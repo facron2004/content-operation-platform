@@ -1,0 +1,34 @@
+﻿import { Controller, Get, Inject, Query } from '@nestjs/common';
+import { ApiTags, ApiOperation } from '@nestjs/swagger';
+import type { UserRole } from '@content/shared';
+import { ContentService } from './content.service';
+import { OpsTodayQueryDto } from './content.dto';
+
+@ApiTags('dashboard')
+@Controller('api/content')
+export class DashboardController {
+  constructor(@Inject(ContentService) private readonly contentService: ContentService) {}
+
+  @Get('dashboard/summary')
+  @ApiOperation({ summary: '仪表盘摘要', description: '文稿数量、GMV、转化率、套餐状态分布' })
+  getDashboardSummary() {
+    return this.contentService.getDashboardSummary();
+  }
+
+  @Get('ops/today')
+  @ApiOperation({ summary: '今日运营作战台', description: '必推/风险/爆款/滞销/社群任务/昨日复盘一览' })
+  getTodayOperationConsole(@Query() query: OpsTodayQueryDto) {
+    return this.contentService.getTodayOperationConsole(query.role);
+  }
+
+  @Get('ops/review')
+  async getOperationReview(@Query('date') date?: string, @Query('role') role?: UserRole) {
+    const result = await this.contentService.getTodayOperationConsole(role);
+    return { ...result.yesterdayReview, date: date ?? result.yesterdayReview.date };
+  }
+
+  @Get('performance')
+  getPerformance() {
+    return this.contentService.getPerformance();
+  }
+}

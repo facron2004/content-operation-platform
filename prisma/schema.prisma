@@ -1,0 +1,184 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model ContentPackage {
+  packageId                String            @id
+  packageName              String
+  packageType              String
+  merchantId               String
+  merchantName             String
+  areaId                   String
+  areaName                 String
+  category                 String
+  originalPrice            Float
+  salePrice                Float
+  welfarePrice             Float?
+  temporarySalePrice       Float?
+  commissionRate           Float
+  grossProfit              Float
+  stockTotal               Int
+  stockLeft                Int
+  startTime                DateTime
+  endTime                  DateTime
+  useRules                 String
+  sellingPoints            String
+  saleStatus               String?
+  fallbackPackageId        String?
+  miniProgramPath          String
+  detailSummary            String?
+  merchantCooperationScore Float
+  areaMatchScore           Float
+  timeMatchScore           Float
+  historyScore             Float
+  createdAt                DateTime          @default(now())
+  updatedAt                DateTime          @updatedAt
+  snapshots                SalesSnapshot[]
+  scores                   PromotionScore[]
+  generatedCopies          GeneratedCopy[]
+  performances             CopyPerformance[]
+
+  @@index([areaId])
+  @@index([merchantId])
+  @@index([saleStatus])
+  @@index([category])
+  @@index([areaId, saleStatus])
+}
+
+model SalesSnapshot {
+  id              String         @id @default(cuid())
+  packageId       String
+  areaId          String
+  merchantId      String
+  snapshotTime    DateTime
+  exposureCount   Int
+  clickCount      Int
+  orderCount      Int
+  paidOrderCount  Int
+  refundCount     Int
+  verifyCount     Int
+  gmv             Float
+  paidAmount      Float
+  refundAmount    Float
+  conversionRate  Float
+  verifyRate      Float
+  refundRate      Float
+  sellThroughRate Float
+  remainingStock  Int
+  salesSpeed      Float
+  createdAt       DateTime       @default(now())
+  package         ContentPackage @relation(fields: [packageId], references: [packageId], onDelete: Cascade)
+
+  @@index([packageId, snapshotTime])
+  @@index([areaId])
+  @@index([snapshotTime])
+  @@index([merchantId])
+}
+
+model PromotionScore {
+  id                  String         @id @default(cuid())
+  packageId           String
+  areaId              String
+  score               Float
+  level               String
+  status              String
+  recommendedStrategy String
+  reason              String
+  riskTips            String
+  recommendedChannels String
+  copyAngles          String
+  calculatedAt        DateTime
+  createdAt           DateTime       @default(now())
+  package             ContentPackage @relation(fields: [packageId], references: [packageId], onDelete: Cascade)
+
+  @@index([packageId, calculatedAt])
+  @@index([areaId])
+}
+
+model GeneratedCopy {
+  contentId    String         @id
+  packageId    String
+  areaId       String
+  merchantId   String
+  channel      String
+  scenario     String
+  title        String
+  body         String
+  cta          String
+  copyVersion  String
+  strategyType String
+  riskLevel    String
+  riskTips     String
+  auditStatus  String
+  auditRemark  String?
+  createdBy    String
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  package      ContentPackage @relation(fields: [packageId], references: [packageId], onDelete: Cascade)
+  performances CopyPerformance[]
+
+  @@index([auditStatus])
+  @@index([packageId])
+  @@index([areaId])
+  @@index([auditStatus, channel])
+  @@index([createdAt])
+}
+
+model CopyPerformance {
+  id             String         @id @default(cuid())
+  contentId      String
+  packageId      String
+  channel        String
+  groupId        String?
+  leaderId       String?
+  exposureCount  Int
+  clickCount     Int
+  orderCount     Int
+  paidOrderCount Int
+  verifyCount    Int
+  refundCount    Int
+  gmv            Float
+  conversionRate Float
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  package        ContentPackage @relation(fields: [packageId], references: [packageId], onDelete: Cascade)
+  generatedCopy  GeneratedCopy? @relation(fields: [contentId], references: [contentId], onDelete: Cascade)
+
+  @@index([contentId])
+  @@index([packageId])
+  @@index([channel])
+  @@index([groupId])
+}
+
+model JeeSiteInventoryDailySnapshot {
+  packageId      String
+  snapshotDate   String
+  snapshotTime   DateTime
+  packageName    String
+  merchantName   String
+  areaName        String
+  saleStatus     String?
+  remainingStock Int
+  soldOut        Boolean
+  sourceField    String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@id([packageId, snapshotDate])
+  @@index([snapshotDate])
+}
+
+model OperationAlertResolution {
+  alertId      String
+  resolvedDate String
+  resolvedBy   String?
+  resolvedAt   DateTime @default(now())
+
+  @@id([alertId, resolvedDate])
+  @@index([resolvedDate])
+}

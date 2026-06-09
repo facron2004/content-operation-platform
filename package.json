@@ -1,0 +1,41 @@
+{
+  "name": "content-ops-ai-mvp",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "node scripts/dev-unified.js",
+    "dev:clean": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/start-dev.ps1",
+    "dev:api:keepalive": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/keepalive-api.ps1",
+    "build": "npm run build -w @content/shared && npm run build -w @content/api && npm run build -w @content/web",
+    "build:exe": "npm run build && node scripts/package-exe.js",
+    "test": "npm run test -w @content/api",
+    "test:perf": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/test-performance.ps1",
+    "postinstall": "prisma generate --schema prisma/schema.prisma",
+    "db:push": "tsx prisma/create-schema.ts",
+    "db:purge-mock": "tsx scripts/purge-mock-data.ts",
+    "prepare:db": "npm run db:push",
+    "start:api": "npm run start -w @content/api"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@yao-pkg/pkg": "^6.19.0",
+    "concurrently": "^9.1.2",
+    "playwright": "^1.59.1",
+    "prisma": "^6.0.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "unplugin-auto-import": "^21.0.0",
+    "unplugin-vue-components": "^32.1.0",
+    "vitest": "^3.0.0"
+  },
+  "prisma": {},
+  "dependencies": {
+    "@nestjs/swagger": "^11.4.4",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.15.1"
+  }
+}
