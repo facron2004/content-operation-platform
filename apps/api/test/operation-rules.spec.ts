@@ -91,7 +91,9 @@ describe('operation rules', () => {
     const battleCard = buildBattleCard(pkg, score, tags);
 
     expect(score.totalScore).toBeGreaterThan(70);
-    expect(tags.map((tag) => tag.key)).toEqual(expect.arrayContaining(['hot_restock_needed', 'price_advantage', 'fallback_package']));
+    expect(tags.map((tag) => tag.key)).toEqual(
+      expect.arrayContaining(['hot_restock_needed', 'price_advantage', 'fallback_package'])
+    );
     expect(alerts.map((alert) => alert.type)).toContain('abnormal_sold_out');
     expect(card.nextAction).toContain('补货');
     expect(battleCard.communityCopy).toContain('当前售价');

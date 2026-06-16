@@ -14,7 +14,7 @@ interface Props {
   columns?: number;
 }
 
-const props = withDefaults(defineProps<Props>(), {
+const { rows, columns } = withDefaults(defineProps<Props>(), {
   rows: 5,
   columns: 6
 });

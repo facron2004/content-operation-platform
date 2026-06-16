@@ -20,6 +20,8 @@ interface Props {
 
 withDefaults(defineProps<Props>(), {
   icon: '📭',
+  description: '',
+  actionText: '',
   actionType: 'primary'
 });
 

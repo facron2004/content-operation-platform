@@ -6,6 +6,7 @@ import type {
   ContentPackage,
   GenerateCopyRequest,
   InventoryTrendPoint,
+  OperationAlert,
   OperationCard,
   OperationTag,
   PackageScoreBreakdown,
@@ -16,7 +17,6 @@ import type {
 import { buildPromotionScore } from '../domain/promotion-rules';
 import {
   buildBattleCard,
-  buildCommunityTasks,
   buildDerivedCommunities,
   buildOperationAlerts,
   buildOperationTags,
@@ -30,11 +30,11 @@ import { PackageDetailService } from './package-detail.service';
 import { AICopyService, type AICopyConfigUpdate } from './ai-copy.service';
 import { DailyInventoryCrawlerService } from './daily-inventory-crawler.service';
 import { CopyService } from './copy.service';
-import { AlertService } from './alert.service';
+import { AlertService, type AlertQuery } from './alert.service';
 import { DashboardService } from './dashboard.service';
 import { getFallbackDate, localDateKey, latestSnapshotsByPackage, resolvePackageAndSnapshot as resolveFromSource } from './shared-helpers';
 
-interface RecommendQuery {
+export interface RecommendQuery {
   date?: string;
   areaId?: string;
   merchantId?: string;
@@ -44,6 +44,12 @@ interface RecommendQuery {
   inventoryMin?: number;
   inventoryMax?: number;
   inventoryFlag?: 'unsold';
+}
+
+export interface RecommendationResult {
+  date: string;
+  areaId: string;
+  packages: RecommendPackageItem[];
 }
 
 /** getPackageAnalysis 返回类型 */
@@ -65,7 +71,7 @@ export interface PackageAnalysisResult {
   salesData: SalesSnapshot;
   operationTags: OperationTag[];
   scoreBreakdown: PackageScoreBreakdown;
-  operationAlerts: any[];
+  operationAlerts: OperationAlert[];
   recommendation: { strategy: string; reason: string; suggestedChannels: Channel[]; riskTips: string[]; copyAngles: string[] };
   trends: Array<{ label: string; value: number }>;
 }
@@ -82,6 +88,7 @@ export class ContentService {
   private readonly recommendationCache = new Map<string, CachedRecommendations>();
   private readonly recommendationInFlight = new Map<string, Promise<{ date: string; areaId: string; packages: RecommendPackageItem[] }>>();
   private readonly RECOMMENDATION_CACHE_TTL = parseInt(process.env.CONTENT_CACHE_TTL_MS ?? '60000', 10);
+  private readonly RECOMMENDATION_CACHE_MAX_SIZE = 50;
 
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
@@ -124,6 +131,18 @@ export class ContentService {
     if (inFlight) return inFlight;
 
     const pending = this.computeRecommendations(query).then((data) => {
+      // 缓存满时清理过期条目
+      if (this.recommendationCache.size >= this.RECOMMENDATION_CACHE_MAX_SIZE) {
+        const now = Date.now();
+        for (const [key, entry] of this.recommendationCache.entries()) {
+          if (entry.expiresAt <= now) this.recommendationCache.delete(key);
+        }
+        // 仍然满则删除最早的条目
+        if (this.recommendationCache.size >= this.RECOMMENDATION_CACHE_MAX_SIZE) {
+          const firstKey = this.recommendationCache.keys().next().value;
+          if (firstKey) this.recommendationCache.delete(firstKey);
+        }
+      }
       this.recommendationCache.set(cacheKey, { data, expiresAt: Date.now() + this.RECOMMENDATION_CACHE_TTL });
       this.recommendationInFlight.delete(cacheKey);
       return data;
@@ -286,7 +305,7 @@ export class ContentService {
 
   // ==================== 预警（委托给 AlertService） ====================
 
-  getOperationAlerts(query: any) {
+  getOperationAlerts(query: AlertQuery) {
     return this.alertService.getOperationAlerts(query, (q) => this.getRecommendations(q));
   }
   resolveOperationAlert(alertId: string, resolvedBy?: string) {

@@ -141,8 +141,16 @@ describe('AICopyService', () => {
           message: {
             content: JSON.stringify({
               copies: [
-                { title: '宝安烤肉双人餐', body: '老张炭火烤肉双人套餐，福利价19.9元，剩余18份。需提前2小时预约，周末可用。', cta: '去下单' },
-                { title: '今晚烤肉安排', body: '宝安中心老张炭火烤肉，招牌牛五花和黑椒鸡翅可选，当前售价39.9元。', cta: '立即看看' }
+                {
+                  title: '宝安烤肉双人餐',
+                  body: '老张炭火烤肉双人套餐，福利价19.9元，剩余18份。需提前2小时预约，周末可用。',
+                  cta: '去下单'
+                },
+                {
+                  title: '今晚烤肉安排',
+                  body: '宝安中心老张炭火烤肉，招牌牛五花和黑椒鸡翅可选，当前售价39.9元。',
+                  cta: '立即看看'
+                }
               ]
             })
           }
@@ -150,20 +158,24 @@ describe('AICopyService', () => {
       ]
     });
 
-    const service = new AICopyService(new ConfigService({
-      AI_API_KEY: 'test-key',
-      AI_API_BASE_URL: 'https://example.test/v1',
-      AI_MODEL: 'copy-model',
-      AI_PROVIDER_NAME: '测试AI'
-    }));
+    const service = new AICopyService(
+      new ConfigService({
+        AI_API_KEY: 'test-key',
+        AI_API_BASE_URL: 'https://example.test/v1',
+        AI_MODEL: 'copy-model',
+        AI_PROVIDER_NAME: '测试AI'
+      })
+    );
 
     const copies = await service.generateCopies(pkg, promotion, request, detail);
 
-    expect(openAiMocks.create.mock.calls[0][0]).toEqual(expect.objectContaining({
-      model: 'copy-model',
-      temperature: 0.7,
-      max_tokens: 900
-    }));
+    expect(openAiMocks.create.mock.calls[0][0]).toEqual(
+      expect.objectContaining({
+        model: 'copy-model',
+        temperature: 0.7,
+        max_tokens: 900
+      })
+    );
     const prompt = openAiMocks.create.mock.calls[0][0].messages[1].content as string;
     expect(prompt).toContain('当前售价：39.9元');
     expect(prompt).toContain('价格口径：只允许使用“当前售价”');
@@ -189,7 +201,11 @@ describe('AICopyService', () => {
           message: {
             content: JSON.stringify({
               copies: [
-                { title: '宝安烤肉今晚可用', body: '群里有人问晚餐，这个老张炭火烤肉双人餐还剩18份，福利价19.9元。牛五花/鸡翅二选一，记得提前2小时预约。', cta: '戳链接下单' }
+                {
+                  title: '宝安烤肉今晚可用',
+                  body: '群里有人问晚餐，这个老张炭火烤肉双人餐还剩18份，福利价19.9元。牛五花/鸡翅二选一，记得提前2小时预约。',
+                  cta: '戳链接下单'
+                }
               ]
             })
           }
@@ -216,7 +232,11 @@ describe('AICopyService', () => {
           message: {
             content: JSON.stringify({
               copies: [
-                { title: '宝安烤肉今晚可用', body: '老张炭火烤肉双人餐还剩18份，福利价19.9元。牛五花和黑椒鸡翅二选一，需提前2小时预约。', cta: '戳链接下单' }
+                {
+                  title: '宝安烤肉今晚可用',
+                  body: '老张炭火烤肉双人餐还剩18份，福利价19.9元。牛五花和黑椒鸡翅二选一，需提前2小时预约。',
+                  cta: '戳链接下单'
+                }
               ]
             })
           }
@@ -227,7 +247,12 @@ describe('AICopyService', () => {
     const service = new AICopyService(new ConfigService({ AI_API_KEY: 'test-key' }));
     const requestWithoutScenario = { ...request };
     delete requestWithoutScenario.scenario;
-    const [copy] = await service.generateCopies(pkg, promotion, { ...requestWithoutScenario, copyCount: 1 }, detail);
+    const [copy] = await service.generateCopies(
+      pkg,
+      promotion,
+      { ...requestWithoutScenario, copyCount: 1 },
+      detail
+    );
 
     const prompt = openAiMocks.create.mock.calls[0][0].messages[1].content as string;
     expect(prompt).toContain('场景：日常运营推荐');
@@ -262,7 +287,12 @@ describe('AICopyService', () => {
       sellingPoints: ['双人餐', '下班晚餐可用']
     };
     const service = new AICopyService(new ConfigService({ AI_API_KEY: 'test-key' }));
-    const [copy] = await service.generateCopies(greenTeaPkg, promotion, { ...request, copyCount: 1 }, detail);
+    const [copy] = await service.generateCopies(
+      greenTeaPkg,
+      promotion,
+      { ...request, copyCount: 1 },
+      detail
+    );
 
     expect(copy.title).not.toContain('想吃绿茶');
     expect(copy.title).not.toContain('双人餐1');

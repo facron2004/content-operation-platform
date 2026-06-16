@@ -79,11 +79,17 @@ describe('content inventory API', () => {
   it('uses only JeeSite dataset snapshots to mark slow-moving inventory', async () => {
     const { app } = await createApp({
       packages: [packageBase],
-      snapshots: [snapshot('2026-05-22', 80), snapshot('2026-05-23', 50), snapshot('2026-05-24', 20)]
+      snapshots: [
+        snapshot('2026-05-22', 80),
+        snapshot('2026-05-23', 50),
+        snapshot('2026-05-24', 20)
+      ]
     });
 
     const response = await request(app.getHttpServer())
-      .get('/api/content/packages/recommend?role=platform_operator&status=selling&inventoryFlag=unsold&date=2026-05-24')
+      .get(
+        '/api/content/packages/recommend?role=platform_operator&status=selling&inventoryFlag=unsold&date=2026-05-24'
+      )
       .expect(200);
 
     expect(response.body.packages).toHaveLength(1);
@@ -96,7 +102,11 @@ describe('content inventory API', () => {
       inventorySalesLevel: 'danger',
       inventoryObservedDays: 3
     });
-    expect(response.body.packages[0].inventoryTrend.map((point: { remainingStock: number }) => point.remainingStock)).toEqual([80, 50, 20]);
+    expect(
+      response.body.packages[0].inventoryTrend.map(
+        (point: { remainingStock: number }) => point.remainingStock
+      )
+    ).toEqual([80, 50, 20]);
 
     await app.close();
   });
@@ -129,7 +139,11 @@ describe('content inventory API', () => {
   it('returns JeeSite-only inventory trend and sales flag in package analysis', async () => {
     const { app } = await createApp({
       packages: [packageBase],
-      snapshots: [snapshot('2026-05-22', 80), snapshot('2026-05-23', 50), snapshot('2026-05-24', 20)]
+      snapshots: [
+        snapshot('2026-05-22', 80),
+        snapshot('2026-05-23', 50),
+        snapshot('2026-05-24', 20)
+      ]
     });
 
     const response = await request(app.getHttpServer())
@@ -141,7 +155,9 @@ describe('content inventory API', () => {
       inventorySalesLabel: '连续未售罄·滞销',
       inventorySalesLevel: 'danger'
     });
-    expect(response.body.inventoryTrend.map((point: { remainingStock: number }) => point.remainingStock)).toEqual([80, 50, 20]);
+    expect(
+      response.body.inventoryTrend.map((point: { remainingStock: number }) => point.remainingStock)
+    ).toEqual([80, 50, 20]);
 
     await app.close();
   });

@@ -10,7 +10,10 @@ export class CopyController {
   constructor(@Inject(ContentService) private readonly contentService: ContentService) {}
 
   @Post('generate')
-  @ApiOperation({ summary: '生成文稿', description: 'AI 或规则兜底生成营销文稿，支持微信群/朋友圈/商家转发渠道' })
+  @ApiOperation({
+    summary: '生成文稿',
+    description: 'AI 或规则兜底生成营销文稿，支持微信群/朋友圈/商家转发渠道'
+  })
   generateCopies(@Body() body: GenerateCopyDto) {
     return this.contentService.generateCopies({
       packageId: body.packageId,

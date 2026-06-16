@@ -1,6 +1,13 @@
 <template>
   <section v-loading="loading" class="page-stack">
-    <el-alert v-if="loadError" :title="loadError" type="error" show-icon closable style="margin-bottom: 12px" />
+    <el-alert
+      v-if="loadError"
+      :title="loadError"
+      type="error"
+      show-icon
+      closable
+      style="margin-bottom: 12px"
+    />
     <section class="panel">
       <div class="panel-head">
         <h2>AI 复盘建议</h2>
@@ -8,15 +15,17 @@
       <div class="review-board">
         <div>
           <strong>昨天发生了什么</strong>
-          <p v-for="item in performance.review?.whatHappened ?? []" :key="item">{{ item }}</p>
+          <p v-for="item in perf.review?.whatHappened ?? []" :key="item">{{ item }}</p>
         </div>
         <div>
           <strong>明天建议推什么</strong>
-          <p v-for="item in performance.review?.tomorrowSuggestions ?? []" :key="item">{{ item }}</p>
+          <p v-for="item in perf.review?.tomorrowSuggestions ?? []" :key="item">
+            {{ item }}
+          </p>
         </div>
         <div>
           <strong>高转化文案</strong>
-          <p v-for="item in performance.review?.highConversionCopies ?? []" :key="item.contentId">
+          <p v-for="item in perf.review?.highConversionCopies ?? []" :key="item.contentId">
             {{ item.title }} / {{ formatPercent(item.conversionRate) }}
           </p>
         </div>
@@ -42,7 +51,7 @@
       <div class="panel-head">
         <h2>推广效果明细</h2>
       </div>
-      <el-table :data="performance.items ?? []" height="420">
+      <el-table :data="perf.items ?? []" height="420">
         <el-table-column prop="title" label="文案" min-width="180" show-overflow-tooltip />
         <el-table-column prop="copyVersion" label="版本" width="64" />
         <el-table-column label="渠道" width="90">
@@ -62,11 +71,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted } from 'vue';
 import type { Channel } from '@content/shared';
 import ChartPanel from '../components/ChartPanel.vue';
 import { api } from '../services/api';
 import { channelLabels, percent as formatPercent } from '../utils/labels';
+import { useApiFetch } from '../composables/useApiFetch';
 
 interface PerformanceItem {
   title: string;
@@ -102,14 +112,17 @@ interface PerformanceData {
   review: DailyReview;
 }
 
-const loading = ref(false);
-const loadError = ref<string | null>(null);
-const performance = ref<PerformanceData>({ items: [], versionComparison: [], review: { date: '', whatHappened: [], tomorrowSuggestions: [], highConversionCopies: [] } });
+const { loading, data: performance, error: loadError, load } = useApiFetch<PerformanceData>(
+  () => api.getPerformance() as Promise<unknown> as Promise<PerformanceData>,
+  { errorMessage: '效果数据加载失败，请稍后重试', clearCacheOnForce: false }
+);
 
-// percent 已从 utils/labels.ts 导入为 formatPercent
+const perf = computed<PerformanceData>(
+  () => performance.value ?? { items: [], versionComparison: [], review: { date: '', whatHappened: [], tomorrowSuggestions: [], highConversionCopies: [] } }
+);
 
 const versionOption = computed(() => {
-  const rows = performance.value.versionComparison;
+  const rows = perf.value.versionComparison;
   return {
     tooltip: { trigger: 'axis' },
     legend: { top: 0 },
@@ -117,14 +130,24 @@ const versionOption = computed(() => {
     xAxis: { type: 'category', data: rows.map((row) => row.copyVersion) },
     yAxis: { type: 'value' },
     series: [
-      { name: '点击', type: 'bar', data: rows.map((row) => row.clickCount), itemStyle: { color: '#2f6f73' } },
-      { name: '下单', type: 'bar', data: rows.map((row) => row.orderCount), itemStyle: { color: '#d18b34' } }
+      {
+        name: '点击',
+        type: 'bar',
+        data: rows.map((row) => row.clickCount),
+        itemStyle: { color: '#2f6f73' }
+      },
+      {
+        name: '下单',
+        type: 'bar',
+        data: rows.map((row) => row.orderCount),
+        itemStyle: { color: '#d18b34' }
+      }
     ]
   };
 });
 
 const channelOption = computed(() => {
-  const grouped = performance.value.items.reduce((acc: Record<string, number>, row) => {
+  const grouped = perf.value.items.reduce((acc: Record<string, number>, row) => {
     const label = channelLabels[row.channel] ?? row.channel;
     acc[label] = (acc[label] ?? 0) + row.clickCount;
     return acc;
@@ -142,19 +165,9 @@ const channelOption = computed(() => {
   };
 });
 
-const load = async () => {
-  loading.value = true;
-  loadError.value = null;
-  try {
-    performance.value = await api.getPerformance() as unknown as PerformanceData;
-  } catch (e: unknown) {
-    loadError.value = '效果数据加载失败，请稍后重试';
-  } finally {
-    loading.value = false;
-  }
-};
+const loadPerf = async () => { load(); };
 
-onMounted(load);
+onMounted(loadPerf);
 </script>
 
 <style scoped>

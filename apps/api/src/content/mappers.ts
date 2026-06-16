@@ -5,8 +5,6 @@ import type {
   CopyPerformance,
   GeneratedCopy,
   PackageType,
-  PromotionLevel,
-  PromotionScore,
   SaleStatus,
   StrategyType
 } from '@content/shared';
@@ -83,7 +81,12 @@ type DbPerformance = {
 };
 
 export const splitList = (value: string | null | undefined) =>
-  value ? value.split('｜').map((item) => item.trim()).filter(Boolean) : [];
+  value
+    ? value
+        .split('｜')
+        .map((item) => item.trim())
+        .filter(Boolean)
+    : [];
 
 export const joinList = (items: string[]) => items.join('｜');
 

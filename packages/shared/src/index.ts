@@ -1,4 +1,9 @@
-export type UserRole = 'platform_operator' | 'area_operator' | 'merchant_operator' | 'auditor' | 'admin';
+export type UserRole =
+  | 'platform_operator'
+  | 'area_operator'
+  | 'merchant_operator'
+  | 'auditor'
+  | 'admin';
 
 export type PackageType = 'welfare' | 'commission' | 'fallback';
 
@@ -329,7 +334,7 @@ export interface GenerateCopyRequest {
   packageId: string;
   channel: Channel;
   scenario?: string;
-  tone: string;
+  tone?: string;
   copyCount: number;
   createdBy?: string;
   useAI?: boolean;
@@ -370,3 +375,14 @@ export interface RecommendPackageItem extends ContentPackage {
   scoreBreakdown?: PackageScoreBreakdown;
   operationAlerts?: OperationAlert[];
 }
+
+// ==================== 工具函数 ====================
+
+export const currentPrice = (pkg: ContentPackage): number =>
+  pkg.temporarySalePrice ?? pkg.salePrice;
+
+export const formatPrice = (value?: number | null, decimals = 0): string =>
+  value != null && Number.isFinite(value) ? Number(value.toFixed(decimals)).toString() : '-';
+
+// ==================== API Response Types ====================
+export * from './api-types';

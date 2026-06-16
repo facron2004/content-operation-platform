@@ -1,4 +1,4 @@
-﻿import 'reflect-metadata';
+import 'reflect-metadata';
 import './config/load-env';
 import compression from 'compression';
 import { join, dirname } from 'path';
@@ -6,6 +6,8 @@ import { existsSync } from 'fs';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
+import { securityHeaders } from './common';
+import type { Request, Response, NextFunction } from 'express';
 
 /** 解析前端静态资源目录，兼容 pkg 打包后的 exe 环境 */
 function resolvePublicDir(): string {
@@ -21,14 +23,18 @@ function resolvePublicDir(): string {
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.use(compression());
+  app.use(securityHeaders);
 
   // P0-4 CORS 白名单：仅允许本机前端访问
   const allowedOrigins = [
     `http://localhost:${process.env.PORT ?? 3100}`,
-    `http://127.0.0.1:${process.env.PORT ?? 3100}`,
+    `http://127.0.0.1:${process.env.PORT ?? 3100}`
   ];
   app.enableCors({
-    origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+    origin: (
+      origin: string | undefined,
+      callback: (err: Error | null, allow?: boolean) => void
+    ) => {
       // 允许无 origin（同源请求、curl 等）
       if (!origin || allowedOrigins.includes(origin)) {
         callback(null, true);
@@ -36,15 +42,17 @@ async function bootstrap() {
         callback(null, false);
       }
     },
-    credentials: true,
+    credentials: true
   });
 
   // P0-3 DTO 校验：让 class-validator 装饰器真正生效
-  app.useGlobalPipes(new ValidationPipe({
-    whitelist: true,
-    forbidNonWhitelisted: true,
-    transform: true,
-  }));
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true
+    })
+  );
 
   // P0-1 静态资源托管：exe 打包后可以直接访问前端页面
   const expressApp = app.getHttpAdapter().getInstance();
@@ -52,7 +60,7 @@ async function bootstrap() {
   if (existsSync(publicDir)) {
     expressApp.use(require('express').static(publicDir));
     // Vue history 路由回落：非 /api 请求统一返回 index.html
-    expressApp.get('*', (req: any, res: any, next: any) => {
+    expressApp.get('*splat', (req: Request, res: Response, next: NextFunction) => {
       if (req.path.startsWith('/api') || req.path.startsWith('/health')) return next();
       const indexPath = join(publicDir, 'index.html');
       if (existsSync(indexPath)) {
@@ -71,4 +79,7 @@ async function bootstrap() {
   console.log(`Content Ops API listening on http://${host}:${port}/api`);
 }
 
-void bootstrap();
+bootstrap().catch((err) => {
+  console.error('Failed to start Content Ops API:', err);
+  process.exit(1);
+});

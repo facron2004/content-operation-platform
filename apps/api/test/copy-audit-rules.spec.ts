@@ -214,7 +214,11 @@ describe('generateTemplateCopies - 模板文案生成', () => {
 
   it('uses fallback strategy for sold-out packages', () => {
     const soldOutPkg = { ...basePackage, stockLeft: 0 };
-    const soldOutPromotion = { ...basePromotion, status: 'sold_out' as const, recommendedStrategy: 'fallback' as const };
+    const soldOutPromotion = {
+      ...basePromotion,
+      status: 'sold_out' as const,
+      recommendedStrategy: 'fallback' as const
+    };
 
     const [copy] = generateTemplateCopies(soldOutPkg, soldOutPromotion, {
       packageId: 'PKG-AUDIT',

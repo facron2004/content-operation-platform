@@ -1,5 +1,5 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import type { InventoryTrendPoint, SalesSnapshot } from '@content/shared';
+import type { ContentPackage, InventoryTrendPoint, SalesSnapshot } from '@content/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { DataSourceService, type ContentDataset } from './data-source.service';
 import { localDateKey } from './shared-helpers';
@@ -35,12 +35,15 @@ export class DailyInventoryCrawlerService {
   async recordDatasetInventory(dataset: ContentDataset, date?: string) {
     await this.ensureTable();
     const targetDate = this.resolveDateKey(date, new Date());
-    const snapshotsByPackage = new Map(dataset.snapshots.map((snapshot) => [snapshot.packageId, snapshot]));
+    const snapshotsByPackage = new Map(
+      dataset.snapshots.map((snapshot) => [snapshot.packageId, snapshot])
+    );
     let crawledCount = 0;
     let soldOutCount = 0;
 
     // 收集所有行，批量 INSERT（避免 N+1 逐行插入）
-    const rows: Array<{ pkg: any; snapshot: any; remainingStock: number }> = [];
+    const rows: Array<{ pkg: ContentPackage; snapshot: SalesSnapshot; remainingStock: number }> =
+      [];
     for (const pkg of dataset.packages) {
       if (pkg.saleStatus !== 'selling') continue;
       const snapshot = snapshotsByPackage.get(pkg.packageId);
@@ -55,11 +58,19 @@ export class DailyInventoryCrawlerService {
     const BATCH_SIZE = 50;
     for (let i = 0; i < rows.length; i += BATCH_SIZE) {
       const batch = rows.slice(i, i + BATCH_SIZE);
-      const valueClauses = batch.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)').join(', ');
+      const valueClauses = batch
+        .map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)')
+        .join(', ');
       const params = batch.flatMap(({ pkg, snapshot, remainingStock }) => [
-        pkg.packageId, targetDate, new Date(snapshot.snapshotTime).toISOString(),
-        pkg.packageName, pkg.merchantName, pkg.areaName,
-        pkg.saleStatus ?? null, remainingStock, remainingStock <= 0 ? 1 : 0,
+        pkg.packageId,
+        targetDate,
+        new Date(snapshot.snapshotTime).toISOString(),
+        pkg.packageName,
+        pkg.merchantName,
+        pkg.areaName,
+        pkg.saleStatus ?? null,
+        remainingStock,
+        remainingStock <= 0 ? 1 : 0,
         'bargainCommodityDynamic.hasInventory'
       ]);
 
@@ -164,7 +175,9 @@ export class DailyInventoryCrawlerService {
     for (const snapshot of snapshots) {
       const points = result.get(snapshot.packageId) ?? [];
       const snapshotDate = new Date(snapshot.snapshotTime);
-      const date = Number.isFinite(snapshotDate.getTime()) ? localDateKey(snapshotDate) : localDateKey(asOf);
+      const date = Number.isFinite(snapshotDate.getTime())
+        ? localDateKey(snapshotDate)
+        : localDateKey(asOf);
       const point = {
         date,
         snapshotTime: snapshot.snapshotTime,

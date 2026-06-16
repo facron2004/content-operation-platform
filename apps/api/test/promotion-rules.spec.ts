@@ -70,7 +70,13 @@ describe('promotion rules', () => {
   it('marks low-stock packages with growing paid orders as nearly sold out', () => {
     const status = calculatePackageStatus(
       { ...basePackage, stockLeft: 18 },
-      { ...baseSnapshot, remainingStock: 18, sellThroughRate: 0.82, paidOrderCount: 55, salesSpeed: 22 },
+      {
+        ...baseSnapshot,
+        remainingStock: 18,
+        sellThroughRate: 0.82,
+        paidOrderCount: 55,
+        salesSpeed: 22
+      },
       new Date('2026-05-11T18:00:00.000Z')
     );
 
@@ -91,7 +97,14 @@ describe('promotion rules', () => {
     const strong = calculatePromotionScore(basePackage, baseSnapshot, 'healthy_sales');
     const weak = calculatePromotionScore(
       { ...basePackage, stockLeft: 92 },
-      { ...baseSnapshot, conversionRate: 0.01, verifyRate: 0.1, refundRate: 0.35, sellThroughRate: 0.05, remainingStock: 95 },
+      {
+        ...baseSnapshot,
+        conversionRate: 0.01,
+        verifyRate: 0.1,
+        refundRate: 0.35,
+        sellThroughRate: 0.05,
+        remainingStock: 95
+      },
       'healthy_sales'
     );
 
@@ -111,4 +124,3 @@ describe('promotion rules', () => {
     expect(strategy.reason).toContain('已售罄');
   });
 });
-

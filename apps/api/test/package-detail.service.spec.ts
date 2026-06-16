@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { PackageDetailService } from '../src/content/package-detail.service';
+import { HtmlParser } from '../src/content/package-detail/html-parser';
 
-const createService = () => new PackageDetailService({} as any, {} as any);
+const parser = new HtmlParser();
 
 const parseDetail = (html: string) =>
-  (createService() as any).parsePackageDetail('PKG_DETAIL', `<div id="commodityDetailUE">${html}</div>`, false);
+  parser.parsePackageDetail(
+    'PKG_DETAIL',
+    `<div id="commodityDetailUE">${html}</div>`,
+    false
+  );
 
 describe('PackageDetailService detail parser', () => {
   it('parses menu streams made of title, dish, quantity and price tokens', () => {
@@ -51,7 +55,11 @@ describe('PackageDetailService detail parser', () => {
     `);
 
     expect(detail.packageTitle).toBe('2-3人豪华餐8荤4素炭烤鲜牛肉');
-    expect(detail.sections.map((section: any) => section.title)).toEqual(['8荤4素2主食', '饮品2选1', '其他']);
+    expect(detail.sections.map((section: any) => section.title)).toEqual([
+      '8荤4素2主食',
+      '饮品2选1',
+      '其他'
+    ]);
     expect(detail.sections[0].items).toContainEqual({ name: '新鲜牛肉', quantity: '1份' });
     expect(detail.sections[0].items).toContainEqual({ name: '淄博小饼', quantity: '6片' });
     expect(detail.sections[1].selectionRule).toBe('2选1');

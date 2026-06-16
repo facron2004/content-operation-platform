@@ -7,10 +7,18 @@
         <h2>{{ pkg.packageName }}</h2>
         <div class="analysis-tags">
           <el-tag>{{ statusLabels[analysis.status] ?? analysis.status }}</el-tag>
-          <el-tag v-if="analysis.inventoryFlag && analysis.inventoryFlag !== 'normal'" :type="inventoryTagType(analysis.inventoryFlagLevel)" effect="dark">
+          <el-tag
+            v-if="analysis.inventoryFlag && analysis.inventoryFlag !== 'normal'"
+            :type="inventoryTagType(analysis.inventoryFlagLevel)"
+            effect="dark"
+          >
             {{ analysis.inventoryFlagLabel }}
           </el-tag>
-          <el-tag v-if="analysis.inventorySalesLabel" :type="salesTagType(analysis.inventorySalesLevel)" effect="plain">
+          <el-tag
+            v-if="analysis.inventorySalesLabel"
+            :type="salesTagType(analysis.inventorySalesLevel)"
+            effect="plain"
+          >
             {{ analysis.inventorySalesLabel }}
           </el-tag>
           <el-tag type="info">未售罄 {{ analysis.inventoryBacklogDays ?? 0 }} 天</el-tag>
@@ -83,7 +91,12 @@
     <section v-if="pkg" class="panel">
       <div class="panel-head">
         <h2>异常预警与下一步动作</h2>
-        <el-button type="primary" @click="$router.push({ path: '/generate', query: { packageId, mode: 'battle-card' } })">生成作战卡</el-button>
+        <el-button
+          type="primary"
+          @click="$router.push({ path: '/generate', query: { packageId, mode: 'battle-card' } })"
+        >
+          生成作战卡
+        </el-button>
       </div>
       <el-table :data="analysis.operationAlerts ?? []" height="220" empty-text="暂无预警">
         <el-table-column prop="title" label="预警" width="140" />
@@ -95,7 +108,12 @@
     <section v-if="pkg" class="panel package-long-panel">
       <div class="panel-head">
         <h2>卖点与限制</h2>
-        <el-button type="primary" @click="$router.push({ path: '/generate', query: { packageId } })">生成文案</el-button>
+        <el-button
+          type="primary"
+          @click="$router.push({ path: '/generate', query: { packageId } })"
+        >
+          生成文案
+        </el-button>
       </div>
       <div class="detail-columns">
         <div class="detail-block">
@@ -124,8 +142,21 @@
         <h2>可生成文案角度</h2>
       </div>
       <div class="tag-cloud">
-        <el-tag v-for="angle in analysis.recommendation?.copyAngles ?? []" :key="angle" size="large">{{ angle }}</el-tag>
-        <el-tag v-for="tip in analysis.recommendation?.riskTips ?? []" :key="tip" type="warning" size="large">{{ tip }}</el-tag>
+        <el-tag
+          v-for="angle in analysis.recommendation?.copyAngles ?? []"
+          :key="angle"
+          size="large"
+        >
+          {{ angle }}
+        </el-tag>
+        <el-tag
+          v-for="tip in analysis.recommendation?.riskTips ?? []"
+          :key="tip"
+          type="warning"
+          size="large"
+        >
+          {{ tip }}
+        </el-tag>
       </div>
     </section>
   </section>
@@ -138,7 +169,13 @@ import { ArrowLeft } from '@element-plus/icons-vue';
 import type { ContentPackage } from '@content/shared';
 import ChartPanel from '../components/ChartPanel.vue';
 import { api, type PackageAnalysisResponse } from '../services/api';
-import { statusLabels, inventoryTagType, salesTagType, operationTagType, formatMoney } from '../utils/labels';
+import {
+  statusLabels,
+  inventoryTagType,
+  salesTagType,
+  operationTagType,
+  formatMoney
+} from '../utils/labels';
 
 const props = defineProps<{ packageId: string }>();
 const router = useRouter();
@@ -154,20 +191,6 @@ const formatInventoryTrend = (trend: Array<{ remainingStock: number }> | undefin
 const goBack = () => {
   router.push('/recommendations');
 };
-
-const trendOption = computed(() => ({
-  tooltip: { trigger: 'axis' },
-  grid: { left: 36, right: 18, top: 26, bottom: 32 },
-  xAxis: { type: 'category', data: (analysis.value.trends ?? []).map((item) => item.label) },
-  yAxis: { type: 'value' },
-  series: [
-    {
-      type: 'bar',
-      data: (analysis.value.trends ?? []).map((item) => item.value),
-      itemStyle: { color: '#2f6f73' }
-    }
-  ]
-}));
 
 const scoreOption = computed(() => {
   const dimensions = analysis.value.scoreBreakdown?.dimensions ?? [];
@@ -230,7 +253,7 @@ onMounted(load);
   padding: 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #f8fafc;
+  background: var(--soft, #f8fafc);
 }
 
 .info-card span {
@@ -267,7 +290,7 @@ onMounted(load);
   padding: 14px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #f8fafc;
+  background: var(--soft, #f8fafc);
 }
 
 .detail-block h3 {

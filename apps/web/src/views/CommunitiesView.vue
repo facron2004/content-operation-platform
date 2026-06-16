@@ -1,6 +1,13 @@
 <template>
   <section v-loading="loading" class="page-stack">
-    <el-alert v-if="loadError" :title="loadError" type="error" show-icon closable style="margin-bottom: 12px" />
+    <el-alert
+      v-if="loadError"
+      :title="loadError"
+      type="error"
+      show-icon
+      closable
+      style="margin-bottom: 12px"
+    />
     <div class="community-toolbar">
       <div>
         <p class="eyebrow">Community Operations</p>
@@ -14,7 +21,9 @@
         <div class="community-head">
           <div>
             <strong>{{ group.groupName }}</strong>
-            <span>{{ group.areaName }} / {{ groupTypeLabels[group.groupType] ?? group.groupType }}</span>
+            <span>
+              {{ group.areaName }} / {{ groupTypeLabels[group.groupType] ?? group.groupType }}
+            </span>
           </div>
           <el-tag type="success" effect="plain">活跃 {{ group.activityScore }}</el-tag>
         </div>
@@ -36,12 +45,24 @@
 
         <div class="community-packages">
           <h3>今日推荐套餐</h3>
-          <div v-for="pkg in group.todayRecommendedPackages" :key="pkg.packageId" class="community-package">
+          <div
+            v-for="pkg in group.todayRecommendedPackages"
+            :key="pkg.packageId"
+            class="community-package"
+          >
             <div>
               <strong>{{ pkg.packageName }}</strong>
               <span>{{ pkg.reason }}</span>
             </div>
-            <el-button size="small" @click="$router.push({ path: '/generate', query: { packageId: pkg.packageId, mode: 'battle-card' } })">
+            <el-button
+              size="small"
+              @click="
+                $router.push({
+                  path: '/generate',
+                  query: { packageId: pkg.packageId, mode: 'battle-card' }
+                })
+              "
+            >
               作战卡
             </el-button>
           </div>
@@ -55,26 +76,44 @@
       </div>
       <el-table :data="pushRows" height="320" empty-text="暂无社群任务">
         <el-table-column prop="groupName" label="社群" min-width="150" />
-        <el-table-column prop="packageName" label="推荐套餐" min-width="200" show-overflow-tooltip />
+        <el-table-column
+          prop="packageName"
+          label="推荐套餐"
+          min-width="200"
+          show-overflow-tooltip
+        />
         <el-table-column prop="plannedTime" label="推送时间" width="90" />
         <el-table-column prop="reason" label="推荐原因" min-width="200" show-overflow-tooltip />
-        <el-table-column prop="nextAction" label="下一步动作" min-width="180" show-overflow-tooltip />
+        <el-table-column
+          prop="nextAction"
+          label="下一步动作"
+          min-width="180"
+          show-overflow-tooltip
+        />
       </el-table>
     </section>
   </section>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onMounted, watch } from 'vue';
 import type { CommunityGroup, OperationCard } from '@content/shared';
 import { api } from '../services/api';
 import { useRoleStore } from '../stores/role';
 import { groupTypeLabels, percent as formatPercent } from '../utils/labels';
+import { useApiFetch } from '../composables/useApiFetch';
+
+interface CommunitiesData {
+  items: CommunityGroup[];
+}
 
 const roleStore = useRoleStore();
-const loading = ref(false);
-const loadError = ref<string | null>(null);
-const communities = ref<CommunityGroup[]>([]);
+const { loading, data, error: loadError, load } = useApiFetch<CommunitiesData>(
+  () => api.getCommunities({ role: roleStore.currentRole }),
+  { errorMessage: '社群数据加载失败，请稍后重试' }
+);
+
+const communities = computed(() => data.value?.items ?? []);
 
 /** 根据社群类型和索引生成合理的推送时间 */
 const plannedTimeForGroup = (groupType: string, index: number): string => {
@@ -84,7 +123,7 @@ const plannedTimeForGroup = (groupType: string, index: number): string => {
     foodie: ['11:30', '17:30'],
     merchant: ['09:30', '14:00'],
     wellness: ['14:00', '20:00'],
-    mixed: ['11:00', '17:00'],
+    mixed: ['11:00', '17:00']
   };
   const slots = timeSlots[groupType] ?? timeSlots.mixed;
   return slots[index % slots.length];
@@ -102,26 +141,13 @@ const pushRows = computed(() =>
   )
 );
 
-// percent 已从 utils/labels.ts 导入为 formatPercent
-
-const load = async (force = false) => {
-  loading.value = true;
-  loadError.value = null;
-  try {
-    if (force) api.clearCache();
-    const data = await api.getCommunities({ role: roleStore.currentRole });
-    communities.value = data.items ?? [];
-  } catch (e: unknown) {
-    loadError.value = '社群数据加载失败，请稍后重试';
-  } finally {
-    loading.value = false;
-  }
-};
-
-onMounted(load);
+onMounted(() => load());
 
 // 角色切换后自动刷新社群数据
-watch(() => roleStore.currentRole, () => load(true));
+watch(
+  () => roleStore.currentRole,
+  () => load(true)
+);
 </script>
 
 <style scoped>
@@ -189,7 +215,7 @@ watch(() => roleStore.currentRole, () => load(true));
   min-width: 0;
   padding: 10px;
   border-radius: 8px;
-  background: #f8fafc;
+  background: var(--soft, #f8fafc);
 }
 
 .community-metrics strong {

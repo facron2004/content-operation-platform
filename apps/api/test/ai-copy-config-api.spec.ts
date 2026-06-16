@@ -11,6 +11,8 @@ describe('AI copy config API', () => {
 
     const app = moduleRef.createNestApplication();
     await app.init();
+    // 确保 app 在测试结束后关闭，即使断言失败
+    try {
 
     const response = await request(app.getHttpServer())
       .post('/api/content/ai-copy/config')
@@ -41,7 +43,8 @@ describe('AI copy config API', () => {
       .expect(200);
     expect(status.body.maskedApiKey).toBe('sk-f**********cret');
     expect(JSON.stringify(status.body)).not.toContain('sk-front-config-secret');
-
-    await app.close();
+    } finally {
+      await app.close();
+    }
   });
 });

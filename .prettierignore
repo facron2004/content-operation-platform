@@ -1,0 +1,17 @@
+.prettierrc
+.editorconfig
+.nvmrc
+dist
+apps/api/dist
+apps/api/public
+apps/web/dist
+packages/shared/dist
+packages/shared/src/*.js
+packages/shared/src/*.js.map
+coverage
+node_modules
+test-parser.ts
+*.log
+*.md
+apps/web/auto-imports.d.ts
+apps/web/components.d.ts

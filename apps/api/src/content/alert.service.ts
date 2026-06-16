@@ -1,8 +1,10 @@
 import { BadRequestException, Inject, Injectable, Logger } from '@nestjs/common';
 import type { OperationAlert, RecommendPackageItem, UserRole } from '@content/shared';
 import { PrismaService } from '../prisma/prisma.service';
-import type { ContentService } from './content.service';
+import type { RecommendQuery, RecommendationResult } from './content.service';
 import { localDateKey } from './shared-helpers';
+
+type GetRecommendationsFn = (q: RecommendQuery) => Promise<RecommendationResult>;
 
 // 合并了 resolveOperationAlert / resolveOperationAlerts 中重复的 SQL 字符串
 const ALERT_UPSERT_SQL = `
@@ -25,17 +27,17 @@ export interface AlertQuery {
 export class AlertService {
   private readonly logger = new Logger(AlertService.name);
 
-  constructor(
-    @Inject(PrismaService) private readonly prisma: PrismaService,
-  ) {}
+  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
 
   /**
    * 从 ContentService 注入推荐结果，避免循环依赖。
    * 通过方法参数传入推荐结果而非构造函数注入。
    */
-  async getOperationAlerts(query: AlertQuery, getRecommendations: (q: any) => Promise<any>) {
+  async getOperationAlerts(query: AlertQuery, getRecommendations: GetRecommendationsFn) {
     const recommendations = await getRecommendations({ role: query.role, status: 'selling' });
-    const allAlerts = this.rankAlerts(recommendations.packages.flatMap((pkg: RecommendPackageItem) => pkg.operationAlerts ?? []));
+    const allAlerts = this.rankAlerts(
+      recommendations.packages.flatMap((pkg: RecommendPackageItem) => pkg.operationAlerts ?? [])
+    );
     const resolvedAlertIds = await this.loadResolvedAlertIds(recommendations.date);
     const activeAlerts = allAlerts.filter((alert) => !resolvedAlertIds.has(alert.alertId));
     const filteredAlerts = this.filterAlerts(activeAlerts, query);
@@ -114,19 +116,25 @@ export class AlertService {
       });
       return new Set(rows.map((row: { alertId: string }) => row.alertId));
     }
-    const rows = await this.prisma.$queryRawUnsafe(
+    const rows = (await this.prisma.$queryRawUnsafe(
       `SELECT "alertId" FROM "OperationAlertResolution" WHERE "resolvedDate" = ?`,
       dateKey
-    ) as Array<{ alertId: string }>;
+    )) as Array<{ alertId: string }>;
     return new Set(rows.map((row: { alertId: string }) => row.alertId));
   }
 
   alertPriorityScore(alert: OperationAlert): number {
     const levelScore = alert.level === 'danger' ? 80 : alert.level === 'warning' ? 52 : 20;
     const typeScore: Partial<Record<OperationAlert['type'], number>> = {
-      high_refund: 20, continuous_unsold: 18, inventory_abnormal: 17,
-      price_abnormal: 16, abnormal_sold_out: 14, low_verify: 12,
-      merchant_abnormal: 10, missing_use_rules: 8, missing_selling_points: 4
+      high_refund: 20,
+      continuous_unsold: 18,
+      inventory_abnormal: 17,
+      price_abnormal: 16,
+      abnormal_sold_out: 14,
+      low_verify: 12,
+      merchant_abnormal: 10,
+      missing_use_rules: 8,
+      missing_selling_points: 4
     };
     return levelScore + (typeScore[alert.type] ?? 0);
   }
@@ -138,8 +146,16 @@ export class AlertService {
       .filter((alert) => (query.type ? alert.type === query.type : true))
       .filter((alert) => {
         if (!keyword) return true;
-        return [alert.packageId, alert.packageName, alert.merchantName, alert.areaName,
-          alert.title, alert.reason, alert.action, alert.type]
+        return [
+          alert.packageId,
+          alert.packageName,
+          alert.merchantName,
+          alert.areaName,
+          alert.title,
+          alert.reason,
+          alert.action,
+          alert.type
+        ]
           .filter(Boolean)
           .some((value) => String(value).toLowerCase().includes(keyword));
       });
@@ -172,13 +188,16 @@ export class AlertService {
       .map((rows) => {
         const first = rows[0];
         return {
-          packageId: first.packageId, packageName: first.packageName,
-          merchantName: first.merchantName, areaName: first.areaName,
+          packageId: first.packageId,
+          packageName: first.packageName,
+          merchantName: first.merchantName,
+          areaName: first.areaName,
           alertCount: rows.length,
           dangerCount: rows.filter((a) => a.level === 'danger').length,
           warningCount: rows.filter((a) => a.level === 'warning').length,
           priorityScore: Math.max(...rows.map((a) => this.alertPriorityScore(a))),
-          mainReason: rows[0].reason, nextAction: rows[0].action,
+          mainReason: rows[0].reason,
+          nextAction: rows[0].action,
           alertIds: rows.map((a) => a.alertId),
           types: [...new Set(rows.map((a) => a.type))]
         };
@@ -188,7 +207,10 @@ export class AlertService {
   }
 
   private resolvePagination(page?: number, pageSize?: number, total = 0) {
-    const safePageSize = Math.min(200, Math.max(1, Number.isFinite(pageSize) ? Number(pageSize) : 80));
+    const safePageSize = Math.min(
+      200,
+      Math.max(1, Number.isFinite(pageSize) ? Number(pageSize) : 80)
+    );
     const maxPage = Math.max(1, Math.ceil(total / safePageSize));
     const safePage = Math.min(maxPage, Math.max(1, Number.isFinite(page) ? Number(page) : 1));
     return { page: safePage, pageSize: safePageSize, offset: (safePage - 1) * safePageSize };

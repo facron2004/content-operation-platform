@@ -1,20 +1,51 @@
+# Dependencies
 node_modules/
+
+# Build output
 dist/
+apps/api/dist/
+apps/api/public/
+apps/web/dist/
+packages/shared/dist/
+packages/shared/src/*.js
+packages/shared/src/*.js.map
 .vite/
+
+# Test
 coverage/
-*.log
+
+# Environment
 .env
 .env.local
+.env.*.local
+.cookie.cache
+
+# Database
 dev.db
 dev.db-journal
 prisma/dev.db
-.superpowers/
 
-# Dev server log files
+# Logs
+*.log
 dev-*.log
 dev-*-current*.log
+dev-*-current-*.log
 
-# Build artifacts
-apps/api/dist/
-apps/web/dist/
+# OS files
+.DS_Store
+Thumbs.db
+nul
 
+# Editor
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+
+# Build info
+*.tsbuildinfo
+
+# Misc
+.superpowers/

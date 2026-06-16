@@ -7,6 +7,7 @@ import type {
   SalesSnapshot,
   StrategyType
 } from '@content/shared';
+import { clamp, scoreLevel } from './utils';
 
 interface StrategyResult {
   recommendedStrategy: StrategyType;
@@ -16,17 +17,8 @@ interface StrategyResult {
   copyAngles: string[];
 }
 
-const clamp = (value: number, min = 0, max = 100) => Math.max(min, Math.min(max, value));
-
-const scoreLevel = (score: number): PromotionLevel => {
-  if (score >= 85) return 'S';
-  if (score >= 70) return 'A';
-  if (score >= 55) return 'B';
-  if (score >= 40) return 'C';
-  return 'D';
-};
-
-const isBeforeStart = (pkg: ContentPackage, now: Date) => new Date(pkg.startTime).getTime() > now.getTime();
+const isBeforeStart = (pkg: ContentPackage, now: Date) =>
+  new Date(pkg.startTime).getTime() > now.getTime();
 
 export function calculatePackageStatus(
   pkg: ContentPackage,
@@ -88,7 +80,9 @@ export function generateStrategy(
   const saleStart = new Date(pkg.startTime).getTime();
   const snapshotTime = new Date(snapshot.snapshotTime).getTime();
   const inventoryBacklogDays =
-    saleStart > 0 && snapshotTime > saleStart ? Math.floor((snapshotTime - saleStart) / (24 * 60 * 60 * 1000)) : 0;
+    saleStart > 0 && snapshotTime > saleStart
+      ? Math.floor((snapshotTime - saleStart) / (24 * 60 * 60 * 1000))
+      : 0;
   const isBacklog = pkg.stockLeft > 0 && inventoryBacklogDays >= 3;
 
   if (status === 'sold_out' && pkg.fallbackPackageId) {
@@ -126,7 +120,8 @@ export function generateStrategy(
       recommendedStrategy: 'sprint',
       reason: `当前库存剩余 ${pkg.stockLeft} 份，转化率 ${(snapshot.conversionRate * 100).toFixed(1)}%，适合继续做库存冲刺。`,
       riskTips: ['避免使用全网最低、最后疯抢等绝对化表述'],
-      recommendedChannels: level === 'S' ? ['wechat_group', 'moments', 'merchant_share'] : ['wechat_group', 'moments'],
+      recommendedChannels:
+        level === 'S' ? ['wechat_group', 'moments', 'merchant_share'] : ['wechat_group', 'moments'],
       copyAngles: ['剩余库存', '晚餐场景', '适合结伴']
     };
   }
@@ -141,7 +136,11 @@ export function generateStrategy(
     };
   }
 
-  if (status === 'conversion_weak' || status === 'unclear_selling_point' || status === 'poor_sales') {
+  if (
+    status === 'conversion_weak' ||
+    status === 'unclear_selling_point' ||
+    status === 'poor_sales'
+  ) {
     return {
       recommendedStrategy: 'conversion_optimize',
       reason: `曝光或点击已有基础，但下单表现偏弱，建议换卖点、补充使用规则和消费场景。`,
@@ -165,8 +164,12 @@ export function generateStrategy(
     recommendedStrategy: pkg.packageType === 'commission' ? 'merchant_co_promotion' : 'launch',
     reason: `当前剩余 ${pkg.stockLeft} / ${pkg.stockTotal}，库存仍有承接空间，建议常规曝光并持续监控售罄进度。`,
     riskTips: ['价格、库存和限制条件必须来自套餐字段'],
-    recommendedChannels: level === 'S' ? ['wechat_group', 'moments', 'merchant_share'] : ['wechat_group', 'moments'],
-    copyAngles: pkg.packageType === 'commission' ? ['商家推荐', '稳定转化', '场景种草'] : ['区域福利', '开抢提醒', '价格利益点']
+    recommendedChannels:
+      level === 'S' ? ['wechat_group', 'moments', 'merchant_share'] : ['wechat_group', 'moments'],
+    copyAngles:
+      pkg.packageType === 'commission'
+        ? ['商家推荐', '稳定转化', '场景种草']
+        : ['区域福利', '开抢提醒', '价格利益点']
   };
 }
 

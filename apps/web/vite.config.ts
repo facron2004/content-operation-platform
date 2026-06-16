@@ -8,6 +8,7 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   const devPort = Number(env.VITE_DEV_SERVER_PORT || 3100);
   const proxyTarget = env.VITE_API_PROXY_TARGET || 'http://localhost:3101';
+  const isDev = mode === 'development';
 
   return {
     plugins: [
@@ -22,6 +23,9 @@ export default defineConfig(({ mode }) => {
         imports: ['vue', 'vue-router', 'pinia']
       })
     ],
+    optimizeDeps: {
+      include: ['@content/shared']
+    },
     server: {
       host: env.VITE_DEV_SERVER_HOST || '127.0.0.1',
       port: devPort,
@@ -33,18 +37,36 @@ export default defineConfig(({ mode }) => {
         }
       }
     },
+    css: {
+      // 生产环境提取 CSS 到独立文件，开发环境保持内联以加速 HMR
+      devSourcemap: true
+    },
     build: {
       target: 'es2020',
       minify: 'esbuild',
+      cssCodeSplit: true,
+      // 生产环境生成 sourcemap 便于线上问题定位
+      sourcemap: isDev ? false : 'hidden',
       rollupOptions: {
         output: {
+          // 入口文件使用 hash，确保缓存失效
+          entryFileNames: 'assets/[name]-[hash].js',
+          chunkFileNames: 'assets/[name]-[hash].js',
+          assetFileNames: 'assets/[name]-[hash].[ext]',
           manualChunks(id) {
-            if (id.includes('node_modules/vue') || id.includes('node_modules/@vue')
-              || id.includes('node_modules/pinia') || id.includes('node_modules/vue-router')) {
+            if (
+              id.includes('node_modules/vue') ||
+              id.includes('node_modules/@vue') ||
+              id.includes('node_modules/pinia') ||
+              id.includes('node_modules/vue-router')
+            ) {
               return 'vendor-vue';
             }
             // Element Plus 按需导入后会自动 tree-shake，剩余组件放一起
-            if (id.includes('node_modules/element-plus') || id.includes('node_modules/@element-plus')) {
+            if (
+              id.includes('node_modules/element-plus') ||
+              id.includes('node_modules/@element-plus')
+            ) {
               return 'vendor-ui';
             }
             if (id.includes('node_modules/echarts') || id.includes('node_modules/zrender')) {
@@ -60,7 +82,7 @@ export default defineConfig(({ mode }) => {
         }
       },
       reportCompressedSize: false,
-      chunkSizeWarningLimit: 600
+      chunkSizeWarningLimit: 500
     }
   };
 });

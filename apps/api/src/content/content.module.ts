@@ -17,7 +17,17 @@ import { DailyInventoryCrawlerService } from './daily-inventory-crawler.service'
 @Module({
   imports: [ConfigModule],
   controllers: [DashboardController, AlertController, CopyController, PackageController],
-  providers: [ContentService, CopyService, AlertService, DashboardService, DataSourceService, AutoLoginService, PackageDetailService, AICopyService, DailyInventoryCrawlerService],
+  providers: [
+    ContentService,
+    CopyService,
+    AlertService,
+    DashboardService,
+    DataSourceService,
+    AutoLoginService,
+    PackageDetailService,
+    AICopyService,
+    DailyInventoryCrawlerService
+  ],
   exports: [ContentService, CopyService, AlertService, DashboardService]
 })
 export class ContentModule {}

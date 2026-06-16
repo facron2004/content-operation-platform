@@ -6,7 +6,13 @@
         <el-segmented v-model="status" :options="statusOptions" @change="load" />
       </div>
       <TableSkeleton v-if="loading && copies.length === 0" :rows="10" :columns="5" />
-      <el-table v-else :data="copies" height="650" highlight-current-row @current-change="selectCopy">
+      <el-table
+        v-else
+        :data="copies"
+        height="650"
+        highlight-current-row
+        @current-change="selectCopy"
+      >
         <el-table-column prop="copyVersion" label="版本" width="70" />
         <el-table-column prop="title" label="标题" min-width="190" show-overflow-tooltip />
         <el-table-column label="渠道" width="100">
@@ -40,7 +46,12 @@
             <el-input v-model="draft.body" type="textarea" :rows="8" placeholder="请输入正文内容" />
           </el-form-item>
           <el-form-item label="审核备注">
-            <el-input v-model="draft.auditRemark" type="textarea" :rows="3" placeholder="选填，记录审核意见" />
+            <el-input
+              v-model="draft.auditRemark"
+              type="textarea"
+              :rows="3"
+              placeholder="选填，记录审核意见"
+            />
           </el-form-item>
         </el-form>
         <div class="check-list">
@@ -86,7 +97,8 @@ const load = async () => {
   try {
     const data = await api.listCopies({ auditStatus: status.value });
     copies.value = data.items;
-    if (!copies.value.some((copy) => copy.contentId === selected.value?.contentId)) selected.value = null;
+    if (!copies.value.some((copy) => copy.contentId === selected.value?.contentId))
+      selected.value = null;
   } finally {
     loading.value = false;
   }
@@ -115,14 +127,14 @@ const audit = async (auditStatus: Extract<AuditStatus, 'approved' | 'rejected' |
       auditRemark: draft.auditRemark || (auditStatus === 'approved' ? '通过' : '')
     });
 
-    const statusText = auditStatus === 'approved' ? '通过' : auditStatus === 'rejected' ? '驳回' : '标记为风险';
+    const statusText =
+      auditStatus === 'approved' ? '通过' : auditStatus === 'rejected' ? '驳回' : '标记为风险';
     ElMessage.success(`审核结果已保存：${statusText}`);
     await load();
-  } catch (error: unknown) {
+  } catch {
     // 错误已由拦截器处理
   }
 };
 
 onMounted(load);
 </script>
-

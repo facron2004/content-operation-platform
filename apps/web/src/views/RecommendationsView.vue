@@ -2,20 +2,43 @@
   <section class="page-stack">
     <div class="filter-bar">
       <el-select v-model="filters.areaId" clearable placeholder="区域">
-        <el-option v-for="area in areaOptions" :key="area.value" :label="area.label" :value="area.value" />
+        <el-option
+          v-for="area in areaOptions"
+          :key="area.value"
+          :label="area.label"
+          :value="area.value"
+        />
       </el-select>
       <el-select v-model="filters.category" clearable filterable placeholder="所属类型">
-        <el-option v-for="category in categoryOptions" :key="category" :label="category" :value="category" />
+        <el-option
+          v-for="category in categoryOptions"
+          :key="category"
+          :label="category"
+          :value="category"
+        />
       </el-select>
       <el-checkbox v-model="filters.unsoldOnly">只看未售罄链接</el-checkbox>
-      <el-button type="primary" :loading="loading" @click="load(true)">{{ loading ? '加载中' : '刷新套餐' }}</el-button>
+      <el-button type="primary" :loading="loading" @click="load(true)">
+        {{ loading ? '加载中' : '刷新套餐' }}
+      </el-button>
     </div>
 
     <section class="panel">
       <TableSkeleton v-if="loading && items.length === 0" :rows="10" :columns="9" />
-      <el-table v-else :data="items" height="520" :default-sort="{ prop: 'stockLeft', order: 'descending' }" @row-dblclick="openAnalysis">
+      <el-table
+        v-else
+        :data="items"
+        height="520"
+        :default-sort="{ prop: 'stockLeft', order: 'descending' }"
+        @row-dblclick="openAnalysis"
+      >
         <el-table-column type="index" label="#" width="42" />
-        <el-table-column prop="packageName" label="套餐名称" min-width="160" show-overflow-tooltip />
+        <el-table-column
+          prop="packageName"
+          label="套餐名称"
+          min-width="160"
+          show-overflow-tooltip
+        />
         <el-table-column prop="category" label="类型" width="78" show-overflow-tooltip />
         <el-table-column prop="merchantName" label="商家" min-width="120" show-overflow-tooltip />
         <el-table-column prop="areaName" label="区域" width="68" />
@@ -25,7 +48,12 @@
         <el-table-column prop="stockLeft" label="库存" width="60" sortable />
         <el-table-column label="库存标记" width="96">
           <template #default="{ row }">
-            <el-tag v-if="row.inventoryFlag !== 'normal'" :type="inventoryTagType(row.inventoryFlagLevel)" effect="dark" size="small">
+            <el-tag
+              v-if="row.inventoryFlag !== 'normal'"
+              :type="inventoryTagType(row.inventoryFlagLevel)"
+              effect="dark"
+              size="small"
+            >
               {{ row.inventoryFlagLabel }}
             </el-tag>
             <span v-else class="muted-cell">正常</span>
@@ -60,7 +88,11 @@
               :content="scoreTooltip(row.scoreBreakdown)"
               :disabled="!row.scoreBreakdown"
             >
-              <el-tag :type="levelTagType[row.scoreBreakdown?.level ?? row.promotionLevel] ?? 'info'" effect="dark" size="small">
+              <el-tag
+                :type="levelTagType[row.scoreBreakdown?.level ?? row.promotionLevel] ?? 'info'"
+                effect="dark"
+                size="small"
+              >
                 {{ row.scoreBreakdown?.totalScore ?? row.promotionScore }}
               </el-tag>
             </el-tooltip>
@@ -69,7 +101,9 @@
         <el-table-column prop="inventoryBacklogDays" label="天数" width="56" sortable />
         <el-table-column label="操作" width="130" fixed="right">
           <template #default="{ row }">
-            <el-button size="small" type="primary" @click="goGenerate(row.packageId)">文案</el-button>
+            <el-button size="small" type="primary" @click="goGenerate(row.packageId)">
+              文案
+            </el-button>
             <el-button size="small" @click="openAnalysis(row)">详情</el-button>
           </template>
         </el-table-column>
@@ -103,11 +137,18 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import { ElMessage } from 'element-plus';
 import type { RecommendPackageItem } from '@content/shared';
 import { api } from '../services/api';
+import { clearPackageCache } from '../services/cache.service';
 import { useRoleStore } from '../stores/role';
-import { levelTagType, inventoryTagType, salesTagType, operationTagType, displayPrice, scoreTooltip } from '../utils/labels';
+import {
+  levelTagType,
+  inventoryTagType,
+  salesTagType,
+  operationTagType,
+  displayPrice,
+  scoreTooltip
+} from '../utils/labels';
 import TableSkeleton from '../components/TableSkeleton.vue';
 import EmptyState from '../components/EmptyState.vue';
 
@@ -130,7 +171,10 @@ const load = async (force = false) => {
   const requestId = ++loadRequestId;
   loading.value = true;
   try {
-    if (force) { api.clearCache(); pagination.page = 1; }
+    if (force) {
+      clearPackageCache();
+      pagination.page = 1;
+    }
     const data = await api.getRecommendations({
       role: roleStore.currentRole,
       areaId: filters.areaId || undefined,
@@ -153,35 +197,39 @@ const load = async (force = false) => {
       }
     }
     areaOptions.value = Array.from(areaMap.entries()).map(([value, label]) => ({ value, label }));
-  } catch (error: unknown) {
+  } catch {
     // 错误已由拦截器处理
   } finally {
     if (requestId === loadRequestId) loading.value = false;
   }
 };
 
-const loadPage = () => { load(); };
+const loadPage = () => {
+  load();
+};
 
 const loadCategoryOptions = async () => {
   const requestId = ++categoryOptionsRequestId;
   try {
     const data = await api.getCategories({
       areaId: filters.areaId || undefined,
-      role: roleStore.currentRole,
+      role: roleStore.currentRole
     });
     if (requestId !== categoryOptionsRequestId) return;
     categoryOptions.value = data.categories;
-  } catch (error: unknown) {
+  } catch {
     // 错误已由拦截器处理
   }
 };
 
 const clearFilters = () => {
-  const shouldReload = !filters.areaId && !filters.category && !filters.unsoldOnly;
+  const hadFilters = !!filters.areaId || !!filters.category || filters.unsoldOnly;
   filters.areaId = '';
   filters.category = '';
   filters.unsoldOnly = false;
-  if (shouldReload) {
+  // 如果之前有筛选条件，watchers 会自动触发重新加载
+  // 如果之前就没有筛选条件，手动刷新一次
+  if (!hadFilters) {
     load(true);
     loadCategoryOptions();
   }
@@ -189,10 +237,6 @@ const clearFilters = () => {
 
 const openAnalysis = (row: RecommendPackageItem) => router.push(`/packages/${row.packageId}`);
 const goGenerate = (packageId: string) => router.push({ path: '/generate', query: { packageId } });
-// 判断商家名称是否被截断（包含多个逗号表示多店通用）
-const isMerchantNameTruncated = (merchantName: string) => {
-  return merchantName.includes(',');
-};
 
 watch(
   () => roleStore.currentRole,
@@ -218,7 +262,7 @@ watch(
 watch(
   () => filters.unsoldOnly,
   () => {
-    load();
+    load(true);
   }
 );
 

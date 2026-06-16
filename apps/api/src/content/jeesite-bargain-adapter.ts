@@ -1,4 +1,5 @@
 import type { ContentPackage, SalesSnapshot } from '@content/shared';
+import { clamp } from '../domain/utils';
 
 type AnyRecord = Record<string, unknown>;
 
@@ -88,8 +89,6 @@ const ratio = (value: number) => {
   return value > 1 ? value / 100 : value;
 };
 
-const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
-
 const splitList = (value: string) =>
   value
     .split(/[、,，;；|｜\n]/g)
@@ -127,7 +126,10 @@ export function normalizeJeesiteBaseUrl(rawUrl: string) {
     const url = new URL(trimmed);
     const adminIndex = url.pathname.indexOf('/a/');
     if (url.pathname === '/a' || url.pathname.startsWith('/a/')) {
-      return `${url.origin}${adminIndex >= 0 ? url.pathname.slice(0, adminIndex + 2) : '/a'}`.replace(/\/$/, '');
+      return `${url.origin}${adminIndex >= 0 ? url.pathname.slice(0, adminIndex + 2) : '/a'}`.replace(
+        /\/$/,
+        ''
+      );
     }
     return `${url.origin}${url.pathname}`.replace(/\/$/, '');
   } catch {
@@ -214,7 +216,16 @@ export function mapJeesiteBargainListToDataset(
     );
     const city = text(row, ['cityName', 'city_name', 'city']);
     const area =
-      text(row, ['districtName', 'district_name', 'areaName', 'area_name', 'regionName', 'region_name', 'district', 'area']) ||
+      text(row, [
+        'districtName',
+        'district_name',
+        'areaName',
+        'area_name',
+        'regionName',
+        'region_name',
+        'district',
+        'area'
+      ]) ||
       city ||
       'default-area';
     const originalPrice = money(
@@ -225,14 +236,36 @@ export function mapJeesiteBargainListToDataset(
     );
     const fallbackSalePrice = money(
       row,
-      ['bargainPrice', 'bargain_price', 'salePrice', 'sale_price', 'sellingPrice', 'selling_price', 'price', 'payPrice', 'pay_price'],
-      ['priceCents', 'price_cents', 'salePriceCents', 'sale_price_cents', 'bargainPriceCents', 'bargain_price_cents'],
+      [
+        'bargainPrice',
+        'bargain_price',
+        'salePrice',
+        'sale_price',
+        'sellingPrice',
+        'selling_price',
+        'price',
+        'payPrice',
+        'pay_price'
+      ],
+      [
+        'priceCents',
+        'price_cents',
+        'salePriceCents',
+        'sale_price_cents',
+        'bargainPriceCents',
+        'bargain_price_cents'
+      ],
       originalPrice
     );
     const welfarePrice = money(
       row,
       ['welfarePrice', 'welfare_price', 'bargainFloorPrice', 'bargain_floor_price'],
-      ['welfarePriceCents', 'welfare_price_cents', 'bargainFloorPriceCents', 'bargain_floor_price_cents'],
+      [
+        'welfarePriceCents',
+        'welfare_price_cents',
+        'bargainFloorPriceCents',
+        'bargain_floor_price_cents'
+      ],
       Number.NaN
     );
     const fixedPrice = money(
@@ -243,16 +276,32 @@ export function mapJeesiteBargainListToDataset(
     );
     const temporaryPrice = money(
       row,
-      ['temporaryPrice', 'temporary_price', 'tempPrice', 'temp_price', 'activityPrice', 'activity_price'],
+      [
+        'temporaryPrice',
+        'temporary_price',
+        'tempPrice',
+        'temp_price',
+        'activityPrice',
+        'activity_price'
+      ],
       ['temporaryPriceCents', 'temporary_price_cents', 'tempPriceCents', 'temp_price_cents'],
       Number.NaN
     );
-    const isFixedPrice = boolean(row, ['isFixed', 'is_fixed', 'fixed', 'fixedPriceEnabled', 'fixed_price_enabled', 'onePriceEnabled', 'one_price_enabled']);
-    const resolvedSalePrice = isFixedPrice && Number.isFinite(fixedPrice) && fixedPrice > 0
-      ? fixedPrice
-      : Number.isFinite(temporaryPrice) && temporaryPrice > 0
-        ? temporaryPrice
-        : fallbackSalePrice;
+    const isFixedPrice = boolean(row, [
+      'isFixed',
+      'is_fixed',
+      'fixed',
+      'fixedPriceEnabled',
+      'fixed_price_enabled',
+      'onePriceEnabled',
+      'one_price_enabled'
+    ]);
+    const resolvedSalePrice =
+      isFixedPrice && Number.isFinite(fixedPrice) && fixedPrice > 0
+        ? fixedPrice
+        : Number.isFinite(temporaryPrice) && temporaryPrice > 0
+          ? temporaryPrice
+          : fallbackSalePrice;
     const orderCount = Math.round(
       number(
         row,
@@ -270,7 +319,13 @@ export function mapJeesiteBargainListToDataset(
         0
       )
     );
-    const paidOrderCount = Math.round(number(row, ['paidOrderCount', 'paid_order_count', 'payNum', 'pay_num', 'paidNum', 'paid_num'], orderCount));
+    const paidOrderCount = Math.round(
+      number(
+        row,
+        ['paidOrderCount', 'paid_order_count', 'payNum', 'pay_num', 'paidNum', 'paid_num'],
+        orderCount
+      )
+    );
     const stockTotalFromRow = Math.round(
       number(
         row,
@@ -291,7 +346,9 @@ export function mapJeesiteBargainListToDataset(
     );
     const stockLeftFromRow = (() => {
       // 后台表格列 dataGrid_hasInventory 对应 hasInventory，强制以该字段为准
-      const dailyInventory = Math.round(number(row, ['hasInventory', 'bargainCommodityDynamic.hasInventory'], Number.NaN));
+      const dailyInventory = Math.round(
+        number(row, ['hasInventory', 'bargainCommodityDynamic.hasInventory'], Number.NaN)
+      );
       if (Number.isFinite(dailyInventory) && dailyInventory >= 0) return dailyInventory;
 
       return Math.round(
@@ -318,31 +375,110 @@ export function mapJeesiteBargainListToDataset(
       ? clamp(stockLeftFromRow, 0, stockTotal || stockLeftFromRow)
       : Math.max(0, stockTotal - orderCount);
 
-    const useRules = splitList(text(row, ['useRule', 'use_rule', 'rules', 'rule', 'limitDesc', 'limit_desc', 'notice', 'tagText', 'tag_text']));
-    const sellingPoints = splitList(text(row, ['sellPoint', 'sell_point', 'sellingPoint', 'selling_point', 'subtitle', 'summary', 'description']));
+    const useRules = splitList(
+      text(row, [
+        'useRule',
+        'use_rule',
+        'rules',
+        'rule',
+        'limitDesc',
+        'limit_desc',
+        'notice',
+        'tagText',
+        'tag_text'
+      ])
+    );
+    const sellingPoints = splitList(
+      text(row, [
+        'sellPoint',
+        'sell_point',
+        'sellingPoint',
+        'selling_point',
+        'subtitle',
+        'summary',
+        'description'
+      ])
+    );
     const exposureCount = Math.round(
       number(
         row,
-        ['exposureCount', 'exposure_count', 'visitNum', 'visit_num', 'viewCount', 'view_count', 'pv', 'bargainCommodityDynamic.hasHeatCount'],
+        [
+          'exposureCount',
+          'exposure_count',
+          'visitNum',
+          'visit_num',
+          'viewCount',
+          'view_count',
+          'pv',
+          'bargainCommodityDynamic.hasHeatCount'
+        ],
         Math.max(100, orderCount * 20)
       )
     );
-    const clickCount = Math.round(number(row, ['clickCount', 'click_count', 'clickNum', 'click_num', 'uv'], Math.max(1, orderCount * 3)));
-    const refundCount = Math.round(number(row, ['refundCount', 'refund_count', 'refundNum', 'refund_num'], 0));
-    const verifyCount = Math.round(number(row, ['verifyCount', 'verify_count', 'verifyNum', 'verify_num', 'usedCount', 'used_count'], 0));
-    const gmv = money(row, ['gmv', 'paidAmount', 'paid_amount', 'salesAmount', 'sales_amount'], ['paidAmountCents', 'paid_amount_cents'], paidOrderCount * resolvedSalePrice);
-    const refundAmount = money(row, ['refundAmount', 'refund_amount'], ['refundAmountCents', 'refund_amount_cents'], refundCount * resolvedSalePrice);
+    const clickCount = Math.round(
+      number(
+        row,
+        ['clickCount', 'click_count', 'clickNum', 'click_num', 'uv'],
+        Math.max(1, orderCount * 3)
+      )
+    );
+    const refundCount = Math.round(
+      number(row, ['refundCount', 'refund_count', 'refundNum', 'refund_num'], 0)
+    );
+    const verifyCount = Math.round(
+      number(
+        row,
+        ['verifyCount', 'verify_count', 'verifyNum', 'verify_num', 'usedCount', 'used_count'],
+        0
+      )
+    );
+    const gmv = money(
+      row,
+      ['gmv', 'paidAmount', 'paid_amount', 'salesAmount', 'sales_amount'],
+      ['paidAmountCents', 'paid_amount_cents'],
+      paidOrderCount * resolvedSalePrice
+    );
+    const refundAmount = money(
+      row,
+      ['refundAmount', 'refund_amount'],
+      ['refundAmountCents', 'refund_amount_cents'],
+      refundCount * resolvedSalePrice
+    );
     const soldCount = Math.max(0, stockTotal - stockLeft);
-    const startTime = dateText(row, ['startTime', 'start_time', 'startDate', 'start_date', 'beginTime', 'begin_time', 'createDate', 'createdAt'], now);
+    const startTime = dateText(
+      row,
+      [
+        'startTime',
+        'start_time',
+        'startDate',
+        'start_date',
+        'beginTime',
+        'begin_time',
+        'createDate',
+        'createdAt'
+      ],
+      now
+    );
     const endTime = dateText(
       row,
-      ['endTime', 'end_time', 'expireDate', 'expire_date', 'finishTime', 'finish_time', 'expireTime', 'expire_time'],
+      [
+        'endTime',
+        'end_time',
+        'expireDate',
+        'expire_date',
+        'finishTime',
+        'finish_time',
+        'expireTime',
+        'expire_time'
+      ],
       new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
     );
     const rating = number(row, ['rating', 'score', 'merchantScore', 'merchant_score'], 4.6);
     const scoreSeed = rating > 5 ? rating : rating * 18;
 
-    const bargainType = Math.round(number(row, ['bargainType', 'bargain_type', 'commodityType', 'commodity_type'], 1));
+    const bargainType = Math.round(
+      number(row, ['bargainType', 'bargain_type', 'commodityType', 'commodity_type'], 1)
+    );
 
     packages.push({
       packageId,
@@ -352,13 +488,29 @@ export function mapJeesiteBargainListToDataset(
       merchantName,
       areaId: area,
       areaName: areaName(city, area),
-      category: text(row, ['categoryName', 'category_name', 'category', 'typeName', 'type_name', 'bargainCommodityTag.name'], '未分类'),
+      category: text(
+        row,
+        [
+          'categoryName',
+          'category_name',
+          'category',
+          'typeName',
+          'type_name',
+          'bargainCommodityTag.name'
+        ],
+        '未分类'
+      ),
       originalPrice: originalPrice || resolvedSalePrice,
       salePrice: resolvedSalePrice,
       welfarePrice: Number.isFinite(welfarePrice) && welfarePrice > 0 ? welfarePrice : null,
       temporarySalePrice: resolvedSalePrice > 0 ? resolvedSalePrice : null,
       commissionRate: ratio(number(row, ['commissionRate', 'commission_rate', 'ratio'], 12)),
-      grossProfit: Math.round((resolvedSalePrice * ratio(number(row, ['commissionRate', 'commission_rate', 'ratio'], 12))) * 100) / 100,
+      grossProfit:
+        Math.round(
+          resolvedSalePrice *
+            ratio(number(row, ['commissionRate', 'commission_rate', 'ratio'], 12)) *
+            100
+        ) / 100,
       stockTotal,
       stockLeft,
       startTime,
@@ -366,10 +518,23 @@ export function mapJeesiteBargainListToDataset(
       useRules,
       sellingPoints,
       fallbackPackageId: null,
-      miniProgramPath: text(row, ['miniProgramPath', 'mini_program_path', 'detailUrl', 'detail_url'], adminFormUrl(options.baseUrl, packageId)),
+      miniProgramPath: text(
+        row,
+        ['miniProgramPath', 'mini_program_path', 'detailUrl', 'detail_url'],
+        adminFormUrl(options.baseUrl, packageId)
+      ),
       detailSummary: text(
         row,
-        ['commodityDesc', 'commodity_desc', 'description', 'detail', 'detailText', 'detail_text', 'introduce', 'content'],
+        [
+          'commodityDesc',
+          'commodity_desc',
+          'description',
+          'detail',
+          'detailText',
+          'detail_text',
+          'introduce',
+          'content'
+        ],
         ''
       ),
       saleStatus,
@@ -398,7 +563,10 @@ export function mapJeesiteBargainListToDataset(
       refundRate: paidOrderCount === 0 ? 0 : Number((refundCount / paidOrderCount).toFixed(4)),
       sellThroughRate: stockTotal === 0 ? 0 : Number((soldCount / stockTotal).toFixed(4)),
       remainingStock: stockLeft,
-      salesSpeed: Math.max(0, Math.round(number(row, ['salesSpeed', 'sales_speed'], Math.max(1, orderCount / 3))))
+      salesSpeed: Math.max(
+        0,
+        Math.round(number(row, ['salesSpeed', 'sales_speed'], Math.max(1, orderCount / 3)))
+      )
     });
   }
 

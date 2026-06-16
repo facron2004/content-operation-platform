@@ -1,5 +1,13 @@
 import { BadRequestException, Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
-import type { AuditCopyRequest, AuditStatus, Channel, ContentPackage, GeneratedCopy, GenerateCopyRequest, SalesSnapshot } from '@content/shared';
+import type {
+  AuditCopyRequest,
+  AuditStatus,
+  Channel,
+  ContentPackage,
+  GeneratedCopy,
+  GenerateCopyRequest,
+  SalesSnapshot
+} from '@content/shared';
 import { auditCopyText, generateTemplateCopies } from '../domain/copy-rules';
 import { buildPromotionScore } from '../domain/promotion-rules';
 import { PrismaService } from '../prisma/prisma.service';
@@ -17,11 +25,13 @@ export class CopyService {
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(DataSourceService) private readonly dataSource: DataSourceService,
     @Inject(PackageDetailService) private readonly packageDetailService: PackageDetailService,
-    @Inject(AICopyService) private readonly aiCopyService: AICopyService,
+    @Inject(AICopyService) private readonly aiCopyService: AICopyService
   ) {}
 
   /** 解析套餐 + 快照（从数据源加载） */
-  private async resolvePackageAndSnapshot(packageId: string): Promise<{ pkg: ContentPackage; snapshot: SalesSnapshot } | null> {
+  private async resolvePackageAndSnapshot(
+    packageId: string
+  ): Promise<{ pkg: ContentPackage; snapshot: SalesSnapshot } | null> {
     const dataset = await this.dataSource.loadDataset();
     const pkg = dataset.packages.find((item) => item.packageId === packageId);
     const snapshots = dataset.snapshots.filter((item) => item.packageId === packageId);
@@ -59,7 +69,9 @@ export class CopyService {
 
     let packageDetail = null;
     try {
-      packageDetail = await this.packageDetailService.fetchPackageDetail(normalizedRequest.packageId);
+      packageDetail = await this.packageDetailService.fetchPackageDetail(
+        normalizedRequest.packageId
+      );
     } catch (error: unknown) {
       const msg = error instanceof Error ? error.message : String(error);
       this.logger.warn(`获取套餐详情失败 ${normalizedRequest.packageId}: ${msg}`);
@@ -89,7 +101,9 @@ export class CopyService {
     const row = await this.prisma.generatedCopy.findUnique({ where: { contentId } });
     if (!row) throw new NotFoundException('文案不存在');
 
-    const packageRow = await this.prisma.contentPackage.findUnique({ where: { packageId: row.packageId } });
+    const packageRow = await this.prisma.contentPackage.findUnique({
+      where: { packageId: row.packageId }
+    });
     if (!packageRow) throw new NotFoundException('套餐不存在');
 
     const pkg = mapPackage(packageRow);
@@ -100,7 +114,10 @@ export class CopyService {
       body,
       strategyType: row.strategyType as GeneratedCopy['strategyType']
     });
-    const finalStatus = machineAudit.riskLevel === 'high' && request.auditStatus === 'approved' ? 'risk' : request.auditStatus;
+    const finalStatus =
+      machineAudit.riskLevel === 'high' && request.auditStatus === 'approved'
+        ? 'risk'
+        : request.auditStatus;
 
     const updated = await this.prisma.generatedCopy.update({
       where: { contentId },
@@ -108,7 +125,7 @@ export class CopyService {
         title,
         body,
         auditStatus: finalStatus,
-        auditRemark: request.auditRemark ?? machineAudit.riskTips.join('；') ?? null,
+        auditRemark: request.auditRemark ?? (machineAudit.riskTips.length > 0 ? machineAudit.riskTips.join('；') : null),
         riskLevel: machineAudit.riskLevel,
         riskTips: joinList(machineAudit.riskTips)
       }

@@ -16,14 +16,20 @@ export class DashboardController {
   }
 
   @Get('ops/today')
-  @ApiOperation({ summary: '今日运营作战台', description: '必推/风险/爆款/滞销/社群任务/昨日复盘一览' })
+  @ApiOperation({
+    summary: '今日运营作战台',
+    description: '必推/风险/爆款/滞销/社群任务/昨日复盘一览'
+  })
   getTodayOperationConsole(@Query() query: OpsTodayQueryDto) {
     return this.contentService.getTodayOperationConsole(query.role);
   }
 
   @Get('ops/review')
-  async getOperationReview(@Query('date') date?: string, @Query('role') role?: UserRole) {
-    const result = await this.contentService.getTodayOperationConsole(role);
+  async getOperationReview(@Query('date') date?: string, @Query('role') role?: string) {
+    const validRole = (role && ['platform_operator', 'area_operator', 'merchant_operator', 'auditor', 'admin'].includes(role))
+      ? role as UserRole
+      : undefined;
+    const result = await this.contentService.getTodayOperationConsole(validRole);
     return { ...result.yesterdayReview, date: date ?? result.yesterdayReview.date };
   }
 

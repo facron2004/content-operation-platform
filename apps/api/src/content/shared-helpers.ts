@@ -24,7 +24,10 @@ export function latestSnapshotsByPackage(snapshots: SalesSnapshot[]): Map<string
   const result = new Map<string, SalesSnapshot>();
   for (const snapshot of snapshots) {
     const previous = result.get(snapshot.packageId);
-    if (!previous || new Date(snapshot.snapshotTime).getTime() > new Date(previous.snapshotTime).getTime()) {
+    if (
+      !previous ||
+      new Date(snapshot.snapshotTime).getTime() > new Date(previous.snapshotTime).getTime()
+    ) {
       result.set(snapshot.packageId, snapshot);
     }
   }
@@ -47,13 +50,19 @@ export async function resolvePackageAndSnapshot(
 }
 
 /** 从快照列表中取指定 packageId 的最新快照（简化版） */
-export function latestSnapshotForPackage(snapshots: SalesSnapshot[], packageId: string): SalesSnapshot | null {
+export function latestSnapshotForPackage(
+  snapshots: SalesSnapshot[],
+  packageId: string
+): SalesSnapshot | null {
   let best: SalesSnapshot | null = null;
   let bestTime = 0;
   for (const s of snapshots) {
     if (s.packageId !== packageId) continue;
     const t = new Date(s.snapshotTime).getTime();
-    if (Number.isFinite(t) && t > bestTime) { best = s; bestTime = t; }
+    if (Number.isFinite(t) && t > bestTime) {
+      best = s;
+      bestTime = t;
+    }
   }
   return best;
 }

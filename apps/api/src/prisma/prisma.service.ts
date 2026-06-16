@@ -53,13 +53,14 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
 
       // 启动时自动迁移：给已存在的表补齐新增字段
       await this.migrateAddColumns();
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
       console.error('\n❌ 数据库连接失败:');
-      console.error(`   错误信息: ${error.message}`);
+      console.error(`   错误信息: ${err.message}`);
 
-      if (error.code === 'P1003') {
+      if ((error as { code?: string }).code === 'P1003') {
         console.error('   数据库文件不存在或无法访问');
-      } else if (error.code === 'P2021') {
+      } else if ((error as { code?: string }).code === 'P2021') {
         console.error('   数据库表不存在，可能需要运行迁移');
       }
 
@@ -80,7 +81,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     const columns: Array<{ name: string; type: string }> = [
       { name: 'temporarySalePrice', type: 'REAL' },
       { name: 'detailSummary', type: 'TEXT' },
-      { name: 'saleStatus', type: 'TEXT' },
+      { name: 'saleStatus', type: 'TEXT' }
     ];
 
     try {
@@ -97,9 +98,10 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
           console.log(`[migrate] Added column "ContentPackage"."${col.name}"`);
         }
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       // 表可能还不存在（首次启动），忽略错误
-      console.warn('[migrate] Skipping column migration:', err.message);
+      const message = err instanceof Error ? err.message : String(err);
+      console.warn('[migrate] Skipping column migration:', message);
     }
   }
 
@@ -107,4 +109,3 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     await this.$disconnect();
   }
 }
-

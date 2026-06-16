@@ -194,11 +194,13 @@ describe('JeeSite bargain backend adapter', () => {
       ]
     });
 
-    expect(dataset.packages.map((pkg) => ({
-      packageId: pkg.packageId,
-      salePrice: pkg.salePrice,
-      temporarySalePrice: pkg.temporarySalePrice
-    }))).toEqual([
+    expect(
+      dataset.packages.map((pkg) => ({
+        packageId: pkg.packageId,
+        salePrice: pkg.salePrice,
+        temporarySalePrice: pkg.temporarySalePrice
+      }))
+    ).toEqual([
       { packageId: 'fixed-price', salePrice: 49, temporarySalePrice: 49 },
       { packageId: 'temporary-price', salePrice: 66, temporarySalePrice: 66 }
     ]);

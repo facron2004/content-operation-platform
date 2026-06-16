@@ -64,7 +64,11 @@ describe('content API', () => {
       imports: [AppModule]
     })
       .overrideProvider(DataSourceService)
-      .useValue({ loadDataset: vi.fn().mockResolvedValue({ packages: [livePackage], snapshots: [liveSnapshot] }) })
+      .useValue({
+        loadDataset: vi
+          .fn()
+          .mockResolvedValue({ packages: [livePackage], snapshots: [liveSnapshot] })
+      })
       .compile();
 
     const app = moduleRef.createNestApplication();
@@ -106,7 +110,9 @@ describe('content API', () => {
       .get('/api/content/copies?auditStatus=approved')
       .expect(200);
 
-    expect(copies.body.items.some((copy: { contentId: string }) => copy.contentId === contentId)).toBe(true);
+    expect(
+      copies.body.items.some((copy: { contentId: string }) => copy.contentId === contentId)
+    ).toBe(true);
 
     await app.close();
   });

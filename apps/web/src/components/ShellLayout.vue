@@ -1,6 +1,5 @@
-﻿<template>
+<template>
   <div class="app-shell">
-    <div v-if="routeLoading" class="route-loading-bar"></div>
     <aside class="sidebar">
       <div class="brand">
         <div class="brand-mark">OP</div>
@@ -48,7 +47,35 @@
           <h1>{{ pageTitle }}</h1>
         </div>
         <div class="topbar-actions">
-          <el-select v-model="roleStore.currentRole" class="role-select" @change="roleStore.setRole">
+          <!-- 通知中心 -->
+          <NotificationCenter />
+
+          <!-- 操作历史 -->
+          <el-button circle @click="historyVisible = true">
+            <el-icon><Clock /></el-icon>
+          </el-button>
+
+          <!-- 主题切换 -->
+          <ThemeSwitch />
+
+          <!-- Cookie 状态与手动更新 -->
+          <el-button
+            class="cookie-status-btn"
+            :type="cookieStatus?.isValid ? 'success' : 'danger'"
+            plain
+            size="default"
+            @click="openCookieDialog"
+          >
+            <el-badge :is-dot="!cookieStatus?.isValid" class="badge-dot">
+              <span>JeeSite: {{ cookieStatus?.isValid ? '已连接' : '未连接' }}</span>
+            </el-badge>
+          </el-button>
+
+          <el-select
+            v-model="roleStore.currentRole"
+            class="role-select"
+            @change="roleStore.setRole"
+          >
             <el-option
               v-for="option in roleStore.roleOptions"
               :key="option.value"
@@ -61,22 +88,204 @@
       </header>
       <RouterView />
     </main>
+
+    <!-- Cookie 管理对话框 -->
+    <el-dialog
+      v-model="cookieDialogVisible"
+      title="JeeSite 数据源连接配置"
+      width="500px"
+      append-to-body
+      destroy-on-close
+    >
+      <div class="cookie-dialog-content">
+        <el-alert
+          v-if="!cookieStatus?.isValid"
+          title="JeeSite 认证已失效"
+          type="error"
+          description="因为多次登录失败触发验证码或 Cookie 过期，系统无法自动抓取库存。请在浏览器中手动登录后更新 Cookie。"
+          show-icon
+          :closable="false"
+          style="margin-bottom: 16px"
+        />
+        <el-alert
+          v-else
+          title="JeeSite 连通正常"
+          type="success"
+          description="系统正使用有效 Session 自动同步最新数据。无需额外操作。"
+          show-icon
+          :closable="false"
+          style="margin-bottom: 16px"
+        />
+
+        <div class="status-items">
+          <div class="status-item">
+            <span>账号名:</span>
+            <strong>{{ cookieStatus?.username || '未配置' }}</strong>
+          </div>
+          <div class="status-item">
+            <span>连接状态:</span>
+            <el-tag :type="cookieStatus?.isValid ? 'success' : 'danger'" size="small">
+              {{ cookieStatus?.isValid ? '在线' : '离线' }}
+            </el-tag>
+          </div>
+          <div v-if="(cookieStatus?.cooldownMinutes ?? 0) > 0" class="status-item">
+            <span>安全冷却:</span>
+            <span style="color: var(--el-color-warning); font-weight: bold">
+              自动登录冷却中（余 {{ cookieStatus?.cooldownMinutes }} 分钟）
+            </span>
+          </div>
+          <div v-if="cookieStatus?.lastLoginTime" class="status-item">
+            <span>上次成功登录:</span>
+            <span>{{ formatTime(cookieStatus?.lastLoginTime ?? '') }}</span>
+          </div>
+          <div class="status-item">
+            <span>Session ID:</span>
+            <code
+              style="
+                font-size: 11px;
+                max-width: 280px;
+                word-break: break-all;
+                background: #e2e8f0;
+                padding: 2px 4px;
+                border-radius: 4px;
+              "
+            >
+              {{ cookieStatus?.maskedCookie || '无' }}
+            </code>
+          </div>
+        </div>
+
+        <div class="manual-cookie-section">
+          <h4>手动更新 Cookie</h4>
+          <ol class="instructions">
+            <li>
+              在浏览器中访问并登录：
+              <a
+                href="https://zdm.zhsh1.cn/a/login"
+                target="_blank"
+                rel="noopener noreferrer"
+                style="color: #409eff; text-decoration: underline"
+              >
+                zdm.zhsh1.cn/a/login
+              </a>
+            </li>
+            <li>输入账号密码及验证码登录成功。</li>
+            <li>
+              在页面任意处按
+              <strong>F12</strong>
+              ，进入 Console 输入
+              <code>document.cookie</code>
+              。
+            </li>
+            <li>复制输出的完整字符串，粘贴在下方。</li>
+          </ol>
+
+          <el-input
+            v-model="newCookieString"
+            type="textarea"
+            :rows="3"
+            placeholder="粘贴 document.cookie 输出的字符串..."
+            resize="none"
+            style="margin-top: 10px"
+          />
+        </div>
+      </div>
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button @click="cookieDialogVisible = false">取消</el-button>
+          <el-button type="primary" :loading="updatingCookie" @click="saveCookie">
+            验证并更新
+          </el-button>
+        </div>
+      </template>
+    </el-dialog>
+
+    <!-- 操作历史对话框 -->
+    <OperationHistory v-model:visible="historyVisible" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, nextTick } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
-import { ChatLineRound, Checked, DataBoard, EditPen, Histogram, TrendCharts, Warning } from '@element-plus/icons-vue';
+import { computed, ref, nextTick, onMounted, onUnmounted } from 'vue';
+import { useRoute } from 'vue-router';
+import { ElMessage } from 'element-plus';
+import {
+  ChatLineRound,
+  Checked,
+  DataBoard,
+  EditPen,
+  Histogram,
+  TrendCharts,
+  Warning,
+  Clock
+} from '@element-plus/icons-vue';
 import { useRoleStore } from '../stores/role';
+import { api } from '../services/api';
+import NotificationCenter from './NotificationCenter.vue';
+import ThemeSwitch from './ThemeSwitch.vue';
+import OperationHistory from './OperationHistory.vue';
 
 const roleStore = useRoleStore();
-const route = useRoute();
-const router = useRouter();
+const historyVisible = ref(false);
 
-const routeLoading = ref(false);
-router.beforeEach(() => { routeLoading.value = true; });
-router.afterEach(() => { nextTick(() => { routeLoading.value = false; }); });
+const cookieDialogVisible = ref(false);
+const updatingCookie = ref(false);
+const newCookieString = ref('');
+type CookieStatus = Awaited<ReturnType<typeof api.getCookieStatus>>;
+const cookieStatus = ref<CookieStatus | null>(null);
+
+const fetchCookieStatus = async () => {
+  try {
+    cookieStatus.value = await api.getCookieStatus();
+  } catch {
+    // 拦截器已处理错误提示
+  }
+};
+
+const openCookieDialog = async () => {
+  await fetchCookieStatus();
+  newCookieString.value = '';
+  cookieDialogVisible.value = true;
+};
+
+const saveCookie = async () => {
+  if (!newCookieString.value.trim()) {
+    ElMessage.warning('请输入 Cookie 字符串');
+    return;
+  }
+  updatingCookie.value = true;
+  try {
+    const res = await api.updateCookie(newCookieString.value.trim());
+    if (res.success) {
+      ElMessage.success('Cookie 更新成功，连接已恢复！');
+      cookieDialogVisible.value = false;
+      await fetchCookieStatus();
+    } else {
+      ElMessage.error(res.error || '更新失败，请检查 Cookie 是否有效');
+    }
+  } catch {
+    // 拦截器处理
+  } finally {
+    updatingCookie.value = false;
+  }
+};
+
+const formatTime = (timeStr: string) => {
+  if (!timeStr) return '';
+  const date = new Date(timeStr);
+  return date.toLocaleString();
+};
+
+let cookiePoller: ReturnType<typeof setInterval> | null = null;
+onMounted(() => {
+  fetchCookieStatus();
+  cookiePoller = setInterval(fetchCookieStatus, 30000);
+});
+
+onUnmounted(() => {
+  if (cookiePoller) clearInterval(cookiePoller);
+});
+const route = useRoute();
 
 const titles: Record<string, string> = {
   dashboard: '今日作战台',
@@ -93,19 +302,64 @@ const pageTitle = computed(() => titles[String(route.name)] ?? '内容运营中�
 </script>
 
 <style scoped>
-.route-loading-bar {
-  position: fixed;
-  top: 0;
-  left: 0;
-  height: 3px;
-  width: 100%;
-  background: var(--el-color-primary, #409eff);
-  z-index: 9999;
-  animation: route-loading 1.5s ease-in-out infinite;
+.cookie-status-btn {
+  margin-right: 12px;
 }
-@keyframes route-loading {
-  0% { transform: translateX(-100%); }
-  50% { transform: translateX(0); }
-  100% { transform: translateX(100%); }
+.badge-dot :deep(.el-badge__content.is-fixed.is-dot) {
+  right: 5px;
+  top: 5px;
+}
+.cookie-dialog-content {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.status-items {
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--soft, #f8fafc);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.status-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+}
+.status-item span {
+  color: var(--muted);
+}
+.status-item strong {
+  color: var(--ink);
+}
+.manual-cookie-section {
+  margin-top: 6px;
+}
+.manual-cookie-section h4 {
+  margin: 0 0 10px 0;
+  font-size: 14px;
+  color: var(--ink);
+}
+.instructions {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 12.5px;
+  color: var(--muted);
+  line-height: 1.7;
+}
+.instructions code {
+  background: #f1f5f9;
+  padding: 2px 4px;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 12px;
+}
+.dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 </style>

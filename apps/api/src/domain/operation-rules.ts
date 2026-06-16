@@ -10,13 +10,12 @@ import type {
   OperationTag,
   OperationTagKey,
   PackageScoreBreakdown,
-  PromotionLevel,
   RecommendPackageItem,
   SalesSnapshot
 } from '@content/shared';
+import { currentPrice } from '@content/shared';
+import { clamp, scoreLevel } from './utils';
 
-const clamp = (value: number, min = 0, max = 100) => Math.max(min, Math.min(max, value));
-const currentPrice = (pkg: ContentPackage) => pkg.temporarySalePrice ?? pkg.salePrice;
 const tagLabels: Record<OperationTagKey, string> = {
   hot_restock_needed: '爆品待补货',
   continuous_slow: '连续滞销',
@@ -28,25 +27,26 @@ const tagLabels: Record<OperationTagKey, string> = {
   community_focus: '社群专推'
 };
 
-const scoreLevel = (score: number): PromotionLevel => {
-  if (score >= 85) return 'S';
-  if (score >= 70) return 'A';
-  if (score >= 55) return 'B';
-  if (score >= 40) return 'C';
-  return 'D';
-};
-
 const formatPrice = (price: number) => Number(price.toFixed(2)).toString();
-const compact = (value: string) => value.replace(/\s+/g, ' ').replace(/[｜|]+/g, '、').trim();
+const compact = (value: string) =>
+  value
+    .replace(/\s+/g, ' ')
+    .replace(/[｜|]+/g, '、')
+    .trim();
 const uniqueText = (items: string[]) => [...new Set(items.map(compact).filter(Boolean))];
 
-export function buildPackageScore(pkg: RecommendPackageItem, snapshot: SalesSnapshot): PackageScoreBreakdown {
+export function buildPackageScore(
+  pkg: RecommendPackageItem,
+  snapshot: SalesSnapshot
+): PackageScoreBreakdown {
   const price = currentPrice(pkg);
   const discount = pkg.originalPrice > 0 ? 1 - price / pkg.originalPrice : 0;
   const inventoryRatio = pkg.stockTotal > 0 ? pkg.stockLeft / pkg.stockTotal : 1;
   const soldOutRatio = pkg.stockTotal > 0 ? (pkg.stockTotal - pkg.stockLeft) / pkg.stockTotal : 0;
-  const soldOutDayRatio = pkg.inventoryObservedDays > 0 ? pkg.inventorySoldOutDays / pkg.inventoryObservedDays : 0;
-  const neverSoldOutInWindow = pkg.inventoryObservedDays >= 2 && pkg.inventorySoldOutDays === 0 && pkg.stockLeft > 0;
+  const soldOutDayRatio =
+    pkg.inventoryObservedDays > 0 ? pkg.inventorySoldOutDays / pkg.inventoryObservedDays : 0;
+  const neverSoldOutInWindow =
+    pkg.inventoryObservedDays >= 2 && pkg.inventorySoldOutDays === 0 && pkg.stockLeft > 0;
   const commissionSpace = clamp(pkg.commissionRate * 450 + pkg.grossProfit * 2);
 
   const dimensions = [
@@ -64,16 +64,21 @@ export function buildPackageScore(pkg: RecommendPackageItem, snapshot: SalesSnap
       weight: 0.16,
       reason: neverSoldOutInWindow
         ? `近 ${pkg.inventoryObservedDays} 天库存都没有清零，需要提高曝光或换卖点`
-        : inventoryRatio >= 0.7 ? '库存承压，需要提高曝光' : '库存压力可控'
+        : inventoryRatio >= 0.7
+          ? '库存承压，需要提高曝光'
+          : '库存压力可控'
     },
     {
       key: 'sold_out_speed',
       label: '售罄速度',
       score: clamp(Math.max(soldOutRatio * 70 + snapshot.salesSpeed * 5, soldOutDayRatio * 100)),
       weight: 0.14,
-      reason: soldOutDayRatio >= 0.66
-        ? `近 ${pkg.inventoryObservedDays} 天有 ${pkg.inventorySoldOutDays} 天售罄，具备爆品信号`
-        : snapshot.salesSpeed >= 5 ? '销售速度较快，适合冲刺或补货判断' : '售罄速度偏慢'
+      reason:
+        soldOutDayRatio >= 0.66
+          ? `近 ${pkg.inventoryObservedDays} 天有 ${pkg.inventorySoldOutDays} 天售罄，具备爆品信号`
+          : snapshot.salesSpeed >= 5
+            ? '销售速度较快，适合冲刺或补货判断'
+            : '售罄速度偏慢'
     },
     {
       key: 'verify_rate',
@@ -112,16 +117,25 @@ export function buildPackageScore(pkg: RecommendPackageItem, snapshot: SalesSnap
     }
   ];
 
-  const totalScore = Math.round(dimensions.reduce((sum, item) => sum + item.score * item.weight, 0));
+  const totalScore = Math.round(
+    dimensions.reduce((sum, item) => sum + item.score * item.weight, 0)
+  );
   return {
     totalScore,
     level: scoreLevel(totalScore),
     dimensions,
-    reasons: dimensions.filter((item) => item.score >= 75 || item.score <= 35).map((item) => `${item.label}：${item.reason}`)
+    reasons: dimensions
+      .filter((item) => item.score >= 75 || item.score <= 35)
+      .map((item) => `${item.label}：${item.reason}`)
   };
 }
 
-export function buildOperationTags(pkg: RecommendPackageItem, score: PackageScoreBreakdown, snapshot: SalesSnapshot, now = new Date()): OperationTag[] {
+export function buildOperationTags(
+  pkg: RecommendPackageItem,
+  score: PackageScoreBreakdown,
+  snapshot: SalesSnapshot,
+  now = new Date()
+): OperationTag[] {
   const tags: OperationTag[] = [];
   const add = (key: OperationTagKey, level: OperationTag['level'], reason: string) => {
     tags.push({ key, label: tagLabels[key], level, reason });
@@ -138,13 +152,25 @@ export function buildOperationTags(pkg: RecommendPackageItem, score: PackageScor
     (pkg.inventoryObservedDays >= 2 && pkg.inventorySoldOutDays === 0 && pkg.stockLeft > 0);
 
   if (hotByDailyStock || (pkg.stockLeft <= 0 && snapshot.salesSpeed >= 5)) {
-    add('hot_restock_needed', 'success', `近 ${Math.max(pkg.inventoryObservedDays, pkg.inventorySoldOutDays)} 天出现连续售罄，建议确认补货或承接套餐`);
+    add(
+      'hot_restock_needed',
+      'success',
+      `近 ${Math.max(pkg.inventoryObservedDays, pkg.inventorySoldOutDays)} 天出现连续售罄，建议确认补货或承接套餐`
+    );
   }
   if (slowByDailyStock) {
-    add('continuous_slow', 'danger', `近 ${pkg.inventoryObservedDays || pkg.inventoryUnsoldDays || 2} 天库存都没有清零，优先进入滞销处理池`);
+    add(
+      'continuous_slow',
+      'danger',
+      `近 ${pkg.inventoryObservedDays || pkg.inventoryUnsoldDays || 2} 天库存都没有清零，优先进入滞销处理池`
+    );
   }
   if (snapshot.refundRate >= 0.15 || pkg.status === 'high_refund_risk') {
-    add('high_refund_risk', 'danger', `退款率 ${(snapshot.refundRate * 100).toFixed(1)}%，需要人工确认`);
+    add(
+      'high_refund_risk',
+      'danger',
+      `退款率 ${(snapshot.refundRate * 100).toFixed(1)}%，需要人工确认`
+    );
   }
   if (snapshot.verifyRate >= 0.7 && snapshot.refundRate <= 0.05) {
     add('high_verify_quality', 'success', '核销质量好，适合做口碑和商家共推');
@@ -158,16 +184,32 @@ export function buildOperationTags(pkg: RecommendPackageItem, score: PackageScor
   if (pkg.packageType === 'fallback' || pkg.fallbackPackageId) {
     add('fallback_package', 'info', '可作为售罄后的同店承接选择');
   }
-  if (score.totalScore >= 70 && pkg.stockLeft > 0 && pkg.recommendedChannels.includes('wechat_group') && !tags.some((tag) => tag.level === 'danger')) {
+  if (
+    score.totalScore >= 70 &&
+    pkg.stockLeft > 0 &&
+    pkg.recommendedChannels.includes('wechat_group') &&
+    !tags.some((tag) => tag.level === 'danger')
+  ) {
     add('community_focus', 'info', '分数和库存适合安排社群专推');
   }
 
   return tags;
 }
 
-export function buildOperationAlerts(pkg: RecommendPackageItem, score: PackageScoreBreakdown, snapshot: SalesSnapshot, now = new Date()): OperationAlert[] {
+export function buildOperationAlerts(
+  pkg: RecommendPackageItem,
+  score: PackageScoreBreakdown,
+  snapshot: SalesSnapshot,
+  now = new Date()
+): OperationAlert[] {
   const alerts: OperationAlert[] = [];
-  const add = (type: OperationAlert['type'], level: OperationAlert['level'], title: string, reason: string, action: string) => {
+  const add = (
+    type: OperationAlert['type'],
+    level: OperationAlert['level'],
+    title: string,
+    reason: string,
+    action: string
+  ) => {
     alerts.push({
       alertId: `${pkg.packageId}:${type}`,
       packageId: pkg.packageId,
@@ -191,37 +233,98 @@ export function buildOperationAlerts(pkg: RecommendPackageItem, score: PackageSc
     (pkg.inventoryObservedDays >= 2 && pkg.inventorySoldOutDays >= 2);
 
   if (slowByDailyStock) {
-    add('continuous_unsold', 'danger', '连续未售罄', `${pkg.inventoryObservedDays || pkg.inventoryUnsoldDays || 2} 天观察期内库存未清零`, '进入今日滞销池，前排曝光并改卖点');
+    add(
+      'continuous_unsold',
+      'danger',
+      '连续未售罄',
+      `${pkg.inventoryObservedDays || pkg.inventoryUnsoldDays || 2} 天观察期内库存未清零`,
+      '进入今日滞销池，前排曝光并改卖点'
+    );
   }
   if (hotByDailyStock || (pkg.stockLeft <= 0 && snapshot.salesSpeed >= 5)) {
-    add('abnormal_sold_out', 'warning', '异常售罄', '近几日库存多次清零，售罄速度偏快', '确认是否需要补货，并准备承接套餐');
+    add(
+      'abnormal_sold_out',
+      'warning',
+      '异常售罄',
+      '近几日库存多次清零，售罄速度偏快',
+      '确认是否需要补货，并准备承接套餐'
+    );
   }
   if (snapshot.refundRate >= 0.15) {
-    add('high_refund', 'danger', '高退款', `退款率 ${(snapshot.refundRate * 100).toFixed(1)}%`, '暂停强推，核对规则、库存和履约');
+    add(
+      'high_refund',
+      'danger',
+      '高退款',
+      `退款率 ${(snapshot.refundRate * 100).toFixed(1)}%`,
+      '暂停强推，核对规则、库存和履约'
+    );
   }
   if (snapshot.paidOrderCount >= 10 && snapshot.verifyRate < 0.25) {
-    add('low_verify', 'warning', '低核销', `核销率 ${(snapshot.verifyRate * 100).toFixed(1)}%`, '生成到店提醒和预约说明');
+    add(
+      'low_verify',
+      'warning',
+      '低核销',
+      `核销率 ${(snapshot.verifyRate * 100).toFixed(1)}%`,
+      '生成到店提醒和预约说明'
+    );
   }
   if (pkg.useRules.length === 0) {
-    add('missing_use_rules', 'warning', '使用规则缺失', '套餐缺少使用规则，文案风险较高', '抓取详情或人工补充规则');
+    add(
+      'missing_use_rules',
+      'warning',
+      '使用规则缺失',
+      '套餐缺少使用规则，文案风险较高',
+      '抓取详情或人工补充规则'
+    );
   }
   if (pkg.sellingPoints.length === 0) {
-    add('missing_selling_points', 'info', '卖点缺失', '缺少可直接用于文案的卖点', '从套餐明细中提取 2-4 个主推点');
+    add(
+      'missing_selling_points',
+      'info',
+      '卖点缺失',
+      '缺少可直接用于文案的卖点',
+      '从套餐明细中提取 2-4 个主推点'
+    );
   }
   if (pkg.stockTotal <= 0 || pkg.stockLeft > pkg.stockTotal) {
-    add('inventory_abnormal', 'danger', '库存异常', `库存 ${pkg.stockLeft}/${pkg.stockTotal}`, '回查 JeeSite 库存字段');
+    add(
+      'inventory_abnormal',
+      'danger',
+      '库存异常',
+      `库存 ${pkg.stockLeft}/${pkg.stockTotal}`,
+      '回查 JeeSite 库存字段'
+    );
   }
   if (currentPrice(pkg) <= 0 || pkg.salePrice > pkg.originalPrice * 1.2) {
-    add('price_abnormal', 'danger', '价格异常', `当前售价 ${currentPrice(pkg)}，原价 ${pkg.originalPrice}`, '检查一口价/临时售价映射');
+    add(
+      'price_abnormal',
+      'danger',
+      '价格异常',
+      `当前售价 ${currentPrice(pkg)}，原价 ${pkg.originalPrice}`,
+      '检查一口价/临时售价映射'
+    );
   }
-  if (pkg.merchantCooperationScore < 60 || score.dimensions.find((item) => item.key === 'merchant_cooperation')?.score! < 60) {
-    add('merchant_abnormal', 'warning', '商家异常', '商家配合度偏低', '避免自动强推，先联系商家确认履约');
+  if (
+    pkg.merchantCooperationScore < 60 ||
+    (score.dimensions.find((item) => item.key === 'merchant_cooperation')?.score ?? 0) < 60
+  ) {
+    add(
+      'merchant_abnormal',
+      'warning',
+      '商家异常',
+      '商家配合度偏低',
+      '避免自动强推，先联系商家确认履约'
+    );
   }
 
   return alerts;
 }
 
-export function toOperationCard(pkg: RecommendPackageItem, score: PackageScoreBreakdown, tags: OperationTag[]): OperationCard {
+export function toOperationCard(
+  pkg: RecommendPackageItem,
+  score: PackageScoreBreakdown,
+  tags: OperationTag[]
+): OperationCard {
   const primaryTag = tags[0];
   return {
     packageId: pkg.packageId,
@@ -240,10 +343,16 @@ export function toOperationCard(pkg: RecommendPackageItem, score: PackageScoreBr
   };
 }
 
-export function buildBattleCard(pkg: RecommendPackageItem, score: PackageScoreBreakdown, tags: OperationTag[]): BattleCard {
+export function buildBattleCard(
+  pkg: RecommendPackageItem,
+  score: PackageScoreBreakdown,
+  tags: OperationTag[]
+): BattleCard {
   const price = currentPrice(pkg);
   const audience = inferAudience(pkg);
-  const channels = pkg.recommendedChannels.length ? pkg.recommendedChannels : (['wechat_group'] as Channel[]);
+  const channels = pkg.recommendedChannels.length
+    ? pkg.recommendedChannels
+    : (['wechat_group'] as Channel[]);
   const sellingPoints = buildSellingPoints(pkg, price);
   const priceText = `${formatPrice(price)} 元`;
   const stockText = stockCue(pkg);
@@ -252,7 +361,9 @@ export function buildBattleCard(pkg: RecommendPackageItem, score: PackageScoreBr
   const secondPoint = sellingPoints[1] ?? `${pkg.areaName}可用`;
   const riskTips = [
     ...pkg.riskTips,
-    ...tags.filter((tag) => tag.level === 'danger' || tag.level === 'warning').map((tag) => tag.reason),
+    ...tags
+      .filter((tag) => tag.level === 'danger' || tag.level === 'warning')
+      .map((tag) => tag.reason),
     ruleText ? `使用规则：${ruleText}` : ''
   ];
 
@@ -276,7 +387,10 @@ export function buildBattleCard(pkg: RecommendPackageItem, score: PackageScoreBr
   };
 }
 
-export function buildDerivedCommunities(packages: RecommendPackageItem[], cards: Map<string, OperationCard>): CommunityGroup[] {
+export function buildDerivedCommunities(
+  packages: RecommendPackageItem[],
+  cards: Map<string, OperationCard>
+): CommunityGroup[] {
   const grouped = new Map<string, RecommendPackageItem[]>();
   for (const pkg of packages) {
     const key = `${pkg.areaId || pkg.areaName}:${pkg.category}`;
@@ -331,10 +445,21 @@ export function buildCommunityTasks(communities: CommunityGroup[]): CommunityPus
 export function buildDailyReview(
   date: string,
   cards: OperationCard[],
-  performances: Array<{ contentId: string; title?: string; channel: Channel; conversionRate: number; orderCount: number; groupId?: string | null }>
+  performances: Array<{
+    contentId: string;
+    title?: string;
+    channel: Channel;
+    conversionRate: number;
+    orderCount: number;
+    groupId?: string | null;
+  }>
 ): DailyOperationReview {
   const goodPackages = cards.filter((card) => card.score >= 75).slice(0, 5);
-  const weakPackages = cards.filter((card) => card.tags.some((tag) => tag.key === 'continuous_slow' || tag.key === 'high_refund_risk')).slice(0, 5);
+  const weakPackages = cards
+    .filter((card) =>
+      card.tags.some((tag) => tag.key === 'continuous_slow' || tag.key === 'high_refund_risk')
+    )
+    .slice(0, 5);
   const highConversionCopies = [...performances]
     .sort((a, b) => b.conversionRate - a.conversionRate)
     .slice(0, 5)
@@ -352,7 +477,10 @@ export function buildDailyReview(
       groupId: row.groupId!,
       groupName: row.groupId!,
       conversionRate: row.conversionRate,
-      reason: row.conversionRate >= 0.12 ? '昨日转化高，建议继续安排同品类' : '有转化基础，可继续小流量测试'
+      reason:
+        row.conversionRate >= 0.12
+          ? '昨日转化高，建议继续安排同品类'
+          : '有转化基础，可继续小流量测试'
     }));
 
   return {
@@ -360,34 +488,47 @@ export function buildDailyReview(
     whatHappened: [
       `昨日共有 ${performances.length} 条推送效果记录`,
       `高分可推套餐 ${goodPackages.length} 个，风险/滞销套餐 ${weakPackages.length} 个`,
-      highConversionCopies[0] ? `最高转化文案为「${highConversionCopies[0].title}」` : '暂无足够文案效果数据'
+      highConversionCopies[0]
+        ? `最高转化文案为「${highConversionCopies[0].title}」`
+        : '暂无足够文案效果数据'
     ],
     goodPackages,
     weakPackages,
     highConversionCopies,
     valuableCommunities,
     tomorrowSuggestions: [
-      goodPackages[0] ? `明天优先推「${goodPackages[0].packageName}」` : '明天先从高分套餐池选择 3 个测试',
-      weakPackages[0] ? `滞销/风险套餐「${weakPackages[0].packageName}」需要换卖点或降曝光` : '继续监控连续未售罄套餐',
+      goodPackages[0]
+        ? `明天优先推「${goodPackages[0].packageName}」`
+        : '明天先从高分套餐池选择 3 个测试',
+      weakPackages[0]
+        ? `滞销/风险套餐「${weakPackages[0].packageName}」需要换卖点或降曝光`
+        : '继续监控连续未售罄套餐',
       '社群文案保留价格、库存和使用规则，避免空泛促销话术'
     ]
   };
 }
 
 function nextActionFor(pkg: RecommendPackageItem, tags: OperationTag[]) {
-  if (tags.some((tag) => tag.key === 'hot_restock_needed')) return '联系商家确认补货，同时准备售罄承接文案';
-  if (tags.some((tag) => tag.key === 'continuous_slow')) return '进入滞销前排池，重写卖点并安排社群测试';
-  if (tags.some((tag) => tag.key === 'high_refund_risk')) return '暂停强推，先核对使用规则和商家履约';
-  if (tags.some((tag) => tag.key === 'ending_clearance')) return '今天安排清仓提醒，突出截止时间和库存';
+  if (tags.some((tag) => tag.key === 'hot_restock_needed'))
+    return '联系商家确认补货，同时准备售罄承接文案';
+  if (tags.some((tag) => tag.key === 'continuous_slow'))
+    return '进入滞销前排池，重写卖点并安排社群测试';
+  if (tags.some((tag) => tag.key === 'high_refund_risk'))
+    return '暂停强推，先核对使用规则和商家履约';
+  if (tags.some((tag) => tag.key === 'ending_clearance'))
+    return '今天安排清仓提醒，突出截止时间和库存';
   if (pkg.recommendedChannels.includes('wechat_group')) return '生成作战卡并推送到匹配社群';
   return '进入今日观察池，等待下一轮库存快照';
 }
 
 function buildSellingPoints(pkg: RecommendPackageItem, price: number) {
   const discount = pkg.originalPrice > 0 ? price / pkg.originalPrice : 1;
-  const pricePoint = discount <= 0.5
-    ? `到手约 ${Math.round(discount * 100) / 10} 折`
-    : price > 0 ? `当前售价 ${formatPrice(price)} 元` : '';
+  const pricePoint =
+    discount <= 0.5
+      ? `到手约 ${Math.round(discount * 100) / 10} 折`
+      : price > 0
+        ? `当前售价 ${formatPrice(price)} 元`
+        : '';
   const rulePoint = primaryUseRule(pkg);
   const points = uniqueText([
     ...pkg.sellingPoints.flatMap((point) => point.split(/[、，,]/)),
@@ -402,18 +543,23 @@ function stockCue(pkg: RecommendPackageItem) {
   if (pkg.stockLeft <= 0) return 'JeeSite 显示当前已售罄，先确认补货或承接套餐';
   if (pkg.stockLeft <= 10) return `JeeSite 剩余 ${pkg.stockLeft} 份，适合做限量提醒`;
   if (pkg.inventorySoldOutDays >= 2) return `近几日多次售罄，当前补到 ${pkg.stockLeft} 份`;
-  if (pkg.inventoryObservedDays >= 2 && pkg.inventorySoldOutDays === 0) return `近 ${pkg.inventoryObservedDays} 天未售罄，当前剩余 ${pkg.stockLeft} 份`;
+  if (pkg.inventoryObservedDays >= 2 && pkg.inventorySoldOutDays === 0)
+    return `近 ${pkg.inventoryObservedDays} 天未售罄，当前剩余 ${pkg.stockLeft} 份`;
   return `JeeSite 剩余 ${pkg.stockLeft} 份`;
 }
 
 function primaryUseRule(pkg: ContentPackage) {
-  return uniqueText(pkg.useRules).find((rule) => rule.length <= 34) ?? uniqueText(pkg.useRules)[0] ?? '';
+  return (
+    uniqueText(pkg.useRules).find((rule) => rule.length <= 34) ?? uniqueText(pkg.useRules)[0] ?? ''
+  );
 }
 
 function inferAudience(pkg: ContentPackage) {
   if (/亲子|儿童|乐园/.test(pkg.category + pkg.packageName)) return ['亲子家庭', '周末出行用户'];
-  if (/水疗|按摩|足浴|SPA|汤泉/.test(pkg.category + pkg.packageName)) return ['下班放松用户', '附近白领'];
-  if (/健身|运动|练习场/.test(pkg.category + pkg.packageName)) return ['运动爱好者', '周末体验用户'];
+  if (/水疗|按摩|足浴|SPA|汤泉/.test(pkg.category + pkg.packageName))
+    return ['下班放松用户', '附近白领'];
+  if (/健身|运动|练习场/.test(pkg.category + pkg.packageName))
+    return ['运动爱好者', '周末体验用户'];
   if (/双人|2人/.test(pkg.packageName)) return ['双人结伴用户', '晚餐决策用户'];
   return ['附近用户', '价格敏感用户', '本地生活高频用户'];
 }

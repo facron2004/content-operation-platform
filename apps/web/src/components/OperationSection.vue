@@ -21,7 +21,7 @@
             </el-tag>
           </div>
           <div class="ops-card-meta">
-            <span>¥{{ item.currentPrice }}</span>
+            <span>{{ item.currentPrice }}</span>
             <span>{{ item.areaName }}</span>
             <span>库存 {{ item.stockLeft }}</span>
           </div>
@@ -38,11 +38,7 @@
           </div>
           <small>下一步：{{ item.nextAction }}</small>
         </div>
-        <el-button
-          size="small"
-          type="primary"
-          @click.stop="$emit('generate', item.packageId)"
-        >
+        <el-button size="small" type="primary" @click.stop="$emit('generate', item.packageId)">
           作战卡
         </el-button>
       </article>
@@ -78,66 +74,80 @@ defineEmits<{
 .ops-card-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 6px;
 }
 
 .ops-card {
   display: flex;
   justify-content: space-between;
-  gap: 12px;
-  padding: 12px;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
   border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #fff;
+  border-radius: var(--radius-sm);
+  background: var(--panel);
   cursor: pointer;
-  transition: border-color 0.16s ease, transform 0.16s ease, box-shadow 0.16s ease;
+  transition:
+    border-color 0.15s ease,
+    transform 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
 .ops-card:hover {
-  border-color: rgba(37, 99, 235, 0.32);
-  box-shadow: var(--shadow-soft);
+  border-color: var(--accent-line);
+  box-shadow: var(--shadow);
   transform: translateY(-1px);
+}
+
+.ops-card-main {
+  min-width: 0;
+  flex: 1;
 }
 
 .ops-card-title {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px;
 }
 
 .ops-card-meta {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 8px;
+  gap: 6px;
+  margin-top: 4px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .ops-card-meta span {
-  padding: 4px 8px;
-  border-radius: 8px;
-  background: #f4f7fb;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  background: var(--soft);
+  font-variant-numeric: tabular-nums;
 }
 
 .ops-card strong {
   color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
   line-height: 1.4;
 }
 
 .ops-card p {
-  margin: 8px 0;
+  margin: 4px 0;
   color: var(--muted);
+  font-size: 12px;
   line-height: 1.5;
 }
 
 .ops-card small {
   color: var(--muted);
+  font-size: 11px;
 }
 
 .compact {
-  gap: 6px;
+  gap: 4px;
 }
 </style>

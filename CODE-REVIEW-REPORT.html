@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>代码审查报告 — 内容运营 AI 文案生成系统</title>
+<style>
+  :root {
+    --bg: #f8f9fa;
+    --card: #ffffff;
+    --ink: #1a1a2e;
+    --muted: #6c757d;
+    --line: #e9ecef;
+    --accent: #3b82f6;
+    --green: #10b981;
+    --yellow: #f59e0b;
+    --red: #ef4444;
+    --purple: #8b5cf6;
+    --radius: 12px;
+    --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    line-height: 1.7;
+    padding: 40px 24px;
+  }
+  .container { max-width: 1000px; margin: 0 auto; }
+
+  header {
+    background: linear-gradient(135deg, #1e3a5f 0%, #2563eb 100%);
+    color: white;
+    border-radius: var(--radius);
+    padding: 40px;
+    margin-bottom: 32px;
+  }
+  header h1 { font-size: 28px; font-weight: 700; margin-bottom: 8px; }
+  header p { opacity: 0.85; font-size: 15px; }
+  header .meta { margin-top: 16px; display: flex; gap: 24px; font-size: 13px; opacity: 0.7; }
+
+  .scorecard {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 16px;
+    margin-bottom: 32px;
+  }
+  .score-item {
+    background: var(--card);
+    border-radius: var(--radius);
+    padding: 24px;
+    box-shadow: var(--shadow);
+    text-align: center;
+  }
+  .score-item .label { font-size: 13px; color: var(--muted); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .score-item .value { font-size: 36px; font-weight: 700; }
+  .score-item .sub { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+  .section {
+    background: var(--card);
+    border-radius: var(--radius);
+    padding: 28px 32px;
+    margin-bottom: 20px;
+    box-shadow: var(--shadow);
+  }
+  .section h2 {
+    font-size: 20px;
+    font-weight: 700;
+    margin-bottom: 20px;
+    padding-bottom: 12px;
+    border-bottom: 2px solid var(--line);
+  }
+  .section h3 {
+    font-size: 16px;
+    font-weight: 600;
+    margin: 20px 0 10px;
+    color: #334155;
+  }
+
+  .badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    margin-right: 6px;
+  }
+  .badge-critical { background: #fef2f2; color: #dc2626; }
+  .badge-high { background: #fff7ed; color: #ea580c; }
+  .badge-medium { background: #fefce8; color: #ca8a04; }
+  .badge-low { background: #f0fdf4; color: #16a34a; }
+  .badge-info { background: #eff6ff; color: #2563eb; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 12px 0;
+    font-size: 14px;
+  }
+  th, td {
+    padding: 10px 14px;
+    text-align: left;
+    border-bottom: 1px solid var(--line);
+  }
+  th {
+    font-weight: 600;
+    color: var(--muted);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  tr:last-child td { border-bottom: none; }
+
+  .issue-card {
+    border-left: 4px solid var(--line);
+    padding: 14px 18px;
+    margin: 12px 0;
+    background: #fafbfc;
+    border-radius: 0 8px 8px 0;
+  }
+  .issue-card.critical { border-color: var(--red); }
+  .issue-card.high { border-color: var(--yellow); }
+  .issue-card.medium { border-color: var(--accent); }
+  .issue-card.low { border-color: var(--green); }
+  .issue-card .title { font-weight: 600; font-size: 15px; margin-bottom: 4px; }
+  .issue-card .desc { font-size: 13px; color: var(--muted); }
+
+  .checklist { list-style: none; padding: 0; }
+  .checklist li { padding: 8px 0; font-size: 14px; display: flex; align-items: flex-start; gap: 10px; }
+  .checklist .icon { font-size: 18px; flex-shrink: 0; }
+
+  pre {
+    background: #1e293b;
+    color: #e2e8f0;
+    padding: 16px;
+    border-radius: 8px;
+    font-size: 13px;
+    overflow-x: auto;
+    margin: 12px 0;
+    line-height: 1.5;
+  }
+
+  .grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  @media (max-width: 640px) { .grid-2 { grid-template-columns: 1fr; } }
+
+  footer {
+    text-align: center;
+    padding: 32px;
+    color: var(--muted);
+    font-size: 13px;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <h1>代码审查报告</h1>
+  <p>内容运营 AI 文案生成系统 — 全栈项目代码质量与安全审查</p>
+  <div class="meta">
+    <span>审查日期：2026-06-16</span>
+    <span>审查范围：全项目（apps/api + apps/web + packages/shared）</span>
+    <span>审查人：WorkBuddy AI</span>
+  </div>
+</header>
+
+<!-- Scorecard -->
+<div class="scorecard">
+  <div class="score-item">
+    <div class="label">架构设计</div>
+    <div class="value" style="color:var(--green)">A</div>
+    <div class="sub">分层清晰，门面模式</div>
+  </div>
+  <div class="score-item">
+    <div class="label">安全性</div>
+    <div class="value" style="color:var(--yellow)">B</div>
+    <div class="sub">缺少认证和速率限制</div>
+  </div>
+  <div class="score-item">
+    <div class="label">代码质量</div>
+    <div class="value" style="color:var(--green)">A-</div>
+    <div class="sub">TypeScript 严格模式，domain 纯函数</div>
+  </div>
+  <div class="score-item">
+    <div class="label">测试覆盖</div>
+    <div class="value" style="color:var(--accent)">B+</div>
+    <div class="sub">19 个测试文件，覆盖核心领域</div>
+  </div>
+  <div class="score-item">
+    <div class="label">前端工程</div>
+    <div class="value" style="color:var(--yellow)">B</div>
+    <div class="sub">prop drilling 严重，缺少错误边界</div>
+  </div>
+</div>
+
+<!-- ============ SECTION: Executive Summary ============ -->
+<div class="section">
+  <h2>总览</h2>
+  <p>这是一个设计良好的全栈项目，采用 <strong>NestJS（后端）+ Vue 3（前端）+ Prisma（ORM）+ SQLite（数据库）</strong> 技术栈，通过 npm workspaces monorepo 管理三个子包。整体代码质量较高，领域层采用纯函数设计使其可测试性极佳，缓存策略和错误处理也比较完善。</p>
+  <p style="margin-top:12px;">主要短板集中在 <strong>安全层面</strong>（缺少认证/授权、速率限制）和 <strong>前端工程化</strong>(prop drilling 严重、缺少全局错误边界）。下面对比列出亮点与问题：</p>
+
+  <table style="margin-top:16px;">
+    <tr><th style="width:50%">亮点</th><th style="width:50%">主要问题</th></tr>
+    <tr>
+      <td>Domain 层全部是纯函数，无副作用</td>
+      <td>API 端点完全无需认证即可访问</td>
+    </tr>
+    <tr>
+      <td>多层缓存（内存 TTL + inflight 去重 + 最小请求间隔）</td>
+      <td>缺少速率限制（ThrottlerGuard）</td>
+    </tr>
+    <tr>
+      <td>输入校验完善 (class-validator + ValidationPipe)</td>
+      <td>前端缺少全局 Error Boundary</td>
+    </tr>
+    <tr>
+      <td>AI 文案生成含审核、兜底、重试完整链路</td>
+      <td>GenerateView / AiConfigPanel prop drilling 严重</td>
+    </tr>
+    <tr>
+      <td>JeeSite 适配器字段兼容性强</td>
+      <td>health 端点暴露内存使用详情</td>
+    </tr>
+    <tr>
+      <td>19 个测试文件覆盖核心业务</td>
+      <td>内存缓存无 LRU 上限，长运行可能泄漏</td>
+    </tr>
+  </table>
+</div>
+
+<!-- ============ SECTION: Overall Architecture ============ -->
+<div class="section">
+  <h2>架构评审</h2>
+  <h3>分层结构</h3>
+  <pre>apps/api/src/
+├── main.ts              # 入口：CORS、ValidationPipe、静态资源
+├── app.module.ts        # 根模块（极简，只导入 PrismaModule + ContentModule）
+├── config/load-env.ts   # 环境变量加载
+├── prisma/              # 数据库模块 (@Global)
+├── domain/              # ★ 纯函数领域规则层（推广评分、运营标签、文案规则）
+├── content/
+│   ├── content.service.ts    # ★ 门面模式聚合入口
+│   ├── alert.service.ts      # 预警服务
+│   ├── copy.service.ts       # 文案服务
+│   ├── dashboard.service.ts  # 仪表盘
+│   ├── data-source.service.ts # 数据源（JeeSite API）
+│   ├── auto-login.service.ts  # 自动登录
+│   ├── ai-copy/               # AI 文案子模块（生成、解析、重试）
+│   └── package-detail/        # 套餐详情子模块（抓取、解析、缓存）
+└── content/*.controller.ts    # 5 个 Controller</pre>
+
+  <h3>设计模式评价</h3>
+  <ul class="checklist">
+    <li><span class="icon">✅</span><strong>门面模式：</strong>ContentService 作为聚合入口，将文案、预警、仪表盘委托给子服务，职责清晰。</li>
+    <li><span class="icon">✅</span><strong>纯函数领域层：</strong>domain/ 目录下所有模块均无副作用，可独立测试，评分/标签/预警规则透明。</li>
+    <li><span class="icon">✅</span><strong>适配器模式：</strong>jeesite-bargain-adapter.ts 将外部 API 数据适配为内部类型，兼容多种字段名变体。</li>
+    <li><span class="icon">✅</span><strong>多层缓存：</strong>内存 TTL + inflight 去重 + 最小请求间隔 + 写后失效。</li>
+    <li><span class="icon">⚠️</span><strong>缺少横切关注点：</strong>无全局 ExceptionFilter、无 AuthGuard、无 ThrottlerGuard、无 LoggingInterceptor。</li>
+  </ul>
+</div>
+
+<!-- ============ SECTION: Security ============ -->
+<div class="section">
+  <h2>安全审查</h2>
+
+  <table>
+    <tr><th>检查项</th><th>状态</th><th>详情</th></tr>
+    <tr>
+      <td>API 认证</td>
+      <td><span class="badge badge-critical">缺失</span></td>
+      <td>所有 /api 路由无需任何认证即可访问，依赖 localhost 绑定做访问控制</td>
+    </tr>
+    <tr>
+      <td>速率限制</td>
+      <td><span class="badge badge-critical">缺失</span></td>
+      <td>无 ThrottlerGuard，API 可能被滥用</td>
+    </tr>
+    <tr>
+      <td>HTTP 安全头</td>
+      <td><span class="badge badge-high">缺失</span></td>
+      <td>未使用 helmet 中间件，缺少 X-Frame-Options、CSP 等安全头</td>
+    </tr>
+    <tr>
+      <td>CORS 配置</td>
+      <td><span class="badge badge-low">良好</span></td>
+      <td>白名单仅允许 localhost / 127.0.0.1</td>
+    </tr>
+    <tr>
+      <td>绑定地址</td>
+      <td><span class="badge badge-low">良好</span></td>
+      <td>默认 127.0.0.1，设置 HOST=0.0.0.0 才对外开放</td>
+    </tr>
+    <tr>
+      <td>输入校验</td>
+      <td><span class="badge badge-low">良好</span></td>
+      <td>ValidationPipe（whitelist + forbidNonWhitelisted + transform）</td>
+    </tr>
+    <tr>
+      <td>SQL 注入</td>
+      <td><span class="badge badge-low">良好</span></td>
+      <td>使用 Prisma ORM + 参数绑定，无字符串拼接 SQL</td>
+    </tr>
+    <tr>
+      <td>CSRF 防护</td>
+      <td><span class="badge badge-high">缺失</span></td>
+      <td>前端无 CSRF Token 机制</td>
+    </tr>
+    <tr>
+      <td>信息泄露 (health)</td>
+      <td><span class="badge badge-medium">需改进</span></td>
+      <td>/api/content/health 暴露 process.memoryUsage() 详情</td>
+    </tr>
+    <tr>
+      <td>Cookie 安全</td>
+      <td><span class="badge badge-low">可接受</span></td>
+      <td>日志中 Cookie 做 mask 处理；API 响应中 maskedCookie 脱敏</td>
+    </tr>
+    <tr>
+      <td>.env 防护</td>
+      <td><span class="badge badge-low">良好</span></td>
+      <td>.env 已在 .gitignore 中排除</td>
+    </tr>
+    <tr>
+      <td>401 处理</td>
+      <td><span class="badge badge-medium">需改进</span></td>
+      <td>前端 axios 401 只 toast 提示，不触发登出重定向</td>
+    </tr>
+  </table>
+
+  <div class="issue-card critical">
+    <div class="title">P0 — 缺少认证和授权机制</div>
+    <div class="desc">当前所有 API 端点完全对外开放。建议添加 AuthGuard（基于 JWT 或 Session），结合角色体系（5 种角色）实现真正的权限控制，而不只是前端 UI 过滤。</div>
+  </div>
+  <div class="issue-card high">
+    <div class="title">P1 — 缺少全局异常过滤器</div>
+    <div class="desc">错误响应格式依赖 NestJS 默认行为。添加 ExceptionFilter 可统一 JSON 错误格式，方便前端消费。</div>
+  </div>
+  <div class="issue-card high">
+    <div class="title">P1 — health 端点信息泄露</div>
+    <div class="desc">/api/content/health 返回 process.uptime()、process.memoryUsage() 等敏感信息，在公网可访问时可能被利用做 DoS 分析。</div>
+  </div>
+</div>
+
+<!-- ============ SECTION: Backend ============ -->
+<div class="section">
+  <h2>后端代码质量</h2>
+
+  <h3>Controller 层</h3>
+  <table>
+    <tr><th>Controller</th><th>路由数</th><th>输入校验</th><th>评价</th></tr>
+    <tr><td>package.controller.ts</td><td>12</td><td>class-validator + Transform</td><td>✅ 完善，page/pageSize 做了安全边界</td></tr>
+    <tr><td>copy.controller.ts</td><td>3</td><td>@IsIn 严格枚举</td><td>✅ channel 和 auditStatus 严格限制</td></tr>
+    <tr><td>alert.controller.ts</td><td>3</td><td>DTO + 数组校验</td><td>✅ 批量操作做了去重和空值过滤</td></tr>
+    <tr><td>dashboard.controller.ts</td><td>4</td><td>role 仅 IsString</td><td>⚠️ role 缺少 @IsIn 枚举限制</td></tr>
+  </table>
+
+  <h3>Service 层亮点</h3>
+  <ul class="checklist">
+    <li><span class="icon">✅</span><strong>data-source.service.ts：</strong>完整的数据获取链路 — 缓存→inflight去重→分页并发（Promise.allSettled）→单页健康度检查→自动登录重试→指数退避重试。</li>
+    <li><span class="icon">✅</span><strong>auto-login.service.ts：</strong>启动时加载 Cookie 缓存，失效后自动登录，失败3次后指数退避冷却（5-30分钟），Cookie 脱敏记录。</li>
+    <li><span class="icon">✅</span><strong>copy.service.ts：</strong>机器审核结果优先于人工审核（安全设计），审核前校验 packageId/channel 必填。</li>
+    <li><span class="icon">✅</span><strong>alert.service.ts：</strong>使用 $transaction 保证批量操作原子性，分页严格边界。</li>
+    <li><span class="icon">✅</span><strong>domain/copy-rules.ts：</strong>禁用词检测 + 价格一致性 + 库存一致性 + 售罄状态，全纯函数。</li>
+    <li><span class="icon">✅</span><strong>domain/operation-rules.ts：</strong>8 维度加权评分（权重分配合理），9 种运营标签，8 种预警。</li>
+  </ul>
+
+  <h3>需要改进</h3>
+  <div class="issue-card medium">
+    <div class="title">P2 — detail-cache.ts 无 LRU 上限</div>
+    <div class="desc">使用 Map 存储，仅 TTL 过期，无最大容量限制。长时间运行可能内存持续增长。建议添加 LRU 淘汰或设置 maxSize。</div>
+  </div>
+  <div class="issue-card medium">
+    <div class="title">P2 — role 参数校验过宽</div>
+    <div class="desc">dashboard.controller.ts 中 @IsOptional() @IsString() 应改为 @IsOptional() @IsIn([...UserRole 枚举])。</div>
+  </div>
+  <div class="issue-card low">
+    <div class="title">P3 — daily-inventory-crawler 使用 $executeRawUnsafe</div>
+    <div class="desc">拼接 SQL 创建表时使用了模板字符串，但通过参数绑定传值，SQL 注入风险可控。建议迁移到 Prisma Migrate。</div>
+  </div>
+</div>
+
+<!-- ============ SECTION: Frontend ============ -->
+<div class="section">
+  <h2>前端代码质量</h2>
+
+  <h3>架构概览</h3>
+  <pre>apps/web/src/
+├── views/           # 8 个路由页面
+├── components/      # 15 个通用组件
+├── composables/     # 4 个全局 composable
+├── features/        # 业务模块化（alerts、dashboard）
+├── services/        # API 调用层（http-client + cache + 7 领域 API）
+├── stores/role.ts   # Pinia 角色状态
+└── utils/           # 导出、标签、导航</pre>
+
+  <h3>亮点</h3>
+  <ul class="checklist">
+    <li><span class="icon">✅</span><strong>http-client.ts：</strong>指数退避重试（1s→2s→4s），统一 NProgress 管理，完整的 HTTP 状态码映射，30s 超时。</li>
+    <li><span class="icon">✅</span><strong>cache.service.ts：</strong>请求去重（pendingRequests Map）+ TTL 过期 + 写后失效。</li>
+    <li><span class="icon">✅</span><strong>角色联动：</strong>role 切换时 composable 自动重载，无需 View 层关注。</li>
+    <li><span class="icon">✅</span><strong>CSS 变量体系：</strong>--line / --muted / --ink / --panel，暗色主题支持完善。</li>
+    <li><span class="icon">✅</span><strong>路由懒加载：</strong>() => import()，首屏只加载 ShellLayout。</li>
+  </ul>
+
+  <h3>关键问题</h3>
+
+  <div class="issue-card high">
+    <div class="title">P1 — GenerateView / AiConfigPanel prop drilling 严重</div>
+    <div class="desc">GenerateView 向 AiConfigPanel 传递 15+ 个 :prop 和 15+ 个 @update:xxx 事件，可读性和维护性极差。建议合并为 v-model:config 对象，或将状态提取到独立 composable。</div>
+  </div>
+  <div class="issue-card high">
+    <div class="title">P1 — 前端缺少全局错误边界</div>
+    <div class="desc">main.ts 中未配置 app.config.errorHandler，组件渲染错误会静默失败。同时缺少 window.addEventListener('unhandledrejection')。建议添加全局错误处理插件。</div>
+  </div>
+  <div class="issue-card high">
+    <div class="title">P1 — useDashboard 类型断言绕过类型检查</div>
+    <div class="desc">使用 <code>as unknown as OperationConsoleData</code> 强转类型，如果后端字段变更不会在编译期报错。</div>
+  </div>
+  <div class="issue-card medium">
+    <div class="title">P2 — 前端内存缓存无 LRU 上限</div>
+    <div class="desc">cache.service.ts 使用 Map 无容量限制，cache key 用 JSON.stringify(params) 对对象键顺序敏感。</div>
+  </div>
+  <div class="issue-card medium">
+    <div class="title">P2 — api.clearCache() 粒度过粗</div>
+    <div class="desc">写操作后全量清空缓存，可能误伤正在读取的无关请求。</div>
+  </div>
+  <div class="issue-card medium">
+    <div class="title">P2 — ShellLayout 重复注册路由守卫</div>
+    <div class="desc">router.beforeEach/afterEach 在 ShellLayout.vue 中重复注册，与 router.ts 中的守卫冲突。</div>
+  </div>
+  <div class="issue-card medium">
+    <div class="title">P2 — useAlerts 缺少请求竞态保护</div>
+    <div class="desc">快速切换筛选条件时，旧请求的响应可能覆盖新请求的结果。RecommendationsView 有 loadRequestId 保护，但 useAlerts 没有。</div>
+  </div>
+  <div class="issue-card low">
+    <div class="title">P3 — api 命名空间聚合对象为死代码</div>
+    <div class="desc">api.ts 第 44-53 行的 <code>export const api = { getRecommendations, ... }</code> 聚合导出未在任何文件中被使用，所有调用都是解构导入。</div>
+  </div>
+  <div class="issue-card low">
+    <div class="title">P3 — copyText 缺少 clipboard API fallback</div>
+    <div class="desc">某些环境下 navigator.clipboard 不可用，应 fallback 到 document.execCommand('copy')。</div>
+  </div>
+  <div class="issue-card low">
+    <div class="title">P3 — ShellLayout cookiePoller 清理是死代码</div>
+    <div class="desc">ShellLayout 是持久布局，不会触发 onUnmounted，但 onUnmounted 中写了清理逻辑。</div>
+  </div>
+</div>
+
+<!-- ============ SECTION: Test Coverage ============ -->
+<div class="section">
+  <h2>测试覆盖评估</h2>
+  <p>项目包含 <strong>19 个测试文件</strong>，覆盖了核心业务逻辑和 API 集成。测试框架使用 Vitest。</p>
+
+  <table>
+    <tr><th>领域</th><th>测试文件</th><th>覆盖内容</th></tr>
+    <tr><td>Domain 规则</td><td>5 个</td><td>文案规则引擎、运营评分/标签/预警、推广评分、库存标记、文案审核</td></tr>
+    <tr><td>Service 层</td><td>6 个</td><td>ContentService、CopyService、AlertService、DashboardService、DataSourceService、AutoLoginService</td></tr>
+    <tr><td>适配器</td><td>1 个</td><td>JeeSite 数据适配器的字段映射和边界情况</td></tr>
+    <tr><td>Package Detail</td><td>1 个</td><td>HTML 解析器的多种解析策略</td></tr>
+    <tr><td>API 集成</td><td>4 个</td><td>内容 API、库存 API、Cookie API、AI 配置 API</td></tr>
+    <tr><td>AI Copy</td><td>1 个</td><td>AI 文案生成、配置、prompt 构建</td></tr>
+  </table>
+
+  <h3>缺失的测试</h3>
+  <ul class="checklist">
+    <li><span class="icon">❌</span>前端组件测试（Vue Test Utils + Vitest）— 0 个文件</li>
+    <li><span class="icon">❌</span>E2E 测试（Playwright 已安装但未见用例）</li>
+    <li><span class="icon">❌</span>前端 composable 单元测试（useAlerts、useDashboard、useGenerate）</li>
+    <li><span class="icon">❌</span>API 异常路径测试（SQLite 故障、外部 API 超时）</li>
+  </ul>
+</div>
+
+<!-- ============ SECTION: Database ============ -->
+<div class="section">
+  <h2>数据库设计审查</h2>
+
+  <h3>数据模型</h3>
+  <table>
+    <tr><th>Model</th><th>字段数</th><th>索引数</th><th>关系</th><th>评价</th></tr>
+    <tr><td>ContentPackage</td><td>24</td><td>5</td><td>→ Snapshots, Scores, Copies, Performances</td><td>✅ 覆盖完整业务实体</td></tr>
+    <tr><td>SalesSnapshot</td><td>17</td><td>4</td><td>← ContentPackage (Cascade)</td><td>✅ 时间序列数据设计合理</td></tr>
+    <tr><td>PromotionScore</td><td>12</td><td>2</td><td>← ContentPackage (Cascade)</td><td>✅ 含策略/风险/渠道推荐</td></tr>
+    <tr><td>GeneratedCopy</td><td>17</td><td>5</td><td>← ContentPackage, → Performances</td><td>✅ auditStatus + channel 联合索引好</td></tr>
+    <tr><td>CopyPerformance</td><td>15</td><td>4</td><td>← ContentPackage, ← GeneratedCopy</td><td>✅ channel/groupId 索引合理</td></tr>
+    <tr><td>JeeSiteInventoryDailySnapshot</td><td>11</td><td>1</td><td>无（独立表）</td><td>✅ 复合主键 (packageId, snapshotDate)</td></tr>
+    <tr><td>OperationAlertResolution</td><td>4</td><td>1</td><td>无（独立表）</td><td>✅ 复合主键 (alertId, resolvedDate) 防重复</td></tr>
+  </table>
+
+  <h3>审查意见</h3>
+  <ul class="checklist">
+    <li><span class="icon">✅</span><strong>外键级联删除：</strong>所有关联表使用 <code>onDelete: Cascade</code>，删除套餐时子数据自动清理，一致性好。</li>
+    <li><span class="icon">✅</span><strong>索引设计：</strong>常用查询字段（areaId、merchantId、saleStatus、auditStatus、createdAt）均有索引，联合索引 (areaId, saleStatus) 覆盖区域+状态查询。</li>
+    <li><span class="icon">⚠️</span><strong>SQLite 限制：</strong>SQLite 并发写入性能有限，作为本地工具足够，但不适合多用户高并发场景。</li>
+    <li><span class="icon">⚠️</span><strong>无迁移版本管理：</strong>使用 prisma/create-schema.ts 手动执行 DDL，没有利用 Prisma Migrate 的版本历史。</li>
+  </ul>
+</div>
+
+<!-- ============ SECTION: Recommendations ============ -->
+<div class="section">
+  <h2>改进建议优先级</h2>
+
+  <table>
+    <tr><th style="width:50px">优先级</th><th>类别</th><th>问题</th><th>建议方案</th></tr>
+    <tr>
+      <td><span class="badge badge-critical">P0</span></td>
+      <td>安全</td>
+      <td>API 无认证</td>
+      <td>添加 JWT AuthGuard + 登录接口</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-critical">P0</span></td>
+      <td>安全</td>
+      <td>无速率限制</td>
+      <td>添加 @nestjs/throttler</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-high">P1</span></td>
+      <td>安全</td>
+      <td>缺少 HTTP 安全头</td>
+      <td>添加 helmet 中间件</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-high">P1</span></td>
+      <td>后端</td>
+      <td>缺少全局 ExceptionFilter</td>
+      <td>添加统一错误响应格式</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-high">P1</span></td>
+      <td>前端</td>
+      <td>GenerateView prop drilling</td>
+      <td>重构为 v-model:config 对象模式</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-high">P1</span></td>
+      <td>前端</td>
+      <td>缺少全局 Error Boundary</td>
+      <td>app.config.errorHandler + unhandledrejection</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-high">P1</span></td>
+      <td>前端</td>
+      <td>useDashboard 类型断言不安全</td>
+      <td>使用 TypeScript 类型守卫替代 as unknown as</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-high">P1</span></td>
+      <td>后端</td>
+      <td>health 端点信息泄露</td>
+      <td>对内存详情做脱敏或限制 localhost 访问</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-medium">P2</span></td>
+      <td>后端</td>
+      <td>detail-cache 无容量限制</td>
+      <td>添加 LRU 淘汰或 maxSize</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-medium">P2</span></td>
+      <td>前端</td>
+      <td>内存缓存无 LRU</td>
+      <td>添加 LRU 上限</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-medium">P2</span></td>
+      <td>前端</td>
+      <td>useAlerts 缺少请求竞态保护</td>
+      <td>添加 loadRequestId 模式</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-medium">P2</span></td>
+      <td>后端</td>
+      <td>role 参数校验过宽</td>
+      <td>添加 @IsIn 严格枚举限制</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-low">P3</span></td>
+      <td>前端</td>
+      <td>api 命名空间聚合死代码</td>
+      <td>移除未使用的 export const api</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-low">P3</span></td>
+      <td>前端</td>
+      <td>copyText 无 clipboard fallback</td>
+      <td>添加 document.execCommand fallback</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-low">P3</span></td>
+      <td>测试</td>
+      <td>缺少前端组件/E2E测试</td>
+      <td>添加 Vue Test Utils + Playwright 用例</td>
+    </tr>
+  </table>
+</div>
+
+<!-- ============ SECTION: Conclusion ============ -->
+<div class="section">
+  <h2>总结</h2>
+  <p><strong>整体评分：B+ → A-</strong>（解决 P0/P1 问题后可提升至 A）</p>
+  <br>
+  <p>这是一个<strong>工程化水平较高的全栈项目</strong>。后端采用 NestJS 门面模式 + 纯函数领域层，架构优雅；前端使用 Vue 3 Composition API + TypeScript，类型安全。缓存策略、错误重试、自动登录等关键链路考虑周全。<strong>19 个测试文件</strong>覆盖了核心业务逻辑，domain 层的纯函数设计使得规则引擎高度可测。</p>
+  <br>
+  <p>主要不足集中在<strong>安全层面</strong>——在当前本地使用场景下（默认绑定 127.0.0.1，CORS 白名单限制 localhost），风险可控；但如果未来需要在局域网或公网部署，<strong>认证、授权、速率限制、安全头是必须补齐的基础设施</strong>。前端方面，GenerateView 的 prop drilling 问题需要优先重构。</p>
+</div>
+
+<footer>
+  代码审查报告 · 内容运营 AI 文案生成系统 · 2026-06-16
+</footer>
+
+</div>
+</body>
+</html>

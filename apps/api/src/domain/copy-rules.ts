@@ -6,6 +6,7 @@ import type {
   PromotionScore,
   StrategyType
 } from '@content/shared';
+import { currentPrice } from '@content/shared';
 import { getSubwayStation } from './subway-stations';
 import { getCategoryEmoji, getDishEmoji } from './category-emoji';
 
@@ -35,9 +36,6 @@ const defaultScenario = '日常运营推荐';
 const formatPrice = (value?: number | null): string =>
   value === null || value === undefined ? '' : String(value);
 
-const primaryPrice = (pkg: ContentPackage) =>
-  pkg.temporarySalePrice ?? pkg.salePrice;
-
 const calculateSavings = (originalPrice: number, currentPrice: number): number =>
   Math.round(originalPrice - currentPrice);
 
@@ -65,12 +63,18 @@ const extractLocationNames = (merchantName: string): string[] => {
 };
 
 const extractBrandShortName = (merchantName: string): string => {
-  const cleaned = merchantName.split(',')[0].replace(/（.*?）/g, '').trim();
+  const cleaned = merchantName
+    .split(',')[0]
+    .replace(/（.*?）/g, '')
+    .trim();
   return cleaned.split('·')[0].trim() || cleaned;
 };
 
 const extractBrandFullName = (merchantName: string): string =>
-  merchantName.split(',')[0].replace(/（.*?）/g, '').trim();
+  merchantName
+    .split(',')[0]
+    .replace(/（.*?）/g, '')
+    .trim();
 
 const simplifyPackageName = (packageName: string, brandShort: string): string => {
   const cleaned = packageName.replace(
@@ -87,7 +91,7 @@ const formatPackageDetail = (detail: PackageDetail | null, separator: string): s
   const parts: string[] = [];
   for (const section of detail.sections) {
     if (!section.items?.length) continue;
-    const items = section.items.map(i => i.name);
+    const items = section.items.map((i) => i.name);
     if (!items.length) continue;
     const emoji = getDishEmoji(items[0]);
     if (items.length > 1) {
@@ -102,7 +106,11 @@ const formatPackageDetail = (detail: PackageDetail | null, separator: string): s
 
 // ---- 地址文案 ----
 
-const buildLocationLine = (pkg: ContentPackage, brandShort: string, locationNames: string[]): string => {
+const buildLocationLine = (
+  pkg: ContentPackage,
+  brandShort: string,
+  locationNames: string[]
+): string => {
   const storeCount = getStoreCount(pkg.useRules);
   if (storeCount && storeCount > 1 && locationNames.length > 0) {
     const shown = locationNames.slice(0, 5).join('/');
@@ -128,17 +136,17 @@ interface TitleCtx {
 }
 
 const buildTitleCtx = (pkg: ContentPackage): TitleCtx => {
-  const currentPrice = primaryPrice(pkg);
+  const pkgPrice = currentPrice(pkg) ?? 0;
   return {
     station: getSubwayStation(pkg.areaName || pkg.areaId, pkg.merchantName),
     brandShort: extractBrandShortName(pkg.merchantName),
     brandFull: extractBrandFullName(pkg.merchantName),
     category: pkg.category,
-    currentPrice,
-    savings: calculateSavings(pkg.originalPrice, currentPrice),
-    discountZhe: Math.round((currentPrice / pkg.originalPrice) * 10),
+    currentPrice: pkgPrice,
+    savings: calculateSavings(pkg.originalPrice, pkgPrice),
+    discountZhe: Math.round((pkgPrice / pkg.originalPrice) * 10),
     storeCount: getStoreCount(pkg.useRules),
-    locationNames: extractLocationNames(pkg.merchantName),
+    locationNames: extractLocationNames(pkg.merchantName)
   };
 };
 
@@ -147,21 +155,29 @@ const buildTitleCtx = (pkg: ContentPackage): TitleCtx => {
 type TitleBuilder = (ctx: TitleCtx, pkg: ContentPackage, promotion?: PromotionScore) => string;
 
 const buildTitlePrice: TitleBuilder = (ctx, pkg) => {
-  if (ctx.savings >= 100) return `🚇${ctx.station}站&${ctx.brandShort}某团${pkg.originalPrice}！立省${ctx.savings}！今天去吃可以用！`;
-  if (ctx.savings >= 50) return `🚇${ctx.station}站&${ctx.brandShort}某团${pkg.originalPrice}！立省${ctx.savings}！`;
-  if (ctx.discountZhe <= 3) return `🚇${ctx.station}站&${ctx.brandShort}某团${pkg.originalPrice}！${ctx.discountZhe}折拿下！`;
+  if (ctx.savings >= 100)
+    return `🚇${ctx.station}站&${ctx.brandShort}某团${pkg.originalPrice}！立省${ctx.savings}！今天去吃可以用！`;
+  if (ctx.savings >= 50)
+    return `🚇${ctx.station}站&${ctx.brandShort}某团${pkg.originalPrice}！立省${ctx.savings}！`;
+  if (ctx.discountZhe <= 3)
+    return `🚇${ctx.station}站&${ctx.brandShort}某团${pkg.originalPrice}！${ctx.discountZhe}折拿下！`;
   return `🚇${ctx.station}站&${ctx.brandShort}某团${pkg.originalPrice}！现价${ctx.currentPrice}`;
 };
 
 const buildTitleDiscount: TitleBuilder = (ctx, pkg) => {
-  if (ctx.discountZhe <= 3) return `🚇${ctx.station}站&${ctx.brandShort}某团${pkg.originalPrice}！${ctx.discountZhe}折拿下！今天去吃可以用！`;
-  if (ctx.discountZhe <= 5) return `🚇${ctx.station}站&${ctx.category}${ctx.discountZhe}折！今天去吃可以用！`;
+  if (ctx.discountZhe <= 3)
+    return `🚇${ctx.station}站&${ctx.brandShort}某团${pkg.originalPrice}！${ctx.discountZhe}折拿下！今天去吃可以用！`;
+  if (ctx.discountZhe <= 5)
+    return `🚇${ctx.station}站&${ctx.category}${ctx.discountZhe}折！今天去吃可以用！`;
   return `🚇${ctx.station}站&${ctx.brandShort}${ctx.category}特惠！${ctx.discountZhe}折拿下！`;
 };
 
 const buildTitleMultiStore: TitleBuilder = (ctx, _pkg) => {
   if (ctx.storeCount && ctx.storeCount > 1 && ctx.locationNames.length > 0) {
-    const areaSummary = ctx.locationNames.slice(0, 3).map(s => s.replace('店', '')).join('');
+    const areaSummary = ctx.locationNames
+      .slice(0, 3)
+      .map((s) => s.replace('店', ''))
+      .join('');
     return `🚇${ctx.station}站&${ctx.brandShort}${areaSummary}都有店`;
   }
   return `🚇${ctx.station}站&${ctx.brandShort}${ctx.category}`;
@@ -184,8 +200,10 @@ const buildTitleScene: TitleBuilder = (ctx, pkg, promotion) => {
   if (promotion?.status === 'nearly_sold_out') {
     return `🚇${ctx.station}站&${ctx.category}限时特惠！库存不多手慢无！`;
   }
-  if (ctx.discountZhe <= 3) return `🚇${ctx.station}站&${ctx.brandShort}￥${ctx.currentPrice}拿下！某团原价${pkg.originalPrice}！`;
-  if (ctx.savings >= 50) return `🚇${ctx.station}站&${ctx.brandShort}￥${ctx.currentPrice}！比某团省${ctx.savings}！`;
+  if (ctx.discountZhe <= 3)
+    return `🚇${ctx.station}站&${ctx.brandShort}￥${ctx.currentPrice}拿下！某团原价${pkg.originalPrice}！`;
+  if (ctx.savings >= 50)
+    return `🚇${ctx.station}站&${ctx.brandShort}￥${ctx.currentPrice}！比某团省${ctx.savings}！`;
   return `🚇${ctx.station}站&${ctx.brandShort}￥${ctx.currentPrice}超值！${ctx.category}特惠`;
 };
 
@@ -195,19 +213,23 @@ const buildBody = (
   pkg: ContentPackage,
   detail: PackageDetail | null,
   fmt: '+' | '\n',
-  ctx: TitleCtx,
+  ctx: TitleCtx
 ): string => {
-  const currentPrice = primaryPrice(pkg);
+  const pkgPrice = currentPrice(pkg) ?? 0;
   const simpleName = simplifyPackageName(pkg.packageName, ctx.brandShort);
   const lines: string[] = [];
-  lines.push(`￥${currentPrice} ${ctx.brandFull}丨${simpleName}`);
+  lines.push(`￥${pkgPrice} ${ctx.brandFull}丨${simpleName}`);
   const detailText = formatPackageDetail(detail, fmt);
   if (detailText) {
     lines.push(detailText);
   } else {
     lines.push(`${getCategoryEmoji(pkg.category)}${simpleName}`);
   }
-  lines.push(pkg.stockLeft <= 0 ? '当前已售罄，可引导关注同店替代套餐或下次补货。' : `当前剩余${pkg.stockLeft}份`);
+  lines.push(
+    pkg.stockLeft <= 0
+      ? '当前已售罄，可引导关注同店替代套餐或下次补货。'
+      : `当前剩余${pkg.stockLeft}份`
+  );
   if (pkg.useRules.length > 0) lines.push(`使用规则：${pkg.useRules.join('、')}`);
   lines.push(buildLocationLine(pkg, ctx.brandShort, ctx.locationNames));
   return lines.join('\n');
@@ -230,10 +252,12 @@ export function auditCopyText(pkg: ContentPackage, copy: CopyDraftForAudit): Aud
     if (text.includes(word)) riskTips.push(`包含禁用或绝对化表述：${word}`);
   }
 
-  const currentPrice = primaryPrice(pkg);
-  const expectedPrices = [formatPrice(pkg.originalPrice), formatPrice(currentPrice)];
+  const pkgPrice = currentPrice(pkg) ?? 0;
+  const expectedPrices = [formatPrice(pkg.originalPrice), formatPrice(pkgPrice)];
   const hasKnownPrice = expectedPrices.some((price) => price && text.includes(price));
-  const inventedPrice = /(?:原价|福利价|优惠价|今日价|当前可用价)\s*\d+(?:\.\d+)?|(?:\d+(?:\.\d+)?)\s*元/.test(text) && !hasKnownPrice;
+  const inventedPrice =
+    /(?:原价|福利价|优惠价|今日价|当前可用价)\s*\d+(?:\.\d+)?|(?:\d+(?:\.\d+)?)\s*元/.test(text) &&
+    !hasKnownPrice;
   if (inventedPrice || (/(^|[^\d.])9\.9([^\d.]|$)/.test(text) && !expectedPrices.includes('9.9'))) {
     riskTips.push('文案价格与套餐价格不一致');
   }
@@ -254,7 +278,9 @@ export function auditCopyText(pkg: ContentPackage, copy: CopyDraftForAudit): Aud
     }
   }
 
-  const riskLevel = riskTips.some((tip) => tip.includes('禁用') || tip.includes('价格') || tip.includes('库存'))
+  const riskLevel = riskTips.some(
+    (tip) => tip.includes('禁用') || tip.includes('价格') || tip.includes('库存')
+  )
     ? 'high'
     : riskTips.length > 0
       ? 'medium'
@@ -286,11 +312,23 @@ export function generateTemplateCopies(
   const ctx = buildTitleCtx(pkg);
 
   const versionConfigs: VersionConfig[] = [
-    { titleBuilder: buildTitlePrice, bodyFmt: '\n', strategy: 'conversion_optimize' as StrategyType },
+    {
+      titleBuilder: buildTitlePrice,
+      bodyFmt: '\n',
+      strategy: 'conversion_optimize' as StrategyType
+    },
     { titleBuilder: buildTitleDiscount, bodyFmt: '+', strategy: 'sprint' as StrategyType },
-    { titleBuilder: buildTitleMultiStore, bodyFmt: '+', strategy: 'merchant_co_promotion' as StrategyType },
-    { titleBuilder: buildTitleComprehensive, bodyFmt: '\n', strategy: promotion.recommendedStrategy },
-    { titleBuilder: buildTitleScene, bodyFmt: '\n', strategy: 'launch' as StrategyType },
+    {
+      titleBuilder: buildTitleMultiStore,
+      bodyFmt: '+',
+      strategy: 'merchant_co_promotion' as StrategyType
+    },
+    {
+      titleBuilder: buildTitleComprehensive,
+      bodyFmt: '\n',
+      strategy: promotion.recommendedStrategy
+    },
+    { titleBuilder: buildTitleScene, bodyFmt: '\n', strategy: 'launch' as StrategyType }
   ];
 
   return Array.from({ length: count }).map((_, index) => {
@@ -301,7 +339,7 @@ export function generateTemplateCopies(
     const audit = auditCopyText(pkg, { title, body, strategyType: config.strategy });
 
     return {
-      contentId: `C${baseTimestamp}${Math.random().toString(36).substr(2, 5)}`,
+      contentId: `C${baseTimestamp}${Math.random().toString(36).slice(2, 7)}`,
       packageId: pkg.packageId,
       areaId: pkg.areaId,
       merchantId: pkg.merchantId,
@@ -318,7 +356,7 @@ export function generateTemplateCopies(
       auditRemark: audit.riskTips.join('；') || null,
       createdBy: request.createdBy ?? 'system',
       createdAt: now,
-      updatedAt: now,
+      updatedAt: now
     };
   });
 }

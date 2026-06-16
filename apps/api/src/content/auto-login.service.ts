@@ -1,4 +1,6 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import * as fs from 'fs/promises';
+import * as path from 'path';
 
 interface LoginResult {
   success: boolean;
@@ -7,7 +9,7 @@ interface LoginResult {
 }
 
 @Injectable()
-export class AutoLoginService {
+export class AutoLoginService implements OnModuleInit {
   private readonly logger = new Logger(AutoLoginService.name);
   private cachedCookie: string | null = null;
   private lastLoginTime = 0;
@@ -15,15 +17,61 @@ export class AutoLoginService {
   private failedAttempts = 0;
   private lastFailedTime = 0;
 
+  async onModuleInit() {
+    await this.loadCookieFromCacheFile();
+  }
+
+  private async loadCookieFromCacheFile() {
+    try {
+      const cachePath = path.resolve(process.cwd(), '.cookie.cache');
+      const exists = await fs
+        .access(cachePath)
+        .then(() => true)
+        .catch(() => false);
+      if (exists) {
+        const data = await fs.readFile(cachePath, 'utf8');
+        const cookie = data.trim();
+        if (cookie) {
+          const isValid = await this.validateCookie(cookie);
+          if (isValid) {
+            this.cachedCookie = cookie;
+            this.lastLoginTime = Date.now();
+            this.failedAttempts = 0;
+            this.logger.log('Loaded and validated cached cookie from .cookie.cache');
+          } else {
+            this.logger.warn('Cached cookie from .cookie.cache is invalid or expired');
+          }
+        }
+      }
+    } catch (err) {
+      this.logger.error('Failed to load cookie from cache file:', err);
+    }
+  }
+
+  private async saveCookieToCacheFile(cookie: string) {
+    try {
+      const cachePath = path.resolve(process.cwd(), '.cookie.cache');
+      await fs.writeFile(cachePath, cookie, 'utf8');
+      this.logger.log('Saved valid cookie to .cookie.cache');
+    } catch (err) {
+      this.logger.error('Failed to save cookie to cache file:', err);
+    }
+  }
+
   async ensureValidCookie(forceRefresh = false): Promise<string | null> {
     // 如果最近失败过多次，等待更长时间
     const now = Date.now();
     if (this.failedAttempts >= 3) {
       const timeSinceLastFail = now - this.lastFailedTime;
-      const waitTime = Math.min(30 * 60 * 1000, 5 * 60 * 1000 * Math.pow(2, this.failedAttempts - 3)); // 5分钟起，指数增长，最多30分钟
+      const waitTime = Math.min(
+        30 * 60 * 1000,
+        5 * 60 * 1000 * Math.pow(2, this.failedAttempts - 3)
+      ); // 5分钟起，指数增长，最多30分钟
       if (timeSinceLastFail < waitTime) {
         const remainingWait = Math.ceil((waitTime - timeSinceLastFail) / 1000 / 60);
-        this.logger.warn(`Too many failed login attempts (${this.failedAttempts}). Please wait ${remainingWait} more minutes or login manually.`);
+        this.logger.warn(
+          `Too many failed login attempts (${this.failedAttempts}). Please wait ${remainingWait} more minutes or login manually.`
+        );
         // 使用环境变量中的 Cookie（即使可能过期）
         if (process.env.EXTERNAL_API_COOKIE) {
           return process.env.EXTERNAL_API_COOKIE;
@@ -75,6 +123,7 @@ export class AutoLoginService {
         this.lastLoginTime = Date.now();
         this.failedAttempts = 0; // 重置失败计数
         this.logger.log(`Auto login successful, new cookie: ${this.maskCookie(result.cookie)}`);
+        await this.saveCookieToCacheFile(result.cookie);
         return result.cookie;
       } else {
         this.failedAttempts++;
@@ -93,7 +142,9 @@ export class AutoLoginService {
     const baseUrl = process.env.EXTERNAL_API_BASE_URL;
 
     if (!username || !password) {
-      this.logger.error('EXTERNAL_API_USERNAME and EXTERNAL_API_PASSWORD are required for auto login');
+      this.logger.error(
+        'EXTERNAL_API_USERNAME and EXTERNAL_API_PASSWORD are required for auto login'
+      );
       return {
         success: false,
         error: 'EXTERNAL_API_USERNAME and EXTERNAL_API_PASSWORD are required for auto login'
@@ -121,7 +172,9 @@ export class AutoLoginService {
       });
 
       const setCookieHeader = pageResponse.headers.get('set-cookie');
-      this.logger.debug(`Initial cookies received: ${setCookieHeader ? this.maskCookie(setCookieHeader) : 'none'}`);
+      this.logger.debug(
+        `Initial cookies received: ${setCookieHeader ? this.maskCookie(setCookieHeader) : 'none'}`
+      );
 
       // 解析初始 Cookie
       let initialCookieString = '';
@@ -156,9 +209,9 @@ export class AutoLoginService {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
-          'Cookie': initialCookieString,
+          Cookie: initialCookieString,
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-          'Referer': loginPageUrl
+          Referer: loginPageUrl
         },
         body: formData.toString(),
         redirect: 'manual' // 不自动跟随重定向，手动处理
@@ -168,7 +221,9 @@ export class AutoLoginService {
 
       // 获取登录响应的 Cookie
       const loginSetCookieHeader = loginResponse.headers.get('set-cookie');
-      this.logger.debug(`Set-Cookie header: ${loginSetCookieHeader ? this.maskCookie(loginSetCookieHeader) : 'null'}`);
+      this.logger.debug(
+        `Set-Cookie header: ${loginSetCookieHeader ? this.maskCookie(loginSetCookieHeader) : 'null'}`
+      );
 
       // 302 重定向是正常的，但我们需要从这个响应中提取 session cookie
       if (loginResponse.status === 302 || loginResponse.status === 301) {
@@ -180,14 +235,19 @@ export class AutoLoginService {
           this.logger.error(`Login failed: redirected to ${location}`);
           this.logger.error('This usually means:');
           this.logger.error('  1. Invalid username or password');
-          this.logger.error('  2. Captcha/verification code is required (due to multiple failed attempts)');
+          this.logger.error(
+            '  2. Captcha/verification code is required (due to multiple failed attempts)'
+          );
           this.logger.error('  3. Account is locked or restricted');
           this.logger.error('');
-          this.logger.error('SOLUTION: Please login manually in browser and update EXTERNAL_API_COOKIE in .env file');
+          this.logger.error(
+            'SOLUTION: Please login manually in browser and update EXTERNAL_API_COOKIE in .env file'
+          );
           this.logger.error('See get-cookie-instructions.md for detailed steps');
           return {
             success: false,
-            error: 'Login failed: Captcha required or invalid credentials. Please login manually and update EXTERNAL_API_COOKIE in .env'
+            error:
+              'Login failed: Captcha required or invalid credentials. Please login manually and update EXTERNAL_API_COOKIE in .env'
           };
         }
 
@@ -205,7 +265,9 @@ export class AutoLoginService {
 
         const sessionId = allCookies['jeesite.session.id'];
         if (!sessionId) {
-          this.logger.error(`No session ID in redirect. Available cookies: ${Object.keys(allCookies).join(', ')}`);
+          this.logger.error(
+            `No session ID in redirect. Available cookies: ${Object.keys(allCookies).join(', ')}`
+          );
           return {
             success: false,
             error: 'No session ID in redirect response'
@@ -261,7 +323,9 @@ export class AutoLoginService {
       const sessionId = cookies['jeesite.session.id'];
 
       if (!sessionId) {
-        this.logger.error(`No session ID in login response. Available cookies: ${Object.keys(cookies).join(', ')}`);
+        this.logger.error(
+          `No session ID in login response. Available cookies: ${Object.keys(cookies).join(', ')}`
+        );
         return {
           success: false,
           error: 'No session ID in login response'
@@ -306,7 +370,7 @@ export class AutoLoginService {
 
       const response = await fetch(testUrl, {
         headers: {
-          'Cookie': cookie,
+          Cookie: cookie,
           'x-ajax': 'json'
         }
       });
@@ -412,5 +476,60 @@ export class AutoLoginService {
     this.cachedCookie = null;
     this.lastLoginTime = 0;
     // 不重置 failedAttempts，保持速率限制
+  }
+
+  async getCookieStatus() {
+    const now = Date.now();
+    let isValid = false;
+    const cookieToTest = this.cachedCookie || process.env.EXTERNAL_API_COOKIE;
+    if (cookieToTest) {
+      isValid = await this.validateCookie(cookieToTest);
+    }
+
+    const cooldownRemainingMinutes =
+      this.failedAttempts >= 3
+        ? Math.max(
+            0,
+            Math.ceil(
+              (Math.min(30 * 60 * 1000, 5 * 60 * 1000 * Math.pow(2, this.failedAttempts - 3)) -
+                (now - this.lastFailedTime)) /
+                1000 /
+                60
+            )
+          )
+        : 0;
+
+    return {
+      hasCookie: !!cookieToTest,
+      maskedCookie: cookieToTest ? this.maskCookie(cookieToTest) : null,
+      isValid,
+      username: process.env.EXTERNAL_API_USERNAME
+        ? this.maskIdentifier(process.env.EXTERNAL_API_USERNAME)
+        : null,
+      failedAttempts: this.failedAttempts,
+      cooldownMinutes: cooldownRemainingMinutes,
+      lastLoginTime: this.lastLoginTime > 0 ? new Date(this.lastLoginTime).toISOString() : null
+    };
+  }
+
+  async updateManualCookie(cookie: string): Promise<{ success: boolean; error?: string }> {
+    const trimmedCookie = cookie.trim();
+    if (!trimmedCookie) {
+      return { success: false, error: 'Cookie 内容不能为空' };
+    }
+    const isValid = await this.validateCookie(trimmedCookie);
+    if (!isValid) {
+      return {
+        success: false,
+        error: 'Cookie 校验失败，该 Cookie 可能已失效，请重新从浏览器获取。'
+      };
+    }
+
+    this.cachedCookie = trimmedCookie;
+    this.lastLoginTime = Date.now();
+    this.failedAttempts = 0; // 手动输入有效 Cookie 后重置失败计数
+    await this.saveCookieToCacheFile(trimmedCookie);
+    this.logger.log('Manual cookie update validated and saved');
+    return { success: true };
   }
 }

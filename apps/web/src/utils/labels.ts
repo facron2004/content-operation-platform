@@ -1,5 +1,10 @@
 // --- 中文标签映射 ---
 
+import type { ContentPackage } from '@content/shared';
+
+export const currentPrice = (pkg: ContentPackage): number =>
+  pkg.temporarySalePrice ?? pkg.salePrice;
+
 export const statusLabels: Record<string, string> = {
   pending_launch: '待开售',
   cold_start: '冷启动',
@@ -117,16 +122,19 @@ export function operationTagType(level?: string): TagType {
 // --- 格式化辅助函数 ---
 
 /** 显示价格：优先使用临时售价，否则使用普通售价 */
-export function displayPrice(row: { temporarySalePrice?: number | null; salePrice?: number }): string {
+export function displayPrice(row: {
+  temporarySalePrice?: number | null;
+  salePrice?: number;
+}): string {
   const price = row.temporarySalePrice ?? row.salePrice;
   if (price == null) return '-';
-  return `¥${price}`;
+  return `${price}`;
 }
 
-/** 格式化金额为 ¥xxx 或 ¥xxx.xx */
+/** 格式化金额为 xxx 或 xxx.xx */
 export function formatMoney(value?: number, decimals = 0): string {
   if (value == null || Number.isNaN(value)) return '-';
-  return `¥${value.toLocaleString('zh-CN', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}`;
+  return `${value.toLocaleString('zh-CN', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}`;
 }
 
 /** 百分比格式化 */
@@ -152,7 +160,9 @@ export function formatDate(value?: string): string {
 }
 
 /** 评分 tooltip：用 dimensions 拼接成 "维度 分数 / 维度 分数" */
-export function scoreTooltip(score: { dimensions?: Array<{ label: string; score: number }> } | null | undefined): string {
+export function scoreTooltip(
+  score: { dimensions?: Array<{ label: string; score: number }> } | null | undefined
+): string {
   if (!score?.dimensions?.length) return '';
   return score.dimensions
     .slice(0, 4)

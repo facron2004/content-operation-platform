@@ -37,8 +37,11 @@ export const useRoleStore = defineStore('role', {
   actions: {
     setRole(role: UserRole) {
       this.currentRole = role;
-      try { localStorage.setItem(STORAGE_KEY, role); } catch { /* ignore */ }
+      try {
+        localStorage.setItem(STORAGE_KEY, role);
+      } catch {
+        /* ignore */
+      }
     }
   }
 });
-

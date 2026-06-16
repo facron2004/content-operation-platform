@@ -1,5 +1,5 @@
 <template>
-  <div class="metric-tile" :class="{ danger }">
+  <div class="metric-tile" :class="{ danger, info }">
     <span>{{ label }}</span>
     <strong>{{ value }}</strong>
   </div>
@@ -10,5 +10,6 @@ defineProps<{
   label: string;
   value: string | number;
   danger?: boolean;
+  info?: boolean;
 }>();
 </script>
