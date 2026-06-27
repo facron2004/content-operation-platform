@@ -1,6 +1,7 @@
-import { Controller, Post, Body, Inject } from '@nestjs/common';
+import { Body, Controller, ForbiddenException, Inject, Post, Req } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { IsString, MinLength } from 'class-validator';
+import type { Request } from 'express';
 import { AuthService } from './auth.service';
 import { Public } from './public.decorator';
 
@@ -24,4 +25,39 @@ export class AuthController {
   login(@Body() body: LoginDto) {
     return this.authService.login(body.username, body.password);
   }
+
+  @Public()
+  @Post('local-session')
+  localSession(@Req() req: Request) {
+    if (!isLoopbackRequest(req)) {
+      throw new ForbiddenException('Local session is only available from this machine');
+    }
+    return this.authService.localSession();
+  }
+
+  @Post('refresh')
+  refresh(@Req() req: Request) {
+    const user = req.user as { sub?: string; userId?: string; username: string };
+    return this.authService.refresh({
+      sub: user.sub ?? user.userId ?? 'admin',
+      username: user.username
+    });
+  }
+}
+
+function isLoopbackRequest(req: Request) {
+  const candidates = [req.ip, req.socket.remoteAddress, req.headers['x-forwarded-for']]
+    .flatMap((value) => (Array.isArray(value) ? value : [value]))
+    .filter((value): value is string => typeof value === 'string')
+    .flatMap((value) => value.split(',').map((item) => item.trim()));
+
+  return candidates.some((value) => {
+    const normalized = value.replace(/^::ffff:/, '');
+    return (
+      normalized === '127.0.0.1' ||
+      normalized === '::1' ||
+      normalized === '0:0:0:0:0:0:0:1' ||
+      normalized === 'localhost'
+    );
+  });
 }

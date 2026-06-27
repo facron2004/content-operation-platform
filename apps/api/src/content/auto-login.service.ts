@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { assertHostnameNotPrivateAsync } from './jeesite-bargain-adapter';
 
 interface LoginResult {
   success: boolean;
@@ -19,6 +20,9 @@ export class AutoLoginService implements OnModuleInit {
 
   async onModuleInit() {
     await this.loadCookieFromCacheFile();
+    if (!this.cachedCookie) {
+      await this.refreshExpiredCookie('startup');
+    }
   }
 
   private async loadCookieFromCacheFile() {
@@ -59,59 +63,79 @@ export class AutoLoginService implements OnModuleInit {
   }
 
   async ensureValidCookie(forceRefresh = false): Promise<string | null> {
-    // 如果最近失败过多次，等待更长时间
     const now = Date.now();
-    if (this.failedAttempts >= 3) {
-      const timeSinceLastFail = now - this.lastFailedTime;
-      const waitTime = Math.min(
-        30 * 60 * 1000,
-        5 * 60 * 1000 * Math.pow(2, this.failedAttempts - 3)
-      ); // 5分钟起，指数增长，最多30分钟
-      if (timeSinceLastFail < waitTime) {
-        const remainingWait = Math.ceil((waitTime - timeSinceLastFail) / 1000 / 60);
-        this.logger.warn(
-          `Too many failed login attempts (${this.failedAttempts}). Please wait ${remainingWait} more minutes or login manually.`
-        );
-        // 使用环境变量中的 Cookie（即使可能过期）
-        if (process.env.EXTERNAL_API_COOKIE) {
-          return process.env.EXTERNAL_API_COOKIE;
-        }
-        return null;
-      } else {
-        // 重置失败计数
-        this.logger.log('Cooldown period expired, resetting failed attempts counter');
-        this.failedAttempts = 0;
-      }
-    }
+    const cooledDownCookie = this.resolveCooldownCookie(now);
+    if (cooledDownCookie !== undefined) return cooledDownCookie;
 
-    // 如果强制刷新，直接执行登录
     if (forceRefresh) {
       this.logger.log('Force refresh requested, performing auto login');
       return await this.performLogin();
     }
 
-    // 如果有缓存的 Cookie 且未过期（假设 Cookie 有效期 2 小时）
-    if (this.cachedCookie && now - this.lastLoginTime < 2 * 60 * 60 * 1000) {
-      this.logger.debug('Using cached cookie');
-      return this.cachedCookie;
+    const cachedCookie = this.getFreshCachedCookie(now);
+    if (cachedCookie) return cachedCookie;
+
+    const envCookie = this.getEnvironmentCookie();
+    if (envCookie) {
+      const isValid = await this.validateCookie(envCookie);
+      if (isValid) {
+        this.cachedCookie = envCookie;
+        this.lastLoginTime = Date.now();
+        this.failedAttempts = 0;
+        await this.saveCookieToCacheFile(envCookie);
+        return envCookie;
+      }
+      this.logger.warn('Environment cookie is invalid or expired, performing auto login');
+      return await this.performLogin();
     }
 
-    // 如果有环境变量中的 Cookie，尝试使用（但不完全信任它）
-    if (process.env.EXTERNAL_API_COOKIE && !this.cachedCookie) {
-      this.logger.debug('Using cookie from environment variable');
-      return process.env.EXTERNAL_API_COOKIE;
-    }
-
-    // 如果正在登录中，等待登录完成
     if (this.loginInProgress) {
       this.logger.debug('Login in progress, waiting...');
       const result = await this.loginInProgress;
       return result.success ? result.cookie || null : null;
     }
 
-    // 执行自动登录
     this.logger.log('No valid cached cookie, performing auto login');
     return await this.performLogin();
+  }
+
+  private async refreshExpiredCookie(reason: string): Promise<string | null> {
+    this.logger.log(`Refreshing JeeSite cookie automatically (${reason})`);
+    return await this.performLogin();
+  }
+
+  private resolveCooldownCookie(now: number): string | null | undefined {
+    if (this.failedAttempts < 3) return undefined;
+
+    const timeSinceLastFail = now - this.lastFailedTime;
+    const waitTime = Math.min(30 * 60 * 1000, 5 * 60 * 1000 * Math.pow(2, this.failedAttempts - 3));
+    if (timeSinceLastFail >= waitTime) {
+      this.logger.log('Cooldown period expired, resetting failed attempts counter');
+      this.failedAttempts = 0;
+      return undefined;
+    }
+
+    const remainingWait = Math.ceil((waitTime - timeSinceLastFail) / 1000 / 60);
+    this.logger.warn(
+      `Too many failed login attempts (${this.failedAttempts}). Please wait ${remainingWait} more minutes or login manually.`
+    );
+    return this.getEnvironmentCookie();
+  }
+
+  private getFreshCachedCookie(now: number) {
+    if (this.cachedCookie && now - this.lastLoginTime < 2 * 60 * 60 * 1000) {
+      this.logger.debug('Using cached cookie');
+      return this.cachedCookie;
+    }
+    return null;
+  }
+
+  private getEnvironmentCookie() {
+    if (process.env.EXTERNAL_API_COOKIE && !this.cachedCookie) {
+      this.logger.debug('Using cookie from environment variable');
+      return process.env.EXTERNAL_API_COOKIE;
+    }
+    return null;
   }
 
   private async performLogin(): Promise<string | null> {
@@ -156,6 +180,20 @@ export class AutoLoginService implements OnModuleInit {
       return {
         success: false,
         error: 'EXTERNAL_API_BASE_URL is required'
+      };
+    }
+
+    // SSRF 防护:拒绝指向私网/loopback/元数据服务的主机名。
+    // 否则攻击者把 EXTERNAL_API_BASE_URL 改成 http://10.0.0.1 / http://169.254.169.254
+    // 就能让本服务主动探测内网或窃取云凭证。
+    try {
+      await assertHostnameNotPrivateAsync(new URL(baseUrl).hostname);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.logger.error(`SSRF guard rejected EXTERNAL_API_BASE_URL: ${message}`);
+      return {
+        success: false,
+        error: `EXTERNAL_API_BASE_URL is not allowed: ${message}`
       };
     }
 
@@ -366,6 +404,15 @@ export class AutoLoginService implements OnModuleInit {
   private async validateCookie(cookie: string): Promise<boolean> {
     try {
       const baseUrl = process.env.EXTERNAL_API_BASE_URL;
+      if (!baseUrl) return false;
+
+      // SSRF 防护:与 doLogin 相同的校验,防止通过 cookie/status 路径绕过。
+      try {
+        await assertHostnameNotPrivateAsync(new URL(baseUrl).hostname);
+      } catch {
+        return false;
+      }
+
       const testUrl = `${baseUrl}/bargain/bargainCommodity/listData?pageSize=1&pageNo=1`;
 
       const response = await fetch(testUrl, {
@@ -388,6 +435,14 @@ export class AutoLoginService implements OnModuleInit {
       // 检查是否返回了有效的 JSON
       try {
         const data = JSON.parse(text);
+        if (
+          data &&
+          typeof data === 'object' &&
+          'result' in data &&
+          (data as { result?: unknown }).result === 'login'
+        ) {
+          return false;
+        }
         return data && typeof data === 'object';
       } catch {
         return false;
@@ -481,9 +536,25 @@ export class AutoLoginService implements OnModuleInit {
   async getCookieStatus() {
     const now = Date.now();
     let isValid = false;
-    const cookieToTest = this.cachedCookie || process.env.EXTERNAL_API_COOKIE;
+    let cookieToTest = this.cachedCookie || process.env.EXTERNAL_API_COOKIE;
+    let autoRefreshed = false;
     if (cookieToTest) {
       isValid = await this.validateCookie(cookieToTest);
+      if (!isValid) {
+        const refreshedCookie = await this.refreshExpiredCookie('status check');
+        if (refreshedCookie) {
+          cookieToTest = refreshedCookie;
+          autoRefreshed = true;
+          isValid = true;
+        }
+      }
+    } else {
+      const refreshedCookie = await this.refreshExpiredCookie('missing cookie');
+      if (refreshedCookie) {
+        cookieToTest = refreshedCookie;
+        autoRefreshed = true;
+        isValid = true;
+      }
     }
 
     const cooldownRemainingMinutes =
@@ -503,6 +574,7 @@ export class AutoLoginService implements OnModuleInit {
       hasCookie: !!cookieToTest,
       maskedCookie: cookieToTest ? this.maskCookie(cookieToTest) : null,
       isValid,
+      autoRefreshed,
       username: process.env.EXTERNAL_API_USERNAME
         ? this.maskIdentifier(process.env.EXTERNAL_API_USERNAME)
         : null,

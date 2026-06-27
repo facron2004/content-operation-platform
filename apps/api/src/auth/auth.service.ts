@@ -1,6 +1,6 @@
 import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { ADMIN_USERNAME, ADMIN_PASSWORD } from '../config/auth.config';
+import { ADMIN_PASSWORD, ADMIN_USERNAME } from '../config/auth.config';
 
 @Injectable()
 export class AuthService {
@@ -10,9 +10,23 @@ export class AuthService {
     if (username !== ADMIN_USERNAME || password !== ADMIN_PASSWORD) {
       throw new UnauthorizedException('用户名或密码错误');
     }
-    const payload = { sub: 'admin', username };
+    return this.signAdminToken(username);
+  }
+
+  localSession() {
+    return this.signAdminToken(ADMIN_USERNAME);
+  }
+
+  refresh(payload: { sub: string; username: string }) {
     return {
-      access_token: this.jwtService.sign(payload),
+      access_token: this.jwtService.sign({ sub: payload.sub, username: payload.username }),
+      username: payload.username
+    };
+  }
+
+  private signAdminToken(username: string) {
+    return {
+      access_token: this.jwtService.sign({ sub: 'admin', username }),
       username
     };
   }
