@@ -31,10 +31,25 @@ dev-*.log
 dev-*-current*.log
 dev-*-current-*.log
 
+# Temporary audit/diagnosis reports
+DIAGNOSIS-REPORT.md
+FINAL-SOLUTION.md
+LOGIN-ISSUE-SOLUTION.md
+README-LOGIN-ISSUE.md
+PACKAGE_DETAIL_IMPROVEMENTS.md
+get-cookie-instructions.md
+CODE-REVIEW-REPORT.html
+CODE-REVIEW-REPORT-ROUND2.html
+test-parser.ts
+
 # OS files
 .DS_Store
 Thumbs.db
 nul
+
+# Agent / sidecar directories (local-only, never committed)
+.workbuddy/
+devspace/
 
 # Editor
 .vscode/*

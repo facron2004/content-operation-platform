@@ -4,7 +4,7 @@ import { ensureDatabaseSchema } from '../prisma/seed-data';
 const prisma = new PrismaClient({
   datasources: {
     db: {
-      url: process.env.DATABASE_URL ?? 'file:./dev.db'
+      url: process.env.DATABASE_URL ?? 'file:./prisma/dev.db'
     }
   }
 });
