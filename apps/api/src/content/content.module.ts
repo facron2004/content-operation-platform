@@ -4,6 +4,7 @@ import { DashboardController } from './dashboard.controller';
 import { AlertController } from './alert.controller';
 import { CopyController } from './copy.controller';
 import { PackageController } from './package.controller';
+import { SoldoutController } from './soldout.controller';
 import { ContentService } from './content.service';
 import { CopyService } from './copy.service';
 import { AlertService } from './alert.service';
@@ -13,10 +14,17 @@ import { AutoLoginService } from './auto-login.service';
 import { PackageDetailService } from './package-detail.service';
 import { AICopyService } from './ai-copy.service';
 import { DailyInventoryCrawlerService } from './daily-inventory-crawler.service';
+import { SoldoutService } from './soldout.service';
 
 @Module({
   imports: [ConfigModule],
-  controllers: [DashboardController, AlertController, CopyController, PackageController],
+  controllers: [
+    DashboardController,
+    AlertController,
+    CopyController,
+    PackageController,
+    SoldoutController
+  ],
   providers: [
     ContentService,
     CopyService,
@@ -26,8 +34,9 @@ import { DailyInventoryCrawlerService } from './daily-inventory-crawler.service'
     AutoLoginService,
     PackageDetailService,
     AICopyService,
-    DailyInventoryCrawlerService
+    DailyInventoryCrawlerService,
+    SoldoutService
   ],
-  exports: [ContentService, CopyService, AlertService, DashboardService]
+  exports: [ContentService, CopyService, AlertService, DashboardService, SoldoutService]
 })
 export class ContentModule {}
