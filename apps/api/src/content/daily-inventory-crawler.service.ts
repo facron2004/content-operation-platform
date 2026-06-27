@@ -94,7 +94,7 @@ export class DailyInventoryCrawlerService {
     return this.ensureTablePromise;
   }
 
-  private collectInventoryRows(dataset: ContentDataset, targetDate: string) {
+  private collectInventoryRows(dataset: ContentDataset, _targetDate: string) {
     const snapshotsByPackage = new Map(dataset.snapshots.map((snapshot) => [snapshot.packageId, snapshot]));
     const rows: Array<{ pkg: ContentPackage; snapshot: SalesSnapshot; remainingStock: number }> = [];
 

@@ -1,6 +1,6 @@
 ﻿import { Body, Controller, Get, Inject, Param, Post, Query } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import type { OperationAlert, OperationAlertType, UserRole } from '@content/shared';
+import type { OperationAlert, OperationAlertType } from '@content/shared';
 import { AlertService } from './alert.service';
 import { ContentService } from './content.service';
 import { AlertResolveDto, AlertResolveBatchDto, AlertQueryDto } from './content.dto';
