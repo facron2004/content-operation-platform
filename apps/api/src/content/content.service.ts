@@ -1,55 +1,194 @@
 import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import type {
-  AuditCopyRequest,
-  AuditStatus,
   Channel,
   ContentPackage,
-  GenerateCopyRequest,
   InventoryTrendPoint,
   OperationAlert,
-  OperationCard,
   OperationTag,
   PackageScoreBreakdown,
   RecommendPackageItem,
+  RecommendQuery,
+  RecommendationResult,
   SalesSnapshot,
   UserRole
 } from '@content/shared';
+import { INVENTORY_PRIORITIES, latestSnapshotsByPackage, localDateKey } from '@content/shared';
 import { buildPromotionScore } from '../domain/promotion-rules';
 import {
   buildBattleCard,
   buildDerivedCommunities,
   buildOperationAlerts,
   buildOperationTags,
-  buildPackageScore,
-  toOperationCard
+  buildPackageScore
 } from '../domain/operation-rules';
+import { getFallbackDate } from '../domain/utils';
 import { PrismaService } from '../prisma/prisma.service';
 import { DataSourceService } from './data-source.service';
-import { buildInventoryFlag } from './inventory-flags';
+import { buildInventoryFlag, normalizeInventoryTrend } from './inventory-flags';
 import { PackageDetailService } from './package-detail.service';
 import { AICopyService, type AICopyConfigUpdate } from './ai-copy.service';
 import { DailyInventoryCrawlerService } from './daily-inventory-crawler.service';
-import { CopyService } from './copy.service';
-import { AlertService, type AlertQuery } from './alert.service';
-import { DashboardService } from './dashboard.service';
-import { getFallbackDate, localDateKey, latestSnapshotsByPackage, resolvePackageAndSnapshot as resolveFromSource } from './shared-helpers';
+import { resolvePackageAndSnapshot as resolveFromSource, buildOperationCardMap } from './package-detail-helpers';
 
-export interface RecommendQuery {
-  date?: string;
-  areaId?: string;
-  merchantId?: string;
-  role?: UserRole;
-  status?: 'selling';
-  category?: string;
-  inventoryMin?: number;
-  inventoryMax?: number;
-  inventoryFlag?: 'unsold';
+// 重新导出共享类型,保持外部模块向后兼容
+// (其它模块原来从 './content.service' 引用这些类型,无需改 import)
+export type { RecommendQuery, RecommendationResult };
+
+// ============================================================================
+// 推荐计算批量化
+// ----------------------------------------------------------------------------
+// 旧实现里 buildRecommendPackageItem 对每个 package 串行调用 4 个 domain 函数
+// + 内部重复 normalize inventory trend,数百套餐 N+1 严重。
+// 下方 buildRecommendPackageItems 做单次循环,共享 now/todayKey/normalize 结果。
+// ============================================================================
+
+/** 批处理内部条目:item 是给前端的最终结果,promotion 保留给 getPackageAnalysis 复用 */
+interface InternalRecommendItem {
+  item: RecommendPackageItem;
+  promotion: ReturnType<typeof buildPromotionScore>;
 }
 
-export interface RecommendationResult {
-  date: string;
-  areaId: string;
-  packages: RecommendPackageItem[];
+/** 动态兜底日期:取当前时间往前推 1 天,避免硬编码过期日期。 */
+function getPromotionNow(): Date {
+  return getFallbackDate();
+}
+
+/** 当日是否已在 trend 中;不在则补一条 (date=today, remainingStock=stockLeft) */
+function ensureTodayInTrend(
+  trend: InventoryTrendPoint[],
+  stockLeft: number,
+  snapshotTime: string
+): InventoryTrendPoint[] {
+  const snapshotDate = new Date(snapshotTime);
+  const date = Number.isFinite(snapshotDate.getTime())
+    ? localDateKey(snapshotDate)
+    : localDateKey(new Date());
+  if (trend.some((point) => point.date === date)) return trend;
+  return [...trend, { date, snapshotTime, remainingStock: stockLeft }];
+}
+
+/** 售罄前已上线的天数;若 snapshot 在 start 之前/无效返回 0 */
+function computeInventoryBacklogDays(pkg: ContentPackage, snapshot: SalesSnapshot): number {
+  const start = new Date(pkg.startTime).getTime();
+  const snap = new Date(snapshot.snapshotTime).getTime();
+  if (!Number.isFinite(start) || !Number.isFinite(snap) || snap <= start) return 0;
+  return Math.floor((snap - start) / (24 * 60 * 60 * 1000));
+}
+
+/** 库存 flag 优先级:normal < unsold_today < unsold_2d < unsold_3d_slow */
+function inventoryPriorityRank(flag: RecommendPackageItem['inventoryFlag']): number {
+  switch (flag) {
+    case 'normal': return 0;
+    case 'unsold_today': return 1;
+    case 'unsold_2d': return 2;
+    case 'unsold_3d_slow': return 3;
+  }
+}
+
+/**
+ * 批量计算推荐套餐列表的派生字段(promotion / inventory / score / tags / alerts)。
+ *
+ * 输入:已经过滤过的 packages + snapshot map + inventory trends + asOf 时间。
+ * 输出:每个 package 对应一个完整的 RecommendPackageItem,按 (inventoryFlag, backlog, stockLeft, score) 排序。
+ *
+ * 不变量:每个 item 的字段值与原 buildRecommendPackageItem 完全一致。
+ */
+function buildRecommendPackageItems(
+  packages: ContentPackage[],
+  snapshotsByPkg: Map<string, SalesSnapshot>,
+  inventoryTrends: Map<string, InventoryTrendPoint[]>,
+  asOf: Date
+): InternalRecommendItem[] {
+  const now = getPromotionNow();
+  const result: InternalRecommendItem[] = [];
+
+  for (const pkg of packages) {
+    const snapshot = snapshotsByPkg.get(pkg.packageId);
+    if (!snapshot) continue; // 与原 .filter(item => item !== null) 等价
+
+    // 1. promotion (含 status / score / strategy)
+    const promotion = buildPromotionScore(pkg, snapshot, now);
+
+    // 2. inventory flag —— trend 只 normalize 一次
+    const rawTrend = inventoryTrends.get(pkg.packageId) ?? [];
+    const ensuredTrend = ensureTodayInTrend(rawTrend, pkg.stockLeft, snapshot.snapshotTime);
+    const normalizedTrend = normalizeInventoryTrend(ensuredTrend);
+
+    const inventoryBacklogDays = computeInventoryBacklogDays(pkg, snapshot);
+    const inventoryPriority: RecommendPackageItem['inventoryPriority'] =
+      pkg.stockLeft > 0 && inventoryBacklogDays >= 3
+        ? INVENTORY_PRIORITIES[1]
+        : INVENTORY_PRIORITIES[0];
+
+    const inventory = buildInventoryFlag({
+      currentStockLeft: pkg.stockLeft,
+      saleStatus: pkg.saleStatus,
+      normalizedTrend
+    });
+
+    // 3. 基础 baseItem
+    const baseItem: RecommendPackageItem = {
+      ...pkg,
+      status: promotion.status,
+      promotionLevel: promotion.level,
+      promotionScore: promotion.score,
+      inventoryBacklogDays,
+      inventoryPriority,
+      inventoryFlag: inventory.inventoryFlag,
+      inventoryFlagLabel: inventory.inventoryFlagLabel,
+      inventoryFlagLevel: inventory.inventoryFlagLevel,
+      inventorySalesFlag: inventory.inventorySalesFlag,
+      inventorySalesLabel: inventory.inventorySalesLabel,
+      inventorySalesLevel: inventory.inventorySalesLevel,
+      inventoryObservedDays: inventory.inventoryObservedDays,
+      inventorySoldOutDays: inventory.inventorySoldOutDays,
+      inventoryUnsoldDays: inventory.inventoryUnsoldDays,
+      inventoryTrend: inventory.inventoryTrend,
+      recommendedStrategy: promotion.recommendedStrategy,
+      reason: promotion.reason,
+      riskTips: promotion.riskTips,
+      recommendedChannels: promotion.recommendedChannels,
+      conversionRate: snapshot.conversionRate,
+      verifyRate: snapshot.verifyRate,
+      refundRate: snapshot.refundRate
+    };
+
+    // 4. score / tags / alerts (依赖 baseItem + scoreBreakdown)
+    const scoreBreakdown = buildPackageScore(baseItem, snapshot);
+    const operationTags = buildOperationTags(baseItem, scoreBreakdown, snapshot, asOf);
+    const operationAlerts = buildOperationAlerts(baseItem, scoreBreakdown, snapshot, asOf);
+
+    const item: RecommendPackageItem = {
+      ...baseItem,
+      // 注意:此处 promotionScore 用 scoreBreakdown.totalScore 覆盖 promotion.score,
+      // 与原 buildRecommendPackageItem (line 290-293) 行为一致
+      promotionScore: scoreBreakdown.totalScore,
+      promotionLevel: scoreBreakdown.level,
+      scoreBreakdown,
+      operationTags,
+      operationAlerts
+    };
+
+    result.push({ item, promotion });
+  }
+
+  // 单次 sort —— 内联优先级 rank,避免 N log N 次 inventoryPriorityRank 闭包调用
+  const isBacklog = (item: RecommendPackageItem) => item.inventoryPriority === INVENTORY_PRIORITIES[1];
+  result.sort((a, b) => {
+    const ai = a.item;
+    const bi = b.item;
+    const inventoryDelta = inventoryPriorityRank(bi.inventoryFlag) - inventoryPriorityRank(ai.inventoryFlag);
+    if (inventoryDelta !== 0) return inventoryDelta;
+    const priorityDelta = Number(isBacklog(bi)) - Number(isBacklog(ai));
+    if (priorityDelta !== 0) return priorityDelta;
+    if (bi.stockLeft !== ai.stockLeft) return bi.stockLeft - ai.stockLeft;
+    if (bi.inventoryBacklogDays !== ai.inventoryBacklogDays) {
+      return bi.inventoryBacklogDays - ai.inventoryBacklogDays;
+    }
+    return bi.promotionScore - ai.promotionScore;
+  });
+
+  return result;
 }
 
 /** getPackageAnalysis 返回类型 */
@@ -87,8 +226,8 @@ export class ContentService {
   private readonly logger = new Logger(ContentService.name);
   private readonly recommendationCache = new Map<string, CachedRecommendations>();
   private readonly recommendationInFlight = new Map<string, Promise<{ date: string; areaId: string; packages: RecommendPackageItem[] }>>();
-  private readonly RECOMMENDATION_CACHE_TTL = parseInt(process.env.CONTENT_CACHE_TTL_MS ?? '60000', 10);
-  private readonly RECOMMENDATION_CACHE_MAX_SIZE = 50;
+  private readonly recommendationCacheTtlMs = Number.parseInt(process.env.CONTENT_CACHE_TTL_MS ?? '60000', 10);
+  private readonly recommendationCacheMaxSize = 50;
 
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
@@ -96,9 +235,6 @@ export class ContentService {
     @Inject(PackageDetailService) private readonly packageDetailService: PackageDetailService,
     @Inject(AICopyService) private readonly aiCopyService: AICopyService,
     @Inject(DailyInventoryCrawlerService) private readonly dailyInventoryCrawler: DailyInventoryCrawlerService,
-    @Inject(CopyService) private readonly copyService: CopyService,
-    @Inject(AlertService) private readonly alertService: AlertService,
-    @Inject(DashboardService) private readonly dashboardService: DashboardService,
   ) {}
 
   // ==================== 缓存管理 ====================
@@ -131,24 +267,11 @@ export class ContentService {
     if (inFlight) return inFlight;
 
     const pending = this.computeRecommendations(query).then((data) => {
-      // 缓存满时清理过期条目
-      if (this.recommendationCache.size >= this.RECOMMENDATION_CACHE_MAX_SIZE) {
-        const now = Date.now();
-        for (const [key, entry] of this.recommendationCache.entries()) {
-          if (entry.expiresAt <= now) this.recommendationCache.delete(key);
-        }
-        // 仍然满则删除最早的条目
-        if (this.recommendationCache.size >= this.RECOMMENDATION_CACHE_MAX_SIZE) {
-          const firstKey = this.recommendationCache.keys().next().value;
-          if (firstKey) this.recommendationCache.delete(firstKey);
-        }
-      }
-      this.recommendationCache.set(cacheKey, { data, expiresAt: Date.now() + this.RECOMMENDATION_CACHE_TTL });
-      this.recommendationInFlight.delete(cacheKey);
+      this.pruneRecommendationCache(now);
+      this.recommendationCache.set(cacheKey, { data, expiresAt: Date.now() + this.recommendationCacheTtlMs });
       return data;
-    }).catch((error) => {
+    }).finally(() => {
       this.recommendationInFlight.delete(cacheKey);
-      throw error;
     });
     this.recommendationInFlight.set(cacheKey, pending);
     return pending;
@@ -181,54 +304,16 @@ export class ContentService {
       packages.map((pkg) => pkg.packageId), dataset.snapshots, 3, asOf
     );
 
-    const packagesWithScores = packages
-      .map((pkg): RecommendPackageItem | null => {
-        const snapshot = snapshotsByPkg.get(pkg.packageId);
-        if (!snapshot) return null;
-        const promotion = buildPromotionScore(pkg, snapshot, getFallbackDate());
-        const inventoryBacklogDays = this.getInventoryBacklogDays(pkg, snapshot);
-        const inventoryPriority: RecommendPackageItem['inventoryPriority'] =
-          pkg.stockLeft > 0 && inventoryBacklogDays >= 3 ? 'backlog_3d' : 'normal';
-        const inventory = buildInventoryFlag({
-          currentStockLeft: pkg.stockLeft, saleStatus: pkg.saleStatus,
-          trend: this.ensureTodayInTrend(inventoryTrends.get(pkg.packageId) ?? [], pkg.stockLeft, snapshot.snapshotTime)
-        });
-        const item: RecommendPackageItem = {
-          ...pkg, status: promotion.status,
-          promotionLevel: promotion.level, promotionScore: promotion.score,
-          inventoryBacklogDays, inventoryPriority,
-          inventoryFlag: inventory.inventoryFlag, inventoryFlagLabel: inventory.inventoryFlagLabel,
-          inventoryFlagLevel: inventory.inventoryFlagLevel, inventorySalesFlag: inventory.inventorySalesFlag,
-          inventorySalesLabel: inventory.inventorySalesLabel, inventorySalesLevel: inventory.inventorySalesLevel,
-          inventoryObservedDays: inventory.inventoryObservedDays, inventorySoldOutDays: inventory.inventorySoldOutDays,
-          inventoryUnsoldDays: inventory.inventoryUnsoldDays, inventoryTrend: inventory.inventoryTrend,
-          recommendedStrategy: promotion.recommendedStrategy, reason: promotion.reason,
-          riskTips: promotion.riskTips, recommendedChannels: promotion.recommendedChannels,
-          conversionRate: snapshot.conversionRate, verifyRate: snapshot.verifyRate, refundRate: snapshot.refundRate
-        };
-        const scoreBreakdown = buildPackageScore(item, snapshot);
-        const operationTags = buildOperationTags(item, scoreBreakdown, snapshot, asOf);
-        const operationAlerts = buildOperationAlerts(item, scoreBreakdown, snapshot, asOf);
-        return {
-          ...item, promotionScore: scoreBreakdown.totalScore, promotionLevel: scoreBreakdown.level,
-          scoreBreakdown, operationTags, operationAlerts
-        } as RecommendPackageItem;
-      })
-      .filter((item): item is RecommendPackageItem => item !== null)
+    // 批量计算 —— promotion / inventory / score / tags / alerts 全部在内部完成 + 排序
+    const built = buildRecommendPackageItems(packages, snapshotsByPkg, inventoryTrends, asOf);
+
+    const packagesWithScores = built
+      .map((entry) => entry.item)
       .filter((item) => this.isSellingPackage(item))
       .filter((item) => (query.category ? item.category === query.category : true))
       .filter((item) => (query.inventoryMin !== undefined ? item.stockLeft >= query.inventoryMin : true))
       .filter((item) => (query.inventoryMax !== undefined ? item.stockLeft <= query.inventoryMax : true))
-      .filter((item) => (query.inventoryFlag === 'unsold' ? item.inventoryFlag !== 'normal' : true))
-      .sort((a, b) => {
-        const inventoryDelta = this.inventoryPriorityRank(b.inventoryFlag) - this.inventoryPriorityRank(a.inventoryFlag);
-        if (inventoryDelta !== 0) return inventoryDelta;
-        const priorityDelta = Number(b.inventoryPriority === 'backlog_3d') - Number(a.inventoryPriority === 'backlog_3d');
-        if (priorityDelta !== 0) return priorityDelta;
-        if (b.stockLeft !== a.stockLeft) return b.stockLeft - a.stockLeft;
-        if (b.inventoryBacklogDays !== a.inventoryBacklogDays) return b.inventoryBacklogDays - a.inventoryBacklogDays;
-        return b.promotionScore - a.promotionScore;
-      });
+      .filter((item) => (query.inventoryFlag === 'unsold' ? item.inventoryFlag !== 'normal' : true));
 
     return {
       date: query.date ?? new Date().toISOString().slice(0, 10),
@@ -243,94 +328,39 @@ export class ContentService {
     const resolved = await this.resolveLocalPackageAndSnapshot(packageId);
     if (!resolved) throw new NotFoundException('套餐不存在');
 
-    const { pkg, snapshot } = resolved;
-    const promotion = buildPromotionScore(pkg, snapshot, getFallbackDate());
+    const { pkg, snapshot, snapshots } = resolved;
     const asOf = this.resolveAsOfDate(undefined, [snapshot]);
-    const inventoryTrends = await this.loadJeesiteInventoryTrends([pkg.packageId], resolved.snapshots, 3, asOf);
-    const inventory = buildInventoryFlag({
-      currentStockLeft: pkg.stockLeft, saleStatus: pkg.saleStatus,
-      trend: this.ensureTodayInTrend(inventoryTrends.get(pkg.packageId) ?? [], pkg.stockLeft, snapshot.snapshotTime)
-    });
-    const recommendationItem: RecommendPackageItem = {
-      ...pkg, status: promotion.status,
-      promotionLevel: promotion.level, promotionScore: promotion.score,
-      inventoryBacklogDays: this.getInventoryBacklogDays(pkg, snapshot),
-      inventoryPriority: pkg.stockLeft > 0 && this.getInventoryBacklogDays(pkg, snapshot) >= 3 ? 'backlog_3d' : 'normal',
-      inventoryFlag: inventory.inventoryFlag, inventoryFlagLabel: inventory.inventoryFlagLabel,
-      inventoryFlagLevel: inventory.inventoryFlagLevel, inventorySalesFlag: inventory.inventorySalesFlag,
-      inventorySalesLabel: inventory.inventorySalesLabel, inventorySalesLevel: inventory.inventorySalesLevel,
-      inventoryObservedDays: inventory.inventoryObservedDays, inventorySoldOutDays: inventory.inventorySoldOutDays,
-      inventoryUnsoldDays: inventory.inventoryUnsoldDays, inventoryTrend: inventory.inventoryTrend,
-      recommendedStrategy: promotion.recommendedStrategy, reason: promotion.reason,
-      riskTips: promotion.riskTips, recommendedChannels: promotion.recommendedChannels,
-      conversionRate: snapshot.conversionRate, verifyRate: snapshot.verifyRate, refundRate: snapshot.refundRate
-    };
-    const scoreBreakdown = buildPackageScore(recommendationItem, snapshot);
-    const operationTags = buildOperationTags(recommendationItem, scoreBreakdown, snapshot, asOf);
-    const operationAlerts = buildOperationAlerts(recommendationItem, scoreBreakdown, snapshot, asOf);
+    const inventoryTrends = await this.loadJeesiteInventoryTrends([pkg.packageId], snapshots, 3, asOf);
 
-    return {
-      package: pkg, status: promotion.status, promotionScore: promotion.score,
-      inventoryBacklogDays: this.getInventoryBacklogDays(pkg, snapshot),
-      inventoryFlag: inventory.inventoryFlag, inventoryFlagLabel: inventory.inventoryFlagLabel,
-      inventoryFlagLevel: inventory.inventoryFlagLevel, inventorySalesFlag: inventory.inventorySalesFlag,
-      inventorySalesLabel: inventory.inventorySalesLabel, inventorySalesLevel: inventory.inventorySalesLevel,
-      inventoryObservedDays: inventory.inventoryObservedDays, inventorySoldOutDays: inventory.inventorySoldOutDays,
-      inventoryUnsoldDays: inventory.inventoryUnsoldDays, inventoryTrend: inventory.inventoryTrend,
-      salesData: snapshot, operationTags, scoreBreakdown, operationAlerts,
-      recommendation: {
-        strategy: promotion.recommendedStrategy, reason: promotion.reason,
-        suggestedChannels: promotion.recommendedChannels,
-        riskTips: promotion.riskTips, copyAngles: promotion.copyAngles
-      },
-      trends: [
-        { label: '曝光', value: snapshot.exposureCount }, { label: '点击', value: snapshot.clickCount },
-        { label: '下单', value: snapshot.orderCount }, { label: '支付', value: snapshot.paidOrderCount },
-        { label: '核销', value: snapshot.verifyCount }, { label: '退款', value: snapshot.refundCount }
-      ]
-    };
+    // 复用批量计算 (N=1):与 getRecommendations 共享同一逻辑,避免 promotion/score/tags/alerts 二次计算
+    const built = buildRecommendPackageItems(
+      [pkg],
+      new Map([[pkg.packageId, snapshot]]),
+      inventoryTrends,
+      asOf
+    );
+    // 走 batch 必有 1 个结果 (resolveLocalPackageAndSnapshot 已校验 snapshot 存在)
+    const { item: recommendationItem, promotion } = built[0];
+    const scoreBreakdown = recommendationItem.scoreBreakdown!;
+    const operationTags = recommendationItem.operationTags!;
+    const operationAlerts = recommendationItem.operationAlerts!;
+
+    return this.buildPackageAnalysisResult({
+      pkg,
+      snapshot,
+      promotion,
+      recommendationItem,
+      scoreBreakdown,
+      operationTags,
+      operationAlerts
+    });
   }
 
-  // ==================== AI 配置（委托） ====================
+  // ==================== AI 配置（委托给 AICopyService / DailyInventoryCrawlerService） ====================
 
   getAICopyStatus() { return this.aiCopyService.getStatus(); }
   updateAICopyConfig(config: AICopyConfigUpdate) { return this.aiCopyService.updateConfig(config); }
   crawlDailyInventory(date?: string) { return this.dailyInventoryCrawler.crawlDailyInventory(date); }
-
-  // ==================== 文案（委托给 CopyService） ====================
-
-  generateCopies(request: GenerateCopyRequest) { return this.copyService.generateCopies(request); }
-  listCopies(filters: { auditStatus?: AuditStatus; channel?: Channel }) { return this.copyService.listCopies(filters); }
-  auditCopy(contentId: string, request: AuditCopyRequest) { return this.copyService.auditCopy(contentId, request); }
-
-  // ==================== 预警（委托给 AlertService） ====================
-
-  getOperationAlerts(query: AlertQuery) {
-    return this.alertService.getOperationAlerts(query, (q) => this.getRecommendations(q));
-  }
-  resolveOperationAlert(alertId: string, resolvedBy?: string) {
-    return this.alertService.resolveOperationAlert(alertId, resolvedBy);
-  }
-  resolveOperationAlerts(alertIds: string[], resolvedBy?: string) {
-    return this.alertService.resolveOperationAlerts(alertIds, resolvedBy);
-  }
-
-  // ==================== 仪表盘（委托给 DashboardService） ====================
-
-  getTodayOperationConsole(role?: UserRole) {
-    return this.dashboardService.getTodayOperationConsole(role, (q) => this.getRecommendations(q));
-  }
-  getDashboardSummary() {
-    return this.dashboardService.getDashboardSummary(
-      (q) => this.getRecommendations(q),
-      this.recommendationCache,
-      (q) => this.recommendationCacheKey(q),
-      (q) => this.getCachedRecommendations(q),
-    );
-  }
-  getPerformance() {
-    return this.dashboardService.getPerformance((q) => this.getCachedRecommendations(q));
-  }
 
   // ==================== 社群 ====================
 
@@ -356,15 +386,24 @@ export class ContentService {
 
   // ==================== 私有工具方法 ====================
 
-  private operationCardMap(packages: RecommendPackageItem[]) {
-    return new Map<string, OperationCard>(
-      packages.filter((pkg) => pkg.scoreBreakdown)
-        .map((pkg) => [pkg.packageId, toOperationCard(pkg, pkg.scoreBreakdown!, pkg.operationTags ?? [])])
-    );
+  private resolveLocalPackageAndSnapshot(packageId: string) {
+    return resolveFromSource(packageId, this.dataSource);
   }
 
-  private async resolveLocalPackageAndSnapshot(packageId: string) {
-    return resolveFromSource(packageId, this.dataSource);
+  private operationCardMap = buildOperationCardMap;
+
+  private pruneRecommendationCache(now: number) {
+    if (this.recommendationCache.size < this.recommendationCacheMaxSize) return;
+
+    for (const [key, entry] of this.recommendationCache.entries()) {
+      if (entry.expiresAt <= now) this.recommendationCache.delete(key);
+    }
+
+    while (this.recommendationCache.size >= this.recommendationCacheMaxSize) {
+      const firstKey = this.recommendationCache.keys().next().value;
+      if (!firstKey) break;
+      this.recommendationCache.delete(firstKey);
+    }
   }
 
   private resolveAsOfDate(date: string | undefined, snapshots: SalesSnapshot[]) {
@@ -372,15 +411,20 @@ export class ContentService {
       const parsed = new Date(`${date}T12:00:00.000`);
       if (Number.isFinite(parsed.getTime())) return parsed;
     }
-    const latestSnapshot = snapshots.map((s) => new Date(s.snapshotTime))
-      .filter((d) => Number.isFinite(d.getTime())).sort((a, b) => b.getTime() - a.getTime())[0];
+    const latestSnapshot = snapshots
+      .map((s) => new Date(s.snapshotTime))
+      .filter((d) => Number.isFinite(d.getTime()))
+      .sort((a, b) => b.getTime() - a.getTime())[0];
     return latestSnapshot ?? new Date();
   }
 
   private buildLiveInventoryTrends(snapshots: SalesSnapshot[], days: number, asOf: Date) {
     const result = new Map<string, InventoryTrendPoint[]>();
-    const dayEnd = new Date(asOf); dayEnd.setHours(23, 59, 59, 999);
-    const dayStart = new Date(dayEnd); dayStart.setDate(dayStart.getDate() - Math.max(1, days) + 1); dayStart.setHours(0, 0, 0, 0);
+    const dayEnd = new Date(asOf);
+    dayEnd.setHours(23, 59, 59, 999);
+    const dayStart = new Date(dayEnd);
+    dayStart.setDate(dayStart.getDate() - Math.max(1, days) + 1);
+    dayStart.setHours(0, 0, 0, 0);
 
     const latestByPkgAndDate = new Map<string, InventoryTrendPoint>();
     for (const snapshot of snapshots) {
@@ -395,7 +439,8 @@ export class ContentService {
     for (const [key, point] of latestByPkgAndDate.entries()) {
       const packageId = key.split(':')[0];
       const points = result.get(packageId) ?? [];
-      points.push(point); result.set(packageId, points);
+      points.push(point);
+      result.set(packageId, points);
     }
     for (const points of result.values()) points.sort((a, b) => a.date.localeCompare(b.date));
     return result;
@@ -411,26 +456,10 @@ export class ContentService {
     return mergedTrends;
   }
 
-  private ensureTodayInTrend(trend: InventoryTrendPoint[], stockLeft: number, snapshotTime: string) {
-    const snapshotDate = new Date(snapshotTime);
-    const date = Number.isFinite(snapshotDate.getTime()) ? localDateKey(snapshotDate) : localDateKey(new Date());
-    if (trend.some((point) => point.date === date)) return trend;
-    return [...trend, { date, snapshotTime, remainingStock: stockLeft }];
-  }
-
-  private inventoryPriorityRank(flag: RecommendPackageItem['inventoryFlag']) {
-    const ranks: Record<RecommendPackageItem['inventoryFlag'], number> = {
-      normal: 0, unsold_today: 1, unsold_2d: 2, unsold_3d_slow: 3
-    };
-    return ranks[flag];
-  }
-
   private applyRoleFilter(packages: ContentPackage[], query: RecommendQuery) {
     let result = packages;
     if (query.areaId) result = result.filter((pkg) => pkg.areaId === query.areaId);
     if (query.merchantId) result = result.filter((pkg) => pkg.merchantId === query.merchantId);
-    // 不再使用硬编码的 A001/M001：区域/商家角色若未指定具体 ID，展示全部数据
-    // 前端选择具体区域/商家后再由 query.areaId / query.merchantId 过滤
     if (query.role === 'area_operator' && !query.areaId) {
       this.logger.warn('area_operator role without areaId — showing all packages. Select a specific area to filter.');
     }
@@ -440,11 +469,51 @@ export class ContentService {
     return result;
   }
 
-  private getInventoryBacklogDays(pkg: ContentPackage, snapshot: SalesSnapshot) {
-    const start = new Date(pkg.startTime).getTime();
-    const snap = new Date(snapshot.snapshotTime).getTime();
-    if (!Number.isFinite(start) || !Number.isFinite(snap) || snap <= start) return 0;
-    return Math.floor((snap - start) / (24 * 60 * 60 * 1000));
+  private buildPackageAnalysisResult(params: {
+    pkg: ContentPackage;
+    snapshot: SalesSnapshot;
+    promotion: ReturnType<typeof buildPromotionScore>;
+    recommendationItem: RecommendPackageItem;
+    scoreBreakdown: PackageScoreBreakdown;
+    operationTags: OperationTag[];
+    operationAlerts: OperationAlert[];
+  }): PackageAnalysisResult {
+    const { pkg, snapshot, promotion, recommendationItem, scoreBreakdown, operationTags, operationAlerts } = params;
+    return {
+      package: pkg,
+      status: promotion.status,
+      promotionScore: promotion.score,
+      inventoryBacklogDays: recommendationItem.inventoryBacklogDays,
+      inventoryFlag: recommendationItem.inventoryFlag,
+      inventoryFlagLabel: recommendationItem.inventoryFlagLabel,
+      inventoryFlagLevel: recommendationItem.inventoryFlagLevel,
+      inventorySalesFlag: recommendationItem.inventorySalesFlag,
+      inventorySalesLabel: recommendationItem.inventorySalesLabel,
+      inventorySalesLevel: recommendationItem.inventorySalesLevel,
+      inventoryObservedDays: recommendationItem.inventoryObservedDays,
+      inventorySoldOutDays: recommendationItem.inventorySoldOutDays,
+      inventoryUnsoldDays: recommendationItem.inventoryUnsoldDays,
+      inventoryTrend: recommendationItem.inventoryTrend,
+      salesData: snapshot,
+      operationTags,
+      scoreBreakdown,
+      operationAlerts,
+      recommendation: {
+        strategy: promotion.recommendedStrategy,
+        reason: promotion.reason,
+        suggestedChannels: promotion.recommendedChannels,
+        riskTips: promotion.riskTips,
+        copyAngles: promotion.copyAngles
+      },
+      trends: [
+        { label: '曝光', value: snapshot.exposureCount },
+        { label: '点击', value: snapshot.clickCount },
+        { label: '下单', value: snapshot.orderCount },
+        { label: '支付', value: snapshot.paidOrderCount },
+        { label: '核销', value: snapshot.verifyCount },
+        { label: '退款', value: snapshot.refundCount }
+      ]
+    };
   }
 
   private isSellingPackage(item: RecommendPackageItem) {

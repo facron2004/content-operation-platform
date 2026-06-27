@@ -1,9 +1,9 @@
 import { Test } from '@nestjs/testing';
 import type { ContentPackage, SalesSnapshot } from '@content/shared';
-import request from 'supertest';
 import { describe, expect, it, vi } from 'vitest';
 import { AppModule } from '../src/app.module';
 import { DataSourceService } from '../src/content/data-source.service';
+import { authedAgent } from './helpers/auth';
 
 const livePackage: ContentPackage = {
   packageId: 'LIVE-PKG-API',
@@ -74,8 +74,8 @@ describe('content API', () => {
     const app = moduleRef.createNestApplication();
     await app.init();
 
-    const server = app.getHttpServer();
-    const recommendations = await request(server)
+    const api = await authedAgent(app);
+    const recommendations = await api
       .get('/api/content/packages/recommend?role=platform_operator')
       .expect(200);
 
@@ -85,7 +85,7 @@ describe('content API', () => {
     expect(first).toHaveProperty('inventoryPriority');
     expect(first).toHaveProperty('inventorySalesFlag');
 
-    const generated = await request(server)
+    const generated = await api
       .post('/api/content/generate')
       .send({
         packageId: first.packageId,
@@ -101,12 +101,12 @@ describe('content API', () => {
     expect(generated.body.contentList[0].auditStatus).toBe('pending');
 
     const contentId = generated.body.contentList[0].contentId;
-    await request(server)
+    await api
       .post(`/api/content/copies/${contentId}/audit`)
       .send({ auditStatus: 'approved', auditRemark: '通过' })
       .expect(201);
 
-    const copies = await request(server)
+    const copies = await api
       .get('/api/content/copies?auditStatus=approved')
       .expect(200);
 

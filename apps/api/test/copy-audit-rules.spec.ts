@@ -134,6 +134,67 @@ describe('auditCopyText - 文案审核规则', () => {
     expect(result.riskLevel).toBe('medium');
     expect(result.riskTips).toHaveLength(1);
   });
+
+  it('flags stock mismatch when copy mentions wrong stock number', () => {
+    // basePackage.stockLeft=50, 写文案说"剩余 99 份"
+    const result = auditCopyText(basePackage, {
+      title: '火锅双人餐',
+      body: '川味老火锅79元，锅底任选含肥牛虾滑。剩余99份。需提前1天预约，节假日不可用。',
+      strategyType: 'sprint'
+    });
+    expect(result.riskTips).toContainEqual(expect.stringContaining('库存'));
+    expect(result.riskLevel).toBe('high');
+  });
+
+  it('passes stock mention when copy uses correct stock number', () => {
+    // basePackage.stockLeft=50, 文案说"剩余 50 份"
+    const result = auditCopyText(basePackage, {
+      title: '火锅双人餐',
+      body: '川味老火锅79元，锅底任选含肥牛虾滑。剩余50份。需提前1天预约，节假日不可用。',
+      strategyType: 'sprint'
+    });
+    expect(result.riskTips).not.toContainEqual(expect.stringContaining('库存'));
+  });
+
+  it('maps riskLevel=high to auditStatus=risk', () => {
+    // 触发 forbidden word → high → risk
+    const result = auditCopyText(basePackage, {
+      title: '全网最低特惠',
+      body: '川味老火锅79元，需提前1天预约，节假日不可用。',
+      strategyType: 'sprint'
+    });
+    expect(result.riskLevel).toBe('high');
+    expect(result.auditStatus).toBe('risk');
+  });
+
+  it('returns auditStatus=pending for medium and low risk', () => {
+    // medium: 只有 missing rules
+    const mediumResult = auditCopyText(basePackage, {
+      title: '火锅双人餐',
+      body: '川味老火锅79元，锅底任选含肥牛虾滑。',
+      strategyType: 'sprint'
+    });
+    expect(mediumResult.auditStatus).toBe('pending');
+
+    // low: 全部正常
+    const lowResult = auditCopyText(basePackage, {
+      title: '火锅双人餐',
+      body: '川味老火锅79元，原价198。锅底任选含肥牛虾滑。需提前1天预约，节假日不可用。',
+      strategyType: 'sprint'
+    });
+    expect(lowResult.auditStatus).toBe('pending');
+  });
+
+  it('detects invented price 88元 that does not match package', () => {
+    // basePackage salePrice=79, originalPrice=198, temporarySalePrice=null, welfarePrice=59
+    // 任何文案里出现 88 元 (与 79/198/59 都不同) → invented price
+    const result = auditCopyText(basePackage, {
+      title: '火锅双人餐88元',
+      body: '川味老火锅只要88元，锅底任选含肥牛虾滑。需提前1天预约，节假日不可用。',
+      strategyType: 'sprint'
+    });
+    expect(result.riskTips).toContainEqual(expect.stringContaining('价格'));
+  });
 });
 
 describe('generateTemplateCopies - 模板文案生成', () => {

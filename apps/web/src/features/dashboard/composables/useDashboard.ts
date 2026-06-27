@@ -115,7 +115,7 @@ export function useDashboard(role: Ref<string | undefined>) {
       const data = await api.getTodayOperationConsole({ role: role.value });
       consoleData.value = mapConsoleResponse(data as ConsoleResponse);
     } catch {
-      loadError.value = '运营看板加载失败，请稍后重试';
+      loadError.value = '作战台数据加载失败，请稍后重试；如反复出现请重新登录';
       consoleData.value = emptyConsoleData;
     } finally {
       loading.value = false;

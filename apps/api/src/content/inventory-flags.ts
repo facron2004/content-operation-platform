@@ -1,39 +1,20 @@
 import type {
-  InventoryFlag,
-  InventoryFlagLevel,
+  InventoryFlagInput,
+  InventoryFlagResult,
   InventorySalesFlag,
   InventorySalesLevel,
-  InventoryTrendPoint,
-  SaleStatus
+  InventoryTrendPoint
 } from '@content/shared';
 
-export interface InventoryFlagInput {
-  currentStockLeft: number;
-  saleStatus?: SaleStatus;
-  trend: InventoryTrendPoint[];
-}
+export type { InventoryFlagInput, InventoryFlagResult };
 
-export interface InventoryFlagResult {
-  inventoryFlag: InventoryFlag;
-  inventoryFlagLabel: string;
-  inventoryFlagLevel: InventoryFlagLevel;
-  inventorySalesFlag: InventorySalesFlag;
-  inventorySalesLabel: string;
-  inventorySalesLevel: InventorySalesLevel;
-  inventoryObservedDays: number;
-  inventorySoldOutDays: number;
-  inventoryUnsoldDays: number;
-  inventoryTrend: InventoryTrendPoint[];
-  priority: number;
-}
-
-const normalResult = (trend: InventoryTrendPoint[] = []): InventoryFlagResult => ({
+const normalResult = (normalizedTrend: InventoryTrendPoint[] = []): InventoryFlagResult => ({
   inventoryFlag: 'normal',
   inventoryFlagLabel: '正常',
   inventoryFlagLevel: 'none',
-  ...buildInventorySalesStatus(trend),
+  ...buildInventorySalesStatusFromNormalized(normalizedTrend),
   inventoryUnsoldDays: 0,
-  inventoryTrend: normalizeInventoryTrend(trend),
+  inventoryTrend: normalizedTrend,
   priority: 0
 });
 
@@ -56,9 +37,11 @@ export function normalizeInventoryTrend(trend: InventoryTrendPoint[]) {
 }
 
 export function buildInventoryFlag(input: InventoryFlagInput): InventoryFlagResult {
-  const normalizedTrend = normalizeInventoryTrend(input.trend);
+  // 调用方必须传已 normalize 的 trend (InventoryFlagInput.normalizedTrend)
+  // —— 批量路径上由 buildRecommendPackageItems 负责 normalize,避免每个套餐重复 sort
+  const normalizedTrend = input.normalizedTrend;
   const currentStockLeft = Math.max(0, Math.round(input.currentStockLeft));
-  const inventorySalesStatus = buildInventorySalesStatus(normalizedTrend);
+  const inventorySalesStatus = buildInventorySalesStatusFromNormalized(normalizedTrend);
 
   if (currentStockLeft <= 0 || input.saleStatus === 'recycle') {
     return normalResult(normalizedTrend);
@@ -106,8 +89,12 @@ export function buildInventoryFlag(input: InventoryFlagInput): InventoryFlagResu
   };
 }
 
-function buildInventorySalesStatus(trend: InventoryTrendPoint[]) {
-  const normalizedTrend = normalizeInventoryTrend(trend);
+/**
+ * 内部:假定 trend 已 normalize,直接计算 sales status。
+ * 与旧 `buildInventorySalesStatus` 等价,只是不再调用 normalizeInventoryTrend。
+ * 批量路径上由 buildRecommendPackageItems 负责 normalize,避免每个套餐重复 sort。
+ */
+function buildInventorySalesStatusFromNormalized(normalizedTrend: InventoryTrendPoint[]) {
   const recentTrend = normalizedTrend.slice(-3);
   const inventoryObservedDays = recentTrend.length;
   const inventorySoldOutDays = recentTrend.filter((point) => point.remainingStock <= 0).length;

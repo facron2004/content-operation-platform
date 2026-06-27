@@ -1,20 +1,23 @@
 import type { InventoryTrendPoint } from '@content/shared';
 import { describe, expect, it } from 'vitest';
-import { buildInventoryFlag } from '../src/content/inventory-flags';
+import { buildInventoryFlag, normalizeInventoryTrend } from '../src/content/inventory-flags';
 
+// 返回已 normalize 的 trend,符合 buildInventoryFlag 新签名
 const trend = (items: Array<[string, number]>): InventoryTrendPoint[] =>
-  items.map(([date, remainingStock]) => ({
-    date,
-    snapshotTime: `${date}T10:00:00.000Z`,
-    remainingStock
-  }));
+  normalizeInventoryTrend(
+    items.map(([date, remainingStock]) => ({
+      date,
+      snapshotTime: `${date}T10:00:00.000Z`,
+      remainingStock
+    }))
+  );
 
 describe('buildInventoryFlag', () => {
   it('marks recent all-zero stock days as hot-selling', () => {
     const result = buildInventoryFlag({
       currentStockLeft: 0,
       saleStatus: 'selling',
-      trend: trend([
+      normalizedTrend: trend([
         ['2026-05-12', 0],
         ['2026-05-13', 0],
         ['2026-05-14', 0]
@@ -32,7 +35,7 @@ describe('buildInventoryFlag', () => {
     const result = buildInventoryFlag({
       currentStockLeft: 20,
       saleStatus: 'selling',
-      trend: trend([
+      normalizedTrend: trend([
         ['2026-05-12', 80],
         ['2026-05-13', 50],
         ['2026-05-14', 20]
@@ -50,7 +53,7 @@ describe('buildInventoryFlag', () => {
     const result = buildInventoryFlag({
       currentStockLeft: 8,
       saleStatus: 'selling',
-      trend: trend([['2026-05-14', 8]])
+      normalizedTrend: trend([['2026-05-14', 8]])
     });
 
     expect(result.inventoryFlag).toBe('unsold_today');
@@ -65,7 +68,7 @@ describe('buildInventoryFlag', () => {
     const result = buildInventoryFlag({
       currentStockLeft: 6,
       saleStatus: 'selling',
-      trend: trend([
+      normalizedTrend: trend([
         ['2026-05-13', 7],
         ['2026-05-14', 6]
       ])
@@ -83,7 +86,7 @@ describe('buildInventoryFlag', () => {
     const result = buildInventoryFlag({
       currentStockLeft: 11,
       saleStatus: 'selling',
-      trend: trend([
+      normalizedTrend: trend([
         ['2026-05-12', 12],
         ['2026-05-13', 12],
         ['2026-05-14', 11]
@@ -103,7 +106,7 @@ describe('buildInventoryFlag', () => {
       buildInventoryFlag({
         currentStockLeft: 0,
         saleStatus: 'selling',
-        trend: trend([['2026-05-14', 0]])
+        normalizedTrend: trend([['2026-05-14', 0]])
       }).inventoryFlag
     ).toBe('normal');
 
@@ -111,7 +114,7 @@ describe('buildInventoryFlag', () => {
       buildInventoryFlag({
         currentStockLeft: 5,
         saleStatus: 'recycle',
-        trend: trend([['2026-05-14', 5]])
+        normalizedTrend: trend([['2026-05-14', 5]])
       }).inventoryFlag
     ).toBe('normal');
   });

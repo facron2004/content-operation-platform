@@ -1,8 +1,8 @@
 import { BadRequestException, Inject, Injectable, Logger } from '@nestjs/common';
-import type { OperationAlert, RecommendPackageItem, UserRole } from '@content/shared';
+import type { AlertQuery, OperationAlert, RecommendPackageItem } from '@content/shared';
+import { resolvePagination, localDateKey } from '@content/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import type { RecommendQuery, RecommendationResult } from './content.service';
-import { localDateKey } from './shared-helpers';
 
 type GetRecommendationsFn = (q: RecommendQuery) => Promise<RecommendationResult>;
 
@@ -14,14 +14,27 @@ const ALERT_UPSERT_SQL = `
     "resolvedBy" = excluded."resolvedBy",
     "resolvedAt" = CURRENT_TIMESTAMP`;
 
-export interface AlertQuery {
-  role?: UserRole;
-  level?: OperationAlert['level'];
-  type?: OperationAlert['type'];
-  keyword?: string;
-  page?: number;
-  pageSize?: number;
-}
+// alert 优先级权重
+// - ALERT_LEVEL_WEIGHTS 反映业务严重度:danger > warning > info
+// - ALERT_TYPE_WEIGHTS 反映 9 种预警类型的影响排序
+// 数值被 alert.service.spec.ts 的 score 断言锁死(80/52/20/18/...),
+// 修改需同步更新测试。
+const ALERT_LEVEL_WEIGHTS: Readonly<Record<OperationAlert['level'], number>> = {
+  danger: 80,
+  warning: 52,
+  info: 20
+};
+const ALERT_TYPE_WEIGHTS: Readonly<Partial<Record<OperationAlert['type'], number>>> = {
+  high_refund: 20,
+  continuous_unsold: 18,
+  inventory_abnormal: 17,
+  price_abnormal: 16,
+  abnormal_sold_out: 14,
+  low_verify: 12,
+  merchant_abnormal: 10,
+  missing_use_rules: 8,
+  missing_selling_points: 4
+};
 
 @Injectable()
 export class AlertService {
@@ -124,19 +137,7 @@ export class AlertService {
   }
 
   alertPriorityScore(alert: OperationAlert): number {
-    const levelScore = alert.level === 'danger' ? 80 : alert.level === 'warning' ? 52 : 20;
-    const typeScore: Partial<Record<OperationAlert['type'], number>> = {
-      high_refund: 20,
-      continuous_unsold: 18,
-      inventory_abnormal: 17,
-      price_abnormal: 16,
-      abnormal_sold_out: 14,
-      low_verify: 12,
-      merchant_abnormal: 10,
-      missing_use_rules: 8,
-      missing_selling_points: 4
-    };
-    return levelScore + (typeScore[alert.type] ?? 0);
+    return ALERT_LEVEL_WEIGHTS[alert.level] + (ALERT_TYPE_WEIGHTS[alert.type] ?? 0);
   }
 
   filterAlerts(alerts: OperationAlert[], query: AlertQuery): OperationAlert[] {
@@ -207,12 +208,14 @@ export class AlertService {
   }
 
   private resolvePagination(page?: number, pageSize?: number, total = 0) {
-    const safePageSize = Math.min(
-      200,
-      Math.max(1, Number.isFinite(pageSize) ? Number(pageSize) : 80)
-    );
+    // alert list 默认 pageSize=80;并对 page 做"不超过最大页"夹紧,避免越界空响应
+    const { page: safePage, pageSize: safePageSize } = resolvePagination(page, pageSize ?? 80, total);
     const maxPage = Math.max(1, Math.ceil(total / safePageSize));
-    const safePage = Math.min(maxPage, Math.max(1, Number.isFinite(page) ? Number(page) : 1));
-    return { page: safePage, pageSize: safePageSize, offset: (safePage - 1) * safePageSize };
+    const clampedPage = Math.min(maxPage, safePage);
+    return {
+      page: clampedPage,
+      pageSize: safePageSize,
+      offset: (clampedPage - 1) * safePageSize
+    };
   }
 }

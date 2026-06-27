@@ -9,6 +9,7 @@ import type {
 import { currentPrice } from '@content/shared';
 import { getSubwayStation } from './subway-stations';
 import { getCategoryEmoji, getDishEmoji } from './category-emoji';
+import { priceString } from './utils';
 
 // Re-export for external consumers
 export type { PackageDetail } from '../content/package-detail.service';
@@ -32,9 +33,6 @@ const versionLetters = ['A', 'B', 'C', 'D', 'E'];
 const defaultScenario = '日常运营推荐';
 
 // ---- 纯工具函数 ----
-
-const formatPrice = (value?: number | null): string =>
-  value === null || value === undefined ? '' : String(value);
 
 const calculateSavings = (originalPrice: number, currentPrice: number): number =>
   Math.round(originalPrice - currentPrice);
@@ -253,7 +251,7 @@ export function auditCopyText(pkg: ContentPackage, copy: CopyDraftForAudit): Aud
   }
 
   const pkgPrice = currentPrice(pkg) ?? 0;
-  const expectedPrices = [formatPrice(pkg.originalPrice), formatPrice(pkgPrice)];
+  const expectedPrices = [priceString(pkg.originalPrice), priceString(pkgPrice)];
   const hasKnownPrice = expectedPrices.some((price) => price && text.includes(price));
   const inventedPrice =
     /(?:原价|福利价|优惠价|今日价|当前可用价)\s*\d+(?:\.\d+)?|(?:\d+(?:\.\d+)?)\s*元/.test(text) &&

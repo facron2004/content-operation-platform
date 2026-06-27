@@ -135,140 +135,24 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref, watch } from 'vue';
-import { useRouter } from 'vue-router';
-import type { RecommendPackageItem } from '@content/shared';
-import { api } from '../services/api';
-import { clearPackageCache } from '../services/cache.service';
-import { useRoleStore } from '../stores/role';
-import {
-  levelTagType,
-  inventoryTagType,
-  salesTagType,
-  operationTagType,
-  displayPrice,
-  scoreTooltip
-} from '../utils/labels';
+import { displayPrice, inventoryTagType, levelTagType, operationTagType, salesTagType, scoreTooltip } from '../utils/labels';
 import TableSkeleton from '../components/TableSkeleton.vue';
 import EmptyState from '../components/EmptyState.vue';
+import { useRecommendationsPage } from '../composables/useRecommendationsPage';
 
-const router = useRouter();
-const roleStore = useRoleStore();
-const loading = ref(false);
-const items = ref<RecommendPackageItem[]>([]);
-const categoryOptions = ref<string[]>([]);
-const filters = reactive<{ areaId: string; category: string; unsoldOnly: boolean }>({
-  areaId: '',
-  category: '',
-  unsoldOnly: false
-});
-const pagination = reactive({ page: 1, pageSize: 50, total: 0 });
-const areaOptions = ref<Array<{ value: string; label: string }>>([]);
-let loadRequestId = 0;
-let categoryOptionsRequestId = 0;
-
-const load = async (force = false) => {
-  const requestId = ++loadRequestId;
-  loading.value = true;
-  try {
-    if (force) {
-      clearPackageCache();
-      pagination.page = 1;
-    }
-    const data = await api.getRecommendations({
-      role: roleStore.currentRole,
-      areaId: filters.areaId || undefined,
-      status: 'selling',
-      category: filters.category || undefined,
-      inventoryFlag: filters.unsoldOnly ? 'unsold' : undefined,
-      page: pagination.page,
-      pageSize: pagination.pageSize
-    });
-    if (requestId !== loadRequestId) return;
-    items.value = data.packages;
-    if (data.pagination) pagination.total = data.pagination.total;
-    else pagination.total = items.value.length;
-
-    // 动态构建区域选项
-    const areaMap = new Map<string, string>();
-    for (const pkg of data.packages as Array<{ areaId: string; areaName: string }>) {
-      if (pkg.areaId && pkg.areaName && !areaMap.has(pkg.areaId)) {
-        areaMap.set(pkg.areaId, pkg.areaName);
-      }
-    }
-    areaOptions.value = Array.from(areaMap.entries()).map(([value, label]) => ({ value, label }));
-  } catch {
-    // 错误已由拦截器处理
-  } finally {
-    if (requestId === loadRequestId) loading.value = false;
-  }
-};
-
-const loadPage = () => {
-  load();
-};
-
-const loadCategoryOptions = async () => {
-  const requestId = ++categoryOptionsRequestId;
-  try {
-    const data = await api.getCategories({
-      areaId: filters.areaId || undefined,
-      role: roleStore.currentRole
-    });
-    if (requestId !== categoryOptionsRequestId) return;
-    categoryOptions.value = data.categories;
-  } catch {
-    // 错误已由拦截器处理
-  }
-};
-
-const clearFilters = () => {
-  const hadFilters = !!filters.areaId || !!filters.category || filters.unsoldOnly;
-  filters.areaId = '';
-  filters.category = '';
-  filters.unsoldOnly = false;
-  // 如果之前有筛选条件，watchers 会自动触发重新加载
-  // 如果之前就没有筛选条件，手动刷新一次
-  if (!hadFilters) {
-    load(true);
-    loadCategoryOptions();
-  }
-};
-
-const openAnalysis = (row: RecommendPackageItem) => router.push(`/packages/${row.packageId}`);
-const goGenerate = (packageId: string) => router.push({ path: '/generate', query: { packageId } });
-
-watch(
-  () => roleStore.currentRole,
-  async () => {
-    await Promise.all([load(true), loadCategoryOptions()]);
-  }
-);
-
-watch(
-  () => filters.areaId,
-  async () => {
-    await Promise.all([load(true), loadCategoryOptions()]);
-  }
-);
-
-watch(
-  () => filters.category,
-  async () => {
-    await load(true);
-  }
-);
-
-watch(
-  () => filters.unsoldOnly,
-  () => {
-    load(true);
-  }
-);
-
-onMounted(async () => {
-  await Promise.all([load(), loadCategoryOptions()]);
-});
+const {
+  loading,
+  items,
+  categoryOptions,
+  areaOptions,
+  filters,
+  pagination,
+  load,
+  loadPage,
+  clearFilters,
+  openAnalysis,
+  goGenerate
+} = useRecommendationsPage();
 </script>
 
 <style scoped>

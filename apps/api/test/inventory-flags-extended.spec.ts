@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { InventoryTrendPoint } from '@content/shared';
-import { buildInventoryFlag } from '../src/content/inventory-flags';
+import { buildInventoryFlag, normalizeInventoryTrend } from '../src/content/inventory-flags';
 
 describe('inventory flags', () => {
   function dateStr(daysAgo: number): string {
@@ -21,7 +21,7 @@ describe('inventory flags', () => {
     const result = buildInventoryFlag({
       currentStockLeft: 0,
       saleStatus: 'selling',
-      trend: [snapshot(2, 0), snapshot(1, 0), snapshot(0, 0)]
+      normalizedTrend: normalizeInventoryTrend([snapshot(2, 0), snapshot(1, 0), snapshot(0, 0)])
     });
 
     expect(result.inventoryFlag).toBe('normal');
@@ -33,7 +33,7 @@ describe('inventory flags', () => {
     const result = buildInventoryFlag({
       currentStockLeft: 10,
       saleStatus: 'selling',
-      trend: [snapshot(1, 0), snapshot(0, 10)]
+      normalizedTrend: normalizeInventoryTrend([snapshot(1, 0), snapshot(0, 10)])
     });
 
     expect(result.inventoryFlag).toBe('unsold_today');
@@ -44,7 +44,7 @@ describe('inventory flags', () => {
     const result = buildInventoryFlag({
       currentStockLeft: 20,
       saleStatus: 'selling',
-      trend: [snapshot(2, 0), snapshot(1, 20), snapshot(0, 20)]
+      normalizedTrend: normalizeInventoryTrend([snapshot(2, 0), snapshot(1, 20), snapshot(0, 20)])
     });
 
     expect(result.inventoryFlag).toBe('unsold_2d');
@@ -55,7 +55,7 @@ describe('inventory flags', () => {
     const result = buildInventoryFlag({
       currentStockLeft: 50,
       saleStatus: 'selling',
-      trend: [snapshot(3, 50), snapshot(2, 50), snapshot(1, 50), snapshot(0, 50)]
+      normalizedTrend: normalizeInventoryTrend([snapshot(3, 50), snapshot(2, 50), snapshot(1, 50), snapshot(0, 50)])
     });
 
     expect(result.inventoryFlag).toBe('unsold_3d_slow');
@@ -66,7 +66,7 @@ describe('inventory flags', () => {
     const result = buildInventoryFlag({
       currentStockLeft: 30,
       saleStatus: 'recycle',
-      trend: [snapshot(1, 30), snapshot(0, 30)]
+      normalizedTrend: normalizeInventoryTrend([snapshot(1, 30), snapshot(0, 30)])
     });
 
     expect(result.inventoryFlag).toBe('normal');
@@ -76,7 +76,7 @@ describe('inventory flags', () => {
     const result = buildInventoryFlag({
       currentStockLeft: 0,
       saleStatus: 'selling',
-      trend: []
+      normalizedTrend: []
     });
 
     expect(result.inventoryFlag).toBe('normal');
@@ -87,7 +87,7 @@ describe('inventory flags', () => {
     const result = buildInventoryFlag({
       currentStockLeft: 0,
       saleStatus: 'selling',
-      trend: [snapshot(2, 0), snapshot(1, 0), snapshot(0, 0)]
+      normalizedTrend: normalizeInventoryTrend([snapshot(2, 0), snapshot(1, 0), snapshot(0, 0)])
     });
 
     expect(result.inventorySalesFlag).toBe('hot_sold_out_recent');
@@ -98,7 +98,7 @@ describe('inventory flags', () => {
     const result = buildInventoryFlag({
       currentStockLeft: 80,
       saleStatus: 'selling',
-      trend: [snapshot(3, 80), snapshot(2, 80), snapshot(1, 80), snapshot(0, 80)]
+      normalizedTrend: normalizeInventoryTrend([snapshot(3, 80), snapshot(2, 80), snapshot(1, 80), snapshot(0, 80)])
     });
 
     expect(result.inventorySalesFlag).toBe('slow_never_sold_out');
@@ -109,7 +109,7 @@ describe('inventory flags', () => {
     const result = buildInventoryFlag({
       currentStockLeft: 15,
       saleStatus: 'selling',
-      trend: [snapshot(2, 0), snapshot(1, 20), snapshot(0, 15)]
+      normalizedTrend: normalizeInventoryTrend([snapshot(2, 0), snapshot(1, 20), snapshot(0, 15)])
     });
 
     expect(result.inventorySalesFlag).toBe('observing');

@@ -1,10 +1,11 @@
 import { Body, Controller, Get, Inject, Param, Post, Query } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import type { RecommendPackageItem, UserRole } from '@content/shared';
+import { paginate } from '@content/shared';
 import { ContentService } from './content.service';
 import { PackageDetailService } from './package-detail.service';
 import { AutoLoginService } from './auto-login.service';
-import { PackageDetailQueryDto, AICopyConfigDto } from './content.dto';
+import { PackageDetailQueryDto, AICopyConfigDto, BattleCardGenerateDto, UpdateCookieDto } from './content.dto';
 import { Public } from '../auth';
 
 @ApiTags('packages')
@@ -59,22 +60,17 @@ export class PackageController {
           areaId: string;
           packages: RecommendPackageItem[];
         }) => {
-          const total = packages.length;
-          const safePageSize = Math.min(200, Math.max(1, Number(pageSize) || 50));
-          const safePage = Math.min(
-            Math.ceil(total / safePageSize) || 1,
-            Math.max(1, Number(page) || 1)
-          );
-          const offset = (safePage - 1) * safePageSize;
+          // 推荐接口在 controller 层做二次切片:service 返回全量,controller 按 page/pageSize 切片
+          const paged = paginate(packages, Number(page) || 1, Number(pageSize) || 50);
+          // paginate 会再次 clamp page 到合法范围;还原 totalPages 的"非零即 1"语义
           return {
             date: resultDate,
             areaId,
-            packages: packages.slice(offset, offset + safePageSize),
+            packages: paged.items,
             pagination: {
-              page: safePage,
-              pageSize: safePageSize,
-              total,
-              totalPages: Math.ceil(total / safePageSize) || 1
+              ...paged.pagination,
+              page: Math.min(paged.pagination.totalPages, paged.pagination.page),
+              totalPages: paged.pagination.total === 0 ? 1 : paged.pagination.totalPages
             }
           };
         }
@@ -154,7 +150,7 @@ export class PackageController {
 
   @Post('cookie/update')
   @ApiOperation({ summary: '更新 JeeSite Cookie' })
-  updateCookie(@Body() body: { cookie: string }) {
+  updateCookie(@Body() body: UpdateCookieDto) {
     return this.autoLoginService.updateManualCookie(body.cookie);
   }
 
@@ -184,7 +180,7 @@ export class PackageController {
   }
 
   @Post('battle-cards/generate')
-  generateBattleCard(@Body() body: { packageId: string }) {
+  generateBattleCard(@Body() body: BattleCardGenerateDto) {
     return this.contentService.generateBattleCard(body.packageId);
   }
 

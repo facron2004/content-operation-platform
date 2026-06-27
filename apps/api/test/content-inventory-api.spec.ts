@@ -1,10 +1,10 @@
 import { Test } from '@nestjs/testing';
 import type { ContentPackage, SalesSnapshot } from '@content/shared';
-import request from 'supertest';
 import { describe, expect, it, vi } from 'vitest';
 import { AppModule } from '../src/app.module';
 import { DataSourceService } from '../src/content/data-source.service';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { authedAgent } from './helpers/auth';
 
 const packageBase: ContentPackage = {
   packageId: 'LIVE-PKG-001',
@@ -72,12 +72,15 @@ const createApp = async (dataset: { packages: ContentPackage[]; snapshots: Sales
   const app = moduleRef.createNestApplication();
   await app.init();
 
-  return { app, dataSourceMock };
+  // 走真实 /api/auth/login 拿 Bearer token,避免 8 个 401
+  const api = await authedAgent(app);
+
+  return { app, api, dataSourceMock };
 };
 
 describe('content inventory API', () => {
   it('uses only JeeSite dataset snapshots to mark slow-moving inventory', async () => {
-    const { app } = await createApp({
+    const { app, api } = await createApp({
       packages: [packageBase],
       snapshots: [
         snapshot('2026-05-22', 80),
@@ -86,7 +89,7 @@ describe('content inventory API', () => {
       ]
     });
 
-    const response = await request(app.getHttpServer())
+    const response = await api
       .get(
         '/api/content/packages/recommend?role=platform_operator&status=selling&inventoryFlag=unsold&date=2026-05-24'
       )
@@ -113,12 +116,12 @@ describe('content inventory API', () => {
 
   it('marks a product as hot-selling when recent JeeSite inventory is all zero', async () => {
     const hotPackage = { ...packageBase, stockLeft: 0 };
-    const { app } = await createApp({
+    const { app, api } = await createApp({
       packages: [hotPackage],
       snapshots: [snapshot('2026-05-22', 0), snapshot('2026-05-23', 0), snapshot('2026-05-24', 0)]
     });
 
-    const response = await request(app.getHttpServer())
+    const response = await api
       .get('/api/content/packages/recommend?role=platform_operator&status=selling&date=2026-05-24')
       .expect(200);
 
@@ -137,7 +140,7 @@ describe('content inventory API', () => {
   });
 
   it('returns JeeSite-only inventory trend and sales flag in package analysis', async () => {
-    const { app } = await createApp({
+    const { app, api } = await createApp({
       packages: [packageBase],
       snapshots: [
         snapshot('2026-05-22', 80),
@@ -146,7 +149,7 @@ describe('content inventory API', () => {
       ]
     });
 
-    const response = await request(app.getHttpServer())
+    const response = await api
       .get('/api/content/packages/LIVE-PKG-001/analysis')
       .expect(200);
 
@@ -163,7 +166,7 @@ describe('content inventory API', () => {
   });
 
   it('crawls daily remaining inventory from JeeSite dataset fields', async () => {
-    const { app } = await createApp({
+    const { app, api } = await createApp({
       packages: [packageBase, { ...packageBase, packageId: 'LIVE-PKG-002', stockLeft: 0 }],
       snapshots: [
         snapshot('2026-05-24', 20),
@@ -171,7 +174,7 @@ describe('content inventory API', () => {
       ]
     });
 
-    const response = await request(app.getHttpServer())
+    const response = await api
       .post('/api/content/inventory/daily-crawl?date=2026-05-24')
       .expect(201);
 
@@ -191,7 +194,7 @@ describe('content inventory API', () => {
       packageId: 'LIVE-PKG-ALERTS',
       packageName: 'JeeSite alerts package'
     };
-    const { app } = await createApp({
+    const { app, api } = await createApp({
       packages: [alertPackage],
       snapshots: [
         snapshot('2026-05-22', 80, alertPackage),
@@ -201,7 +204,7 @@ describe('content inventory API', () => {
     });
 
     try {
-      const response = await request(app.getHttpServer())
+      const response = await api
         .get('/api/content/alerts?role=platform_operator&type=continuous_unsold&page=1&pageSize=1')
         .expect(200);
 
@@ -214,7 +217,7 @@ describe('content inventory API', () => {
       });
       expect(response.body.topPackages[0].alertIds).toContain('LIVE-PKG-ALERTS:continuous_unsold');
 
-      await request(app.getHttpServer())
+      await api
         .post('/api/content/alerts/resolve-batch')
         .send({
           alertIds: ['LIVE-PKG-ALERTS:continuous_unsold'],
@@ -222,7 +225,7 @@ describe('content inventory API', () => {
         })
         .expect(201);
 
-      const afterResolve = await request(app.getHttpServer())
+      const afterResolve = await api
         .get('/api/content/alerts?role=platform_operator&type=continuous_unsold&page=1&pageSize=1')
         .expect(200);
 

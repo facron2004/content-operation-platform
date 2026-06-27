@@ -70,7 +70,8 @@ const mockPrisma = {
     findMany: vi.fn().mockResolvedValue([]),
     findUnique: vi.fn().mockResolvedValue(null),
     createMany: vi.fn().mockResolvedValue({ count: 0 }),
-    update: vi.fn().mockResolvedValue({})
+    update: vi.fn().mockResolvedValue({}),
+    count: vi.fn().mockResolvedValue(0)
   },
   contentPackage: {
     upsert: vi.fn().mockResolvedValue({}),
@@ -268,11 +269,13 @@ describe('CopyService', () => {
     });
 
     it('passes auditStatus and channel filters to prisma', async () => {
-      await service.listCopies({ auditStatus: 'approved', channel: 'moments' });
+      await service.listCopies({ auditStatus: 'approved', channel: 'moments' }, 1, 20);
 
       expect(mockPrisma.generatedCopy.findMany).toHaveBeenCalledWith({
         where: { auditStatus: 'approved', channel: 'moments' },
-        orderBy: { createdAt: 'desc' }
+        orderBy: { createdAt: 'desc' },
+        skip: 0,
+        take: 20
       });
     });
   });

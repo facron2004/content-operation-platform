@@ -4,97 +4,34 @@ import type {
   ContentPackage,
   CopyPerformance,
   GeneratedCopy,
-  PackageType,
-  SaleStatus,
   StrategyType
 } from '@content/shared';
+import { PACKAGE_TYPES, SALE_STATUSES } from '@content/shared';
+// 直接复用 Prisma 生成的 row 类型,避免字段漂移;新增字段时 Prisma 报错即提醒
+import type { ContentPackage as PrismaContentPackage, GeneratedCopy as PrismaGeneratedCopy, CopyPerformance as PrismaCopyPerformance } from '@prisma/client';
 
-type DbPackage = {
-  packageId: string;
-  packageName: string;
-  packageType: string;
-  merchantId: string;
-  merchantName: string;
-  areaId: string;
-  areaName: string;
-  category: string;
-  originalPrice: number;
-  salePrice: number;
-  welfarePrice: number | null;
-  temporarySalePrice: number | null;
-  commissionRate: number;
-  grossProfit: number;
-  stockTotal: number;
-  stockLeft: number;
-  startTime: Date;
-  endTime: Date;
-  useRules: string;
-  sellingPoints: string;
-  saleStatus: string | null;
-  fallbackPackageId: string | null;
-  miniProgramPath: string;
-  detailSummary: string | null;
-  merchantCooperationScore: number;
-  areaMatchScore: number;
-  timeMatchScore: number;
-  historyScore: number;
-};
-
-type DbCopy = {
-  contentId: string;
-  packageId: string;
-  areaId: string;
-  merchantId: string;
-  channel: string;
-  scenario: string;
-  title: string;
-  body: string;
-  cta: string;
-  copyVersion: string;
-  strategyType: string;
-  riskLevel: string;
-  riskTips: string;
-  auditStatus: string;
-  auditRemark: string | null;
-  createdBy: string;
-  createdAt: Date;
-  updatedAt: Date;
-};
-
-type DbPerformance = {
-  id: string;
-  contentId: string;
-  packageId: string;
-  channel: string;
-  groupId: string | null;
-  leaderId: string | null;
-  exposureCount: number;
-  clickCount: number;
-  orderCount: number;
-  paidOrderCount: number;
-  verifyCount: number;
-  refundCount: number;
-  gmv: number;
-  conversionRate: number;
-  createdAt: Date;
-  updatedAt: Date;
-};
+type DbPackage = PrismaContentPackage;
+type DbCopy = PrismaGeneratedCopy;
+type DbPerformance = PrismaCopyPerformance;
 
 export const splitList = (value: string | null | undefined) =>
   value
     ? value
-        .split('｜')
+        .split(/[、,，;；|｜\n]/g)
         .map((item) => item.trim())
         .filter(Boolean)
     : [];
 
 export const joinList = (items: string[]) => items.join('｜');
 
+const castEnum = <T extends string>(value: string, allowed: readonly T[], fallback: T): T =>
+  (allowed as readonly string[]).includes(value) ? (value as T) : fallback;
+
 export function mapPackage(row: DbPackage): ContentPackage {
   return {
     packageId: row.packageId,
     packageName: row.packageName,
-    packageType: row.packageType as PackageType,
+    packageType: castEnum(row.packageType, PACKAGE_TYPES, 'commission'),
     merchantId: row.merchantId,
     merchantName: row.merchantName,
     areaId: row.areaId,
@@ -112,7 +49,7 @@ export function mapPackage(row: DbPackage): ContentPackage {
     endTime: row.endTime.toISOString(),
     useRules: splitList(row.useRules),
     sellingPoints: splitList(row.sellingPoints),
-    saleStatus: row.saleStatus ? (row.saleStatus as SaleStatus) : undefined,
+    saleStatus: row.saleStatus ? castEnum(row.saleStatus, SALE_STATUSES, 'pending') : undefined,
     fallbackPackageId: row.fallbackPackageId,
     miniProgramPath: row.miniProgramPath,
     detailSummary: row.detailSummary ?? undefined,

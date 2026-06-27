@@ -12,6 +12,20 @@ import {
 } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
 import type { Channel, AuditStatus, UserRole } from '@content/shared';
+import {
+  ALERT_LEVELS,
+  ALERT_TYPES,
+  AUDIT_DECISION_STATUSES,
+  CHANNELS
+} from '@content/shared';
+
+// --- Cookie Update ---
+export class UpdateCookieDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(5000)
+  cookie!: string;
+}
 
 // --- AI Copy Config ---
 export class AICopyConfigDto {
@@ -58,7 +72,7 @@ export class GenerateCopyDto {
   packageId!: string;
 
   @IsString()
-  @IsIn(['wechat_group', 'moments', 'merchant_share'])
+  @IsIn(CHANNELS)
   channel!: Channel;
 
   @IsOptional()
@@ -95,7 +109,7 @@ export class GenerateCopyDto {
 // --- Copy Audit ---
 export class AuditCopyDto {
   @IsString()
-  @IsIn(['approved', 'rejected', 'risk'])
+  @IsIn(AUDIT_DECISION_STATUSES)
   auditStatus!: Extract<AuditStatus, 'approved' | 'rejected' | 'risk'>;
 
   @IsOptional()
@@ -149,6 +163,42 @@ export class PackageDetailQueryDto {
   @IsOptional()
   @Transform(({ value }) => value === 'true' || value === true)
   saveRawHtml?: boolean;
+}
+
+// --- Alert Query ---
+export class AlertQueryDto {
+  @IsOptional()
+  @IsString()
+  role?: UserRole;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(ALERT_LEVELS)
+  level?: string;
+
+  @IsOptional()
+  @IsString()
+  // 与 OperationAlertType 严格一致;不再接受旧硬编码里的 'price_mismatch'/'expired'(业务上不存在)
+  @IsIn(ALERT_TYPES)
+  type?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  keyword?: string;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  @Type(() => Number)
+  page?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  @Max(200)
+  @Type(() => Number)
+  pageSize?: number;
 }
 
 // --- Ops today query ---

@@ -244,15 +244,9 @@ describe('DashboardService', () => {
       ]);
 
       const mockGetRecommendations = vi.fn().mockResolvedValue({ packages: [] });
-      const emptyCache = new Map();
-      const mockCacheKey = vi.fn().mockReturnValue('test-key');
-      const mockGetCached = vi.fn().mockResolvedValue({ packages: [] });
 
       const result = await service.getDashboardSummary(
-        mockGetRecommendations,
-        emptyCache,
-        mockCacheKey,
-        mockGetCached
+        mockGetRecommendations
       );
 
       expect(result.generatedCount).toBe(50);
@@ -273,9 +267,6 @@ describe('DashboardService', () => {
       ]);
 
       const result = await service.getDashboardSummary(
-        vi.fn().mockResolvedValue({ packages: [] }),
-        new Map(),
-        vi.fn().mockReturnValue('key'),
         vi.fn().mockResolvedValue({ packages: [] })
       );
 

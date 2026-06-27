@@ -64,13 +64,14 @@ export const router = createRouter({
   ]
 });
 
-// Auth guard: redirect to login if not authenticated
-router.beforeEach((to, _from, next) => {
+// Auth guard: recover a local session before showing the login page.
+router.beforeEach(async (to, _from, next) => {
   NProgress.start();
   const authStore = useAuthStore();
-  if (!to.meta.public && !authStore.isAuthenticated) {
+  const token = await authStore.ensureAuthenticated();
+  if (!to.meta.public && !token) {
     next({ name: 'login', query: { redirect: to.fullPath } });
-  } else if (to.name === 'login' && authStore.isAuthenticated) {
+  } else if (to.name === 'login' && token) {
     next({ path: '/' });
   } else {
     next();

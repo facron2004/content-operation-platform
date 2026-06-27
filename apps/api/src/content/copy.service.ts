@@ -8,14 +8,16 @@ import type {
   GenerateCopyRequest,
   SalesSnapshot
 } from '@content/shared';
+import { resolvePagination } from '@content/shared';
 import { auditCopyText, generateTemplateCopies } from '../domain/copy-rules';
 import { buildPromotionScore } from '../domain/promotion-rules';
+import { getFallbackDate } from '../domain/utils';
 import { PrismaService } from '../prisma/prisma.service';
 import { DataSourceService } from './data-source.service';
 import { PackageDetailService } from './package-detail.service';
 import { AICopyService } from './ai-copy.service';
 import { copyToDb, joinList, mapCopy, mapPackage, packageToDb } from './mappers';
-import { getFallbackDate, latestSnapshotForPackage } from './shared-helpers';
+import { resolvePackageAndSnapshot } from './package-detail-helpers';
 
 @Injectable()
 export class CopyService {
@@ -28,15 +30,13 @@ export class CopyService {
     @Inject(AICopyService) private readonly aiCopyService: AICopyService
   ) {}
 
-  /** 解析套餐 + 快照（从数据源加载） */
+  /** 解析套餐 + 快照（委托给 shared-helpers 公共方法） */
   private async resolvePackageAndSnapshot(
     packageId: string
   ): Promise<{ pkg: ContentPackage; snapshot: SalesSnapshot } | null> {
-    const dataset = await this.dataSource.loadDataset();
-    const pkg = dataset.packages.find((item) => item.packageId === packageId);
-    const snapshots = dataset.snapshots.filter((item) => item.packageId === packageId);
-    const snapshot = latestSnapshotForPackage(snapshots, pkg?.packageId ?? '');
-    return pkg && snapshot ? { pkg, snapshot } : null;
+    const result = await resolvePackageAndSnapshot(packageId, this.dataSource);
+    if (!result) return null;
+    return { pkg: result.pkg, snapshot: result.snapshot };
   }
 
   /** 确保套餐已持久化到 DB */
@@ -89,12 +89,32 @@ export class CopyService {
     return { contentList: copies };
   }
 
-  async listCopies(filters: { auditStatus?: AuditStatus; channel?: Channel }) {
-    const rows = await this.prisma.generatedCopy.findMany({
-      where: { auditStatus: filters.auditStatus, channel: filters.channel },
-      orderBy: { createdAt: 'desc' }
-    });
-    return { items: rows.map(mapCopy) };
+  async listCopies(filters: { auditStatus?: AuditStatus; channel?: Channel }, page?: number, pageSize?: number) {
+    const { offset, ...pagination } = resolvePagination(page, pageSize, 0);
+
+    const [rows, total] = await Promise.all([
+      this.prisma.generatedCopy.findMany({
+        where: { auditStatus: filters.auditStatus, channel: filters.channel },
+        orderBy: { createdAt: 'desc' },
+        skip: offset,
+        take: pagination.pageSize
+      }),
+      this.prisma.generatedCopy.count({
+        where: { auditStatus: filters.auditStatus, channel: filters.channel }
+      })
+    ]);
+
+    // 拿到真实 total 后重新计算 totalPages
+    const finalPagination = resolvePagination(page, pageSize, total);
+    return {
+      items: rows.map(mapCopy),
+      pagination: {
+        page: finalPagination.page,
+        pageSize: finalPagination.pageSize,
+        total,
+        totalPages: finalPagination.totalPages
+      }
+    };
   }
 
   async auditCopy(contentId: string, request: AuditCopyRequest) {

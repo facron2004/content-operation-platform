@@ -1,18 +1,23 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import type { Channel, OperationCard, RecommendPackageItem, UserRole } from '@content/shared';
+import type { Prisma } from '@prisma/client';
+import type { Channel, RecommendPackageItem, UserRole } from '@content/shared';
+import { localDateKey } from '@content/shared';
 import {
   buildCommunityTasks,
   buildDailyReview,
-  buildDerivedCommunities,
-  toOperationCard
+  buildDerivedCommunities
 } from '../domain/operation-rules';
+import { buildOperationCardMap } from './package-detail-helpers';
 import { PrismaService } from '../prisma/prisma.service';
 import { AlertService } from './alert.service';
 import { mapPerformance } from './mappers';
-import { localDateKey } from './shared-helpers';
 import type { RecommendQuery, RecommendationResult } from './content.service';
 
 type GetRecommendationsFn = (q: RecommendQuery) => Promise<RecommendationResult>;
+
+// Prisma 行类型:显式声明,跨方法共享,避免内联 (typeof copies)[number] 漂移
+type CopyRow = Prisma.GeneratedCopyGetPayload<Record<string, never>>;
+type PerfRow = Prisma.CopyPerformanceGetPayload<Record<string, never>>;
 
 @Injectable()
 export class DashboardService {
@@ -35,7 +40,19 @@ export class DashboardService {
     const packages = recommendations.packages;
     const cardMap = this.operationCardMap(packages);
     const cards = Array.from(cardMap.values());
-
+    const [performances, copies] = await Promise.all([
+      this.prisma.copyPerformance.findMany({ orderBy: { createdAt: 'desc' }, take: 200 }),
+      this.prisma.generatedCopy.findMany({ take: 500 })
+    ]);
+    const copiesById = new Map<string, CopyRow>(copies.map((c: CopyRow) => [c.contentId, c]));
+    const performanceRows = performances.map((p: PerfRow) => ({
+      contentId: p.contentId,
+      title: copiesById.get(p.contentId)?.title ?? '-',
+      channel: p.channel as Channel,
+      conversionRate: p.conversionRate,
+      orderCount: p.orderCount,
+      groupId: p.groupId
+    }));
     const allAlerts = this.alertService.rankAlerts(
       packages.flatMap((pkg: RecommendPackageItem) => pkg.operationAlerts ?? [])
     );
@@ -44,7 +61,6 @@ export class DashboardService {
 
     const communities = buildDerivedCommunities(packages, cardMap);
     const communityTasks = buildCommunityTasks(communities).slice(0, 8);
-    const performanceRows = await this.loadPerformanceRows();
     const review = buildDailyReview(this.yesterdayKey(), cards, performanceRows);
 
     const dangerAlerts = alerts.filter((a) => a.level === 'danger');
@@ -111,12 +127,7 @@ export class DashboardService {
    * Dashboard 摘要：文案数量、GMV、转化率、套餐状态分布。
    * 使用 SQL 聚合代替 findMany + 内存 reduce。
    */
-  async getDashboardSummary(
-    getRecommendations: GetRecommendationsFn,
-    recommendationCache: Map<string, { data: RecommendationResult; expiresAt: number }>,
-    recommendationCacheKey: (q: RecommendQuery) => string,
-    getCachedRecommendations: GetRecommendationsFn
-  ) {
+  async getDashboardSummary(getRecommendations: GetRecommendationsFn) {
     const [generatedCount, approvedCount, pushedCount, pendingCount, riskCount] = await Promise.all(
       [
         this.prisma.generatedCopy.count(),
@@ -144,16 +155,14 @@ export class DashboardService {
       gmv: number;
     }>;
 
-    // 尝试从缓存获取推荐结果
-    const cacheKey = recommendationCacheKey({ status: 'selling' });
+    // 通过回调获取推荐数据(ContentService 内部已有缓存,无需再关心)
     const packagesSummary = {
       sellingCount: 0,
       countByStatus: {} as Record<string, number>,
       top5: [] as RecommendPackageItem[]
     };
     try {
-      let recommendations = recommendationCache.get(cacheKey)?.data;
-      if (!recommendations) recommendations = await getCachedRecommendations({ status: 'selling' });
+      const recommendations = await getRecommendations({ status: 'selling' });
       packagesSummary.sellingCount = recommendations.packages.length;
       packagesSummary.countByStatus = this.statusDistribution(recommendations.packages);
       packagesSummary.top5 = recommendations.packages.slice(0, 5);
@@ -193,30 +202,25 @@ export class DashboardService {
 
   /**
    * 效果数据：文案性能、版本对比、AI 复盘。
+   * 注意:performances/copies 只 fetch 一次,review 和 items 共用结果。
    */
-  async getPerformance(getCachedRecommendations: GetRecommendationsFn) {
+  async getPerformance(getRecommendations: GetRecommendationsFn) {
     const [performances, copies] = await Promise.all([
       this.prisma.copyPerformance.findMany({ orderBy: { createdAt: 'desc' }, take: 200 }),
       this.prisma.generatedCopy.findMany({ take: 500 })
     ]);
-    type CopyRow = (typeof copies)[number];
-    type PerfRow = (typeof performances)[number];
     const copiesById = new Map<string, CopyRow>(copies.map((c: CopyRow) => [c.contentId, c]));
-
-    const recommendations = await getCachedRecommendations({ status: 'selling' });
+    const performanceRows = performances.map((p: PerfRow) => ({
+      contentId: p.contentId,
+      title: copiesById.get(p.contentId)?.title ?? '-',
+      channel: p.channel as Channel,
+      conversionRate: p.conversionRate,
+      orderCount: p.orderCount,
+      groupId: p.groupId
+    }));
+    const recommendations = await getRecommendations({ status: 'selling' });
     const cards = Array.from(this.operationCardMap(recommendations.packages).values());
-    const review = buildDailyReview(
-      this.yesterdayKey(),
-      cards,
-      performances.map((p: PerfRow) => ({
-        contentId: p.contentId,
-        title: copiesById.get(p.contentId)?.title ?? '-',
-        channel: p.channel as Channel,
-        conversionRate: p.conversionRate,
-        orderCount: p.orderCount,
-        groupId: p.groupId
-      }))
-    );
+    const review = buildDailyReview(this.yesterdayKey(), cards, performanceRows);
 
     return {
       items: performances.map((p: PerfRow) => {
@@ -249,34 +253,7 @@ export class DashboardService {
     }, {});
   }
 
-  private operationCardMap(packages: RecommendPackageItem[]) {
-    return new Map<string, OperationCard>(
-      packages
-        .filter((pkg) => pkg.scoreBreakdown)
-        .map((pkg) => [
-          pkg.packageId,
-          toOperationCard(pkg, pkg.scoreBreakdown!, pkg.operationTags ?? [])
-        ])
-    );
-  }
-
-  private async loadPerformanceRows() {
-    const [performances, copies] = await Promise.all([
-      this.prisma.copyPerformance.findMany({ orderBy: { createdAt: 'desc' }, take: 200 }),
-      this.prisma.generatedCopy.findMany({ take: 500 })
-    ]);
-    type CopyRow = (typeof copies)[number];
-    type PerfRow = (typeof performances)[number];
-    const copiesById = new Map<string, CopyRow>(copies.map((c: CopyRow) => [c.contentId, c]));
-    return performances.map((p: PerfRow) => ({
-      contentId: p.contentId,
-      title: copiesById.get(p.contentId)?.title ?? '-',
-      channel: p.channel as Channel,
-      conversionRate: p.conversionRate,
-      orderCount: p.orderCount,
-      groupId: p.groupId
-    }));
-  }
+  private operationCardMap = buildOperationCardMap;
 
   private yesterdayKey(): string {
     const date = new Date();

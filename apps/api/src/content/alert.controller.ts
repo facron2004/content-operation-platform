@@ -1,40 +1,41 @@
 ﻿import { Body, Controller, Get, Inject, Param, Post, Query } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import type { OperationAlert, UserRole } from '@content/shared';
+import type { OperationAlert, OperationAlertType, UserRole } from '@content/shared';
+import { AlertService } from './alert.service';
 import { ContentService } from './content.service';
-import { AlertResolveDto, AlertResolveBatchDto } from './content.dto';
+import { AlertResolveDto, AlertResolveBatchDto, AlertQueryDto } from './content.dto';
 
 @ApiTags('alerts')
 @Controller('api/content')
 export class AlertController {
-  constructor(@Inject(ContentService) private readonly contentService: ContentService) {}
+  constructor(
+    @Inject(AlertService) private readonly alertService: AlertService,
+    // ContentService 用于包"获取推荐数据"回调,传给 AlertService(避免 alert 依赖 content)
+    @Inject(ContentService) private readonly contentService: ContentService,
+  ) {}
 
   @Get('alerts')
-  getOperationAlerts(
-    @Query('role') role?: UserRole,
-    @Query('level') level?: string,
-    @Query('type') type?: string,
-    @Query('keyword') keyword?: string,
-    @Query('page') page?: string,
-    @Query('pageSize') pageSize?: string
-  ) {
-    return this.contentService.getOperationAlerts({
-      role: role as UserRole,
-      level: level as OperationAlert['level'],
-      type: type as OperationAlert['type'],
-      keyword,
-      page: page !== undefined && page !== '' ? Number(page) : undefined,
-      pageSize: pageSize !== undefined && pageSize !== '' ? Number(pageSize) : undefined
-    });
+  getOperationAlerts(@Query() query: AlertQueryDto) {
+    return this.alertService.getOperationAlerts(
+      {
+        role: query.role,
+        level: query.level as OperationAlert['level'] | undefined,
+        type: query.type as OperationAlertType | undefined,
+        keyword: query.keyword,
+        page: query.page,
+        pageSize: query.pageSize
+      },
+      (q) => this.contentService.getRecommendations(q)
+    );
   }
 
   @Post('alerts/:alertId/resolve')
   resolveAlert(@Param('alertId') alertId: string, @Body() body?: AlertResolveDto) {
-    return this.contentService.resolveOperationAlert(alertId, body?.resolvedBy);
+    return this.alertService.resolveOperationAlert(alertId, body?.resolvedBy);
   }
 
   @Post('alerts/resolve-batch')
   resolveAlerts(@Body() body: AlertResolveBatchDto) {
-    return this.contentService.resolveOperationAlerts(body.alertIds ?? [], body.resolvedBy);
+    return this.alertService.resolveOperationAlerts(body.alertIds ?? [], body.resolvedBy);
   }
 }

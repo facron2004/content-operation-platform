@@ -231,6 +231,33 @@ describe('ContentService', () => {
       // loadDataset called only once because of dedup
       expect(mockDataSource.loadDataset).toHaveBeenCalledTimes(1);
     });
+
+    it('perf: 200 packages complete batch compute in < 500ms', async () => {
+      // 临时构造 200 个 selling 套餐,测量 buildRecommendPackageItems 的实际开销。
+      // 阈值 500ms 给 CI 留余量;若未来重构引入 N+1,本断言会立刻失败。
+      const N = 200;
+      const bigPackages = Array.from({ length: N }, (_, i) => ({
+        ...fixturePackage,
+        packageId: `PKG-PERF-${i}`,
+        stockLeft: i % 5,
+        stockTotal: 100
+      }));
+      const bigSnapshots = Array.from({ length: N }, (_, i) => ({
+        ...fixtureSnapshot,
+        packageId: `PKG-PERF-${i}`
+      }));
+      mockDataSource.loadDataset.mockResolvedValueOnce({
+        packages: bigPackages,
+        snapshots: bigSnapshots
+      });
+
+      const start = performance.now();
+      const result = await service.getRecommendations({ status: 'selling' });
+      const elapsed = performance.now() - start;
+
+      expect(result.packages.length).toBe(N);
+      expect(elapsed).toBeLessThan(500);
+    });
   });
 
   // ---- getCategories ----
@@ -315,44 +342,12 @@ describe('ContentService', () => {
   });
 
   // ---- delegation methods ----
-
+  // P5 拆分后,ContentService 不再转发这些方法;controller 直接依赖领域 service。
+  // 转发行为的测试责任随之迁移到对应 controller 测试 (暂无 e2e 覆盖)。
   describe('delegation methods', () => {
     it('getAICopyStatus delegates to aiCopyService', () => {
       service.getAICopyStatus();
       expect(mockAICopyService.getStatus).toHaveBeenCalled();
-    });
-
-    it('generateCopies delegates to copyService', () => {
-      const req = {
-        packageId: 'PKG-TEST-001',
-        channel: 'wechat_group' as const,
-        copyCount: 2,
-        createdBy: 'tester'
-      };
-      service.generateCopies(req);
-      expect(mockCopyService.generateCopies).toHaveBeenCalledWith(req);
-    });
-
-    it('listCopies delegates to copyService', () => {
-      service.listCopies({ auditStatus: 'pending' });
-      expect(mockCopyService.listCopies).toHaveBeenCalledWith({ auditStatus: 'pending' });
-    });
-
-    it('auditCopy delegates to copyService', () => {
-      service.auditCopy('content-1', { auditStatus: 'approved' });
-      expect(mockCopyService.auditCopy).toHaveBeenCalledWith('content-1', {
-        auditStatus: 'approved'
-      });
-    });
-
-    it('resolveOperationAlert delegates to alertService', () => {
-      service.resolveOperationAlert('alert-1', 'admin');
-      expect(mockAlertService.resolveOperationAlert).toHaveBeenCalledWith('alert-1', 'admin');
-    });
-
-    it('resolveOperationAlerts delegates to alertService', () => {
-      service.resolveOperationAlerts(['a1', 'a2'], 'admin');
-      expect(mockAlertService.resolveOperationAlerts).toHaveBeenCalledWith(['a1', 'a2'], 'admin');
     });
   });
 

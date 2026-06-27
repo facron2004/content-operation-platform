@@ -163,12 +163,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
-import { useRouter } from 'vue-router';
 import { ArrowLeft } from '@element-plus/icons-vue';
-import type { ContentPackage } from '@content/shared';
 import ChartPanel from '../components/ChartPanel.vue';
-import { api, type PackageAnalysisResponse } from '../services/api';
 import {
   statusLabels,
   inventoryTagType,
@@ -176,52 +172,17 @@ import {
   operationTagType,
   formatMoney
 } from '../utils/labels';
+import { usePackageAnalysisPage } from '../composables/usePackageAnalysisPage';
 
 const props = defineProps<{ packageId: string }>();
-const router = useRouter();
-const loading = ref(false);
-const analysis = ref<PackageAnalysisResponse>({} as PackageAnalysisResponse);
-const pkg = computed<ContentPackage | undefined>(() => analysis.value.package);
-
-const formatInventoryTrend = (trend: Array<{ remainingStock: number }> | undefined) =>
-  (trend ?? []).map((point) => point.remainingStock).join(' -> ') || '-';
-
-// inventoryTagType, salesTagType, operationTagType 已从 utils/labels.ts 导入
-
-const goBack = () => {
-  router.push('/recommendations');
-};
-
-const scoreOption = computed(() => {
-  const dimensions = analysis.value.scoreBreakdown?.dimensions ?? [];
-  return {
-    tooltip: { trigger: 'axis' },
-    grid: { left: 78, right: 18, top: 20, bottom: 26 },
-    xAxis: { type: 'value', max: 100 },
-    yAxis: { type: 'category', data: dimensions.map((item) => item.label) },
-    series: [
-      {
-        type: 'bar',
-        data: dimensions.map((item) => Math.round(item.score)),
-        itemStyle: { color: '#2f6f73' },
-        label: { show: true, position: 'right' }
-      }
-    ]
-  };
-});
-
-// operationTagType 已从 utils/labels.ts 导入
-
-const load = async () => {
-  loading.value = true;
-  try {
-    analysis.value = await api.getPackageAnalysis(props.packageId);
-  } finally {
-    loading.value = false;
-  }
-};
-
-onMounted(load);
+const {
+  loading,
+  analysis,
+  pkg,
+  scoreOption,
+  formatInventoryTrend,
+  goBack
+} = usePackageAnalysisPage(props.packageId);
 </script>
 
 <style scoped>
