@@ -2,13 +2,13 @@
   <section class="page-stack ai-generate-page">
     <div class="ai-console-grid">
       <AiConfigPanel
+        v-model:form="form"
+        v-model:config-form="configForm"
         :ai-status="aiStatus"
         :config-saving="configSaving"
         :loading="loading"
         :generation-mode="generationMode"
         :packages="packages"
-        v-model:form="form"
-        v-model:config-form="configForm"
         :channel-options="channelOptions"
         @refresh-status="loadAICopyStatus"
         @save-config="saveAICopyConfig"

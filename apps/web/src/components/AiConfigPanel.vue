@@ -33,22 +33,13 @@
       </div>
       <el-form label-position="top" class="config-form">
         <el-form-item label="API Base URL">
-          <el-input
-            v-model="configForm.baseURL"
-            placeholder="https://api.deepseek.com"
-          />
+          <el-input v-model="configForm.baseURL" placeholder="https://api.deepseek.com" />
         </el-form-item>
         <el-form-item label="模型">
-          <el-input
-            v-model="configForm.model"
-            placeholder="deepseek-chat"
-          />
+          <el-input v-model="configForm.model" placeholder="deepseek-chat" />
         </el-form-item>
         <el-form-item label="服务名">
-          <el-input
-            v-model="configForm.providerName"
-            placeholder="DeepSeek"
-          />
+          <el-input v-model="configForm.providerName" placeholder="DeepSeek" />
         </el-form-item>
         <el-form-item label="API Key">
           <el-input
@@ -63,20 +54,10 @@
         </el-form-item>
         <div class="config-number-row">
           <el-form-item label="Temperature">
-            <el-input-number
-              v-model="configForm.temperature"
-              :min="0"
-              :max="2"
-              :step="0.1"
-            />
+            <el-input-number v-model="configForm.temperature" :min="0" :max="2" :step="0.1" />
           </el-form-item>
           <el-form-item label="Max Tokens">
-            <el-input-number
-              v-model="configForm.maxTokens"
-              :min="200"
-              :max="4000"
-              :step="100"
-            />
+            <el-input-number v-model="configForm.maxTokens" :min="200" :max="4000" :step="100" />
           </el-form-item>
         </div>
         <el-button class="config-save-button" :loading="configSaving" @click="$emit('save-config')">
@@ -87,11 +68,7 @@
 
     <el-form label-position="top" class="ai-form">
       <el-form-item label="套餐" required>
-        <el-select
-          v-model="form.packageId"
-          filterable
-          placeholder="选择套餐"
-        >
+        <el-select v-model="form.packageId" filterable placeholder="选择套餐">
           <el-option
             v-for="item in packages"
             :key="item.packageId"
@@ -101,16 +78,10 @@
         </el-select>
       </el-form-item>
       <el-form-item label="渠道" required>
-        <el-segmented
-          v-model="form.channel"
-          :options="channelOptions"
-        />
+        <el-segmented v-model="form.channel" :options="channelOptions" />
       </el-form-item>
       <el-form-item label="语气风格">
-        <el-input
-          v-model="form.tone"
-          placeholder="例如：真实群主口吻"
-        />
+        <el-input v-model="form.tone" placeholder="例如：真实群主口吻" />
       </el-form-item>
       <el-form-item label="补充要求 / 模板参考">
         <el-input
@@ -122,11 +93,7 @@
         />
       </el-form-item>
       <el-form-item label="生成数量" required>
-        <el-input-number
-          v-model="form.copyCount"
-          :min="1"
-          :max="5"
-        />
+        <el-input-number v-model="form.copyCount" :min="1" :max="5" />
       </el-form-item>
       <div class="generate-actions">
         <el-button
@@ -178,10 +145,13 @@ defineProps<{
   loading: boolean;
   generationMode: 'ai' | 'rule' | null;
   packages: RecommendPackageItem[];
-  form: GenerateForm;
-  configForm: AIConfigForm;
   channelOptions: Array<{ label: string; value: string }>;
 }>();
+
+// v-model:form / v-model:config-form 双向绑定由父组件持有
+// 用 defineModel 取代 props 直接传入,避免 vue/no-mutating-props
+const form = defineModel<GenerateForm>('form', { required: true });
+const configForm = defineModel<AIConfigForm>('configForm', { required: true });
 
 defineEmits<{
   'refresh-status': [];
