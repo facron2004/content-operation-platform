@@ -135,7 +135,14 @@
 </template>
 
 <script setup lang="ts">
-import { displayPrice, inventoryTagType, levelTagType, operationTagType, salesTagType, scoreTooltip } from '../utils/labels';
+import {
+  displayPrice,
+  inventoryTagType,
+  levelTagType,
+  operationTagType,
+  salesTagType,
+  scoreTooltip
+} from '../utils/labels';
 import TableSkeleton from '../components/TableSkeleton.vue';
 import EmptyState from '../components/EmptyState.vue';
 import { useRecommendationsPage } from '../composables/useRecommendationsPage';

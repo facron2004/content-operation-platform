@@ -21,9 +21,15 @@
         @click="handleClick(notification)"
       >
         <div class="notification-icon">
-          <el-icon v-if="notification.type === 'success'" color="#52c41a"><SuccessFilled /></el-icon>
-          <el-icon v-else-if="notification.type === 'warning'" color="#faad14"><WarningFilled /></el-icon>
-          <el-icon v-else-if="notification.type === 'alert'" color="#f5222d"><CircleCloseFilled /></el-icon>
+          <el-icon v-if="notification.type === 'success'" color="#52c41a">
+            <SuccessFilled />
+          </el-icon>
+          <el-icon v-else-if="notification.type === 'warning'" color="#faad14">
+            <WarningFilled />
+          </el-icon>
+          <el-icon v-else-if="notification.type === 'alert'" color="#f5222d">
+            <CircleCloseFilled />
+          </el-icon>
           <el-icon v-else color="#1890ff"><InfoFilled /></el-icon>
         </div>
 
@@ -33,12 +39,7 @@
           <div class="notification-time">{{ formatTime(notification.timestamp) }}</div>
         </div>
 
-        <el-button
-          size="small"
-          circle
-          text
-          @click.stop="remove(notification.id)"
-        >
+        <el-button size="small" circle text @click.stop="remove(notification.id)">
           <el-icon><Close /></el-icon>
         </el-button>
       </div>
@@ -66,7 +67,7 @@ const notifications = ref<Notification[]>([]);
 
 const { getAll, markAsRead, markAllAsRead, remove, clear, subscribe } = useNotifications();
 
-const unreadCount = computed(() => notifications.value.filter(n => !n.read).length);
+const unreadCount = computed(() => notifications.value.filter((n) => !n.read).length);
 
 function formatTime(timestamp: number): string {
   const now = Date.now();
@@ -104,7 +105,7 @@ let unsubscribe: (() => void) | null = null;
 
 onMounted(() => {
   notifications.value = getAll();
-  unsubscribe = subscribe(updatedNotifications => {
+  unsubscribe = subscribe((updatedNotifications) => {
     notifications.value = updatedNotifications;
   });
 });

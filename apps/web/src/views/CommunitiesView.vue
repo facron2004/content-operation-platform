@@ -108,10 +108,14 @@ interface CommunitiesData {
 }
 
 const roleStore = useRoleStore();
-const { loading, data, error: loadError, load } = useApiFetch<CommunitiesData>(
-  () => api.getCommunities({ role: roleStore.currentRole }),
-  { errorMessage: '社群数据加载失败，请稍后重试' }
-);
+const {
+  loading,
+  data,
+  error: loadError,
+  load
+} = useApiFetch<CommunitiesData>(() => api.getCommunities({ role: roleStore.currentRole }), {
+  errorMessage: '社群数据加载失败，请稍后重试'
+});
 
 const communities = computed(() => data.value?.items ?? []);
 

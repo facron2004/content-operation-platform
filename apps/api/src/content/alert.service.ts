@@ -209,7 +209,11 @@ export class AlertService {
 
   private resolvePagination(page?: number, pageSize?: number, total = 0) {
     // alert list 默认 pageSize=80;并对 page 做"不超过最大页"夹紧,避免越界空响应
-    const { page: safePage, pageSize: safePageSize } = resolvePagination(page, pageSize ?? 80, total);
+    const { page: safePage, pageSize: safePageSize } = resolvePagination(
+      page,
+      pageSize ?? 80,
+      total
+    );
     const maxPage = Math.max(1, Math.ceil(total / safePageSize));
     const clampedPage = Math.min(maxPage, safePage);
     return {

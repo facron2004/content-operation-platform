@@ -41,13 +41,25 @@ export function buildOperationTags(
     (pkg.inventoryObservedDays >= 2 && pkg.inventorySoldOutDays === 0 && pkg.stockLeft > 0);
 
   if (hotByDailyStock || (pkg.stockLeft <= 0 && snapshot.salesSpeed >= 5)) {
-    add('hot_restock_needed', 'success', `近 ${Math.max(pkg.inventoryObservedDays, pkg.inventorySoldOutDays)} 天出现连续售罄，建议确认补货或承接套餐`);
+    add(
+      'hot_restock_needed',
+      'success',
+      `近 ${Math.max(pkg.inventoryObservedDays, pkg.inventorySoldOutDays)} 天出现连续售罄，建议确认补货或承接套餐`
+    );
   }
   if (slowByDailyStock) {
-    add('continuous_slow', 'danger', `近 ${pkg.inventoryObservedDays || pkg.inventoryUnsoldDays || 2} 天库存都没有清零，优先进入滞销处理池`);
+    add(
+      'continuous_slow',
+      'danger',
+      `近 ${pkg.inventoryObservedDays || pkg.inventoryUnsoldDays || 2} 天库存都没有清零，优先进入滞销处理池`
+    );
   }
   if (snapshot.refundRate >= 0.15 || pkg.status === 'high_refund_risk') {
-    add('high_refund_risk', 'danger', `退款率 ${(snapshot.refundRate * 100).toFixed(1)}%，需要人工确认`);
+    add(
+      'high_refund_risk',
+      'danger',
+      `退款率 ${(snapshot.refundRate * 100).toFixed(1)}%，需要人工确认`
+    );
   }
   if (snapshot.verifyRate >= 0.7 && snapshot.refundRate <= 0.05) {
     add('high_verify_quality', 'success', '核销质量好，适合做口碑和商家共推');
@@ -109,22 +121,81 @@ export function buildOperationAlerts(
     pkg.inventorySalesFlag === 'hot_sold_out_recent' ||
     (pkg.inventoryObservedDays >= 2 && pkg.inventorySoldOutDays >= 2);
 
-  if (slowByDailyStock) add('continuous_unsold', 'danger', '连续未售罄', `${pkg.inventoryObservedDays || pkg.inventoryUnsoldDays || 2} 天观察期内库存未清零`, '进入今日滞销池，前排曝光并改卖点');
+  if (slowByDailyStock)
+    add(
+      'continuous_unsold',
+      'danger',
+      '连续未售罄',
+      `${pkg.inventoryObservedDays || pkg.inventoryUnsoldDays || 2} 天观察期内库存未清零`,
+      '进入今日滞销池，前排曝光并改卖点'
+    );
   if (hotByDailyStock || (pkg.stockLeft <= 0 && snapshot.salesSpeed >= 5))
-    add('abnormal_sold_out', 'warning', '异常售罄', '近几日库存多次清零，售罄速度偏快', '确认是否需要补货，并准备承接套餐');
-  if (snapshot.refundRate >= 0.15) add('high_refund', 'danger', '高退款', `退款率 ${(snapshot.refundRate * 100).toFixed(1)}%`, '暂停强推，核对规则、库存和履约');
+    add(
+      'abnormal_sold_out',
+      'warning',
+      '异常售罄',
+      '近几日库存多次清零，售罄速度偏快',
+      '确认是否需要补货，并准备承接套餐'
+    );
+  if (snapshot.refundRate >= 0.15)
+    add(
+      'high_refund',
+      'danger',
+      '高退款',
+      `退款率 ${(snapshot.refundRate * 100).toFixed(1)}%`,
+      '暂停强推，核对规则、库存和履约'
+    );
   if (snapshot.paidOrderCount >= 10 && snapshot.verifyRate < 0.25)
-    add('low_verify', 'warning', '低核销', `核销率 ${(snapshot.verifyRate * 100).toFixed(1)}%`, '生成到店提醒和预约说明');
+    add(
+      'low_verify',
+      'warning',
+      '低核销',
+      `核销率 ${(snapshot.verifyRate * 100).toFixed(1)}%`,
+      '生成到店提醒和预约说明'
+    );
   if (pkg.useRules.length === 0)
-    add('missing_use_rules', 'warning', '使用规则缺失', '套餐缺少使用规则，文案风险较高', '抓取详情或人工补充规则');
+    add(
+      'missing_use_rules',
+      'warning',
+      '使用规则缺失',
+      '套餐缺少使用规则，文案风险较高',
+      '抓取详情或人工补充规则'
+    );
   if (pkg.sellingPoints.length === 0)
-    add('missing_selling_points', 'info', '卖点缺失', '缺少可直接用于文案的卖点', '从套餐明细中提取 2-4 个主推点');
+    add(
+      'missing_selling_points',
+      'info',
+      '卖点缺失',
+      '缺少可直接用于文案的卖点',
+      '从套餐明细中提取 2-4 个主推点'
+    );
   if (pkg.stockTotal <= 0 || pkg.stockLeft > pkg.stockTotal)
-    add('inventory_abnormal', 'danger', '库存异常', `库存 ${pkg.stockLeft}/${pkg.stockTotal}`, '回查 JeeSite 库存字段');
+    add(
+      'inventory_abnormal',
+      'danger',
+      '库存异常',
+      `库存 ${pkg.stockLeft}/${pkg.stockTotal}`,
+      '回查 JeeSite 库存字段'
+    );
   if (currentPrice(pkg) <= 0 || pkg.salePrice > pkg.originalPrice * 1.2)
-    add('price_abnormal', 'danger', '价格异常', `当前售价 ${currentPrice(pkg)}，原价 ${pkg.originalPrice}`, '检查一口价/临时售价映射');
-  if (pkg.merchantCooperationScore < 60 || (score.dimensions.find((item) => item.key === 'merchant_cooperation')?.score ?? 0) < 60)
-    add('merchant_abnormal', 'warning', '商家异常', '商家配合度偏低', '避免自动强推，先联系商家确认履约');
+    add(
+      'price_abnormal',
+      'danger',
+      '价格异常',
+      `当前售价 ${currentPrice(pkg)}，原价 ${pkg.originalPrice}`,
+      '检查一口价/临时售价映射'
+    );
+  if (
+    pkg.merchantCooperationScore < 60 ||
+    (score.dimensions.find((item) => item.key === 'merchant_cooperation')?.score ?? 0) < 60
+  )
+    add(
+      'merchant_abnormal',
+      'warning',
+      '商家异常',
+      '商家配合度偏低',
+      '避免自动强推，先联系商家确认履约'
+    );
 
   return alerts;
 }

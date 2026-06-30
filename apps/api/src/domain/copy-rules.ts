@@ -12,7 +12,8 @@ import { getCategoryEmoji, getDishEmoji } from './category-emoji';
 import { priceString } from './utils';
 
 // Re-export for external consumers
-export type { PackageDetail } from '../content/package-detail.service';
+import type { PackageDetail } from '../content/package-detail.service';
+export type { PackageDetail };
 
 interface CopyDraftForAudit {
   title: string;
@@ -25,8 +26,6 @@ interface AuditResult {
   riskTips: string[];
   auditStatus: AuditStatus;
 }
-
-type PackageDetail = import('../content/package-detail.service').PackageDetail;
 
 const forbiddenWords = ['全网最低', '最后疯抢', '错过后悔', '稳赚', '保证返利'];
 const versionLetters = ['A', 'B', 'C', 'D', 'E'];

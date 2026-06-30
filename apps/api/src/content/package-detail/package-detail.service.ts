@@ -35,9 +35,7 @@ export class PackageDetailService {
     const detail = this.parser.parsePackageDetail(packageId, html, options?.saveRawHtml);
 
     if (detail.sections.length === 0) {
-      this.logger.warn(
-        `No sections parsed for package ${packageId}. Consider checking raw HTML.`
-      );
+      this.logger.warn(`No sections parsed for package ${packageId}. Consider checking raw HTML.`);
     }
 
     this.cache.set(packageId, detail);

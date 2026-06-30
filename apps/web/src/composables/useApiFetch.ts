@@ -20,10 +20,7 @@ export interface UseApiFetchOptions {
   clearCacheOnForce?: boolean;
 }
 
-export function useApiFetch<T>(
-  fetcher: () => Promise<T>,
-  options: UseApiFetchOptions = {}
-) {
+export function useApiFetch<T>(fetcher: () => Promise<T>, options: UseApiFetchOptions = {}) {
   const { errorMessage = '数据加载失败，请稍后重试', clearCacheOnForce = true } = options;
   const loading = ref(false);
   const data = ref<T | null>(null) as { value: T | null };

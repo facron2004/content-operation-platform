@@ -106,9 +106,7 @@ describe('content API', () => {
       .send({ auditStatus: 'approved', auditRemark: '通过' })
       .expect(201);
 
-    const copies = await api
-      .get('/api/content/copies?auditStatus=approved')
-      .expect(200);
+    const copies = await api.get('/api/content/copies?auditStatus=approved').expect(200);
 
     expect(
       copies.body.items.some((copy: { contentId: string }) => copy.contentId === contentId)

@@ -36,11 +36,7 @@ export class CopyController {
   ) {
     const safePage = page !== undefined && page !== '' ? Number(page) : undefined;
     const safePageSize = pageSize !== undefined && pageSize !== '' ? Number(pageSize) : undefined;
-    return this.copyService.listCopies(
-      { auditStatus, channel },
-      safePage,
-      safePageSize
-    );
+    return this.copyService.listCopies({ auditStatus, channel }, safePage, safePageSize);
   }
 
   @Post('copies/:contentId/audit')

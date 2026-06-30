@@ -171,7 +171,13 @@ describe('promotion rules', () => {
   it('returns high_verify when verifyRate >= 0.7 and refundRate <= 0.05', () => {
     const status = calculatePackageStatus(
       pkgWith({ stockLeft: 60 }),
-      snapWith({ verifyRate: 0.78, refundRate: 0.04, exposureCount: 800, clickCount: 60, orderCount: 6 })
+      snapWith({
+        verifyRate: 0.78,
+        refundRate: 0.04,
+        exposureCount: 800,
+        clickCount: 60,
+        orderCount: 6
+      })
     );
     expect(status).toBe('high_verify');
   });
@@ -179,7 +185,13 @@ describe('promotion rules', () => {
   it('returns low_verify when paidOrderCount >= 12 but verifyRate < 0.25', () => {
     const status = calculatePackageStatus(
       pkgWith({ stockLeft: 60 }),
-      snapWith({ paidOrderCount: 15, verifyRate: 0.18, exposureCount: 800, clickCount: 60, orderCount: 14 })
+      snapWith({
+        paidOrderCount: 15,
+        verifyRate: 0.18,
+        exposureCount: 800,
+        clickCount: 60,
+        orderCount: 14
+      })
     );
     expect(status).toBe('low_verify');
   });
@@ -188,7 +200,13 @@ describe('promotion rules', () => {
     // 中等库存、正常数据、无任何特殊触发
     const status = calculatePackageStatus(
       pkgWith({ stockLeft: 60 }),
-      snapWith({ exposureCount: 800, clickCount: 60, orderCount: 6, verifyRate: 0.5, refundRate: 0.05 })
+      snapWith({
+        exposureCount: 800,
+        clickCount: 60,
+        orderCount: 6,
+        verifyRate: 0.5,
+        refundRate: 0.05
+      })
     );
     expect(status).toBe('healthy_sales');
   });
@@ -377,7 +395,11 @@ describe('promotion rules', () => {
   // ---- buildPromotionScore 集成 ----
 
   it('buildPromotionScore returns a complete PromotionScore object', () => {
-    const result = buildPromotionScore(basePackage, baseSnapshot, new Date('2026-05-11T18:00:00.000Z'));
+    const result = buildPromotionScore(
+      basePackage,
+      baseSnapshot,
+      new Date('2026-05-11T18:00:00.000Z')
+    );
     expect(result.packageId).toBe('PKG001');
     expect(result.areaId).toBe('A001');
     expect(result.level).toMatch(/^[SABCD]$/);

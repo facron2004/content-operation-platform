@@ -11,7 +11,7 @@ export class AlertController {
   constructor(
     @Inject(AlertService) private readonly alertService: AlertService,
     // ContentService 用于包"获取推荐数据"回调,传给 AlertService(避免 alert 依赖 content)
-    @Inject(ContentService) private readonly contentService: ContentService,
+    @Inject(ContentService) private readonly contentService: ContentService
   ) {}
 
   @Get('alerts')

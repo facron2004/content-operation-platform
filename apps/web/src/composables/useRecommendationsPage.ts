@@ -26,7 +26,8 @@ export function useRecommendationsPage() {
   const buildAreaOptions = (packages: Array<{ areaId: string; areaName: string }>) => {
     const areaMap = new Map<string, string>();
     for (const pkg of packages) {
-      if (pkg.areaId && pkg.areaName && !areaMap.has(pkg.areaId)) areaMap.set(pkg.areaId, pkg.areaName);
+      if (pkg.areaId && pkg.areaName && !areaMap.has(pkg.areaId))
+        areaMap.set(pkg.areaId, pkg.areaName);
     }
     areaOptions.value = Array.from(areaMap.entries()).map(([value, label]) => ({ value, label }));
   };
@@ -95,7 +96,8 @@ export function useRecommendationsPage() {
   };
 
   const openAnalysis = (row: RecommendPackageItem) => router.push(`/packages/${row.packageId}`);
-  const goGenerate = (packageId: string) => router.push({ path: '/generate', query: { packageId } });
+  const goGenerate = (packageId: string) =>
+    router.push({ path: '/generate', query: { packageId } });
 
   watch(
     () => roleStore.currentRole,
@@ -103,9 +105,24 @@ export function useRecommendationsPage() {
       await Promise.all([load(true), loadCategoryOptions()]);
     }
   );
-  watch(() => filters.areaId, async () => { await Promise.all([load(true), loadCategoryOptions()]); });
-  watch(() => filters.category, async () => { await load(true); });
-  watch(() => filters.unsoldOnly, () => { load(true); });
+  watch(
+    () => filters.areaId,
+    async () => {
+      await Promise.all([load(true), loadCategoryOptions()]);
+    }
+  );
+  watch(
+    () => filters.category,
+    async () => {
+      await load(true);
+    }
+  );
+  watch(
+    () => filters.unsoldOnly,
+    () => {
+      load(true);
+    }
+  );
 
   onMounted(async () => {
     await Promise.all([load(), loadCategoryOptions()]);

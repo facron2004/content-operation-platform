@@ -430,7 +430,10 @@ export function latestSnapshotsByPackage<T extends { packageId: string; snapshot
   const result = new Map<string, T>();
   for (const snapshot of snapshots) {
     const previous = result.get(snapshot.packageId);
-    if (!previous || new Date(snapshot.snapshotTime).getTime() > new Date(previous.snapshotTime).getTime()) {
+    if (
+      !previous ||
+      new Date(snapshot.snapshotTime).getTime() > new Date(previous.snapshotTime).getTime()
+    ) {
       result.set(snapshot.packageId, snapshot);
     }
   }
@@ -489,7 +492,12 @@ export interface PaginatedResult<T> {
  * - page 默认为 1;pageSize 默认为 50,上限 200(防止前端请求巨页)
  * - total 缺省按 items.length 计算;外部传入可用于"已分页的二次切片"等场景
  */
-export function paginate<T>(items: T[], page?: number, pageSize?: number, total?: number): PaginatedResult<T> {
+export function paginate<T>(
+  items: T[],
+  page?: number,
+  pageSize?: number,
+  total?: number
+): PaginatedResult<T> {
   const safePageSize = Math.min(200, Math.max(1, Math.floor(pageSize ?? 50)));
   const safePage = Math.max(1, Math.floor(page ?? 1));
   const safeTotal = total ?? items.length;

@@ -66,35 +66,32 @@ export class AICopyService {
     const prompt = this.promptBuilder.buildPrompt(pkg, promotion, request, packageDetail, count);
     const status = this.clientManager.getStatus();
 
-    const content = await this.retryHandler.executeWithRetry(
-      async (controller) => {
-        const response = await client.chat.completions.create(
-          {
-            model: status.model,
-            messages: [
-              {
-                role: 'system',
-                content: [
-                  '你是本地生活运营中台的资深内容运营，不是普通广告文案助手。',
-                  '你的目标是写出运营能直接发到社群/朋友圈/商家群的短文案：真实、有购买理由、有套餐画面感。',
-                  '你必须只基于用户提供的套餐事实写文案，不能编造价格、库存、门店、菜品或使用规则。'
-                ].join('\n')
-              },
-              {
-                role: 'user',
-                content: prompt
-              }
-            ],
-            temperature: status.temperature,
-            max_tokens: status.maxTokens
-          },
-          { signal: controller.signal }
-        );
+    const content = await this.retryHandler.executeWithRetry(async (controller) => {
+      const response = await client.chat.completions.create(
+        {
+          model: status.model,
+          messages: [
+            {
+              role: 'system',
+              content: [
+                '你是本地生活运营中台的资深内容运营，不是普通广告文案助手。',
+                '你的目标是写出运营能直接发到社群/朋友圈/商家群的短文案：真实、有购买理由、有套餐画面感。',
+                '你必须只基于用户提供的套餐事实写文案，不能编造价格、库存、门店、菜品或使用规则。'
+              ].join('\n')
+            },
+            {
+              role: 'user',
+              content: prompt
+            }
+          ],
+          temperature: status.temperature,
+          max_tokens: status.maxTokens
+        },
+        { signal: controller.signal }
+      );
 
-        return response.choices[0]?.message?.content ?? '';
-      },
-      pkg.packageId
-    );
+      return response.choices[0]?.message?.content ?? '';
+    }, pkg.packageId);
 
     const drafts = this.responseParser.parseDrafts(content, count);
     return this.toGeneratedCopies(pkg, promotion, request, drafts, packageDetail, count);

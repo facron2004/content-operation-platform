@@ -136,7 +136,12 @@ describe('buildDerivedCommunities', () => {
 
   it('sorts groups by activityScore descending', () => {
     const pkg1 = makePkg({ packageId: 'P1', conversionRate: 0.2 });
-    const pkg2 = makePkg({ packageId: 'P2', areaId: 'A002', conversionRate: 0.05, areaName: '南山' });
+    const pkg2 = makePkg({
+      packageId: 'P2',
+      areaId: 'A002',
+      conversionRate: 0.05,
+      areaName: '南山'
+    });
     const groups = buildDerivedCommunities([pkg1, pkg2], new Map());
     expect(groups.length).toBe(2);
     expect(groups[0].activityScore).toBeGreaterThan(groups[1].activityScore);
@@ -276,28 +281,88 @@ describe('buildDailyReview', () => {
     ];
     const review = buildDailyReview('2026-05-11', cards, []);
     expect(review.weakPackages).toHaveLength(5);
-    expect(review.weakPackages.every((c) => c.tags.some((t) => t.key === 'continuous_slow' || t.key === 'high_refund_risk'))).toBe(true);
+    expect(
+      review.weakPackages.every((c) =>
+        c.tags.some((t) => t.key === 'continuous_slow' || t.key === 'high_refund_risk')
+      )
+    ).toBe(true);
   });
 
   it('sorts highConversionCopies by conversionRate descending and caps at 5', () => {
     const performances = [
-      { contentId: 'C1', title: 'A', channel: 'wechat_group' as Channel, conversionRate: 0.05, orderCount: 10, groupId: 'g1' },
-      { contentId: 'C2', title: 'B', channel: 'wechat_group' as Channel, conversionRate: 0.20, orderCount: 10, groupId: 'g1' },
-      { contentId: 'C3', title: 'C', channel: 'moments' as Channel, conversionRate: 0.12, orderCount: 10, groupId: null },
-      { contentId: 'C4', title: 'D', channel: 'wechat_group' as Channel, conversionRate: 0.18, orderCount: 10, groupId: 'g1' },
-      { contentId: 'C5', title: 'E', channel: 'moments' as Channel, conversionRate: 0.08, orderCount: 10, groupId: null },
-      { contentId: 'C6', title: 'F', channel: 'wechat_group' as Channel, conversionRate: 0.15, orderCount: 10, groupId: 'g1' }
+      {
+        contentId: 'C1',
+        title: 'A',
+        channel: 'wechat_group' as Channel,
+        conversionRate: 0.05,
+        orderCount: 10,
+        groupId: 'g1'
+      },
+      {
+        contentId: 'C2',
+        title: 'B',
+        channel: 'wechat_group' as Channel,
+        conversionRate: 0.2,
+        orderCount: 10,
+        groupId: 'g1'
+      },
+      {
+        contentId: 'C3',
+        title: 'C',
+        channel: 'moments' as Channel,
+        conversionRate: 0.12,
+        orderCount: 10,
+        groupId: null
+      },
+      {
+        contentId: 'C4',
+        title: 'D',
+        channel: 'wechat_group' as Channel,
+        conversionRate: 0.18,
+        orderCount: 10,
+        groupId: 'g1'
+      },
+      {
+        contentId: 'C5',
+        title: 'E',
+        channel: 'moments' as Channel,
+        conversionRate: 0.08,
+        orderCount: 10,
+        groupId: null
+      },
+      {
+        contentId: 'C6',
+        title: 'F',
+        channel: 'wechat_group' as Channel,
+        conversionRate: 0.15,
+        orderCount: 10,
+        groupId: 'g1'
+      }
     ];
     const review = buildDailyReview('2026-05-11', [], performances);
     expect(review.highConversionCopies).toHaveLength(5);
     const rates = review.highConversionCopies.map((c) => c.conversionRate);
-    expect(rates).toEqual([0.20, 0.18, 0.15, 0.12, 0.08]);
+    expect(rates).toEqual([0.2, 0.18, 0.15, 0.12, 0.08]);
   });
 
   it('only includes performances with groupId in valuableCommunities', () => {
     const performances = [
-      { contentId: 'C1', title: 'A', channel: 'wechat_group' as Channel, conversionRate: 0.15, orderCount: 10, groupId: 'g1' },
-      { contentId: 'C2', title: 'B', channel: 'wechat_group' as Channel, conversionRate: 0.10, orderCount: 10, groupId: null }
+      {
+        contentId: 'C1',
+        title: 'A',
+        channel: 'wechat_group' as Channel,
+        conversionRate: 0.15,
+        orderCount: 10,
+        groupId: 'g1'
+      },
+      {
+        contentId: 'C2',
+        title: 'B',
+        channel: 'wechat_group' as Channel,
+        conversionRate: 0.1,
+        orderCount: 10,
+        groupId: null
+      }
     ];
     const review = buildDailyReview('2026-05-11', [], performances);
     expect(review.valuableCommunities).toHaveLength(1);
@@ -306,7 +371,14 @@ describe('buildDailyReview', () => {
 
   it('marks reason as high-conversion when rate >= 0.12', () => {
     const performances = [
-      { contentId: 'C1', title: 'A', channel: 'wechat_group' as Channel, conversionRate: 0.15, orderCount: 10, groupId: 'g1' }
+      {
+        contentId: 'C1',
+        title: 'A',
+        channel: 'wechat_group' as Channel,
+        conversionRate: 0.15,
+        orderCount: 10,
+        groupId: 'g1'
+      }
     ];
     const review = buildDailyReview('2026-05-11', [], performances);
     expect(review.valuableCommunities[0].reason).toContain('昨日转化高');
@@ -314,7 +386,14 @@ describe('buildDailyReview', () => {
 
   it('marks reason as testable when rate < 0.12', () => {
     const performances = [
-      { contentId: 'C1', title: 'A', channel: 'wechat_group' as Channel, conversionRate: 0.08, orderCount: 10, groupId: 'g1' }
+      {
+        contentId: 'C1',
+        title: 'A',
+        channel: 'wechat_group' as Channel,
+        conversionRate: 0.08,
+        orderCount: 10,
+        groupId: 'g1'
+      }
     ];
     const review = buildDailyReview('2026-05-11', [], performances);
     expect(review.valuableCommunities[0].reason).toContain('小流量测试');
@@ -330,7 +409,14 @@ describe('buildDailyReview', () => {
 
   it('includes highest conversion title in whatHappened when performances present', () => {
     const performances = [
-      { contentId: 'C1', title: '爆款标题', channel: 'wechat_group' as Channel, conversionRate: 0.20, orderCount: 10, groupId: 'g1' }
+      {
+        contentId: 'C1',
+        title: '爆款标题',
+        channel: 'wechat_group' as Channel,
+        conversionRate: 0.2,
+        orderCount: 10,
+        groupId: 'g1'
+      }
     ];
     const review = buildDailyReview('2026-05-11', [], performances);
     expect(review.whatHappened.join('\n')).toContain('爆款标题');

@@ -227,11 +227,15 @@ export async function assertHostnameNotPrivateAsync(hostname: string): Promise<v
   }
   for (const { address } of addrs) {
     if (address.includes(':')) {
-      throw new Error(`EXTERNAL_API_BASE_URL resolves to IPv6 (${hostname} -> ${address}); IPv6 not allowed for safety`);
+      throw new Error(
+        `EXTERNAL_API_BASE_URL resolves to IPv6 (${hostname} -> ${address}); IPv6 not allowed for safety`
+      );
     }
     const ip = parseIpv4(address);
     if (ip && isPrivateIpv4(ip)) {
-      throw new Error(`EXTERNAL_API_BASE_URL resolves to private/loopback IP (${hostname} -> ${address})`);
+      throw new Error(
+        `EXTERNAL_API_BASE_URL resolves to private/loopback IP (${hostname} -> ${address})`
+      );
     }
   }
 }

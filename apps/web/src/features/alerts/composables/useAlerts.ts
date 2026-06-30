@@ -105,7 +105,10 @@ export function useAlerts(role: Ref<string | undefined>) {
     await resolveBatch([alertId]);
   };
 
-  const resolveBatch = async (alertIds: string[], successText = '已标记处理，今日不会再进入待办') => {
+  const resolveBatch = async (
+    alertIds: string[],
+    successText = '已标记处理，今日不会再进入待办'
+  ) => {
     const ids = [...new Set((alertIds ?? []).filter(Boolean))];
     if (!ids.length) {
       ElMessage.warning('当前没有可处理的预警');

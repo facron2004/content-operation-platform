@@ -126,7 +126,7 @@ export function useGlobalShortcuts() {
   ];
 
   // 注册所有快捷键
-  globalShortcuts.forEach(shortcut => register(shortcut));
+  globalShortcuts.forEach((shortcut) => register(shortcut));
 
   // 显示快捷键帮助（使用 Element Plus 弹窗替代原生 alert）
   function showShortcutHelp() {
@@ -134,7 +134,7 @@ export function useGlobalShortcuts() {
     const modKey = isMac ? 'Cmd' : 'Ctrl';
 
     const helpHtml = globalShortcuts
-      .map(s => {
+      .map((s) => {
         const keys: string[] = [];
         if (s.ctrl) keys.push(`<kbd>${modKey}</kbd>`);
         if (s.alt) keys.push('<kbd>Alt</kbd>');

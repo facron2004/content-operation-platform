@@ -139,7 +139,9 @@ describe('AutoLoginService', () => {
 
       const cookie = await service.ensureValidCookie();
 
-      expect(cookie).toBe('skinName=skin-green; jeesite.session.id=fresh-session; pageSize=10; pageNo=1');
+      expect(cookie).toBe(
+        'skinName=skin-green; jeesite.session.id=fresh-session; pageSize=10; pageNo=1'
+      );
       expect(cookie).not.toBe('mock-env-cookie');
     });
   });

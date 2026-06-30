@@ -5,7 +5,12 @@ import { paginate } from '@content/shared';
 import { ContentService } from './content.service';
 import { PackageDetailService } from './package-detail.service';
 import { AutoLoginService } from './auto-login.service';
-import { PackageDetailQueryDto, AICopyConfigDto, BattleCardGenerateDto, UpdateCookieDto } from './content.dto';
+import {
+  PackageDetailQueryDto,
+  AICopyConfigDto,
+  BattleCardGenerateDto,
+  UpdateCookieDto
+} from './content.dto';
 import { Public } from '../auth';
 
 @ApiTags('packages')

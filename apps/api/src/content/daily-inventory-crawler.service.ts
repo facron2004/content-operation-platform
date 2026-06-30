@@ -95,8 +95,11 @@ export class DailyInventoryCrawlerService {
   }
 
   private collectInventoryRows(dataset: ContentDataset, _targetDate: string) {
-    const snapshotsByPackage = new Map(dataset.snapshots.map((snapshot) => [snapshot.packageId, snapshot]));
-    const rows: Array<{ pkg: ContentPackage; snapshot: SalesSnapshot; remainingStock: number }> = [];
+    const snapshotsByPackage = new Map(
+      dataset.snapshots.map((snapshot) => [snapshot.packageId, snapshot])
+    );
+    const rows: Array<{ pkg: ContentPackage; snapshot: SalesSnapshot; remainingStock: number }> =
+      [];
 
     for (const pkg of dataset.packages) {
       if (pkg.saleStatus !== 'selling') continue;
@@ -115,7 +118,9 @@ export class DailyInventoryCrawlerService {
     const BATCH_SIZE = 50;
     for (let i = 0; i < rows.length; i += BATCH_SIZE) {
       const batch = rows.slice(i, i + BATCH_SIZE);
-      const valueClauses = batch.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)').join(', ');
+      const valueClauses = batch
+        .map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)')
+        .join(', ');
       const params = batch.flatMap(({ pkg, snapshot, remainingStock }) => [
         pkg.packageId,
         this.resolveDateKey(undefined, new Date()),
@@ -223,7 +228,9 @@ export class DailyInventoryCrawlerService {
   ) {
     const points = result.get(snapshot.packageId) ?? [];
     const snapshotDate = new Date(snapshot.snapshotTime);
-    const date = Number.isFinite(snapshotDate.getTime()) ? localDateKey(snapshotDate) : localDateKey(asOf);
+    const date = Number.isFinite(snapshotDate.getTime())
+      ? localDateKey(snapshotDate)
+      : localDateKey(asOf);
     const point = {
       date,
       snapshotTime: snapshot.snapshotTime,

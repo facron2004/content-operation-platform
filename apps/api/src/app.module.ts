@@ -40,7 +40,7 @@ import { GlobalExceptionFilter } from './common';
     },
     {
       provide: APP_GUARD,
-      useClass: JwtAuthGuard  // Auth second: reject invalid tokens after counting
+      useClass: JwtAuthGuard // Auth second: reject invalid tokens after counting
     }
   ]
 })

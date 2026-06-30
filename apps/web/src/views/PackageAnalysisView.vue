@@ -175,14 +175,8 @@ import {
 import { usePackageAnalysisPage } from '../composables/usePackageAnalysisPage';
 
 const props = defineProps<{ packageId: string }>();
-const {
-  loading,
-  analysis,
-  pkg,
-  scoreOption,
-  formatInventoryTrend,
-  goBack
-} = usePackageAnalysisPage(props.packageId);
+const { loading, analysis, pkg, scoreOption, formatInventoryTrend, goBack } =
+  usePackageAnalysisPage(props.packageId);
 </script>
 
 <style scoped>

@@ -29,7 +29,12 @@ export * from './api/community.api';
 export * from './api/performance.api';
 
 // Re-export cache utilities
-export { clearCache, clearPackageCache, clearAlertCache, clearDashboardCache } from './cache.service';
+export {
+  clearCache,
+  clearPackageCache,
+  clearAlertCache,
+  clearDashboardCache
+} from './cache.service';
 
 // Backward compatibility: wrap all APIs in a single object
 import * as dashboardApi from './api/dashboard.api';

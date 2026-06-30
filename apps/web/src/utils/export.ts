@@ -25,10 +25,7 @@ function sanitizeData(data: Record<string, unknown>[]): Record<string, unknown>[
 }
 
 // 导出表格数据为 Excel（动态加载 xlsx 库，减少初始包体积约 400KB）
-export async function exportToExcel(
-  data: Record<string, unknown>[],
-  options: ExportOptions = {}
-) {
+export async function exportToExcel(data: Record<string, unknown>[], options: ExportOptions = {}) {
   const {
     filename = `导出数据_${new Date().toISOString().slice(0, 10)}`,
     sheetName = 'Sheet1',
@@ -48,10 +45,7 @@ export async function exportToExcel(
     // 自动列宽
     const maxWidth = 50;
     const colWidths = Object.keys(data[0] || {}).map((key) => {
-      const maxLen = Math.max(
-        key.length,
-        ...data.map((row) => String(row[key] || '').length)
-      );
+      const maxLen = Math.max(key.length, ...data.map((row) => String(row[key] || '').length));
       return { wch: Math.min(maxLen + 2, maxWidth) };
     });
     ws['!cols'] = colWidths;

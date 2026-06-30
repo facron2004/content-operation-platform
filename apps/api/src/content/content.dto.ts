@@ -12,12 +12,7 @@ import {
 } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
 import type { Channel, AuditStatus, UserRole } from '@content/shared';
-import {
-  ALERT_LEVELS,
-  ALERT_TYPES,
-  AUDIT_DECISION_STATUSES,
-  CHANNELS
-} from '@content/shared';
+import { ALERT_LEVELS, ALERT_TYPES, AUDIT_DECISION_STATUSES, CHANNELS } from '@content/shared';
 
 // --- Cookie Update ---
 export class UpdateCookieDto {

@@ -53,7 +53,7 @@ export function useGenerate() {
     if (!pkg) return [];
     return [
       { label: '原价', value: formatMoney(pkg.originalPrice) },
-      { label: '当前售价', value: formatMoney(currentPrice(pkg) ?? undefined) },
+      { label: '当前售价', value: formatMoney(currentPrice(pkg)) },
       { label: '今日库存', value: `${pkg.stockLeft} / ${pkg.stockTotal}` },
       { label: '销售判断', value: pkg.inventorySalesLabel },
       {
@@ -72,11 +72,8 @@ export function useGenerate() {
     return [
       {
         label: '价格',
-        ok: (currentPrice(pkg) ?? 0) > 0,
-        text:
-          (currentPrice(pkg) ?? 0) > 0
-            ? `当前售价 ${formatMoney(currentPrice(pkg) ?? undefined)}`
-            : '缺少有效价格'
+        ok: currentPrice(pkg) > 0,
+        text: currentPrice(pkg) > 0 ? `当前售价 ${formatMoney(currentPrice(pkg))}` : '缺少有效价格'
       },
       {
         label: '套餐明细',

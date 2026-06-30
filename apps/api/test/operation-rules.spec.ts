@@ -106,9 +106,7 @@ function tagWith(key: OperationTag['key'], level: OperationTag['level'] = 'info'
  * 期望值与 buildPackageScore 一致,作为独立回归测试。
  */
 function expectedWeightedSum(breakdown: PackageScoreBreakdown): number {
-  return Math.round(
-    breakdown.dimensions.reduce((sum, d) => sum + d.score * d.weight, 0)
-  );
+  return Math.round(breakdown.dimensions.reduce((sum, d) => sum + d.score * d.weight, 0));
 }
 
 describe('operation rules', () => {
@@ -140,7 +138,10 @@ describe('buildPackageScore', () => {
 
   it('price_advantage dimension hits 65 for 50% discount', () => {
     // discount = 0.5 → score = clamp(0.5 * 130) = 65
-    const score = buildPackageScore(pkgWith({ originalPrice: 200, temporarySalePrice: 100 }), snapshot);
+    const score = buildPackageScore(
+      pkgWith({ originalPrice: 200, temporarySalePrice: 100 }),
+      snapshot
+    );
     const dim = score.dimensions.find((d) => d.key === 'price_advantage');
     expect(dim?.score).toBe(65);
     expect(dim?.weight).toBe(0.18);
@@ -149,7 +150,12 @@ describe('buildPackageScore', () => {
   it('inventory_pressure uses neverSoldOutInWindow reason when applicable', () => {
     // inventoryObservedDays >= 2 && inventorySoldOutDays === 0 && stockLeft > 0
     const score = buildPackageScore(
-      pkgWith({ stockLeft: 50, inventoryObservedDays: 5, inventorySoldOutDays: 0, stockTotal: 100 }),
+      pkgWith({
+        stockLeft: 50,
+        inventoryObservedDays: 5,
+        inventorySoldOutDays: 0,
+        stockTotal: 100
+      }),
       snapshot
     );
     const dim = score.dimensions.find((d) => d.key === 'inventory_pressure');
@@ -239,13 +245,23 @@ describe('buildOperationTags', () => {
 
   it('adds high_verify_quality when verifyRate >= 0.7 AND refundRate <= 0.05', () => {
     const score = buildPackageScore(pkg, snapshot);
-    const tags = buildOperationTags(pkg, score, snapWith({ verifyRate: 0.75, refundRate: 0.04 }), now);
+    const tags = buildOperationTags(
+      pkg,
+      score,
+      snapWith({ verifyRate: 0.75, refundRate: 0.04 }),
+      now
+    );
     expect(tags.map((t) => t.key)).toContain('high_verify_quality');
   });
 
   it('does NOT add high_verify_quality when refundRate too high', () => {
     const score = buildPackageScore(pkg, snapshot);
-    const tags = buildOperationTags(pkg, score, snapWith({ verifyRate: 0.75, refundRate: 0.06 }), now);
+    const tags = buildOperationTags(
+      pkg,
+      score,
+      snapWith({ verifyRate: 0.75, refundRate: 0.06 }),
+      now
+    );
     expect(tags.map((t) => t.key)).not.toContain('high_verify_quality');
   });
 
@@ -287,12 +303,7 @@ describe('buildOperationTags', () => {
 
   it('adds fallback_package for packageType=fallback', () => {
     const score = buildPackageScore(pkg, snapshot);
-    const tags = buildOperationTags(
-      pkgWith({ packageType: 'fallback' }),
-      score,
-      snapshot,
-      now
-    );
+    const tags = buildOperationTags(pkgWith({ packageType: 'fallback' }), score, snapshot, now);
     expect(tags.map((t) => t.key)).toContain('fallback_package');
   });
 
@@ -341,7 +352,13 @@ describe('buildOperationAlerts', () => {
   it('adds continuous_unsold for slow inventory flag', () => {
     const score = buildPackageScore(pkg, snapshot);
     const alerts = buildOperationAlerts(
-      pkgWith({ inventoryFlag: 'unsold_3d_slow', inventorySalesFlag: 'slow_never_sold_out', inventoryObservedDays: 3, inventorySoldOutDays: 0, stockLeft: 50 }),
+      pkgWith({
+        inventoryFlag: 'unsold_3d_slow',
+        inventorySalesFlag: 'slow_never_sold_out',
+        inventoryObservedDays: 3,
+        inventorySoldOutDays: 0,
+        stockLeft: 50
+      }),
       score,
       snapshot,
       now
@@ -368,7 +385,12 @@ describe('buildOperationAlerts', () => {
 
   it('adds low_verify for paidOrderCount >= 10 AND verifyRate < 0.25', () => {
     const score = buildPackageScore(pkg, snapshot);
-    const alerts = buildOperationAlerts(pkg, score, snapWith({ paidOrderCount: 15, verifyRate: 0.2 }), now);
+    const alerts = buildOperationAlerts(
+      pkg,
+      score,
+      snapWith({ paidOrderCount: 15, verifyRate: 0.2 }),
+      now
+    );
     expect(alerts.map((a) => a.type)).toContain('low_verify');
   });
 
@@ -386,13 +408,23 @@ describe('buildOperationAlerts', () => {
 
   it('adds inventory_abnormal when stockTotal=0', () => {
     const score = buildPackageScore(pkg, snapshot);
-    const alerts = buildOperationAlerts(pkgWith({ stockTotal: 0, stockLeft: 10 }), score, snapshot, now);
+    const alerts = buildOperationAlerts(
+      pkgWith({ stockTotal: 0, stockLeft: 10 }),
+      score,
+      snapshot,
+      now
+    );
     expect(alerts.map((a) => a.type)).toContain('inventory_abnormal');
   });
 
   it('adds inventory_abnormal when stockLeft > stockTotal', () => {
     const score = buildPackageScore(pkg, snapshot);
-    const alerts = buildOperationAlerts(pkgWith({ stockTotal: 50, stockLeft: 80 }), score, snapshot, now);
+    const alerts = buildOperationAlerts(
+      pkgWith({ stockTotal: 50, stockLeft: 80 }),
+      score,
+      snapshot,
+      now
+    );
     expect(alerts.map((a) => a.type)).toContain('inventory_abnormal');
   });
 

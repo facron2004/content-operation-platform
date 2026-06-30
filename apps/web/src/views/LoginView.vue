@@ -7,7 +7,7 @@
         <p>内容运营中台 · 登录</p>
       </div>
 
-      <el-form @submit.prevent="handleLogin" label-position="top" class="login-form">
+      <el-form label-position="top" class="login-form" @submit.prevent="handleLogin">
         <el-form-item label="用户名">
           <el-input v-model="form.username" placeholder="请输入用户名" :disabled="loading" />
         </el-form-item>
@@ -21,12 +21,7 @@
             @keyup.enter="handleLogin"
           />
         </el-form-item>
-        <el-button
-          type="primary"
-          class="login-button"
-          :loading="loading"
-          @click="handleLogin"
-        >
+        <el-button type="primary" class="login-button" :loading="loading" @click="handleLogin">
           登录
         </el-button>
         <p v-if="error" class="login-error">{{ error }}</p>
@@ -73,9 +68,10 @@ async function handleLogin() {
     const redirect = (route.query.redirect as string) || '/';
     router.push(redirect);
   } catch (e: unknown) {
-    const msg = axios.isAxiosError(e) && e.response?.data?.message
-      ? e.response.data.message
-      : '登录失败，请检查网络连接';
+    const msg =
+      axios.isAxiosError(e) && e.response?.data?.message
+        ? e.response.data.message
+        : '登录失败，请检查网络连接';
     error.value = msg;
   } finally {
     loading.value = false;

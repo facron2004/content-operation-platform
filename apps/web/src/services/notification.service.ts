@@ -29,11 +29,11 @@ class NotificationService {
   }
 
   getUnread(): Notification[] {
-    return this.notifications.filter(n => !n.read);
+    return this.notifications.filter((n) => !n.read);
   }
 
   markAsRead(id: string) {
-    const notification = this.notifications.find(n => n.id === id);
+    const notification = this.notifications.find((n) => n.id === id);
     if (notification) {
       notification.read = true;
       this.notifyListeners();
@@ -41,12 +41,12 @@ class NotificationService {
   }
 
   markAllAsRead() {
-    this.notifications.forEach(n => (n.read = true));
+    this.notifications.forEach((n) => (n.read = true));
     this.notifyListeners();
   }
 
   remove(id: string) {
-    this.notifications = this.notifications.filter(n => n.id !== id);
+    this.notifications = this.notifications.filter((n) => n.id !== id);
     this.notifyListeners();
   }
 
@@ -61,7 +61,7 @@ class NotificationService {
   }
 
   private notifyListeners() {
-    this.listeners.forEach(listener => listener(this.notifications));
+    this.listeners.forEach((listener) => listener(this.notifications));
   }
 }
 

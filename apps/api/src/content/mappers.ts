@@ -8,7 +8,11 @@ import type {
 } from '@content/shared';
 import { PACKAGE_TYPES, SALE_STATUSES } from '@content/shared';
 // 直接复用 Prisma 生成的 row 类型,避免字段漂移;新增字段时 Prisma 报错即提醒
-import type { ContentPackage as PrismaContentPackage, GeneratedCopy as PrismaGeneratedCopy, CopyPerformance as PrismaCopyPerformance } from '@prisma/client';
+import type {
+  ContentPackage as PrismaContentPackage,
+  GeneratedCopy as PrismaGeneratedCopy,
+  CopyPerformance as PrismaCopyPerformance
+} from '@prisma/client';
 
 type DbPackage = PrismaContentPackage;
 type DbCopy = PrismaGeneratedCopy;

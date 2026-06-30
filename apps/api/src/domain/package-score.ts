@@ -84,7 +84,9 @@ export function buildPackageScore(
     }
   ];
 
-  const totalScore = Math.round(dimensions.reduce((sum, item) => sum + item.score * item.weight, 0));
+  const totalScore = Math.round(
+    dimensions.reduce((sum, item) => sum + item.score * item.weight, 0)
+  );
   return {
     totalScore,
     level: scoreLevel(totalScore),

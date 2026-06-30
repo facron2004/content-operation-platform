@@ -206,7 +206,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, nextTick, onMounted, onUnmounted } from 'vue';
+import { computed, ref, onMounted, onUnmounted } from 'vue';
 import { useRoute } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import {

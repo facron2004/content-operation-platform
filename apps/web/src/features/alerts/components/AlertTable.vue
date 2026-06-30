@@ -3,7 +3,7 @@
     <div class="panel-head">
       <h2>待处理预警</h2>
       <div class="panel-actions">
-        <span class="muted-cell"> 共 {{ pagination.total }} 条，当前页 {{ alerts.length }} 条 </span>
+        <span class="muted-cell">共 {{ pagination.total }} 条，当前页 {{ alerts.length }} 条</span>
         <el-button
           type="success"
           :disabled="!alerts.length"
@@ -17,11 +17,7 @@
     <el-table :data="alerts" height="620" empty-text="暂无待处理预警">
       <el-table-column label="级" width="52" sortable>
         <template #default="{ row }">
-          <el-tag
-            :type="row.level === 'danger' ? 'danger' : 'warning'"
-            effect="plain"
-            size="small"
-          >
+          <el-tag :type="row.level === 'danger' ? 'danger' : 'warning'" effect="plain" size="small">
             {{ row.priorityScore ?? 0 }}
           </el-tag>
         </template>

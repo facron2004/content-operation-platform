@@ -245,9 +245,7 @@ describe('DashboardService', () => {
 
       const mockGetRecommendations = vi.fn().mockResolvedValue({ packages: [] });
 
-      const result = await service.getDashboardSummary(
-        mockGetRecommendations
-      );
+      const result = await service.getDashboardSummary(mockGetRecommendations);
 
       expect(result.generatedCount).toBe(50);
       expect(result.approvedCount).toBe(20);
@@ -266,9 +264,7 @@ describe('DashboardService', () => {
         { exposureCount: 0, clickCount: 0, orderCount: 0, verifyCount: 0, gmv: 0 }
       ]);
 
-      const result = await service.getDashboardSummary(
-        vi.fn().mockResolvedValue({ packages: [] })
-      );
+      const result = await service.getDashboardSummary(vi.fn().mockResolvedValue({ packages: [] }));
 
       expect(result.contentConversionRate).toBe(0);
       expect(result.verifyConversionRate).toBe(0);

@@ -1,4 +1,9 @@
-import type { ContentPackage, OperationCard, RecommendPackageItem, SalesSnapshot } from '@content/shared';
+import type {
+  ContentPackage,
+  OperationCard,
+  RecommendPackageItem,
+  SalesSnapshot
+} from '@content/shared';
 import { latestSnapshotsByPackage } from '@content/shared';
 import type { DataSourceService } from './data-source.service';
 import { toOperationCard } from '../domain/operation-rules';
@@ -19,10 +24,15 @@ export async function resolvePackageAndSnapshot(
 }
 
 /** 将推荐套餐列表转换为 packageId → OperationCard 映射 */
-export function buildOperationCardMap(packages: RecommendPackageItem[]): Map<string, OperationCard> {
+export function buildOperationCardMap(
+  packages: RecommendPackageItem[]
+): Map<string, OperationCard> {
   return new Map<string, OperationCard>(
     packages
       .filter((pkg) => pkg.scoreBreakdown)
-      .map((pkg) => [pkg.packageId, toOperationCard(pkg, pkg.scoreBreakdown!, pkg.operationTags ?? [])])
+      .map((pkg) => [
+        pkg.packageId,
+        toOperationCard(pkg, pkg.scoreBreakdown!, pkg.operationTags ?? [])
+      ])
   );
 }

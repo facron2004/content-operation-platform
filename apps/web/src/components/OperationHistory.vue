@@ -1,17 +1,7 @@
 <template>
-  <el-dialog
-    v-model="visible"
-    title="操作历史"
-    width="800px"
-    :close-on-click-modal="false"
-  >
+  <el-dialog v-model="visible" title="操作历史" width="800px" :close-on-click-modal="false">
     <div class="history-controls">
-      <el-input
-        v-model="searchText"
-        placeholder="搜索操作..."
-        clearable
-        style="width: 300px"
-      >
+      <el-input v-model="searchText" placeholder="搜索操作..." clearable style="width: 300px">
         <template #prefix>
           <el-icon><Search /></el-icon>
         </template>
@@ -64,11 +54,26 @@
   <!-- 详情对话框 -->
   <el-dialog v-model="detailsVisible" title="操作详情" width="600px">
     <div v-if="selectedRecord" class="details-content">
-      <p><strong>时间:</strong> {{ formatTime(selectedRecord.timestamp) }}</p>
-      <p><strong>类型:</strong> {{ getTypeLabel(selectedRecord.type) }}</p>
-      <p><strong>操作:</strong> {{ selectedRecord.action }}</p>
-      <p><strong>结果:</strong> {{ selectedRecord.result === 'success' ? '成功' : '失败' }}</p>
-      <p v-if="selectedRecord.error"><strong>错误:</strong> {{ selectedRecord.error }}</p>
+      <p>
+        <strong>时间:</strong>
+        {{ formatTime(selectedRecord.timestamp) }}
+      </p>
+      <p>
+        <strong>类型:</strong>
+        {{ getTypeLabel(selectedRecord.type) }}
+      </p>
+      <p>
+        <strong>操作:</strong>
+        {{ selectedRecord.action }}
+      </p>
+      <p>
+        <strong>结果:</strong>
+        {{ selectedRecord.result === 'success' ? '成功' : '失败' }}
+      </p>
+      <p v-if="selectedRecord.error">
+        <strong>错误:</strong>
+        {{ selectedRecord.error }}
+      </p>
       <div>
         <strong>详细信息:</strong>
         <pre>{{ JSON.stringify(selectedRecord.details, null, 2) }}</pre>
@@ -98,13 +103,13 @@ const filteredRecords = computed(() => {
   let result = records.value;
 
   if (filterType.value) {
-    result = result.filter(r => r.type === filterType.value);
+    result = result.filter((r) => r.type === filterType.value);
   }
 
   if (searchText.value) {
     const search = searchText.value.toLowerCase();
     result = result.filter(
-      r =>
+      (r) =>
         r.action.toLowerCase().includes(search) ||
         JSON.stringify(r.details).toLowerCase().includes(search)
     );
@@ -114,8 +119,8 @@ const filteredRecords = computed(() => {
 });
 
 // 统计
-const successCount = computed(() => records.value.filter(r => r.result === 'success').length);
-const errorCount = computed(() => records.value.filter(r => r.result === 'error').length);
+const successCount = computed(() => records.value.filter((r) => r.result === 'success').length);
+const errorCount = computed(() => records.value.filter((r) => r.result === 'error').length);
 
 // 格式化时间
 function formatTime(timestamp: number): string {

@@ -112,13 +112,23 @@ interface PerformanceData {
   review: DailyReview;
 }
 
-const { loading, data: performance, error: loadError, load } = useApiFetch<PerformanceData>(
+const {
+  loading,
+  data: performance,
+  error: loadError,
+  load
+} = useApiFetch<PerformanceData>(
   () => api.getPerformance() as Promise<unknown> as Promise<PerformanceData>,
   { errorMessage: '效果数据加载失败，请稍后重试', clearCacheOnForce: false }
 );
 
 const perf = computed<PerformanceData>(
-  () => performance.value ?? { items: [], versionComparison: [], review: { date: '', whatHappened: [], tomorrowSuggestions: [], highConversionCopies: [] } }
+  () =>
+    performance.value ?? {
+      items: [],
+      versionComparison: [],
+      review: { date: '', whatHappened: [], tomorrowSuggestions: [], highConversionCopies: [] }
+    }
 );
 
 const versionOption = computed(() => {
@@ -165,7 +175,9 @@ const channelOption = computed(() => {
   };
 });
 
-const loadPerf = async () => { load(); };
+const loadPerf = async () => {
+  load();
+};
 
 onMounted(loadPerf);
 </script>

@@ -37,7 +37,8 @@ export class DataSourceService {
     const cached = this.getFreshCache(cacheKey, now);
     if (!forceRefresh && cached) return cached;
     if (!forceRefresh && this.inFlight) return this.inFlight;
-    if (!forceRefresh && now - this.lastFetchTime < this.minFetchInterval && this.cache) return this.cache.data;
+    if (!forceRefresh && now - this.lastFetchTime < this.minFetchInterval && this.cache)
+      return this.cache.data;
 
     this.inFlight = (async () => {
       this.lastFetchTime = Date.now();
@@ -61,7 +62,9 @@ export class DataSourceService {
 
   private async loadDatasetBySource(source: string): Promise<ContentDataset> {
     if (source === 'external' || source === 'jeesite') return this.loadExternalDataset();
-    throw new BadRequestException(`Unsupported CONTENT_DATA_SOURCE "${source}". Use "jeesite" or "external".`);
+    throw new BadRequestException(
+      `Unsupported CONTENT_DATA_SOURCE "${source}". Use "jeesite" or "external".`
+    );
   }
 
   private resolveCacheTtlMs() {
@@ -72,7 +75,11 @@ export class DataSourceService {
     const baseUrl = await this.resolveExternalBaseUrl();
     const packagesPath = this.resolvePackagesPath();
 
-    const readPage = async (pageNo: number, retries = 2, autoRetryLogin = true): Promise<unknown> => {
+    const readPage = async (
+      pageNo: number,
+      retries = 2,
+      autoRetryLogin = true
+    ): Promise<unknown> => {
       const packagesUrl = this.buildPageUrl(baseUrl, packagesPath, pageNo);
 
       for (let attempt = 0; attempt <= retries; attempt++) {
@@ -80,16 +87,28 @@ export class DataSourceService {
           const fetchConfig = await this.buildFetchConfig();
           const packagesResponse = await this.fetchWithTimeout(packagesUrl, fetchConfig);
           const payload = await this.parseExternalResponse(packagesResponse);
-          if (typeof payload === 'object' && payload !== null && 'result' in payload && (payload as { result?: unknown }).result === 'login') {
-            if (autoRetryLogin && (await this.retryLogin('Cookie expired, attempting auto login and retry'))) {
+          if (
+            typeof payload === 'object' &&
+            payload !== null &&
+            'result' in payload &&
+            (payload as { result?: unknown }).result === 'login'
+          ) {
+            if (
+              autoRetryLogin &&
+              (await this.retryLogin('Cookie expired, attempting auto login and retry'))
+            ) {
               return await readPage(pageNo, retries, false);
             }
-            throw new ServiceUnavailableException('External backend requires authentication (login expired)');
+            throw new ServiceUnavailableException(
+              'External backend requires authentication (login expired)'
+            );
           }
           return payload;
         } catch (error) {
           if (attempt === retries) {
-            throw error instanceof ServiceUnavailableException ? error : new ServiceUnavailableException('External backend request failed');
+            throw error instanceof ServiceUnavailableException
+              ? error
+              : new ServiceUnavailableException('External backend request failed');
           }
           await this.sleep(Math.min(1000 * Math.pow(2, attempt), 3000));
         }
@@ -102,7 +121,10 @@ export class DataSourceService {
 
     if (totalPages > 1) {
       const pages = Array.from({ length: totalPages - 1 }, (_, index) => index + 2);
-      const concurrency = Math.max(2, Math.min(10, Number(process.env.EXTERNAL_FETCH_CONCURRENCY ?? 6)));
+      const concurrency = Math.max(
+        2,
+        Math.min(10, Number(process.env.EXTERNAL_FETCH_CONCURRENCY ?? 6))
+      );
       const failedPages: number[] = [];
 
       for (let i = 0; i < pages.length; i += concurrency) {
@@ -123,7 +145,9 @@ export class DataSourceService {
 
       const failureRatio = failedPages.length / pages.length;
       if (failedPages.length > 0) {
-        this.logger.warn(`Paginated fetch partial failure: ${failedPages.length}/${pages.length} pages failed (pages: ${failedPages.join(', ')})`);
+        this.logger.warn(
+          `Paginated fetch partial failure: ${failedPages.length}/${pages.length} pages failed (pages: ${failedPages.join(', ')})`
+        );
         if (failureRatio > 0.3) {
           throw new ServiceUnavailableException(
             `External data fetch too many failures: ${failedPages.length}/${pages.length} pages failed. Results would be incomplete.`
@@ -166,7 +190,10 @@ export class DataSourceService {
   }
 
   private resolvePackagesPath() {
-    return process.env.EXTERNAL_PACKAGES_PATH ?? '/bargain/bargainCommodity/listData?pageSize=100&pageNo=1';
+    return (
+      process.env.EXTERNAL_PACKAGES_PATH ??
+      '/bargain/bargainCommodity/listData?pageSize=100&pageNo=1'
+    );
   }
 
   private async buildFetchConfig(): Promise<RequestInit> {
@@ -178,7 +205,9 @@ export class DataSourceService {
       headers: {
         'x-ajax': 'json',
         'Accept-Encoding': 'gzip, deflate',
-        ...(process.env.EXTERNAL_API_TOKEN ? { Authorization: `Bearer ${process.env.EXTERNAL_API_TOKEN}` } : {}),
+        ...(process.env.EXTERNAL_API_TOKEN
+          ? { Authorization: `Bearer ${process.env.EXTERNAL_API_TOKEN}` }
+          : {}),
         ...(cookie ? { Cookie: cookie } : {})
       }
     };
@@ -187,14 +216,18 @@ export class DataSourceService {
   private async parseExternalResponse(response: Response) {
     if (!response.ok) {
       if (response.status >= 500) {
-        throw new ServiceUnavailableException(`External backend request failed: ${response.status}`);
+        throw new ServiceUnavailableException(
+          `External backend request failed: ${response.status}`
+        );
       }
       throw new ServiceUnavailableException(`External backend request failed: ${response.status}`);
     }
 
     const text = await response.text();
     if (text.includes('<form') || text.includes('/a/login') || text.includes('loginForm')) {
-      throw new ServiceUnavailableException('External backend requires authentication (received HTML/login)');
+      throw new ServiceUnavailableException(
+        'External backend requires authentication (received HTML/login)'
+      );
     }
     try {
       return JSON.parse(text) as unknown;
@@ -217,7 +250,9 @@ export class DataSourceService {
 
   private collectPages(firstPayload: unknown) {
     const firstRecord =
-      typeof firstPayload === 'object' && firstPayload !== null ? (firstPayload as Record<string, unknown>) : {};
+      typeof firstPayload === 'object' && firstPayload !== null
+        ? (firstPayload as Record<string, unknown>)
+        : {};
     const totalCount = Number(firstRecord.count ?? 0);
     const pageSize = Number(firstRecord.pageSize ?? 100) || 100;
     const totalPages = Math.min(100, Math.max(1, Math.ceil(totalCount / pageSize)));

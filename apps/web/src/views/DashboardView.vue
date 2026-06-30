@@ -117,9 +117,8 @@ import OperationSection from '../components/OperationSection.vue';
 const router = useRouter();
 const roleStore = useRoleStore();
 const currentRole = computed(() => roleStore.currentRole);
-const { loading, loadError, consoleData, activeFocus, summary, todayText, load } = useDashboard(
-  currentRole
-);
+const { loading, loadError, consoleData, activeFocus, summary, todayText, load } =
+  useDashboard(currentRole);
 const { goAnalysis: openAnalysis, goBattleCard } = usePackageNavigation(router);
 
 onMounted(load);

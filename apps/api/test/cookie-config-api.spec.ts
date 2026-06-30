@@ -25,9 +25,7 @@ describe('Cookie config API', () => {
     const api = await authedAgent(app);
 
     // 1. Get initial status
-    const statusBefore = await api
-      .get('/api/content/cookie/status')
-      .expect(200);
+    const statusBefore = await api.get('/api/content/cookie/status').expect(200);
 
     expect(statusBefore.body).toHaveProperty('hasCookie');
     expect(statusBefore.body).toHaveProperty('isValid');
@@ -41,9 +39,7 @@ describe('Cookie config API', () => {
     expect(updateRes.body.success).toBe(true);
 
     // 3. Check status again
-    const statusAfter = await api
-      .get('/api/content/cookie/status')
-      .expect(200);
+    const statusAfter = await api.get('/api/content/cookie/status').expect(200);
 
     expect(statusAfter.body.isValid).toBe(true);
     expect(statusAfter.body.maskedCookie).toContain('jeesite.session.id=***');

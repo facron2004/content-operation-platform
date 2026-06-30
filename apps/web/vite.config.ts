@@ -82,7 +82,7 @@ export default defineConfig(({ mode }) => {
         }
       },
       reportCompressedSize: false,
-      chunkSizeWarningLimit: 500
+      chunkSizeWarningLimit: 800
     }
   };
 });

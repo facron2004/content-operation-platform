@@ -1,4 +1,15 @@
-import type { BattleCard, Channel, ContentPackage, PackageScoreBreakdown, RecommendPackageItem, OperationTag, CommunityGroup, CommunityPushTask, DailyOperationReview, OperationCard } from '@content/shared';
+import type {
+  BattleCard,
+  Channel,
+  ContentPackage,
+  PackageScoreBreakdown,
+  RecommendPackageItem,
+  OperationTag,
+  CommunityGroup,
+  CommunityPushTask,
+  DailyOperationReview,
+  OperationCard
+} from '@content/shared';
 import { currentPrice } from '@content/shared';
 import { clamp, formatPrice, uniqueText } from './utils';
 
@@ -9,7 +20,9 @@ export function buildBattleCard(
 ): BattleCard {
   const price = currentPrice(pkg);
   const audience = inferAudience(pkg);
-  const channels = pkg.recommendedChannels.length ? pkg.recommendedChannels : (['wechat_group'] as Channel[]);
+  const channels = pkg.recommendedChannels.length
+    ? pkg.recommendedChannels
+    : (['wechat_group'] as Channel[]);
   const sellingPoints = buildSellingPoints(pkg, price);
   const priceText = `${formatPrice(price, 2)} 元`;
   const stockText = stockCue(pkg);
@@ -18,7 +31,9 @@ export function buildBattleCard(
   const secondPoint = sellingPoints[1] ?? `${pkg.areaName}可用`;
   const riskTips = [
     ...pkg.riskTips,
-    ...tags.filter((tag) => tag.level === 'danger' || tag.level === 'warning').map((tag) => tag.reason),
+    ...tags
+      .filter((tag) => tag.level === 'danger' || tag.level === 'warning')
+      .map((tag) => tag.reason),
     ruleText ? `使用规则：${ruleText}` : ''
   ];
 
@@ -110,14 +125,21 @@ export function buildDailyReview(
   }>
 ): DailyOperationReview {
   const goodPackages = cards.filter((card) => card.score >= 75).slice(0, 5);
-  const weakPackages = cards.filter((card) => card.tags.some((tag) => tag.key === 'continuous_slow' || tag.key === 'high_refund_risk')).slice(0, 5);
-  const highConversionCopies = [...performances].sort((a, b) => b.conversionRate - a.conversionRate).slice(0, 5).map((row) => ({
-    contentId: row.contentId,
-    title: row.title ?? '-',
-    channel: row.channel,
-    conversionRate: row.conversionRate,
-    orderCount: row.orderCount
-  }));
+  const weakPackages = cards
+    .filter((card) =>
+      card.tags.some((tag) => tag.key === 'continuous_slow' || tag.key === 'high_refund_risk')
+    )
+    .slice(0, 5);
+  const highConversionCopies = [...performances]
+    .sort((a, b) => b.conversionRate - a.conversionRate)
+    .slice(0, 5)
+    .map((row) => ({
+      contentId: row.contentId,
+      title: row.title ?? '-',
+      channel: row.channel,
+      conversionRate: row.conversionRate,
+      orderCount: row.orderCount
+    }));
   const valuableCommunities = performances
     .filter((row) => row.groupId)
     .slice(0, 5)
@@ -125,7 +147,10 @@ export function buildDailyReview(
       groupId: row.groupId!,
       groupName: row.groupId!,
       conversionRate: row.conversionRate,
-      reason: row.conversionRate >= 0.12 ? '昨日转化高，建议继续安排同品类' : '有转化基础，可继续小流量测试'
+      reason:
+        row.conversionRate >= 0.12
+          ? '昨日转化高，建议继续安排同品类'
+          : '有转化基础，可继续小流量测试'
     }));
 
   return {
@@ -133,15 +158,21 @@ export function buildDailyReview(
     whatHappened: [
       `昨日共有 ${performances.length} 条推送效果记录`,
       `高分可推套餐 ${goodPackages.length} 个，风险/滞销套餐 ${weakPackages.length} 个`,
-      highConversionCopies[0] ? `最高转化文案为「${highConversionCopies[0].title}」` : '暂无足够文案效果数据'
+      highConversionCopies[0]
+        ? `最高转化文案为「${highConversionCopies[0].title}」`
+        : '暂无足够文案效果数据'
     ],
     goodPackages,
     weakPackages,
     highConversionCopies,
     valuableCommunities,
     tomorrowSuggestions: [
-      goodPackages[0] ? `明天优先推「${goodPackages[0].packageName}」` : '明天先从高分套餐池选择 3 个测试',
-      weakPackages[0] ? `滞销/风险套餐「${weakPackages[0].packageName}」需要换卖点或降曝光` : '继续监控连续未售罄套餐',
+      goodPackages[0]
+        ? `明天优先推「${goodPackages[0].packageName}」`
+        : '明天先从高分套餐池选择 3 个测试',
+      weakPackages[0]
+        ? `滞销/风险套餐「${weakPackages[0].packageName}」需要换卖点或降曝光`
+        : '继续监控连续未售罄套餐',
       '社群文案保留价格、库存和使用规则，避免空泛促销话术'
     ]
   };
@@ -149,10 +180,19 @@ export function buildDailyReview(
 
 function buildSellingPoints(pkg: RecommendPackageItem, price: number) {
   const discount = pkg.originalPrice > 0 ? price / pkg.originalPrice : 1;
-  const pricePoint = discount <= 0.5 ? `到手约 ${Math.round(discount * 100) / 10} 折` : price > 0 ? `当前售价 ${formatPrice(price, 2)} 元` : '';
+  const pricePoint =
+    discount <= 0.5
+      ? `到手约 ${Math.round(discount * 100) / 10} 折`
+      : price > 0
+        ? `当前售价 ${formatPrice(price, 2)} 元`
+        : '';
   const rulePoint = primaryUseRule(pkg);
-  const points = uniqueText([...
-pkg.sellingPoints.flatMap((point) => point.split(/[、，,]/)), pricePoint, `${pkg.areaName}可用`, rulePoint]);
+  const points = uniqueText([
+    ...pkg.sellingPoints.flatMap((point) => point.split(/[、，,]/)),
+    pricePoint,
+    `${pkg.areaName}可用`,
+    rulePoint
+  ]);
   return points.slice(0, 4);
 }
 
@@ -160,18 +200,23 @@ function stockCue(pkg: RecommendPackageItem) {
   if (pkg.stockLeft <= 0) return 'JeeSite 显示当前已售罄，先确认补货或承接套餐';
   if (pkg.stockLeft <= 10) return `JeeSite 剩余 ${pkg.stockLeft} 份，适合做限量提醒`;
   if (pkg.inventorySoldOutDays >= 2) return `近几日多次售罄，当前补到 ${pkg.stockLeft} 份`;
-  if (pkg.inventoryObservedDays >= 2 && pkg.inventorySoldOutDays === 0) return `近 ${pkg.inventoryObservedDays} 天未售罄，当前剩余 ${pkg.stockLeft} 份`;
+  if (pkg.inventoryObservedDays >= 2 && pkg.inventorySoldOutDays === 0)
+    return `近 ${pkg.inventoryObservedDays} 天未售罄，当前剩余 ${pkg.stockLeft} 份`;
   return `JeeSite 剩余 ${pkg.stockLeft} 份`;
 }
 
 function primaryUseRule(pkg: ContentPackage) {
-  return uniqueText(pkg.useRules).find((rule) => rule.length <= 34) ?? uniqueText(pkg.useRules)[0] ?? '';
+  return (
+    uniqueText(pkg.useRules).find((rule) => rule.length <= 34) ?? uniqueText(pkg.useRules)[0] ?? ''
+  );
 }
 
 function inferAudience(pkg: ContentPackage) {
   if (/亲子|儿童|乐园/.test(pkg.category + pkg.packageName)) return ['亲子家庭', '周末出行用户'];
-  if (/水疗|按摩|足浴|SPA|汤泉/.test(pkg.category + pkg.packageName)) return ['下班放松用户', '附近白领'];
-  if (/健身|运动|练习场/.test(pkg.category + pkg.packageName)) return ['运动爱好者', '周末体验用户'];
+  if (/水疗|按摩|足浴|SPA|汤泉/.test(pkg.category + pkg.packageName))
+    return ['下班放松用户', '附近白领'];
+  if (/健身|运动|练习场/.test(pkg.category + pkg.packageName))
+    return ['运动爱好者', '周末体验用户'];
   if (/双人|2人/.test(pkg.packageName)) return ['双人结伴用户', '晚餐决策用户'];
   return ['附近用户', '价格敏感用户', '本地生活高频用户'];
 }

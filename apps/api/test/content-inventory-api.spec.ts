@@ -149,9 +149,7 @@ describe('content inventory API', () => {
       ]
     });
 
-    const response = await api
-      .get('/api/content/packages/LIVE-PKG-001/analysis')
-      .expect(200);
+    const response = await api.get('/api/content/packages/LIVE-PKG-001/analysis').expect(200);
 
     expect(response.body).toMatchObject({
       inventorySalesFlag: 'slow_never_sold_out',

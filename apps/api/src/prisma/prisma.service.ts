@@ -14,9 +14,11 @@ function resolveDevDbPath() {
   const exeDir = dirname(process.execPath);
   const exeDbPath = join(exeDir, 'prisma', 'dev.db');
   const cwdDbPath = join(process.cwd(), 'prisma', 'dev.db');
-  const finalDbPath = existsSync(exeDbPath) ? exeDbPath
-    : existsSync(cwdDbPath) ? cwdDbPath
-    : cwdDbPath;
+  const finalDbPath = existsSync(exeDbPath)
+    ? exeDbPath
+    : existsSync(cwdDbPath)
+      ? cwdDbPath
+      : cwdDbPath;
   return { exeDbPath, cwdDbPath, finalDbPath, exists: existsSync(finalDbPath) };
 }
 

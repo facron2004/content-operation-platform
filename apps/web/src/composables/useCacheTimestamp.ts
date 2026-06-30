@@ -55,11 +55,11 @@ export function useCacheTimestamp() {
   // 新鲜度颜色
   const freshnessColor = computed(() => {
     const colors = {
-      fresh: '#52c41a',    // 绿色
-      good: '#1890ff',     // 蓝色
-      stale: '#faad14',    // 橙色
-      expired: '#f5222d',  // 红色
-      unknown: '#d9d9d9'   // 灰色
+      fresh: '#52c41a', // 绿色
+      good: '#1890ff', // 蓝色
+      stale: '#faad14', // 橙色
+      expired: '#f5222d', // 红色
+      unknown: '#d9d9d9' // 灰色
     };
     return colors[freshness.value as keyof typeof colors];
   });

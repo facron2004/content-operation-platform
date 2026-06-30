@@ -93,7 +93,11 @@ describe('DataSourceService', () => {
     expect(dataset.packages).toHaveLength(1);
     expect(autoLoginService.clearCache).toHaveBeenCalledTimes(1);
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect((fetchMock.mock.calls[0][1]?.headers as Record<string, string>).Cookie).toBe('old-cookie');
-    expect((fetchMock.mock.calls[1][1]?.headers as Record<string, string>).Cookie).toBe('new-cookie');
+    expect((fetchMock.mock.calls[0][1]?.headers as Record<string, string>).Cookie).toBe(
+      'old-cookie'
+    );
+    expect((fetchMock.mock.calls[1][1]?.headers as Record<string, string>).Cookie).toBe(
+      'new-cookie'
+    );
   });
 });

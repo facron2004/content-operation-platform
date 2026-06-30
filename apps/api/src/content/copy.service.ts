@@ -89,7 +89,11 @@ export class CopyService {
     return { contentList: copies };
   }
 
-  async listCopies(filters: { auditStatus?: AuditStatus; channel?: Channel }, page?: number, pageSize?: number) {
+  async listCopies(
+    filters: { auditStatus?: AuditStatus; channel?: Channel },
+    page?: number,
+    pageSize?: number
+  ) {
     const { offset, ...pagination } = resolvePagination(page, pageSize, 0);
 
     const [rows, total] = await Promise.all([
@@ -145,7 +149,9 @@ export class CopyService {
         title,
         body,
         auditStatus: finalStatus,
-        auditRemark: request.auditRemark ?? (machineAudit.riskTips.length > 0 ? machineAudit.riskTips.join('；') : null),
+        auditRemark:
+          request.auditRemark ??
+          (machineAudit.riskTips.length > 0 ? machineAudit.riskTips.join('；') : null),
         riskLevel: machineAudit.riskLevel,
         riskTips: joinList(machineAudit.riskTips)
       }

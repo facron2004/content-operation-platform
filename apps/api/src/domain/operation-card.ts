@@ -1,4 +1,9 @@
-import type { OperationCard, RecommendPackageItem, PackageScoreBreakdown, OperationTag } from '@content/shared';
+import type {
+  OperationCard,
+  RecommendPackageItem,
+  PackageScoreBreakdown,
+  OperationTag
+} from '@content/shared';
 import { currentPrice } from '@content/shared';
 
 export function toOperationCard(
@@ -25,10 +30,14 @@ export function toOperationCard(
 }
 
 function nextActionFor(pkg: RecommendPackageItem, tags: OperationTag[]) {
-  if (tags.some((tag) => tag.key === 'hot_restock_needed')) return '联系商家确认补货，同时准备售罄承接文案';
-  if (tags.some((tag) => tag.key === 'continuous_slow')) return '进入滞销前排池，重写卖点并安排社群测试';
-  if (tags.some((tag) => tag.key === 'high_refund_risk')) return '暂停强推，先核对使用规则和商家履约';
-  if (tags.some((tag) => tag.key === 'ending_clearance')) return '今天安排清仓提醒，突出截止时间和库存';
+  if (tags.some((tag) => tag.key === 'hot_restock_needed'))
+    return '联系商家确认补货，同时准备售罄承接文案';
+  if (tags.some((tag) => tag.key === 'continuous_slow'))
+    return '进入滞销前排池，重写卖点并安排社群测试';
+  if (tags.some((tag) => tag.key === 'high_refund_risk'))
+    return '暂停强推，先核对使用规则和商家履约';
+  if (tags.some((tag) => tag.key === 'ending_clearance'))
+    return '今天安排清仓提醒，突出截止时间和库存';
   if (pkg.recommendedChannels.includes('wechat_group')) return '生成作战卡并推送到匹配社群';
   return '进入今日观察池，等待下一轮库存快照';
 }

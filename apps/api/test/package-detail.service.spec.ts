@@ -4,11 +4,7 @@ import { HtmlParser } from '../src/content/package-detail/html-parser';
 const parser = new HtmlParser();
 
 const parseDetail = (html: string) =>
-  parser.parsePackageDetail(
-    'PKG_DETAIL',
-    `<div id="commodityDetailUE">${html}</div>`,
-    false
-  );
+  parser.parsePackageDetail('PKG_DETAIL', `<div id="commodityDetailUE">${html}</div>`, false);
 
 describe('PackageDetailService detail parser', () => {
   it('parses menu streams made of title, dish, quantity and price tokens', () => {

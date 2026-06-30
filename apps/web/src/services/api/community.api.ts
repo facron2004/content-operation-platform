@@ -16,7 +16,9 @@ export async function getCommunities(params: { role?: string } = {}) {
 export async function getCommunityRecommendations(groupId: string, params: { role?: string } = {}) {
   return cachedGet(
     () =>
-      client.get(`/content/communities/${encodeURIComponent(groupId)}`, { params }).then((res) => res.data),
+      client
+        .get(`/content/communities/${encodeURIComponent(groupId)}`, { params })
+        .then((res) => res.data),
     `/content/communities/${encodeURIComponent(groupId)}`,
     params,
     30000

@@ -28,7 +28,10 @@ import { buildInventoryFlag, normalizeInventoryTrend } from './inventory-flags';
 import { PackageDetailService } from './package-detail.service';
 import { AICopyService, type AICopyConfigUpdate } from './ai-copy.service';
 import { DailyInventoryCrawlerService } from './daily-inventory-crawler.service';
-import { resolvePackageAndSnapshot as resolveFromSource, buildOperationCardMap } from './package-detail-helpers';
+import {
+  resolvePackageAndSnapshot as resolveFromSource,
+  buildOperationCardMap
+} from './package-detail-helpers';
 
 // 重新导出共享类型,保持外部模块向后兼容
 // (其它模块原来从 './content.service' 引用这些类型,无需改 import)
@@ -78,10 +81,14 @@ function computeInventoryBacklogDays(pkg: ContentPackage, snapshot: SalesSnapsho
 /** 库存 flag 优先级:normal < unsold_today < unsold_2d < unsold_3d_slow */
 function inventoryPriorityRank(flag: RecommendPackageItem['inventoryFlag']): number {
   switch (flag) {
-    case 'normal': return 0;
-    case 'unsold_today': return 1;
-    case 'unsold_2d': return 2;
-    case 'unsold_3d_slow': return 3;
+    case 'normal':
+      return 0;
+    case 'unsold_today':
+      return 1;
+    case 'unsold_2d':
+      return 2;
+    case 'unsold_3d_slow':
+      return 3;
   }
 }
 
@@ -173,11 +180,13 @@ function buildRecommendPackageItems(
   }
 
   // 单次 sort —— 内联优先级 rank,避免 N log N 次 inventoryPriorityRank 闭包调用
-  const isBacklog = (item: RecommendPackageItem) => item.inventoryPriority === INVENTORY_PRIORITIES[1];
+  const isBacklog = (item: RecommendPackageItem) =>
+    item.inventoryPriority === INVENTORY_PRIORITIES[1];
   result.sort((a, b) => {
     const ai = a.item;
     const bi = b.item;
-    const inventoryDelta = inventoryPriorityRank(bi.inventoryFlag) - inventoryPriorityRank(ai.inventoryFlag);
+    const inventoryDelta =
+      inventoryPriorityRank(bi.inventoryFlag) - inventoryPriorityRank(ai.inventoryFlag);
     if (inventoryDelta !== 0) return inventoryDelta;
     const priorityDelta = Number(isBacklog(bi)) - Number(isBacklog(ai));
     if (priorityDelta !== 0) return priorityDelta;
@@ -211,7 +220,13 @@ export interface PackageAnalysisResult {
   operationTags: OperationTag[];
   scoreBreakdown: PackageScoreBreakdown;
   operationAlerts: OperationAlert[];
-  recommendation: { strategy: string; reason: string; suggestedChannels: Channel[]; riskTips: string[]; copyAngles: string[] };
+  recommendation: {
+    strategy: string;
+    reason: string;
+    suggestedChannels: Channel[];
+    riskTips: string[];
+    copyAngles: string[];
+  };
   trends: Array<{ label: string; value: number }>;
 }
 
@@ -225,8 +240,14 @@ interface CachedRecommendations {
 export class ContentService {
   private readonly logger = new Logger(ContentService.name);
   private readonly recommendationCache = new Map<string, CachedRecommendations>();
-  private readonly recommendationInFlight = new Map<string, Promise<{ date: string; areaId: string; packages: RecommendPackageItem[] }>>();
-  private readonly recommendationCacheTtlMs = Number.parseInt(process.env.CONTENT_CACHE_TTL_MS ?? '60000', 10);
+  private readonly recommendationInFlight = new Map<
+    string,
+    Promise<{ date: string; areaId: string; packages: RecommendPackageItem[] }>
+  >();
+  private readonly recommendationCacheTtlMs = Number.parseInt(
+    process.env.CONTENT_CACHE_TTL_MS ?? '60000',
+    10
+  );
   private readonly recommendationCacheMaxSize = 50;
 
   constructor(
@@ -234,7 +255,8 @@ export class ContentService {
     @Inject(DataSourceService) private readonly dataSource: DataSourceService,
     @Inject(PackageDetailService) private readonly packageDetailService: PackageDetailService,
     @Inject(AICopyService) private readonly aiCopyService: AICopyService,
-    @Inject(DailyInventoryCrawlerService) private readonly dailyInventoryCrawler: DailyInventoryCrawlerService,
+    @Inject(DailyInventoryCrawlerService)
+    private readonly dailyInventoryCrawler: DailyInventoryCrawlerService
   ) {}
 
   // ==================== 缓存管理 ====================
@@ -257,7 +279,9 @@ export class ContentService {
     this.recommendationCache.clear();
   }
 
-  private async getCachedRecommendations(query: RecommendQuery): Promise<{ date: string; areaId: string; packages: RecommendPackageItem[] }> {
+  private async getCachedRecommendations(
+    query: RecommendQuery
+  ): Promise<{ date: string; areaId: string; packages: RecommendPackageItem[] }> {
     const cacheKey = this.recommendationCacheKey(query);
     const now = Date.now();
     const cached = this.recommendationCache.get(cacheKey);
@@ -266,13 +290,18 @@ export class ContentService {
     const inFlight = this.recommendationInFlight.get(cacheKey);
     if (inFlight) return inFlight;
 
-    const pending = this.computeRecommendations(query).then((data) => {
-      this.pruneRecommendationCache(now);
-      this.recommendationCache.set(cacheKey, { data, expiresAt: Date.now() + this.recommendationCacheTtlMs });
-      return data;
-    }).finally(() => {
-      this.recommendationInFlight.delete(cacheKey);
-    });
+    const pending = this.computeRecommendations(query)
+      .then((data) => {
+        this.pruneRecommendationCache(now);
+        this.recommendationCache.set(cacheKey, {
+          data,
+          expiresAt: Date.now() + this.recommendationCacheTtlMs
+        });
+        return data;
+      })
+      .finally(() => {
+        this.recommendationInFlight.delete(cacheKey);
+      });
     this.recommendationInFlight.set(cacheKey, pending);
     return pending;
   }
@@ -285,7 +314,9 @@ export class ContentService {
   async getCategories(query: { areaId?: string; role?: UserRole } = {}) {
     try {
       const recommendations = await this.getCachedRecommendations({ ...query, status: 'selling' });
-      const categories = [...new Set(recommendations.packages.map((pkg) => pkg.category).filter(Boolean))].sort();
+      const categories = [
+        ...new Set(recommendations.packages.map((pkg) => pkg.category).filter(Boolean))
+      ].sort();
       return { categories };
     } catch {
       // 缓存未命中时返回空列表
@@ -301,7 +332,10 @@ export class ContentService {
     const snapshotsByPkg = latestSnapshotsByPackage(dataset.snapshots);
     const packages = this.applyRoleFilter(dataset.packages, query);
     const inventoryTrends = await this.loadJeesiteInventoryTrends(
-      packages.map((pkg) => pkg.packageId), dataset.snapshots, 3, asOf
+      packages.map((pkg) => pkg.packageId),
+      dataset.snapshots,
+      3,
+      asOf
     );
 
     // 批量计算 —— promotion / inventory / score / tags / alerts 全部在内部完成 + 排序
@@ -311,9 +345,15 @@ export class ContentService {
       .map((entry) => entry.item)
       .filter((item) => this.isSellingPackage(item))
       .filter((item) => (query.category ? item.category === query.category : true))
-      .filter((item) => (query.inventoryMin !== undefined ? item.stockLeft >= query.inventoryMin : true))
-      .filter((item) => (query.inventoryMax !== undefined ? item.stockLeft <= query.inventoryMax : true))
-      .filter((item) => (query.inventoryFlag === 'unsold' ? item.inventoryFlag !== 'normal' : true));
+      .filter((item) =>
+        query.inventoryMin !== undefined ? item.stockLeft >= query.inventoryMin : true
+      )
+      .filter((item) =>
+        query.inventoryMax !== undefined ? item.stockLeft <= query.inventoryMax : true
+      )
+      .filter((item) =>
+        query.inventoryFlag === 'unsold' ? item.inventoryFlag !== 'normal' : true
+      );
 
     return {
       date: query.date ?? new Date().toISOString().slice(0, 10),
@@ -330,7 +370,12 @@ export class ContentService {
 
     const { pkg, snapshot, snapshots } = resolved;
     const asOf = this.resolveAsOfDate(undefined, [snapshot]);
-    const inventoryTrends = await this.loadJeesiteInventoryTrends([pkg.packageId], snapshots, 3, asOf);
+    const inventoryTrends = await this.loadJeesiteInventoryTrends(
+      [pkg.packageId],
+      snapshots,
+      3,
+      asOf
+    );
 
     // 复用批量计算 (N=1):与 getRecommendations 共享同一逻辑,避免 promotion/score/tags/alerts 二次计算
     const built = buildRecommendPackageItems(
@@ -358,9 +403,15 @@ export class ContentService {
 
   // ==================== AI 配置（委托给 AICopyService / DailyInventoryCrawlerService） ====================
 
-  getAICopyStatus() { return this.aiCopyService.getStatus(); }
-  updateAICopyConfig(config: AICopyConfigUpdate) { return this.aiCopyService.updateConfig(config); }
-  crawlDailyInventory(date?: string) { return this.dailyInventoryCrawler.crawlDailyInventory(date); }
+  getAICopyStatus() {
+    return this.aiCopyService.getStatus();
+  }
+  updateAICopyConfig(config: AICopyConfigUpdate) {
+    return this.aiCopyService.updateConfig(config);
+  }
+  crawlDailyInventory(date?: string) {
+    return this.dailyInventoryCrawler.crawlDailyInventory(date);
+  }
 
   // ==================== 社群 ====================
 
@@ -429,12 +480,22 @@ export class ContentService {
     const latestByPkgAndDate = new Map<string, InventoryTrendPoint>();
     for (const snapshot of snapshots) {
       const snapshotDate = new Date(snapshot.snapshotTime);
-      if (!Number.isFinite(snapshotDate.getTime()) || snapshotDate < dayStart || snapshotDate > dayEnd) continue;
+      if (
+        !Number.isFinite(snapshotDate.getTime()) ||
+        snapshotDate < dayStart ||
+        snapshotDate > dayEnd
+      )
+        continue;
       const date = localDateKey(snapshotDate);
       const key = `${snapshot.packageId}:${date}`;
-      const point = { date, snapshotTime: snapshot.snapshotTime, remainingStock: Math.max(0, Math.round(snapshot.remainingStock)) };
+      const point = {
+        date,
+        snapshotTime: snapshot.snapshotTime,
+        remainingStock: Math.max(0, Math.round(snapshot.remainingStock))
+      };
       const previous = latestByPkgAndDate.get(key);
-      if (!previous || point.snapshotTime > previous.snapshotTime) latestByPkgAndDate.set(key, point);
+      if (!previous || point.snapshotTime > previous.snapshotTime)
+        latestByPkgAndDate.set(key, point);
     }
     for (const [key, point] of latestByPkgAndDate.entries()) {
       const packageId = key.split(':')[0];
@@ -446,12 +507,26 @@ export class ContentService {
     return result;
   }
 
-  private async loadJeesiteInventoryTrends(packageIds: string[], snapshots: SalesSnapshot[], days: number, asOf: Date) {
-    const crawledTrends = await this.dailyInventoryCrawler.loadRecentInventoryTrends(packageIds, days, asOf);
-    const mergedTrends = this.dailyInventoryCrawler.mergeLiveSnapshots(crawledTrends, snapshots, asOf);
+  private async loadJeesiteInventoryTrends(
+    packageIds: string[],
+    snapshots: SalesSnapshot[],
+    days: number,
+    asOf: Date
+  ) {
+    const crawledTrends = await this.dailyInventoryCrawler.loadRecentInventoryTrends(
+      packageIds,
+      days,
+      asOf
+    );
+    const mergedTrends = this.dailyInventoryCrawler.mergeLiveSnapshots(
+      crawledTrends,
+      snapshots,
+      asOf
+    );
     const fallbackTrends = this.buildLiveInventoryTrends(snapshots, days, asOf);
     for (const [packageId, points] of fallbackTrends.entries()) {
-      if (!mergedTrends.has(packageId) || (mergedTrends.get(packageId)?.length ?? 0) === 0) mergedTrends.set(packageId, points);
+      if (!mergedTrends.has(packageId) || (mergedTrends.get(packageId)?.length ?? 0) === 0)
+        mergedTrends.set(packageId, points);
     }
     return mergedTrends;
   }
@@ -461,10 +536,14 @@ export class ContentService {
     if (query.areaId) result = result.filter((pkg) => pkg.areaId === query.areaId);
     if (query.merchantId) result = result.filter((pkg) => pkg.merchantId === query.merchantId);
     if (query.role === 'area_operator' && !query.areaId) {
-      this.logger.warn('area_operator role without areaId — showing all packages. Select a specific area to filter.');
+      this.logger.warn(
+        'area_operator role without areaId — showing all packages. Select a specific area to filter.'
+      );
     }
     if (query.role === 'merchant_operator' && !query.merchantId) {
-      this.logger.warn('merchant_operator role without merchantId — showing all packages. Select a specific merchant to filter.');
+      this.logger.warn(
+        'merchant_operator role without merchantId — showing all packages. Select a specific merchant to filter.'
+      );
     }
     return result;
   }
@@ -478,7 +557,15 @@ export class ContentService {
     operationTags: OperationTag[];
     operationAlerts: OperationAlert[];
   }): PackageAnalysisResult {
-    const { pkg, snapshot, promotion, recommendationItem, scoreBreakdown, operationTags, operationAlerts } = params;
+    const {
+      pkg,
+      snapshot,
+      promotion,
+      recommendationItem,
+      scoreBreakdown,
+      operationTags,
+      operationAlerts
+    } = params;
     return {
       package: pkg,
       status: promotion.status,

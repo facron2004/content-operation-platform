@@ -55,7 +55,12 @@ describe('inventory flags', () => {
     const result = buildInventoryFlag({
       currentStockLeft: 50,
       saleStatus: 'selling',
-      normalizedTrend: normalizeInventoryTrend([snapshot(3, 50), snapshot(2, 50), snapshot(1, 50), snapshot(0, 50)])
+      normalizedTrend: normalizeInventoryTrend([
+        snapshot(3, 50),
+        snapshot(2, 50),
+        snapshot(1, 50),
+        snapshot(0, 50)
+      ])
     });
 
     expect(result.inventoryFlag).toBe('unsold_3d_slow');
@@ -98,7 +103,12 @@ describe('inventory flags', () => {
     const result = buildInventoryFlag({
       currentStockLeft: 80,
       saleStatus: 'selling',
-      normalizedTrend: normalizeInventoryTrend([snapshot(3, 80), snapshot(2, 80), snapshot(1, 80), snapshot(0, 80)])
+      normalizedTrend: normalizeInventoryTrend([
+        snapshot(3, 80),
+        snapshot(2, 80),
+        snapshot(1, 80),
+        snapshot(0, 80)
+      ])
     });
 
     expect(result.inventorySalesFlag).toBe('slow_never_sold_out');

@@ -12,7 +12,9 @@ import { cachedGet, clearCache } from '../cache.service';
 
 // ==================== Copy / Content APIs ====================
 
-export async function generateCopies(payload: GenerateCopyRequest): Promise<GenerateCopiesResponse> {
+export async function generateCopies(
+  payload: GenerateCopyRequest
+): Promise<GenerateCopiesResponse> {
   const { data } = await client.post('/content/generate', payload);
   clearCache();
   return data;

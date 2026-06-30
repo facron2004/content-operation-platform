@@ -43,12 +43,12 @@ class OperationHistoryService {
 
   // 按类型筛选
   getByType(type: OperationRecord['type']): OperationRecord[] {
-    return this.records.filter(r => r.type === type);
+    return this.records.filter((r) => r.type === type);
   }
 
   // 按时间范围筛选
   getByTimeRange(start: number, end: number): OperationRecord[] {
-    return this.records.filter(r => r.timestamp >= start && r.timestamp <= end);
+    return this.records.filter((r) => r.timestamp >= start && r.timestamp <= end);
   }
 
   // 获取最近 N 条
@@ -65,7 +65,7 @@ class OperationHistoryService {
   // 导出为 CSV
   exportToCSV(): string {
     const headers = ['时间', '类型', '操作', '结果', '详情'];
-    const rows = this.records.map(r => [
+    const rows = this.records.map((r) => [
       new Date(r.timestamp).toLocaleString('zh-CN'),
       this.getTypeLabel(r.type),
       r.action,
@@ -73,10 +73,9 @@ class OperationHistoryService {
       JSON.stringify(r.details)
     ]);
 
-    return [
-      headers.join(','),
-      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
-    ].join('\n');
+    return [headers.join(','), ...rows.map((row) => row.map((cell) => `"${cell}"`).join(','))].join(
+      '\n'
+    );
   }
 
   // 从 localStorage 加载

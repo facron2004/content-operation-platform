@@ -28,7 +28,10 @@ export function getFallbackDate(): Date {
 
 /** 把多空白、多竖线分隔统一压成空格 + 「、」 */
 export const compact = (value: string) =>
-  value.replace(/\s+/g, ' ').replace(/[｜|]+/g, '、').trim();
+  value
+    .replace(/\s+/g, ' ')
+    .replace(/[｜|]+/g, '、')
+    .trim();
 
 /** 对字符串数组做 compact + 去重 + 去空 */
 export const uniqueText = (items: string[]) => [...new Set(items.map(compact).filter(Boolean))];
