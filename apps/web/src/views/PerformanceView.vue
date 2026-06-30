@@ -118,7 +118,9 @@ const {
   error: loadError,
   load
 } = useApiFetch<PerformanceData>(
-  () => api.getPerformance() as Promise<unknown> as Promise<PerformanceData>,
+  // 后端响应实际携带 verifyCount/refundCount 但 PerformanceResponse 类型未声明,
+  // 临时走 unknown 转换;TODO: 同步 shared/api-types.ts 的字段定义
+  () => api.getPerformance() as unknown as Promise<PerformanceData>,
   { errorMessage: '效果数据加载失败，请稍后重试', clearCacheOnForce: false }
 );
 

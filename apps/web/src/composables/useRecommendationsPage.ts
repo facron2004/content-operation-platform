@@ -23,7 +23,7 @@ export function useRecommendationsPage() {
 
   const hasFilters = computed(() => !!filters.areaId || !!filters.category || filters.unsoldOnly);
 
-  const buildAreaOptions = (packages: Array<{ areaId: string; areaName: string }>) => {
+  const buildAreaOptions = (packages: RecommendPackageItem[]) => {
     const areaMap = new Map<string, string>();
     for (const pkg of packages) {
       if (pkg.areaId && pkg.areaName && !areaMap.has(pkg.areaId))
@@ -52,7 +52,7 @@ export function useRecommendationsPage() {
       if (requestId !== loadRequestId) return;
       items.value = data.packages;
       pagination.total = data.pagination?.total ?? items.value.length;
-      buildAreaOptions(data.packages as Array<{ areaId: string; areaName: string }>);
+      buildAreaOptions(data.packages);
     } catch {
       // 错误已由拦截器处理
     } finally {
