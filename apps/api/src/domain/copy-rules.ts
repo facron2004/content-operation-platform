@@ -133,7 +133,7 @@ interface TitleCtx {
 }
 
 const buildTitleCtx = (pkg: ContentPackage): TitleCtx => {
-  const pkgPrice = currentPrice(pkg) ?? 0;
+  const pkgPrice = currentPrice(pkg);
   return {
     station: getSubwayStation(pkg.areaName || pkg.areaId, pkg.merchantName),
     brandShort: extractBrandShortName(pkg.merchantName),
@@ -212,7 +212,7 @@ const buildBody = (
   fmt: '+' | '\n',
   ctx: TitleCtx
 ): string => {
-  const pkgPrice = currentPrice(pkg) ?? 0;
+  const pkgPrice = currentPrice(pkg);
   const simpleName = simplifyPackageName(pkg.packageName, ctx.brandShort);
   const lines: string[] = [];
   lines.push(`￥${pkgPrice} ${ctx.brandFull}丨${simpleName}`);
@@ -249,7 +249,7 @@ export function auditCopyText(pkg: ContentPackage, copy: CopyDraftForAudit): Aud
     if (text.includes(word)) riskTips.push(`包含禁用或绝对化表述：${word}`);
   }
 
-  const pkgPrice = currentPrice(pkg) ?? 0;
+  const pkgPrice = currentPrice(pkg);
   const expectedPrices = [priceString(pkg.originalPrice), priceString(pkgPrice)];
   const hasKnownPrice = expectedPrices.some((price) => price && text.includes(price));
   const inventedPrice =
