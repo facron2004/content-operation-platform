@@ -19,6 +19,23 @@ const tagLabels: Record<OperationTagKey, string> = {
   community_focus: '社群专推'
 };
 
+/** 连续多日未售罄(连续滞销)的判定 —— 在 tag/alert 共用 */
+function isSlowByDailyStock(pkg: RecommendPackageItem): boolean {
+  return (
+    pkg.inventorySalesFlag === 'slow_never_sold_out' ||
+    pkg.inventoryFlag === 'unsold_3d_slow' ||
+    (pkg.inventoryObservedDays >= 2 && pkg.inventorySoldOutDays === 0 && pkg.stockLeft > 0)
+  );
+}
+
+/** 连续多日快速售罄(爆品待补货)的判定 —— 在 tag/alert 共用 */
+function isHotByDailyStock(pkg: RecommendPackageItem): boolean {
+  return (
+    pkg.inventorySalesFlag === 'hot_sold_out_recent' ||
+    (pkg.inventoryObservedDays >= 2 && pkg.inventorySoldOutDays >= 2)
+  );
+}
+
 export function buildOperationTags(
   pkg: RecommendPackageItem,
   score: PackageScoreBreakdown,
@@ -32,22 +49,15 @@ export function buildOperationTags(
   const price = currentPrice(pkg);
   const discount = pkg.originalPrice > 0 ? price / pkg.originalPrice : 1;
   const endHours = (new Date(pkg.endTime).getTime() - now.getTime()) / 36e5;
-  const hotByDailyStock =
-    pkg.inventorySalesFlag === 'hot_sold_out_recent' ||
-    (pkg.inventoryObservedDays >= 2 && pkg.inventorySoldOutDays >= 2);
-  const slowByDailyStock =
-    pkg.inventorySalesFlag === 'slow_never_sold_out' ||
-    pkg.inventoryFlag === 'unsold_3d_slow' ||
-    (pkg.inventoryObservedDays >= 2 && pkg.inventorySoldOutDays === 0 && pkg.stockLeft > 0);
 
-  if (hotByDailyStock || (pkg.stockLeft <= 0 && snapshot.salesSpeed >= 5)) {
+  if (isHotByDailyStock(pkg) || (pkg.stockLeft <= 0 && snapshot.salesSpeed >= 5)) {
     add(
       'hot_restock_needed',
       'success',
       `近 ${Math.max(pkg.inventoryObservedDays, pkg.inventorySoldOutDays)} 天出现连续售罄，建议确认补货或承接套餐`
     );
   }
-  if (slowByDailyStock) {
+  if (isSlowByDailyStock(pkg)) {
     add(
       'continuous_slow',
       'danger',
@@ -113,13 +123,8 @@ export function buildOperationAlerts(
       createdAt: now.toISOString()
     });
   };
-  const slowByDailyStock =
-    pkg.inventorySalesFlag === 'slow_never_sold_out' ||
-    pkg.inventoryFlag === 'unsold_3d_slow' ||
-    (pkg.inventoryObservedDays >= 2 && pkg.inventorySoldOutDays === 0 && pkg.stockLeft > 0);
-  const hotByDailyStock =
-    pkg.inventorySalesFlag === 'hot_sold_out_recent' ||
-    (pkg.inventoryObservedDays >= 2 && pkg.inventorySoldOutDays >= 2);
+  const slowByDailyStock = isSlowByDailyStock(pkg);
+  const hotByDailyStock = isHotByDailyStock(pkg);
 
   if (slowByDailyStock)
     add(
