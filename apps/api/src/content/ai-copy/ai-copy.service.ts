@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
+import { Inject, Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type {
   ContentPackage,
@@ -20,7 +20,6 @@ const versionLetters = ['A', 'B', 'C', 'D', 'E'];
 
 @Injectable()
 export class AICopyService {
-  private readonly logger = new Logger(AICopyService.name);
   private readonly clientManager: AIClientManager;
   private readonly promptBuilder = new PromptBuilder();
   private readonly responseParser = new ResponseParser();

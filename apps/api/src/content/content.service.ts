@@ -22,10 +22,8 @@ import {
   buildPackageScore
 } from '../domain/operation-rules';
 import { getFallbackDate } from '../domain/utils';
-import { PrismaService } from '../prisma/prisma.service';
 import { DataSourceService } from './data-source.service';
 import { buildInventoryFlag, normalizeInventoryTrend } from './inventory-flags';
-import { PackageDetailService } from './package-detail.service';
 import { AICopyService, type AICopyConfigUpdate } from './ai-copy.service';
 import { DailyInventoryCrawlerService } from './daily-inventory-crawler.service';
 import {
@@ -251,9 +249,7 @@ export class ContentService {
   private readonly recommendationCacheMaxSize = 50;
 
   constructor(
-    @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(DataSourceService) private readonly dataSource: DataSourceService,
-    @Inject(PackageDetailService) private readonly packageDetailService: PackageDetailService,
     @Inject(AICopyService) private readonly aiCopyService: AICopyService,
     @Inject(DailyInventoryCrawlerService)
     private readonly dailyInventoryCrawler: DailyInventoryCrawlerService

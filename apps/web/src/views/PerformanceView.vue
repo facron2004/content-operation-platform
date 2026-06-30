@@ -175,11 +175,7 @@ const channelOption = computed(() => {
   };
 });
 
-const loadPerf = async () => {
-  load();
-};
-
-onMounted(loadPerf);
+onMounted(load);
 </script>
 
 <style scoped>

@@ -1,10 +1,5 @@
 // --- 中文标签映射 ---
 
-import type { ContentPackage } from '@content/shared';
-
-export const currentPrice = (pkg: ContentPackage): number =>
-  pkg.temporarySalePrice ?? pkg.salePrice;
-
 export const statusLabels: Record<string, string> = {
   pending_launch: '待开售',
   cold_start: '冷启动',

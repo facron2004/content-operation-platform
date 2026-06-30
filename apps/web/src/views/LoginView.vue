@@ -34,10 +34,8 @@
 import { reactive, ref } from 'vue';
 import { ElMessage } from 'element-plus';
 import axios from 'axios';
+import { useRouter, useRoute } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
-import { useRouter } from 'vue-router';
-
-import { useRoute } from 'vue-router';
 
 const authStore = useAuthStore();
 const router = useRouter();

@@ -2,8 +2,9 @@ import { computed, reactive, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import type { BattleCard, Channel, GeneratedCopy, RecommendPackageItem } from '@content/shared';
+import { currentPrice } from '@content/shared';
 import { api, type AICopyStatus, type PackageDetailResponse } from '../services/api';
-import { formatMoney, currentPrice } from '../utils/labels';
+import { formatMoney } from '../utils/labels';
 
 type PackageDetailData = NonNullable<PackageDetailResponse['data']>;
 type PackageDetailItem = PackageDetailData['sections'][number]['items'][number];

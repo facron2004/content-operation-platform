@@ -1,4 +1,4 @@
-import { BadRequestException, Inject, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable } from '@nestjs/common';
 import type { AlertQuery, OperationAlert, RecommendPackageItem } from '@content/shared';
 import { resolvePagination, localDateKey } from '@content/shared';
 import { PrismaService } from '../prisma/prisma.service';
@@ -38,8 +38,6 @@ const ALERT_TYPE_WEIGHTS: Readonly<Partial<Record<OperationAlert['type'], number
 
 @Injectable()
 export class AlertService {
-  private readonly logger = new Logger(AlertService.name);
-
   constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
 
   /**
