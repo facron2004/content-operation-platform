@@ -7,6 +7,11 @@ import type {
   SalesSnapshot
 } from '@content/shared';
 import { currentPrice } from '@content/shared';
+import {
+  HEALTHY_VERIFY_RATE_THRESHOLD,
+  HIGH_REFUND_RATE_THRESHOLD,
+  SALES_SPEED_HOT_THRESHOLD
+} from './utils';
 
 const tagLabels: Record<OperationTagKey, string> = {
   hot_restock_needed: '爆品待补货',
@@ -50,7 +55,10 @@ export function buildOperationTags(
   const discount = pkg.originalPrice > 0 ? price / pkg.originalPrice : 1;
   const endHours = (new Date(pkg.endTime).getTime() - now.getTime()) / 36e5;
 
-  if (isHotByDailyStock(pkg) || (pkg.stockLeft <= 0 && snapshot.salesSpeed >= 5)) {
+  if (
+    isHotByDailyStock(pkg) ||
+    (pkg.stockLeft <= 0 && snapshot.salesSpeed >= SALES_SPEED_HOT_THRESHOLD)
+  ) {
     add(
       'hot_restock_needed',
       'success',
@@ -64,14 +72,14 @@ export function buildOperationTags(
       `近 ${pkg.inventoryObservedDays || pkg.inventoryUnsoldDays || 2} 天库存都没有清零，优先进入滞销处理池`
     );
   }
-  if (snapshot.refundRate >= 0.15 || pkg.status === 'high_refund_risk') {
+  if (snapshot.refundRate >= HIGH_REFUND_RATE_THRESHOLD || pkg.status === 'high_refund_risk') {
     add(
       'high_refund_risk',
       'danger',
       `退款率 ${(snapshot.refundRate * 100).toFixed(1)}%，需要人工确认`
     );
   }
-  if (snapshot.verifyRate >= 0.7 && snapshot.refundRate <= 0.05) {
+  if (snapshot.verifyRate >= HEALTHY_VERIFY_RATE_THRESHOLD && snapshot.refundRate <= 0.05) {
     add('high_verify_quality', 'success', '核销质量好，适合做口碑和商家共推');
   }
   if (endHours > 0 && endHours <= 48 && pkg.stockLeft > 0) {
@@ -134,7 +142,7 @@ export function buildOperationAlerts(
       `${pkg.inventoryObservedDays || pkg.inventoryUnsoldDays || 2} 天观察期内库存未清零`,
       '进入今日滞销池，前排曝光并改卖点'
     );
-  if (hotByDailyStock || (pkg.stockLeft <= 0 && snapshot.salesSpeed >= 5))
+  if (hotByDailyStock || (pkg.stockLeft <= 0 && snapshot.salesSpeed >= SALES_SPEED_HOT_THRESHOLD))
     add(
       'abnormal_sold_out',
       'warning',
@@ -142,7 +150,7 @@ export function buildOperationAlerts(
       '近几日库存多次清零，售罄速度偏快',
       '确认是否需要补货，并准备承接套餐'
     );
-  if (snapshot.refundRate >= 0.15)
+  if (snapshot.refundRate >= HIGH_REFUND_RATE_THRESHOLD)
     add(
       'high_refund',
       'danger',

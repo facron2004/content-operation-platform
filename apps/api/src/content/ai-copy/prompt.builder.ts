@@ -1,5 +1,5 @@
 import type { ContentPackage, GenerateCopyRequest, PromotionScore } from '@content/shared';
-import { currentPrice } from '@content/shared';
+import { currentPrice, DEFAULT_SCENARIO } from '@content/shared';
 import type { PackageDetail } from '../package-detail.service';
 
 export class PromptBuilder {
@@ -115,8 +115,7 @@ export class PromptBuilder {
   }
 
   private scenarioWritingGoal(scenario: string): string {
-    const defaultScenario = '日常运营推荐';
-    if (scenario === defaultScenario) {
+    if (scenario === DEFAULT_SCENARIO) {
       return '日常运营目标：不靠预设场景，按套餐事实、渠道和真实购买理由写出运营能直接发的文案。';
     }
     if (scenario.includes('库存'))
@@ -133,6 +132,6 @@ export class PromptBuilder {
   }
 
   private resolveScenario(scenario?: string): string {
-    return scenario?.trim() || '日常运营推荐';
+    return scenario?.trim() || DEFAULT_SCENARIO;
   }
 }

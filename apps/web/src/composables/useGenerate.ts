@@ -21,6 +21,8 @@ export function useGenerate() {
   const packageDetail = ref<PackageDetailData | null>(null);
   const battleCard = ref<BattleCard | null>(null);
   const battleCardLoading = ref(false);
+  let packageDetailRequestId = 0;
+  let battleCardRequestId = 0;
 
   const form = reactive({
     packageId: String(route.query.packageId ?? ''),
@@ -70,22 +72,23 @@ export function useGenerate() {
   const feedChecks = computed(() => {
     const pkg = selectedPackage.value;
     if (!pkg) return [];
+    const price = currentPrice(pkg);
     return [
       {
         label: '价格',
-        ok: currentPrice(pkg) > 0,
-        text: currentPrice(pkg) > 0 ? `当前售价 ${formatMoney(currentPrice(pkg))}` : '缺少有效价格'
+        ok: price > 0,
+        text: price > 0 ? `当前售价 ${formatMoney(price)}` : '缺少有效价格'
       },
       {
         label: '套餐明细',
-        ok: Boolean(packageDetail.value?.sections.length),
+        ok: !!packageDetail.value?.sections.length,
         text: packageDetail.value?.sections.length
           ? `${packageDetail.value.sections.length} 组明细已喂给 AI`
           : '未抓到明细，会用基础字段兜底'
       },
       {
         label: '使用规则',
-        ok: Boolean(pkg.useRules?.length),
+        ok: !!pkg.useRules?.length,
         text: pkg.useRules?.length ? `${pkg.useRules.length} 条规则` : '缺少使用规则'
       },
       {
@@ -108,7 +111,9 @@ export function useGenerate() {
   };
 
   const syncConfigForm = (status: AICopyStatus) => {
-    configForm.apiKey = '';
+    if (!configForm.apiKey.trim()) {
+      configForm.apiKey = '';
+    }
     configForm.baseURL = status.baseURL;
     configForm.model = status.model;
     configForm.providerName = status.providerName;
@@ -117,25 +122,38 @@ export function useGenerate() {
   };
 
   const loadPackageDetail = async (packageId: string) => {
+    const requestId = ++packageDetailRequestId;
     detailLoading.value = true;
     packageDetail.value = null;
     try {
       const response = await api.getPackageDetail(packageId);
+      if (requestId !== packageDetailRequestId) return;
       packageDetail.value = response.success && response.data ? response.data : null;
     } catch {
+      if (requestId !== packageDetailRequestId) return;
       packageDetail.value = null;
     } finally {
-      detailLoading.value = false;
+      if (requestId === packageDetailRequestId) {
+        detailLoading.value = false;
+      }
     }
   };
 
   const loadBattleCard = async () => {
-    if (!form.packageId) return;
+    if (!form.packageId) {
+      ElMessage.warning('请选择套餐');
+      return;
+    }
+    const requestId = ++battleCardRequestId;
     battleCardLoading.value = true;
     try {
-      battleCard.value = await api.generateBattleCard(form.packageId);
+      const data = await api.generateBattleCard(form.packageId);
+      if (requestId !== battleCardRequestId) return;
+      battleCard.value = data;
     } finally {
-      battleCardLoading.value = false;
+      if (requestId === battleCardRequestId) {
+        battleCardLoading.value = false;
+      }
     }
   };
 
@@ -238,12 +256,13 @@ export function useGenerate() {
   watch(
     () => form.packageId,
     (packageId) => {
+      copies.value = [];
+      battleCard.value = null;
       if (packageId) {
         loadPackageDetail(packageId);
-        battleCard.value = null;
       } else {
         packageDetail.value = null;
-        battleCard.value = null;
+        detailLoading.value = false;
       }
     }
   );

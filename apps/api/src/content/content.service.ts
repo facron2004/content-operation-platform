@@ -21,7 +21,12 @@ import {
   buildOperationTags,
   buildPackageScore
 } from '../domain/operation-rules';
-import { getFallbackDate } from '../domain/utils';
+import {
+  getFallbackDate,
+  INVENTORY_BACKLOG_DAYS_THRESHOLD,
+  MS_PER_DAY,
+  sortByDateKey
+} from '../domain/utils';
 import { DataSourceService } from './data-source.service';
 import { buildInventoryFlag, normalizeInventoryTrend } from './inventory-flags';
 import { AICopyService, type AICopyConfigUpdate } from './ai-copy.service';
@@ -73,7 +78,7 @@ function computeInventoryBacklogDays(pkg: ContentPackage, snapshot: SalesSnapsho
   const start = new Date(pkg.startTime).getTime();
   const snap = new Date(snapshot.snapshotTime).getTime();
   if (!Number.isFinite(start) || !Number.isFinite(snap) || snap <= start) return 0;
-  return Math.floor((snap - start) / (24 * 60 * 60 * 1000));
+  return Math.floor((snap - start) / MS_PER_DAY);
 }
 
 /** 库存 flag 优先级:normal < unsold_today < unsold_2d < unsold_3d_slow */
@@ -109,24 +114,25 @@ function buildRecommendPackageItems(
 
   for (const pkg of packages) {
     const snapshot = snapshotsByPkg.get(pkg.packageId);
-    if (!snapshot) continue; // 与原 .filter(item => item !== null) 等价
+    if (!snapshot) continue;
 
     // 1. promotion (含 status / score / strategy)
     const promotion = buildPromotionScore(pkg, snapshot, now);
 
     // 2. inventory flag —— trend 只 normalize 一次
+    const stockLeft = pkg.stockLeft;
     const rawTrend = inventoryTrends.get(pkg.packageId) ?? [];
-    const ensuredTrend = ensureTodayInTrend(rawTrend, pkg.stockLeft, snapshot.snapshotTime);
+    const ensuredTrend = ensureTodayInTrend(rawTrend, stockLeft, snapshot.snapshotTime);
     const normalizedTrend = normalizeInventoryTrend(ensuredTrend);
 
     const inventoryBacklogDays = computeInventoryBacklogDays(pkg, snapshot);
     const inventoryPriority: RecommendPackageItem['inventoryPriority'] =
-      pkg.stockLeft > 0 && inventoryBacklogDays >= 3
+      stockLeft > 0 && inventoryBacklogDays >= INVENTORY_BACKLOG_DAYS_THRESHOLD
         ? INVENTORY_PRIORITIES[1]
         : INVENTORY_PRIORITIES[0];
 
     const inventory = buildInventoryFlag({
-      currentStockLeft: pkg.stockLeft,
+      currentStockLeft: stockLeft,
       saleStatus: pkg.saleStatus,
       normalizedTrend
     });
@@ -499,7 +505,7 @@ export class ContentService {
       points.push(point);
       result.set(packageId, points);
     }
-    for (const points of result.values()) points.sort((a, b) => a.date.localeCompare(b.date));
+    for (const points of result.values()) points.sort(sortByDateKey((item) => item.date));
     return result;
   }
 

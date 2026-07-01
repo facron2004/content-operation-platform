@@ -49,7 +49,9 @@ export class AlertService {
     const allAlerts = this.rankAlerts(
       recommendations.packages.flatMap((pkg: RecommendPackageItem) => pkg.operationAlerts ?? [])
     );
-    const resolvedAlertIds = await this.loadResolvedAlertIds(recommendations.date);
+    // resolvedDate 与 resolve* 写入保持一致:当天 localDateKey(now),
+    // 而不是 recommendations.date(回填/历史日期会让已处理记录查不到)。
+    const resolvedAlertIds = await this.loadResolvedAlertIds(localDateKey(new Date()));
     const activeAlerts = allAlerts.filter((alert) => !resolvedAlertIds.has(alert.alertId));
     const filteredAlerts = this.filterAlerts(activeAlerts, query);
     const pagination = this.resolvePagination(query.page, query.pageSize, filteredAlerts.length);

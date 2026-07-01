@@ -104,7 +104,7 @@ export function useDashboard(role: Ref<string | undefined>) {
   const consoleData = ref<OperationConsoleData>(emptyConsoleData);
   const activeFocus = ref('all');
 
-  const summary = computed(() => consoleData.value?.summary ?? ({} as Partial<ConsoleSummary>));
+  const summary = computed(() => consoleData.value.summary);
   const todayText = computed(() => new Date().toISOString().slice(0, 10));
 
   const load = async (force = false) => {
@@ -122,7 +122,6 @@ export function useDashboard(role: Ref<string | undefined>) {
     }
   };
 
-  // 角色切换时自动刷新数据
   watch(role, () => {
     load(true);
   });

@@ -1,5 +1,5 @@
 import { Test, type TestingModule } from '@nestjs/testing';
-import type { RecommendPackageItem } from '@content/shared';
+import type { OperationAlert, RecommendPackageItem } from '@content/shared';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { DashboardService } from '../src/content/dashboard.service';
 import { PrismaService } from '../src/prisma/prisma.service';
@@ -94,7 +94,9 @@ const mockPrisma = {
 const mockAlertService = {
   rankAlerts: vi
     .fn()
-    .mockImplementation((alerts) => alerts.map((a: any) => ({ ...a, priorityScore: 0 }))),
+    .mockImplementation((alerts) =>
+      alerts.map((a: OperationAlert) => ({ ...a, priorityScore: 0 }))
+    ),
   loadResolvedAlertIds: vi.fn().mockResolvedValue(new Set())
 };
 

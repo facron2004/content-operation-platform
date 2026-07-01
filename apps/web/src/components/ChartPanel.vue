@@ -1,5 +1,5 @@
 <template>
-  <div ref="el" class="chart-panel" />
+  <div ref="el" class="chart-panel chart-shell" />
 </template>
 
 <script setup lang="ts">
@@ -23,6 +23,8 @@ echarts.use([
 const props = defineProps<{ option: EChartsCoreOption }>();
 const el = ref<HTMLDivElement | null>(null);
 let chart: echarts.ECharts | null = null;
+let resizeTimer: ReturnType<typeof setTimeout> | null = null;
+let resizeObserver: ResizeObserver | null = null;
 
 const render = () => {
   if (!el.value) return;
@@ -30,35 +32,49 @@ const render = () => {
   chart.setOption(props.option, true);
 };
 
-// resize 时仅调整尺寸，不重新渲染全部 option（比 setOption 快很多）
-let resizeTimer: ReturnType<typeof setTimeout> | null = null;
-const handleResize = () => {
+const scheduleResize = () => {
   if (resizeTimer) clearTimeout(resizeTimer);
   resizeTimer = setTimeout(() => {
     chart?.resize();
-  }, 100);
+  }, 80);
 };
 
 onMounted(() => {
   render();
-  window.addEventListener('resize', handleResize);
+
+  resizeObserver = new ResizeObserver(() => {
+    scheduleResize();
+  });
+
+  if (el.value) {
+    resizeObserver.observe(el.value);
+  }
+
+  window.addEventListener('resize', scheduleResize);
 });
 
-// 仅监听 option 变化时重新渲染（浅比较顶层 key，避免 deep watch 的性能开销）
 watch(
   () => props.option,
   (cur, pre) => {
-    // 快速浅比较：如果引用相同则跳过
     if (cur === pre) return;
-    // 如果 series data 或关键配置变化则重新渲染
     render();
   }
 );
 
 onBeforeUnmount(() => {
-  window.removeEventListener('resize', handleResize);
+  window.removeEventListener('resize', scheduleResize);
+  resizeObserver?.disconnect();
+  resizeObserver = null;
   if (resizeTimer) clearTimeout(resizeTimer);
   chart?.dispose();
   chart = null;
 });
 </script>
+
+<style scoped>
+.chart-shell {
+  width: 100%;
+  height: 100%;
+  min-height: 320px;
+}
+</style>

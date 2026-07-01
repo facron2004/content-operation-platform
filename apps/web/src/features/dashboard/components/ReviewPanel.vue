@@ -1,9 +1,12 @@
 <template>
-  <section class="panel">
-    <div class="panel-head">
-      <h2>昨日运营复盘</h2>
-      <el-button text type="primary" @click="$emit('navigate', '/performance')">效果看板</el-button>
-    </div>
+  <section class="panel dashboard-subpanel">
+    <SectionHeader title="昨日运营复盘" description="把昨天的结果和明天的动作连在一起看。">
+      <template #actions>
+        <el-button text type="primary" @click="$emit('navigate', '/performance')">
+          效果看板
+        </el-button>
+      </template>
+    </SectionHeader>
     <div class="review-list">
       <p v-for="item in review?.whatHappened ?? []" :key="item">{{ item }}</p>
     </div>
@@ -15,6 +18,8 @@
 </template>
 
 <script setup lang="ts">
+import SectionHeader from '../../../components/SectionHeader.vue';
+
 defineProps<{
   review?: { date: string; whatHappened: string[]; tomorrowSuggestions: string[] };
 }>();
@@ -25,6 +30,20 @@ defineEmits<{
 </script>
 
 <style scoped>
+.panel-head h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.panel-head p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .review-list {
   display: flex;
   flex-direction: column;
@@ -34,11 +53,12 @@ defineEmits<{
 
 .review-list p {
   padding: 10px 14px;
-  border-left: 3px solid #3b82f6;
-  border-radius: 4px;
-  background: #eff6ff;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
   color: var(--ink);
-  line-height: 1.5;
+  line-height: 1.55;
 }
 
 .suggestion-list {
@@ -54,8 +74,9 @@ defineEmits<{
 
 .suggestion-list span {
   padding: 8px 12px;
-  border-radius: 6px;
-  background: #f4f7fb;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--soft);
   color: var(--ink);
   line-height: 1.5;
 }

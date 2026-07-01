@@ -8,6 +8,19 @@
           <span>JeeSite 实时运营</span>
         </div>
       </div>
+      <div class="sidebar-meta">
+        <div class="meta-pill">
+          <span class="meta-label">当前角色</span>
+          <strong>{{ roleStore.roleLabel }}</strong>
+        </div>
+        <div
+          class="meta-pill"
+          :class="cookieStatus?.isValid ? 'meta-pill-success' : 'meta-pill-danger'"
+        >
+          <span class="meta-label">数据源</span>
+          <strong>{{ cookieStatus?.isValid ? '在线同步' : '需要更新' }}</strong>
+        </div>
+      </div>
       <el-menu router :default-active="$route.path" class="nav-menu">
         <el-menu-item index="/">
           <el-icon><DataBoard /></el-icon>
@@ -42,23 +55,20 @@
 
     <main class="workspace">
       <header class="topbar">
-        <div>
+        <div class="topbar-copy">
           <p class="eyebrow">Local Life Ops</p>
           <h1>{{ pageTitle }}</h1>
+          <p class="topbar-subtitle">围绕内容生产、异常响应与数据回收的一体化运营工作台。</p>
         </div>
         <div class="topbar-actions">
-          <!-- 通知中心 -->
           <NotificationCenter />
 
-          <!-- 操作历史 -->
-          <el-button circle @click="historyVisible = true">
+          <el-button circle class="icon-button" @click="historyVisible = true">
             <el-icon><Clock /></el-icon>
           </el-button>
 
-          <!-- 主题切换 -->
           <ThemeSwitch />
 
-          <!-- Cookie 状态与手动更新 -->
           <el-button
             class="cookie-status-btn"
             :type="cookieStatus?.isValid ? 'success' : 'danger'"
@@ -89,7 +99,6 @@
       <RouterView />
     </main>
 
-    <!-- Cookie 管理对话框 -->
     <el-dialog
       v-model="cookieDialogVisible"
       title="JeeSite 数据源连接配置"
@@ -119,39 +128,28 @@
 
         <div class="status-items">
           <div class="status-item">
-            <span>账号名:</span>
+            <span>账号名</span>
             <strong>{{ cookieStatus?.username || '未配置' }}</strong>
           </div>
           <div class="status-item">
-            <span>连接状态:</span>
+            <span>连接状态</span>
             <el-tag :type="cookieStatus?.isValid ? 'success' : 'danger'" size="small">
               {{ cookieStatus?.isValid ? '在线' : '离线' }}
             </el-tag>
           </div>
           <div v-if="(cookieStatus?.cooldownMinutes ?? 0) > 0" class="status-item">
-            <span>安全冷却:</span>
-            <span style="color: var(--el-color-warning); font-weight: bold">
+            <span>安全冷却</span>
+            <span class="warning-text">
               自动登录冷却中（余 {{ cookieStatus?.cooldownMinutes }} 分钟）
             </span>
           </div>
           <div v-if="cookieStatus?.lastLoginTime" class="status-item">
-            <span>上次成功登录:</span>
-            <span>{{ formatTime(cookieStatus?.lastLoginTime ?? '') }}</span>
+            <span>上次成功登录</span>
+            <span>{{ formatTime(cookieStatus.lastLoginTime) }}</span>
           </div>
-          <div class="status-item">
-            <span>Session ID:</span>
-            <code
-              style="
-                font-size: 11px;
-                max-width: 280px;
-                word-break: break-all;
-                background: #e2e8f0;
-                padding: 2px 4px;
-                border-radius: 4px;
-              "
-            >
-              {{ cookieStatus?.maskedCookie || '无' }}
-            </code>
+          <div class="status-item code-row">
+            <span>Session ID</span>
+            <code>{{ cookieStatus?.maskedCookie || '无' }}</code>
           </div>
         </div>
 
@@ -160,12 +158,7 @@
           <ol class="instructions">
             <li>
               在浏览器中访问并登录：
-              <a
-                href="https://zdm.zhsh1.cn/a/login"
-                target="_blank"
-                rel="noopener noreferrer"
-                style="color: #409eff; text-decoration: underline"
-              >
+              <a href="https://zdm.zhsh1.cn/a/login" target="_blank" rel="noopener noreferrer">
                 zdm.zhsh1.cn/a/login
               </a>
             </li>
@@ -200,7 +193,6 @@
       </template>
     </el-dialog>
 
-    <!-- 操作历史对话框 -->
     <OperationHistory v-model:visible="historyVisible" />
   </div>
 </template>
@@ -302,18 +294,151 @@ const pageTitle = computed(() => titles[String(route.name)] ?? '内容运营中�
 </script>
 
 <style scoped>
+.sidebar {
+  background:
+    radial-gradient(circle at top left, rgba(37, 99, 235, 0.08), transparent 28%),
+    linear-gradient(180deg, #ffffff 0%, #fbfcfe 100%);
+}
+
+.brand {
+  padding-bottom: 16px;
+}
+
+.sidebar-meta {
+  display: grid;
+  gap: 8px;
+  padding: 0 8px 16px;
+}
+
+.meta-pill {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  box-shadow: var(--shadow-soft);
+}
+
+.meta-pill strong {
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.meta-label {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.meta-pill-success {
+  border-color: rgba(5, 150, 105, 0.2);
+  background: linear-gradient(180deg, rgba(236, 253, 245, 0.95), #fff);
+}
+
+.meta-pill-success strong {
+  color: var(--success);
+}
+
+.meta-pill-danger {
+  border-color: rgba(220, 38, 38, 0.18);
+  background: linear-gradient(180deg, rgba(255, 241, 242, 0.95), #fff);
+}
+
+.meta-pill-danger strong {
+  color: var(--danger);
+}
+
+.nav-menu {
+  padding: 0 4px;
+}
+
+.workspace {
+  min-width: 0;
+  padding: 16px 24px 32px;
+  overflow-x: hidden;
+}
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin: -16px -24px 20px;
+  padding: 16px 24px 14px;
+  backdrop-filter: blur(12px);
+  background: rgba(244, 246, 250, 0.82);
+  border-bottom: 1px solid rgba(228, 232, 239, 0.95);
+}
+
+.topbar-copy {
+  min-width: 0;
+}
+
+.eyebrow {
+  margin: 0 0 4px;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.topbar h1 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+
+.topbar-subtitle {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.icon-button {
+  box-shadow: var(--shadow-soft);
+}
+
+.role-select,
+.role-switch {
+  min-width: 140px;
+  max-width: 180px;
+}
+
 .cookie-status-btn {
   margin-right: 12px;
 }
+
 .badge-dot :deep(.el-badge__content.is-fixed.is-dot) {
   right: 5px;
   top: 5px;
 }
+
 .cookie-dialog-content {
   display: flex;
   flex-direction: column;
   gap: 14px;
 }
+
 .status-items {
   padding: 14px;
   border: 1px solid var(--line);
@@ -323,26 +448,49 @@ const pageTitle = computed(() => titles[String(route.name)] ?? '内容运营中�
   flex-direction: column;
   gap: 10px;
 }
+
 .status-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
   font-size: 13px;
 }
+
 .status-item span {
   color: var(--muted);
 }
+
 .status-item strong {
   color: var(--ink);
 }
+
+.warning-text {
+  color: var(--warning);
+  font-weight: 700;
+  text-align: right;
+}
+
+.code-row code {
+  max-width: 280px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  background: #e2e8f0;
+  word-break: break-all;
+  font-family: monospace;
+  font-size: 11px;
+}
+
 .manual-cookie-section {
   margin-top: 6px;
 }
+
 .manual-cookie-section h4 {
   margin: 0 0 10px 0;
   font-size: 14px;
   color: var(--ink);
 }
+
 .instructions {
   margin: 0;
   padding-left: 20px;
@@ -350,6 +498,17 @@ const pageTitle = computed(() => titles[String(route.name)] ?? '内容运营中�
   color: var(--muted);
   line-height: 1.7;
 }
+
+.instructions a {
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.instructions a:hover {
+  text-decoration: underline;
+}
+
 .instructions code {
   background: #f1f5f9;
   padding: 2px 4px;
@@ -357,9 +516,21 @@ const pageTitle = computed(() => titles[String(route.name)] ?? '内容运营中�
   font-family: monospace;
   font-size: 12px;
 }
+
 .dialog-footer {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+}
+
+@media (max-width: 1280px) {
+  .topbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .topbar-actions {
+    justify-content: flex-start;
+  }
 }
 </style>

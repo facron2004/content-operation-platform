@@ -1,17 +1,21 @@
 <template>
   <section class="panel ai-feed-panel">
-    <div class="panel-head">
-      <h2>喂给 AI 的套餐详情</h2>
-      <el-button
-        size="small"
-        :icon="Refresh"
-        :loading="detailLoading"
-        :disabled="!packageId"
-        @click="$emit('refresh')"
-      >
-        刷新详情
-      </el-button>
-    </div>
+    <SectionHeader
+      title="喂给 AI 的套餐详情"
+      description="把实际输入给模型的套餐信息拆开看，方便判断哪里需要补充。"
+    >
+      <template #actions>
+        <el-button
+          size="small"
+          :icon="Refresh"
+          :loading="detailLoading"
+          :disabled="!packageId"
+          @click="$emit('refresh')"
+        >
+          刷新详情
+        </el-button>
+      </template>
+    </SectionHeader>
 
     <EmptyState
       v-if="!selectedPackage"
@@ -105,6 +109,7 @@ import type { RecommendPackageItem } from '@content/shared';
 import type { PackageDetailResponse } from '../services/api';
 import { inventoryTagType, salesTagType } from '../utils/labels';
 import EmptyState from './EmptyState.vue';
+import SectionHeader from './SectionHeader.vue';
 
 type PackageDetailData = NonNullable<PackageDetailResponse['data']>;
 type PackageDetailItem = PackageDetailData['sections'][number]['items'][number];
@@ -204,7 +209,7 @@ defineEmits<{
   min-width: 0;
   padding: 12px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   background: var(--soft, #f8fafc);
 }
 

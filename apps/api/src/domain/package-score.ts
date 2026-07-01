@@ -1,6 +1,11 @@
 import type { PackageScoreBreakdown, RecommendPackageItem, SalesSnapshot } from '@content/shared';
 import { currentPrice } from '@content/shared';
-import { clamp, scoreLevel } from './utils';
+import {
+  clamp,
+  HEALTHY_VERIFY_RATE_THRESHOLD,
+  HIGH_REFUND_RATE_THRESHOLD,
+  scoreLevel
+} from './utils';
 
 export function buildPackageScore(
   pkg: RecommendPackageItem,
@@ -52,14 +57,20 @@ export function buildPackageScore(
       label: '核销率',
       score: clamp(snapshot.verifyRate * 120),
       weight: 0.14,
-      reason: snapshot.verifyRate >= 0.7 ? '核销健康，履约质量较好' : '核销率仍需观察'
+      reason:
+        snapshot.verifyRate >= HEALTHY_VERIFY_RATE_THRESHOLD
+          ? '核销健康，履约质量较好'
+          : '核销率仍需观察'
     },
     {
       key: 'refund_health',
       label: '退款健康度',
       score: clamp(100 - snapshot.refundRate * 520),
       weight: 0.13,
-      reason: snapshot.refundRate >= 0.15 ? '退款偏高，推广前需人工确认规则' : '退款风险可控'
+      reason:
+        snapshot.refundRate >= HIGH_REFUND_RATE_THRESHOLD
+          ? '退款偏高，推广前需人工确认规则'
+          : '退款风险可控'
     },
     {
       key: 'merchant_cooperation',

@@ -6,6 +6,7 @@ import {
   Inject
 } from '@nestjs/common';
 import type { ContentPackage, SalesSnapshot } from '@content/shared';
+import { RETRY_BASE_DELAY_MS } from '../domain/utils';
 import { mapJeesiteBargainListToDataset, normalizeJeesiteBaseUrl } from './jeesite-bargain-adapter';
 import { AutoLoginService } from './auto-login.service';
 
@@ -110,7 +111,7 @@ export class DataSourceService {
               ? error
               : new ServiceUnavailableException('External backend request failed');
           }
-          await this.sleep(Math.min(1000 * Math.pow(2, attempt), 3000));
+          await this.sleep(Math.min(RETRY_BASE_DELAY_MS * Math.pow(2, attempt), 3000));
         }
       }
       throw new ServiceUnavailableException('External backend request failed after retries');
@@ -273,7 +274,9 @@ export class DataSourceService {
   }
 
   private sleep(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+    return new Promise<void>((resolve) => {
+      setTimeout(resolve, ms);
+    });
   }
 
   private buildCacheKey(source: string) {

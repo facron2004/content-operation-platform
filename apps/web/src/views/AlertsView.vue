@@ -6,7 +6,17 @@
         <h2>异常预警中心</h2>
         <p>只展示今日未处理预警。处理后会写入本地状态，刷新页面不会再回到待办里。</p>
       </div>
-      <el-button type="primary" :loading="loading" @click="load(true)">刷新预警</el-button>
+      <div class="hero-actions">
+        <div class="hero-chip">
+          <span>待处理</span>
+          <strong>{{ summary.activeCount }}</strong>
+        </div>
+        <div class="hero-chip danger-chip">
+          <span>高危</span>
+          <strong>{{ summary.dangerCount }}</strong>
+        </div>
+        <el-button type="primary" :loading="loading" @click="load(true)">刷新预警</el-button>
+      </div>
     </section>
 
     <el-alert
@@ -15,7 +25,7 @@
       type="error"
       show-icon
       closable
-      style="margin-bottom: 12px"
+      class="page-alert"
     />
 
     <AlertMetrics :summary="summary" />
@@ -132,26 +142,77 @@ onMounted(load);
 </script>
 
 <style scoped>
+.alerts-page {
+  gap: 12px;
+}
+
 .alerts-hero {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   justify-content: space-between;
-  gap: 20px;
+  gap: 16px;
   padding: 20px;
   border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--panel);
-  box-shadow: var(--shadow);
+  border-radius: var(--radius-lg);
+  background:
+    radial-gradient(circle at top right, rgba(220, 38, 38, 0.08), transparent 30%),
+    linear-gradient(180deg, #ffffff 0%, #fbfcfe 100%);
+  box-shadow: var(--shadow-soft);
 }
 
 .alerts-hero h2 {
   margin: 0;
   font-size: 24px;
+  font-weight: 800;
 }
 
 .alerts-hero p:not(.eyebrow) {
+  max-width: 60ch;
   margin: 8px 0 0;
   color: var(--muted);
+  line-height: 1.6;
+}
+
+.hero-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.hero-chip {
+  display: grid;
+  gap: 4px;
+  min-width: 92px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  box-shadow: var(--shadow-soft);
+}
+
+.hero-chip span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.hero-chip strong {
+  color: var(--ink);
+  font-size: 18px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.danger-chip strong {
+  color: var(--danger);
+}
+
+.page-alert {
+  margin-bottom: 0;
 }
 
 .alert-detail h3 {
@@ -189,5 +250,17 @@ onMounted(load);
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
+}
+
+@media (max-width: 960px) {
+  .alerts-hero,
+  .hero-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .hero-actions {
+    justify-content: flex-start;
+  }
 }
 </style>

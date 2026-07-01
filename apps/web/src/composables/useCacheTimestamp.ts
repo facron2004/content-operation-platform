@@ -1,5 +1,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 
+type Freshness = 'fresh' | 'good' | 'stale' | 'expired' | 'unknown';
+
 export interface CacheEntry<T> {
   data: T;
   timestamp: number;
@@ -38,7 +40,7 @@ export function useCacheTimestamp() {
   });
 
   // 新鲜度状态
-  const freshness = computed(() => {
+  const freshness = computed<Freshness>(() => {
     if (!cacheTimestamp.value) return 'unknown';
 
     const age = now.value - cacheTimestamp.value;
@@ -46,34 +48,34 @@ export function useCacheTimestamp() {
     const fiveMinutes = 5 * oneMinute;
     const thirtyMinutes = 30 * oneMinute;
 
-    if (age < oneMinute) return 'fresh'; // 新鲜
-    if (age < fiveMinutes) return 'good'; // 良好
-    if (age < thirtyMinutes) return 'stale'; // 过时
-    return 'expired'; // 过期
+    if (age < oneMinute) return 'fresh';
+    if (age < fiveMinutes) return 'good';
+    if (age < thirtyMinutes) return 'stale';
+    return 'expired';
   });
 
   // 新鲜度颜色
   const freshnessColor = computed(() => {
-    const colors = {
-      fresh: '#52c41a', // 绿色
-      good: '#1890ff', // 蓝色
-      stale: '#faad14', // 橙色
-      expired: '#f5222d', // 红色
-      unknown: '#d9d9d9' // 灰色
+    const colors: Record<Freshness, string> = {
+      fresh: '#52c41a',
+      good: '#1890ff',
+      stale: '#faad14',
+      expired: '#f5222d',
+      unknown: '#d9d9d9'
     };
-    return colors[freshness.value as keyof typeof colors];
+    return colors[freshness.value];
   });
 
   // 新鲜度文本
   const freshnessText = computed(() => {
-    const texts = {
+    const texts: Record<Freshness, string> = {
       fresh: '数据新鲜',
       good: '数据良好',
       stale: '建议刷新',
       expired: '数据过期',
       unknown: '未知'
     };
-    return texts[freshness.value as keyof typeof texts];
+    return texts[freshness.value];
   });
 
   // 更新缓存时间戳

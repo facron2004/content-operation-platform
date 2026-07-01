@@ -23,3 +23,9 @@ export interface AICopyConfigUpdate {
   temperature?: number;
   maxTokens?: number;
 }
+
+/** 解析 number/string/undefined 为 number,失败时返回 fallback */
+export const parseNumber = (value: string | number | undefined, fallback: number): number => {
+  const parsed = value === undefined ? Number.NaN : Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};

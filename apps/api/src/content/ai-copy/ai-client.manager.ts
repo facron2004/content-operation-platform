@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import OpenAI from 'openai';
 import type { AICopyStatus, AICopyConfigUpdate } from './types';
+import { parseNumber } from './types';
 
 @Injectable()
 export class AIClientManager {
@@ -30,8 +31,8 @@ export class AIClientManager {
       baseURL: this.normalizeText(update.baseURL) ?? this.status.baseURL,
       model: this.normalizeText(update.model) ?? this.status.model,
       providerName: this.normalizeText(update.providerName) ?? this.status.providerName,
-      temperature: this.parseNumber(update.temperature, this.status.temperature),
-      maxTokens: Math.round(this.parseNumber(update.maxTokens, this.status.maxTokens))
+      temperature: parseNumber(update.temperature, this.status.temperature),
+      maxTokens: Math.round(parseNumber(update.maxTokens, this.status.maxTokens))
     });
     return this.status;
   }
@@ -42,8 +43,8 @@ export class AIClientManager {
     const model = this.normalizeText(config.model) ?? 'deepseek-chat';
     const providerName =
       this.normalizeText(config.providerName) ?? this.resolveProviderName(baseURL);
-    const temperature = this.parseNumber(config.temperature, 0.7);
-    const maxTokens = Math.round(this.parseNumber(config.maxTokens, 900));
+    const temperature = parseNumber(config.temperature, 0.7);
+    const maxTokens = Math.round(parseNumber(config.maxTokens, 900));
     const missing = apiKey ? [] : ['AI_API_KEY'];
 
     this.apiKey = apiKey;
@@ -79,10 +80,5 @@ export class AIClientManager {
   private normalizeText(value: string | undefined | null) {
     const normalized = typeof value === 'string' ? value.trim() : '';
     return normalized || undefined;
-  }
-
-  private parseNumber(value: string | number | undefined, fallback: number) {
-    const parsed = value === undefined ? Number.NaN : Number(value);
-    return Number.isFinite(parsed) ? parsed : fallback;
   }
 }

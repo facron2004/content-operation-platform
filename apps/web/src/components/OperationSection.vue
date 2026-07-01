@@ -1,8 +1,10 @@
 <template>
   <section class="panel" :class="{ 'ops-section-danger': danger }">
-    <div class="panel-head">
-      <h2>{{ title }}</h2>
-    </div>
+    <SectionHeader :title="title" :description="subtitle">
+      <template #actions>
+        <slot name="actions" />
+      </template>
+    </SectionHeader>
     <div v-if="items.length" class="ops-card-list">
       <article
         v-for="item in items"
@@ -13,10 +15,7 @@
         <div class="ops-card-main">
           <div class="ops-card-title">
             <strong>{{ item.packageName }}</strong>
-            <el-tag
-              :type="item.level === 'S' ? 'success' : item.level === 'D' ? 'danger' : 'warning'"
-              effect="plain"
-            >
+            <el-tag :type="levelTagType[item.level] ?? 'warning'" effect="plain">
               {{ item.score }}分
             </el-tag>
           </div>
@@ -54,11 +53,13 @@
 
 <script setup lang="ts">
 import type { OperationCard } from '@content/shared';
-import { riskTagType } from '../utils/labels';
+import { levelTagType, riskTagType } from '../utils/labels';
 import EmptyState from './EmptyState.vue';
+import SectionHeader from './SectionHeader.vue';
 
 defineProps<{
   title: string;
+  subtitle?: string;
   items: OperationCard[];
   emptyText: string;
   danger?: boolean;
@@ -71,10 +72,15 @@ defineEmits<{
 </script>
 
 <style scoped>
+.ops-section-danger {
+  border-color: rgba(220, 38, 38, 0.14);
+  background: linear-gradient(180deg, rgba(255, 251, 251, 0.95), #fff);
+}
+
 .ops-card-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
 .ops-card {
@@ -82,21 +88,23 @@ defineEmits<{
   justify-content: space-between;
   align-items: flex-start;
   gap: 10px;
-  padding: 10px 12px;
+  padding: 12px 14px;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   background: var(--panel);
   cursor: pointer;
   transition:
-    border-color 0.15s ease,
-    transform 0.15s ease,
-    box-shadow 0.15s ease;
+    border-color 0.16s ease,
+    transform 0.16s ease,
+    box-shadow 0.16s ease,
+    background-color 0.16s ease;
 }
 
 .ops-card:hover {
   border-color: var(--accent-line);
   box-shadow: var(--shadow);
   transform: translateY(-1px);
+  background: var(--soft);
 }
 
 .ops-card-main {
@@ -131,15 +139,15 @@ defineEmits<{
 .ops-card strong {
   color: var(--ink);
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 800;
   line-height: 1.4;
 }
 
 .ops-card p {
-  margin: 4px 0;
-  color: var(--muted);
+  margin: 6px 0;
+  color: var(--ink-soft);
   font-size: 12px;
-  line-height: 1.5;
+  line-height: 1.55;
 }
 
 .ops-card small {

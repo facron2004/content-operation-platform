@@ -48,15 +48,16 @@ defineEmits<{
 
 .empty-title {
   font-size: 16px;
-  font-weight: 500;
-  color: #303133;
+  font-weight: 700;
+  color: var(--ink);
   margin-bottom: 8px;
 }
 
 .empty-description {
   font-size: 14px;
-  color: #909399;
+  color: var(--muted);
   margin-bottom: 24px;
   max-width: 400px;
+  line-height: 1.6;
 }
 </style>

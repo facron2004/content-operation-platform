@@ -45,19 +45,14 @@ export class AuthController {
   }
 }
 
+// IPv4/IPv6 loopback + host header 中可能的 localhost 字面值
+const LOOPBACK_HOSTNAMES = new Set(['127.0.0.1', '::1', '0:0:0:0:0:0:0:1', 'localhost']);
+
 function isLoopbackRequest(req: Request) {
   const candidates = [req.ip, req.socket.remoteAddress, req.headers['x-forwarded-for']]
     .flatMap((value) => (Array.isArray(value) ? value : [value]))
     .filter((value): value is string => typeof value === 'string')
     .flatMap((value) => value.split(',').map((item) => item.trim()));
 
-  return candidates.some((value) => {
-    const normalized = value.replace(/^::ffff:/, '');
-    return (
-      normalized === '127.0.0.1' ||
-      normalized === '::1' ||
-      normalized === '0:0:0:0:0:0:0:1' ||
-      normalized === 'localhost'
-    );
-  });
+  return candidates.some((value) => LOOPBACK_HOSTNAMES.has(value.replace(/^::ffff:/, '')));
 }

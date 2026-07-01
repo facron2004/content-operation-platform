@@ -1,12 +1,18 @@
 <template>
   <el-badge :value="unreadCount" :hidden="unreadCount === 0" class="notification-badge">
-    <el-button :icon="Bell" circle @click="visible = true" />
+    <el-button :icon="Bell" circle class="notification-trigger" @click="visible = true" />
   </el-badge>
 
   <el-drawer v-model="visible" title="通知中心" size="400px" direction="rtl">
     <div class="notification-header">
-      <el-button size="small" text @click="markAllAsRead">全部标记为已读</el-button>
-      <el-button size="small" text type="danger" @click="clearAll">清空全部</el-button>
+      <div>
+        <strong>运营提醒</strong>
+        <p>实时查看系统事件、预警和任务结果。</p>
+      </div>
+      <div class="notification-actions">
+        <el-button size="small" text @click="markAllAsRead">全部已读</el-button>
+        <el-button size="small" text type="danger" @click="clearAll">清空全部</el-button>
+      </div>
     </div>
 
     <div v-if="notifications.length === 0" class="empty-notifications">
@@ -20,26 +26,37 @@
         :class="['notification-item', { unread: !notification.read }]"
         @click="handleClick(notification)"
       >
-        <div class="notification-icon">
-          <el-icon v-if="notification.type === 'success'" color="#52c41a">
+        <div class="notification-icon" :class="`type-${notification.type}`">
+          <el-icon v-if="notification.type === 'success'">
             <SuccessFilled />
           </el-icon>
-          <el-icon v-else-if="notification.type === 'warning'" color="#faad14">
+          <el-icon v-else-if="notification.type === 'warning'">
             <WarningFilled />
           </el-icon>
-          <el-icon v-else-if="notification.type === 'alert'" color="#f5222d">
+          <el-icon v-else-if="notification.type === 'alert'">
             <CircleCloseFilled />
           </el-icon>
-          <el-icon v-else color="#1890ff"><InfoFilled /></el-icon>
+          <el-icon v-else>
+            <InfoFilled />
+          </el-icon>
         </div>
 
         <div class="notification-content">
-          <div class="notification-title">{{ notification.title }}</div>
+          <div class="notification-title-row">
+            <div class="notification-title">{{ notification.title }}</div>
+            <span v-if="!notification.read" class="unread-dot" />
+          </div>
           <div class="notification-message">{{ notification.message }}</div>
           <div class="notification-time">{{ formatTime(notification.timestamp) }}</div>
         </div>
 
-        <el-button size="small" circle text @click.stop="remove(notification.id)">
+        <el-button
+          size="small"
+          circle
+          text
+          class="remove-button"
+          @click.stop="remove(notification.id)"
+        >
           <el-icon><Close /></el-icon>
         </el-button>
       </div>
@@ -122,12 +139,39 @@ onUnmounted(() => {
   display: inline-flex;
 }
 
+.notification-trigger {
+  box-shadow: var(--shadow-soft);
+}
+
 .notification-header {
   display: flex;
+  align-items: flex-start;
   justify-content: space-between;
+  gap: 12px;
   margin-bottom: 16px;
   padding-bottom: 12px;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--line);
+}
+
+.notification-header strong {
+  display: block;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.notification-header p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.notification-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 .empty-notifications {
@@ -135,6 +179,9 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   height: 300px;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius);
+  background: var(--soft);
 }
 
 .notification-list {
@@ -147,25 +194,32 @@ onUnmounted(() => {
   display: flex;
   gap: 12px;
   padding: 12px;
-  border-radius: 8px;
-  background: var(--bg-secondary);
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: var(--panel);
   cursor: pointer;
-  transition: all 0.2s;
+  transition:
+    background-color 0.18s ease,
+    border-color 0.18s ease,
+    box-shadow 0.18s ease,
+    transform 0.18s ease;
+  box-shadow: var(--shadow-soft);
 }
 
 .notification-item:hover {
-  background: var(--hover-bg);
-  transform: translateX(-2px);
+  border-color: var(--line);
+  background: var(--soft);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow);
 }
 
 .notification-item.unread {
-  background: #e6f7ff;
-  border-left: 3px solid #1890ff;
+  border-color: var(--accent-line);
+  background: linear-gradient(180deg, rgba(238, 244, 255, 0.95), #fff);
 }
 
-[data-theme='dark'] .notification-item.unread {
-  background: #111d2c;
-  border-left-color: #177ddc;
+.notification-item.unread:hover {
+  border-color: rgba(37, 99, 235, 0.24);
 }
 
 .notification-icon {
@@ -173,8 +227,31 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  background: var(--soft);
+  color: var(--ink-soft);
+}
+
+.notification-icon.type-success {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.notification-icon.type-warning {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+.notification-icon.type-alert {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.notification-icon.type-info {
+  background: var(--accent-soft);
+  color: var(--accent);
 }
 
 .notification-content {
@@ -182,22 +259,47 @@ onUnmounted(() => {
   min-width: 0;
 }
 
-.notification-title {
+.notification-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   margin-bottom: 4px;
-  color: var(--text-primary);
-  font-weight: 600;
+}
+
+.notification-title {
+  color: var(--ink);
+  font-weight: 700;
   font-size: 14px;
+}
+
+.unread-dot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--accent);
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
 }
 
 .notification-message {
   margin-bottom: 4px;
-  color: var(--text-secondary);
+  color: var(--ink-soft);
   font-size: 13px;
-  line-height: 1.5;
+  line-height: 1.55;
 }
 
 .notification-time {
-  color: var(--text-tertiary);
+  color: var(--muted);
   font-size: 12px;
+}
+
+.remove-button {
+  align-self: flex-start;
+  color: var(--muted);
+}
+
+.remove-button:hover {
+  color: var(--danger);
 }
 </style>

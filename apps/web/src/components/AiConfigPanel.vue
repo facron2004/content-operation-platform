@@ -1,11 +1,15 @@
 <template>
   <section class="panel ai-control-panel">
-    <div class="panel-head">
-      <h2>AI文案接口</h2>
-      <el-tag :type="aiStatus?.enabled ? 'success' : 'danger'">
-        {{ aiStatus?.enabled ? '已接入' : '未配置' }}
-      </el-tag>
-    </div>
+    <SectionHeader
+      title="AI文案接口"
+      description="配置生成器、检查连通状态，并决定使用 AI 还是规则兜底。"
+    >
+      <template #actions>
+        <el-tag :type="aiStatus?.enabled ? 'success' : 'danger'">
+          {{ aiStatus?.enabled ? '已接入' : '未配置' }}
+        </el-tag>
+      </template>
+    </SectionHeader>
 
     <div class="ai-status-card" :class="{ offline: aiStatus && !aiStatus.enabled }">
       <div>
@@ -121,6 +125,7 @@
 import { MagicStick, Refresh } from '@element-plus/icons-vue';
 import type { RecommendPackageItem, Channel } from '@content/shared';
 import type { AICopyStatus } from '../services/api';
+import SectionHeader from './SectionHeader.vue';
 
 export interface GenerateForm {
   packageId: string;
@@ -148,8 +153,6 @@ defineProps<{
   channelOptions: Array<{ label: string; value: string }>;
 }>();
 
-// v-model:form / v-model:config-form 双向绑定由父组件持有
-// 用 defineModel 取代 props 直接传入,避免 vue/no-mutating-props
 const form = defineModel<GenerateForm>('form', { required: true });
 const configForm = defineModel<AIConfigForm>('configForm', { required: true });
 
@@ -173,7 +176,7 @@ defineEmits<{
   margin-bottom: 14px;
   padding: 12px;
   border: 1px solid var(--accent-line);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   background: var(--accent-soft);
 }
 
@@ -209,7 +212,7 @@ defineEmits<{
   margin-top: 14px;
   padding: 12px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   background: var(--soft, #f8fafc);
 }
 

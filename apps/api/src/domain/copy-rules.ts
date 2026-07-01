@@ -6,7 +6,7 @@ import type {
   PromotionScore,
   StrategyType
 } from '@content/shared';
-import { currentPrice } from '@content/shared';
+import { COPY_VERSION_LETTERS, currentPrice, DEFAULT_SCENARIO } from '@content/shared';
 import { getSubwayStation } from './subway-stations';
 import { getCategoryEmoji, getDishEmoji } from './category-emoji';
 import { priceString } from './utils';
@@ -28,8 +28,6 @@ interface AuditResult {
 }
 
 const forbiddenWords = ['全网最低', '最后疯抢', '错过后悔', '稳赚', '保证返利'];
-const versionLetters = ['A', 'B', 'C', 'D', 'E'];
-const defaultScenario = '日常运营推荐';
 
 // ---- 纯工具函数 ----
 
@@ -39,7 +37,7 @@ const calculateSavings = (originalPrice: number, currentPrice: number): number =
 const getStoreCount = (useRules: string[]): number | null => {
   for (const rule of useRules) {
     const match = rule.match(/(\d+)门店通用/);
-    if (match) return parseInt(match[1]);
+    if (match) return Number.parseInt(match[1], 10);
   }
   return null;
 };
@@ -301,7 +299,7 @@ export function generateTemplateCopies(
   packageDetail: PackageDetail | null = null
 ): GeneratedCopy[] {
   const count = Math.max(1, Math.min(request.copyCount || 3, 5));
-  const scenario = request.scenario?.trim() || defaultScenario;
+  const scenario = request.scenario?.trim() || DEFAULT_SCENARIO;
   const now = new Date().toISOString();
   const baseTimestamp = Date.now();
 
@@ -345,7 +343,7 @@ export function generateTemplateCopies(
       title,
       body,
       cta,
-      copyVersion: versionLetters[index] ?? `${index + 1}`,
+      copyVersion: COPY_VERSION_LETTERS[index] ?? `${index + 1}`,
       strategyType: config.strategy,
       riskLevel: audit.riskLevel,
       riskTips: [...promotion.riskTips, ...audit.riskTips],

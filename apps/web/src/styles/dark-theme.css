@@ -1,4 +1,4 @@
-/* 暗黑模式变量 */
+/* 主题变量基线 */
 :root {
   --bg-primary: #ffffff;
   --bg-secondary: #f4f6fa;
@@ -17,71 +17,98 @@
 }
 
 [data-theme='dark'] {
-  --bg-primary: #0f1117;
-  --bg-secondary: #1a1d27;
-  --bg-tertiary: #151821;
-
-  --text-primary: #e2e4ea;
-  --text-secondary: #9ba3b5;
-  --text-tertiary: #636d82;
-
-  --border-color: #2a2e3a;
-  --shadow: 0 1px 3px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.2);
-  --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.2);
-
-  --panel-bg: #1a1d27;
-  --hover-bg: #222533;
-}
-
-/* 暗黑模式适配 */
-[data-theme='dark'] {
   color-scheme: dark;
 
-  /* Element Plus 暗黑模式变量 */
-  --el-bg-color: #0f1117;
-  --el-bg-color-page: #0b0d13;
-  --el-text-color-primary: #e2e4ea;
-  --el-text-color-regular: #9ba3b5;
-  --el-border-color: #2a2e3a;
-  --el-fill-color: #1a1d27;
-  --el-fill-color-light: #222533;
+  --bg-primary: #0d1117;
+  --bg-secondary: #131826;
+  --bg-tertiary: #181e2c;
 
-  /* 自定义组件适配 */
-  --ink: #e2e4ea;
-  --ink-soft: #c5c9d4;
-  --muted: #9ba3b5;
-  --line: #2a2e3a;
-  --line-strong: #363b4a;
-  --panel: #1a1d27;
-  --soft: #0f1117;
-  --soft-strong: #222533;
-  --accent-soft: #162040;
-  --accent-line: #1e3a6e;
+  --text-primary: #e6e8ef;
+  --text-secondary: #a0a8bb;
+  --text-tertiary: #6f7890;
 
-  --danger-soft: #2a1215;
-  --warning-soft: #2a2210;
-  --success-soft: #0d2818;
+  --border-color: #273043;
+  --shadow: 0 10px 24px rgba(0, 0, 0, 0.24);
+  --shadow-soft: 0 4px 14px rgba(0, 0, 0, 0.18);
+
+  --panel-bg: #131826;
+  --hover-bg: #1b2232;
 }
 
-/* 平滑过渡：只对有背景、边框的容器元素启用主题切换动画 */
+[data-theme='dark'] {
+  /* Element Plus 暗黑模式变量 */
+  --el-bg-color: #0d1117;
+  --el-bg-color-page: #0a0d14;
+  --el-text-color-primary: #e6e8ef;
+  --el-text-color-regular: #a0a8bb;
+  --el-text-color-secondary: #6f7890;
+  --el-border-color: #273043;
+  --el-fill-color: #131826;
+  --el-fill-color-light: #1b2232;
+  --el-fill-color-lighter: #212838;
+  --el-mask-color: rgba(6, 10, 18, 0.72);
+
+  /* 自定义组件适配 */
+  --ink: #e6e8ef;
+  --ink-soft: #c7cce0;
+  --muted: #a0a8bb;
+  --line: #273043;
+  --line-strong: #344057;
+  --panel: #131826;
+  --soft: #0d1117;
+  --soft-strong: #1b2232;
+  --accent-soft: #16233e;
+  --accent-line: #24406f;
+
+  --danger-soft: #2b1418;
+  --warning-soft: #2a2312;
+  --success-soft: #0f2819;
+}
+
 body,
 .el-card,
 .el-button,
 .el-tag,
 .el-input__wrapper,
+.el-input__inner,
+.el-select__wrapper,
+.el-textarea__inner,
 .el-drawer,
 .el-dialog,
 .el-menu,
 .el-radio-button__inner,
 .page-stack section,
-.page-stack .ops-grid > * {
-  transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+.page-stack .ops-grid > *,
+.panel,
+.table-card,
+.metric-tile,
+.page-hero,
+.empty-state,
+.table-skeleton .skeleton-row,
+.sidebar,
+.workspace,
+.topbar,
+.notification-item,
+.ops-card,
+.task-row,
+.copy-item,
+.review-card,
+.feed-fact,
+.feed-section,
+.feed-detail,
+.battle-card-summary,
+.battle-card-block,
+.battle-copy {
+  transition:
+    background-color 0.22s ease,
+    color 0.22s ease,
+    border-color 0.22s ease,
+    box-shadow 0.22s ease;
 }
 
-/* 暗黑模式图片适配 */
 [data-theme='dark'] img {
-  opacity: 0.9;
-  filter: brightness(0.9);
+  opacity: 0.92;
+  filter: brightness(0.92) saturate(0.96);
 }
 
 [data-theme='dark'] img:hover {
@@ -89,37 +116,102 @@ body,
   filter: brightness(1);
 }
 
-/* 暗黑模式表格 */
 [data-theme='dark'] .el-table {
-  --el-table-header-bg-color: #151821;
-  --el-table-row-hover-bg-color: #162040;
+  --el-table-header-bg-color: #151c29;
+  --el-table-row-hover-bg-color: #18243a;
+  --el-table-border-color: var(--line);
+  --el-table-current-row-bg-color: #1b2232;
 }
 
-/* 暗黑模式侧边栏 */
 [data-theme='dark'] .sidebar {
-  background: var(--panel);
+  background:
+    radial-gradient(circle at top left, rgba(37, 99, 235, 0.12), transparent 28%),
+    linear-gradient(180deg, #131826 0%, #0f1420 100%);
   border-right-color: var(--line);
 }
 
 [data-theme='dark'] .nav-menu .el-menu-item:hover {
-  background: var(--soft-strong);
+  background: var(--hover-bg);
 }
 
 [data-theme='dark'] .nav-menu .el-menu-item.is-active {
   background: var(--accent-soft);
 }
 
-/* 暗黑模式指标卡片 */
-[data-theme='dark'] .metric-tile {
+[data-theme='dark'] .metric-tile,
+[data-theme='dark'] .page-hero,
+[data-theme='dark'] .panel,
+[data-theme='dark'] .table-card,
+[data-theme='dark'] .copy-item,
+[data-theme='dark'] .task-row,
+[data-theme='dark'] .review-card,
+[data-theme='dark'] .feed-fact,
+[data-theme='dark'] .feed-section,
+[data-theme='dark'] .feed-detail,
+[data-theme='dark'] .battle-card-summary,
+[data-theme='dark'] .battle-card-block,
+[data-theme='dark'] .battle-copy,
+[data-theme='dark'] .ops-card,
+[data-theme='dark'] .notification-item,
+[data-theme='dark'] .hero-summary-card,
+[data-theme='dark'] .meta-pill,
+[data-theme='dark'] .status-items,
+[data-theme='dark'] .empty-state,
+[data-theme='dark'] .table-skeleton .skeleton-row {
   background: var(--panel);
   border-color: var(--line);
-}
-
-[data-theme='dark'] .metric-tile:hover {
-  box-shadow: var(--shadow);
+  box-shadow: var(--shadow-soft);
 }
 
 [data-theme='dark'] .metric-tile.danger {
   background: var(--danger-soft);
   border-color: #5c1d22;
+}
+
+[data-theme='dark'] .metric-tile.info {
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
+}
+
+[data-theme='dark'] .metric-tile.info strong {
+  color: #8fb6ff;
+}
+
+[data-theme='dark'] .panel-head p,
+[data-theme='dark'] .page-hero p,
+[data-theme='dark'] .review-card p,
+[data-theme='dark'] .task-row span,
+[data-theme='dark'] .task-row p,
+[data-theme='dark'] .feed-title span,
+[data-theme='dark'] .feed-section p,
+[data-theme='dark'] .feed-detail p,
+[data-theme='dark'] .copy-item p,
+[data-theme='dark'] .hero-copy,
+[data-theme='dark'] .hero-description,
+[data-theme='dark'] .topbar-subtitle,
+[data-theme='dark'] .muted,
+[data-theme='dark'] .empty-description {
+  color: var(--muted);
+}
+
+[data-theme='dark'] .page-hero h2,
+[data-theme='dark'] .panel-head h2,
+[data-theme='dark'] .ops-card strong,
+[data-theme='dark'] .copy-item h3,
+[data-theme='dark'] .feed-title h3,
+[data-theme='dark'] .review-card-label,
+[data-theme='dark'] .battle-copy h3,
+[data-theme='dark'] .history-stats,
+[data-theme='dark'] .empty-title,
+[data-theme='dark'] .topbar h1 {
+  color: var(--ink);
+}
+
+[data-theme='dark'] .table-skeleton .skeleton-row {
+  background: linear-gradient(180deg, rgba(27, 34, 50, 0.94), rgba(19, 24, 38, 0.98));
+}
+
+[data-theme='dark'] .table-skeleton .skeleton-line {
+  background: linear-gradient(90deg, #2a3245 25%, #364059 50%, #2a3245 75%);
+  background-size: 200% 100%;
 }

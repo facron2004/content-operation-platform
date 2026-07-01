@@ -2,6 +2,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { ContentPackage, InventoryTrendPoint, SalesSnapshot } from '@content/shared';
 import { localDateKey } from '@content/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { sortByDateKey } from '../domain/utils';
 import { DataSourceService, type ContentDataset } from './data-source.service';
 
 interface DailyInventoryRow {
@@ -24,7 +25,7 @@ export class DailyInventoryCrawlerService {
 
   async crawlDailyInventory(date?: string) {
     const dataset = await this.dataSource.loadDataset({ forceRefresh: true });
-    const targetDate = this.resolveDateKey(date, new Date());
+    const targetDate = this.resolveDateKey(date);
     const result = await this.recordDatasetInventory(dataset, targetDate);
     return {
       ...result,
@@ -34,7 +35,7 @@ export class DailyInventoryCrawlerService {
 
   async recordDatasetInventory(dataset: ContentDataset, date?: string) {
     await this.ensureTable();
-    const targetDate = this.resolveDateKey(date, new Date());
+    const targetDate = this.resolveDateKey(date);
     const rows = this.collectInventoryRows(dataset, targetDate);
     await this.persistInventoryRows(rows);
 
@@ -48,7 +49,7 @@ export class DailyInventoryCrawlerService {
   }
 
   async recordDatasetInventoryOnce(dataset: ContentDataset, date?: string) {
-    const targetDate = this.resolveDateKey(date, new Date());
+    const targetDate = this.resolveDateKey(date);
     if (this.autoRecordedDates.has(targetDate)) {
       return { date: targetDate, crawledCount: 0, soldOutCount: 0, skipped: true };
     }
@@ -64,7 +65,7 @@ export class DailyInventoryCrawlerService {
 
   async loadRecentInventoryTrends(packageIds: string[], days: number, asOf: Date) {
     await this.ensureTable();
-    const uniquePackageIds = Array.from(new Set(packageIds.filter(Boolean)));
+    const uniquePackageIds = [...new Set(packageIds.filter(Boolean))];
     const result = new Map<string, InventoryTrendPoint[]>();
     if (uniquePackageIds.length === 0) return result;
 
@@ -121,9 +122,10 @@ export class DailyInventoryCrawlerService {
       const valueClauses = batch
         .map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)')
         .join(', ');
+      const batchDate = this.resolveDateKey();
       const params = batch.flatMap(({ pkg, snapshot, remainingStock }) => [
         pkg.packageId,
-        this.resolveDateKey(undefined, new Date()),
+        batchDate,
         new Date(snapshot.snapshotTime).toISOString(),
         pkg.packageName,
         pkg.merchantName,
@@ -180,9 +182,9 @@ export class DailyInventoryCrawlerService {
     );
   }
 
-  private resolveDateKey(date: string | undefined, fallback: Date) {
+  private resolveDateKey(date?: string) {
     if (date && /^\d{4}-\d{2}-\d{2}$/.test(date)) return date;
-    return localDateKey(fallback);
+    return localDateKey(new Date());
   }
 
   private async loadInventoryRows(packageIds: string[], days: number, asOf: Date) {
@@ -239,7 +241,7 @@ export class DailyInventoryCrawlerService {
     const existingIndex = points.findIndex((item) => item.date === date);
     if (existingIndex >= 0) points[existingIndex] = point;
     else points.push(point);
-    points.sort((a, b) => a.date.localeCompare(b.date));
+    points.sort(sortByDateKey((item) => item.date));
     result.set(snapshot.packageId, points);
   }
 

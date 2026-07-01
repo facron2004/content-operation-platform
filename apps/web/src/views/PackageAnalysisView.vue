@@ -55,15 +55,15 @@
           </div>
           <div class="info-card">
             <span>原价</span>
-            <strong>{{ formatMoney(pkg.originalPrice) }}</strong>
+            <strong>{{ priceDisplay.original }}</strong>
           </div>
           <div class="info-card">
             <span>当前售价</span>
-            <strong>{{ formatMoney(pkg.temporarySalePrice ?? pkg.salePrice) }}</strong>
+            <strong>{{ priceDisplay.current }}</strong>
           </div>
           <div class="info-card">
             <span>福利价</span>
-            <strong>{{ formatMoney(pkg.welfarePrice ?? undefined) }}</strong>
+            <strong>{{ priceDisplay.welfare }}</strong>
           </div>
           <div class="info-card">
             <span>库存标记</span>
@@ -163,6 +163,7 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue';
 import { ArrowLeft } from '@element-plus/icons-vue';
 import ChartPanel from '../components/ChartPanel.vue';
 import {
@@ -177,6 +178,16 @@ import { usePackageAnalysisPage } from '../composables/usePackageAnalysisPage';
 const props = defineProps<{ packageId: string }>();
 const { loading, analysis, pkg, scoreOption, formatInventoryTrend, goBack } =
   usePackageAnalysisPage(props.packageId);
+
+const priceDisplay = computed(() => {
+  const target = pkg.value;
+  if (!target) return { original: '-', current: '-', welfare: '-' };
+  return {
+    original: formatMoney(target.originalPrice),
+    current: formatMoney(target.temporarySalePrice ?? target.salePrice),
+    welfare: formatMoney(target.welfarePrice ?? undefined)
+  };
+});
 </script>
 
 <style scoped>

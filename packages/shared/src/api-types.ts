@@ -179,6 +179,7 @@ export interface CommunitiesResponse {
 
 export interface CopiesResponse {
   items: GeneratedCopy[];
+  pagination: { page: number; pageSize: number; total: number; totalPages: number };
 }
 
 export interface GenerateCopiesResponse {
@@ -195,6 +196,8 @@ export interface PerformanceResponse {
     channel: string;
     clickCount: number;
     orderCount: number;
+    verifyCount: number;
+    refundCount: number;
     gmv: number;
     conversionRate: number;
   }>;

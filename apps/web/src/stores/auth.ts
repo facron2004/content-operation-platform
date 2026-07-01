@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import axios from 'axios';
 
 const TOKEN_KEY = 'auth_token';
@@ -29,11 +29,14 @@ export const useAuthStore = defineStore('auth', () => {
   const isAuthenticated = computed(() => {
     if (!token.value) return false;
     const exp = parseJwtExp(token.value);
-    if (exp && Date.now() >= exp) {
-      clearAuth();
-      return false;
-    }
-    return true;
+    return !(exp && Date.now() >= exp);
+  });
+
+  // 单独 watch 处理过期:computed 不能有副作用,否则每次访问都可能触发连锁更新。
+  watch(token, (current) => {
+    if (!current) return;
+    const exp = parseJwtExp(current);
+    if (exp && Date.now() >= exp) clearAuth();
   });
 
   function setAuth(accessToken: string, user: string) {
@@ -67,11 +70,10 @@ export const useAuthStore = defineStore('auth', () => {
     refreshInflight = (async () => {
       try {
         const baseURL = import.meta.env.VITE_API_BASE_URL ?? '/api';
-        const res = await axios.post(
-          `${baseURL}${REFRESH_PATH}`,
-          {},
-          { headers: { Authorization: `Bearer ${current}` }, timeout: 10000 }
-        );
+        const res = await axios.post(`${baseURL}${REFRESH_PATH}`, null, {
+          headers: { Authorization: `Bearer ${current}` },
+          timeout: 10000
+        });
         const newToken = res.data?.access_token as string | undefined;
         const newUser = (res.data?.username as string | undefined) ?? username.value ?? '';
         if (!newToken) return null;
@@ -95,7 +97,7 @@ export const useAuthStore = defineStore('auth', () => {
     localSessionInflight = (async () => {
       try {
         const baseURL = import.meta.env.VITE_API_BASE_URL ?? '/api';
-        const res = await axios.post(`${baseURL}${LOCAL_SESSION_PATH}`, {}, { timeout: 10000 });
+        const res = await axios.post(`${baseURL}${LOCAL_SESSION_PATH}`, null, { timeout: 10000 });
         const newToken = res.data?.access_token as string | undefined;
         const newUser = (res.data?.username as string | undefined) ?? 'admin';
         if (!newToken) return null;

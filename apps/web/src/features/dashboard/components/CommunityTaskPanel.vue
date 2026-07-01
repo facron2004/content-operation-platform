@@ -1,9 +1,15 @@
 <template>
-  <section class="panel">
-    <div class="panel-head">
-      <h2>今日社群推送任务</h2>
-      <el-button text type="primary" @click="$emit('navigate', '/communities')">社群运营</el-button>
-    </div>
+  <section class="panel dashboard-subpanel">
+    <SectionHeader
+      title="今日社群推送任务"
+      description="按群组和渠道查看待执行任务，必要时直接生成对应作战卡。"
+    >
+      <template #actions>
+        <el-button text type="primary" @click="$emit('navigate', '/communities')">
+          社群运营
+        </el-button>
+      </template>
+    </SectionHeader>
     <div v-if="tasks.length" class="task-list">
       <article v-for="task in tasks" :key="task.taskId" class="task-row">
         <div>
@@ -24,6 +30,7 @@
 </template>
 
 <script setup lang="ts">
+import SectionHeader from '../../../components/SectionHeader.vue';
 import EmptyState from '../../../components/EmptyState.vue';
 import { channelLabels } from '../../../utils/labels';
 import type { CommunityTask } from '../composables/useDashboard';
@@ -39,6 +46,20 @@ defineEmits<{
 </script>
 
 <style scoped>
+.panel-head h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.panel-head p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .task-list {
   display: flex;
   flex-direction: column;
@@ -52,8 +73,9 @@ defineEmits<{
   gap: 12px;
   padding: 14px;
   border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #fff;
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  box-shadow: var(--shadow-soft);
 }
 
 .task-row strong {
@@ -69,7 +91,7 @@ defineEmits<{
 
 .task-row p {
   margin: 8px 0 0;
-  color: var(--ink);
+  color: var(--ink-soft);
   line-height: 1.5;
 }
 </style>

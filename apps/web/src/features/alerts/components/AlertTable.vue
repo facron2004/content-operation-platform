@@ -1,8 +1,7 @@
 <template>
-  <section class="panel">
-    <div class="panel-head">
-      <h2>待处理预警</h2>
-      <div class="panel-actions">
+  <section class="panel alert-table-panel">
+    <SectionHeader title="待处理预警" description="先处理高优先级项，再批量收口当前页。">
+      <template #actions>
         <span class="muted-cell">共 {{ pagination.total }} 条，当前页 {{ alerts.length }} 条</span>
         <el-button
           type="success"
@@ -10,19 +9,33 @@
           :loading="resolving"
           @click="$emit('resolve-page')"
         >
-          处理当前页
+          一键处理当前页
         </el-button>
-      </div>
+      </template>
+    </SectionHeader>
+
+    <div class="page-summary">
+      <span>高危 {{ currentPageDangerCount }}</span>
+      <span>警告 {{ currentPageWarningCount }}</span>
+      <span>平均优先级 {{ currentPageAvgScore }}</span>
+      <span>涉及套餐 {{ currentPagePackageCount }}</span>
     </div>
-    <el-table :data="alerts" height="620" empty-text="暂无待处理预警">
-      <el-table-column label="级" width="52" sortable>
+
+    <el-table
+      :data="alerts"
+      height="620"
+      empty-text="暂无待处理预警"
+      class="alert-table"
+      :row-class-name="alertRowClassName"
+    >
+      <el-table-column label="级" width="72" sortable>
         <template #default="{ row }">
           <el-tag :type="row.level === 'danger' ? 'danger' : 'warning'" effect="plain" size="small">
             {{ row.priorityScore ?? 0 }}
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="等级" width="60">
+      <el-table-column label="等级" width="68">
         <template #default="{ row }">
           <el-tag :type="riskTagType(row.level)" effect="dark" size="small">
             {{ levelText(row.level) }}
@@ -46,6 +59,7 @@
         </template>
       </el-table-column>
     </el-table>
+
     <div class="alert-pagination">
       <el-pagination
         :current-page="pagination.page"
@@ -61,10 +75,12 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue';
 import type { OperationAlert } from '@content/shared';
 import { alertTypeLabels, riskTagType, levelText } from '../../../utils/labels';
+import SectionHeader from '../../../components/SectionHeader.vue';
 
-defineProps<{
+const props = defineProps<{
   alerts: (OperationAlert & { priorityScore?: number })[];
   pagination: {
     page: number;
@@ -81,20 +97,69 @@ defineEmits<{
   'page-change': [page: number];
   'size-change': [pageSize: number];
 }>();
+
+const currentPageDangerCount = computed(
+  () => props.alerts.filter((item) => item.level === 'danger').length
+);
+const currentPageWarningCount = computed(
+  () => props.alerts.filter((item) => item.level === 'warning').length
+);
+const currentPageAvgScore = computed(() => {
+  if (!props.alerts.length) return 0;
+  const total = props.alerts.reduce((sum, item) => sum + (item.priorityScore ?? 0), 0);
+  return Math.round((total / props.alerts.length) * 10) / 10;
+});
+const currentPagePackageCount = computed(
+  () => new Set(props.alerts.map((item) => item.packageId)).size
+);
+
+const alertRowClassName = ({ row }: { row: OperationAlert & { priorityScore?: number } }) =>
+  row.level === 'danger' ? 'row-danger' : row.level === 'warning' ? 'row-warning' : '';
 </script>
 
 <style scoped>
-.panel-actions {
+.alert-table-panel {
+  overflow: hidden;
+}
+
+.page-summary {
   display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
   flex-wrap: wrap;
+  gap: 8px;
+  margin: 4px 0 10px;
+}
+
+.page-summary span {
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--soft);
+  color: var(--ink-soft);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.alert-table {
+  margin-top: 4px;
 }
 
 .alert-pagination {
   display: flex;
   justify-content: flex-end;
   padding-top: 14px;
+}
+
+:deep(.row-danger) td {
+  background: rgba(255, 241, 242, 0.68) !important;
+}
+
+:deep(.row-warning) td {
+  background: rgba(255, 251, 235, 0.58) !important;
+}
+
+@media (max-width: 960px) {
+  .alert-pagination {
+    justify-content: flex-start;
+  }
 }
 </style>

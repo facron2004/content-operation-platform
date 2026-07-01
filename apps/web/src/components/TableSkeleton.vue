@@ -33,10 +33,11 @@ const getWidth = (index: number) => {
 .skeleton-row {
   display: flex;
   gap: 16px;
-  margin-bottom: 16px;
-  padding: 12px;
-  background: #f5f7fa;
-  border-radius: 4px;
+  margin-bottom: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: linear-gradient(180deg, rgba(248, 250, 252, 0.95), rgba(255, 255, 255, 0.96));
 }
 
 .skeleton-cell {
@@ -44,11 +45,11 @@ const getWidth = (index: number) => {
 }
 
 .skeleton-line {
-  height: 16px;
-  background: linear-gradient(90deg, #e0e0e0 25%, #f0f0f0 50%, #e0e0e0 75%);
+  height: 14px;
+  background: linear-gradient(90deg, #e2e8f0 25%, #f1f5f9 50%, #e2e8f0 75%);
   background-size: 200% 100%;
   animation: skeleton-loading 1.5s ease-in-out infinite;
-  border-radius: 4px;
+  border-radius: 999px;
 }
 
 @keyframes skeleton-loading {

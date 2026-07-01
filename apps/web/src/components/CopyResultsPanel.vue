@@ -1,7 +1,10 @@
 <template>
   <section class="panel result-panel">
     <div class="panel-head">
-      <h2>生成结果</h2>
+      <div>
+        <h2>生成结果</h2>
+        <p>这里展示 AI 或规则兜底输出的文案，确认后可直接进入审核流。</p>
+      </div>
       <el-button text type="primary" @click="$router.push('/audit')">去审核</el-button>
     </div>
     <div v-if="copies.length === 0" class="copy-list">
@@ -54,10 +57,64 @@ defineEmits<{
 </script>
 
 <style scoped>
+.panel-head h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.panel-head p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.copy-list {
+  display: grid;
+  gap: 10px;
+}
+
+.copy-item {
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  box-shadow: var(--shadow-soft);
+}
+
+.copy-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.copy-item h3 {
+  margin: 10px 0 0;
+  color: var(--ink);
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+.copy-item p {
+  margin: 10px 0 0;
+  color: var(--ink-soft);
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
 .copy-risk {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
   margin-top: 10px;
+}
+
+.copy-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
 }
 </style>

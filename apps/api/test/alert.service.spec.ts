@@ -170,12 +170,14 @@ describe('AlertService', () => {
 
       const summary = service.buildAlertSummary(allAlerts, activeAlerts);
 
-      expect(summary.totalCount).toBe(4);
-      expect(summary.activeCount).toBe(3);
-      expect(summary.resolvedCount).toBe(1);
-      expect(summary.dangerCount).toBe(1);
-      expect(summary.warningCount).toBe(1);
-      expect(summary.infoCount).toBe(1);
+      expect(summary).toMatchObject({
+        totalCount: 4,
+        activeCount: 3,
+        resolvedCount: 1,
+        dangerCount: 1,
+        warningCount: 1,
+        infoCount: 1
+      });
     });
 
     it('includes typeDistribution in the summary', () => {
@@ -329,7 +331,7 @@ describe('AlertService', () => {
 
       const result = await service.getOperationAlerts({}, mockGetRecommendations);
 
-      expect(result.items.find((a: any) => a.alertId === 'A1')).toBeUndefined();
+      expect(result.items.find((a: OperationAlert) => a.alertId === 'A1')).toBeUndefined();
     });
   });
 

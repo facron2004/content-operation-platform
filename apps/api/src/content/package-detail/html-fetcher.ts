@@ -2,6 +2,7 @@ import { Injectable, Logger, Inject } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AutoLoginService } from '../auto-login.service';
 import { normalizeJeesiteBaseUrl } from '../jeesite-bargain-adapter';
+import { DEFAULT_USER_AGENT } from '../http-headers';
 
 @Injectable()
 export class HtmlFetcher {
@@ -26,7 +27,7 @@ export class HtmlFetcher {
       this.logger.log(`Fetching package detail: ${packageId}`);
 
       const headers: Record<string, string> = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        'User-Agent': DEFAULT_USER_AGENT
       };
       if (cookie) {
         headers['Cookie'] = cookie;

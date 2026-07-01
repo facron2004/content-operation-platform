@@ -12,8 +12,8 @@ function getCacheKey(url: string, params?: Record<string, unknown>): string {
   return `${url}:${JSON.stringify(sortedParams)}`;
 }
 
-/** Evict the oldest entry when Map exceeds max size (LRU-like) */
-function evictIfNeeded(map: Map<string, unknown>, maxSize: number): void {
+/** Evict the oldest entries when Map exceeds max size (LRU-like) */
+function evictIfNeeded<V>(map: Map<string, V>, maxSize: number): void {
   while (map.size > maxSize) {
     const oldestKey = map.keys().next().value;
     if (oldestKey) map.delete(oldestKey);
@@ -42,7 +42,7 @@ export async function cachedGet<T>(
   const request = fetcher()
     .then((data) => {
       cache.set(cacheKey, { data, expiresAt: now + ttl });
-      evictIfNeeded(cache as Map<string, unknown>, MAX_CACHE_ENTRIES);
+      evictIfNeeded(cache, MAX_CACHE_ENTRIES);
       pendingRequests.delete(cacheKey);
       return data;
     })
@@ -51,8 +51,8 @@ export async function cachedGet<T>(
       throw error;
     });
 
-  evictIfNeeded(pendingRequests as Map<string, unknown>, MAX_PENDING_ENTRIES);
-  pendingRequests.set(cacheKey, request as Promise<unknown>);
+  evictIfNeeded(pendingRequests, MAX_PENDING_ENTRIES);
+  pendingRequests.set(cacheKey, request);
   return request;
 }
 

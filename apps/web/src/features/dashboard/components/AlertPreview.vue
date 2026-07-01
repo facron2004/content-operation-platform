@@ -1,10 +1,11 @@
 <template>
-  <section class="panel">
-    <div class="panel-head">
-      <h2>异常预警速览</h2>
-      <el-button text type="primary" @click="$emit('navigate', '/alerts')">查看全部</el-button>
-    </div>
-    <el-table :data="alerts" height="280" empty-text="暂无预警">
+  <section class="panel dashboard-subpanel">
+    <SectionHeader title="异常预警速览" description="先看最需要处理的预警，再进入完整列表。">
+      <template #actions>
+        <el-button text type="primary" @click="$emit('navigate', '/alerts')">查看全部</el-button>
+      </template>
+    </SectionHeader>
+    <el-table :data="alerts" height="280" empty-text="暂无预警" class="preview-table">
       <el-table-column prop="title" label="预警" width="120" />
       <el-table-column prop="packageName" label="套餐" min-width="180" show-overflow-tooltip />
       <el-table-column prop="areaName" label="区域" width="90" />
@@ -20,6 +21,7 @@
 </template>
 
 <script setup lang="ts">
+import SectionHeader from '../../../components/SectionHeader.vue';
 import type { OperationAlert } from '@content/shared';
 import { alertTagType } from '../../../utils/labels';
 
@@ -31,3 +33,23 @@ defineEmits<{
   navigate: [path: string];
 }>();
 </script>
+
+<style scoped>
+.panel-head h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.panel-head p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.preview-table {
+  margin-top: 4px;
+}
+</style>

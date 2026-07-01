@@ -61,4 +61,11 @@ defineEmits<{
 .alert-filter .el-input {
   width: 200px;
 }
+
+@media (max-width: 960px) {
+  .alert-filter .el-input,
+  .alert-filter .el-select {
+    width: 100%;
+  }
+}
 </style>

@@ -17,8 +17,7 @@
     "nprogress": "0.2.0",
     "pinia": "^2.3.0",
     "vue": "^3.5.13",
-    "vue-router": "^4.5.0",
-    "xlsx": "0.18.5"
+    "vue-router": "^4.5.0"
   },
   "devDependencies": {
     "@types/nprogress": "0.2.3",
@@ -27,4 +26,3 @@
     "vue-tsc": "^2.2.0"
   }
 }
-

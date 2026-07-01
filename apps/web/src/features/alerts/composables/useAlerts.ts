@@ -1,4 +1,4 @@
-import { computed, ref, reactive, watch, type Ref } from 'vue';
+import { computed, ref, reactive, watch, onBeforeUnmount, type Ref } from 'vue';
 import { ElMessage } from 'element-plus';
 import type { OperationAlert } from '@content/shared';
 import { api } from '../../../services/api';
@@ -52,6 +52,7 @@ export function useAlerts(role: Ref<string | undefined>) {
   const pagination = reactive({ page: 1, pageSize: 80, total: 0, totalPages: 1 });
   let filterTimer: ReturnType<typeof window.setTimeout> | undefined;
   let loadRequestId = 0; // Race condition guard
+  let resolveRequestId = 0;
 
   const { recordSuccess, recordError } = useOperationHistory();
 
@@ -109,6 +110,7 @@ export function useAlerts(role: Ref<string | undefined>) {
     alertIds: string[],
     successText = '已标记处理，今日不会再进入待办'
   ) => {
+    const requestId = ++resolveRequestId;
     const ids = [...new Set((alertIds ?? []).filter(Boolean))];
     if (!ids.length) {
       ElMessage.warning('当前没有可处理的预警');
@@ -118,6 +120,7 @@ export function useAlerts(role: Ref<string | undefined>) {
     resolving.value = true;
     try {
       await api.resolveAlerts(ids);
+      if (requestId !== resolveRequestId) return;
       ElMessage.success(successText);
 
       // 记录操作历史
@@ -129,6 +132,7 @@ export function useAlerts(role: Ref<string | undefined>) {
 
       await load();
     } catch (error) {
+      if (requestId !== resolveRequestId) return;
       ElMessage.error('操作失败，请稍后重试');
 
       // 记录失败
@@ -139,7 +143,9 @@ export function useAlerts(role: Ref<string | undefined>) {
         { alertIds: ids }
       );
     } finally {
-      resolving.value = false;
+      if (requestId === resolveRequestId) {
+        resolving.value = false;
+      }
     }
   };
 
@@ -180,6 +186,14 @@ export function useAlerts(role: Ref<string | undefined>) {
   watch(role, () => {
     pagination.page = 1;
     load(true);
+  });
+
+  onBeforeUnmount(() => {
+    if (filterTimer) {
+      clearTimeout(filterTimer);
+    }
+    loadRequestId += 1;
+    resolveRequestId += 1;
   });
 
   return {

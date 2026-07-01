@@ -7,7 +7,15 @@ import type {
   SalesSnapshot,
   StrategyType
 } from '@content/shared';
-import { clamp, scoreLevel } from './utils';
+import {
+  clamp,
+  HEALTHY_VERIFY_RATE_THRESHOLD,
+  HIGH_REFUND_RATE_THRESHOLD,
+  INVENTORY_BACKLOG_DAYS_THRESHOLD,
+  MS_PER_DAY,
+  SALES_SPEED_HOT_THRESHOLD,
+  scoreLevel
+} from './utils';
 
 interface StrategyResult {
   recommendedStrategy: StrategyType;
@@ -16,6 +24,29 @@ interface StrategyResult {
   recommendedChannels: Channel[];
   copyAngles: string[];
 }
+
+// 弱转化场景的状态合集,统一为单处常量便于运营调整。
+const WEAK_CONVERSION_STATUSES = new Set<PackageStatus>([
+  'conversion_weak',
+  'unclear_selling_point',
+  'poor_sales'
+]);
+
+// 推广分状态调整量,默认 0;仅覆盖需要加减分的特殊状态。
+const STATUS_SCORE_DELTA: Record<PackageStatus, number> = {
+  pending_launch: -6,
+  nearly_sold_out: 4,
+  sold_out: -30,
+  healthy_sales: 0,
+  surging: 0,
+  cold_start: 0,
+  conversion_weak: 0,
+  poor_sales: 0,
+  high_refund_risk: 0,
+  high_verify: 0,
+  low_verify: 0,
+  unclear_selling_point: 0
+};
 
 const isBeforeStart = (pkg: ContentPackage, now: Date) =>
   new Date(pkg.startTime).getTime() > now.getTime();
@@ -26,11 +57,15 @@ export function calculatePackageStatus(
   now = new Date()
 ): PackageStatus {
   if (pkg.stockLeft <= 0 || snapshot.remainingStock <= 0) return 'sold_out';
-  if (snapshot.refundRate > 0.15) return 'high_refund_risk';
+  if (snapshot.refundRate > HIGH_REFUND_RATE_THRESHOLD) return 'high_refund_risk';
   if (isBeforeStart(pkg, now)) return 'pending_launch';
 
   const stockRatio = pkg.stockTotal === 0 ? 0 : pkg.stockLeft / pkg.stockTotal;
-  if (stockRatio < 0.2 && snapshot.paidOrderCount >= 10 && snapshot.salesSpeed >= 5) {
+  if (
+    stockRatio < 0.2 &&
+    snapshot.paidOrderCount >= 10 &&
+    snapshot.salesSpeed >= SALES_SPEED_HOT_THRESHOLD
+  ) {
     return 'nearly_sold_out';
   }
 
@@ -41,7 +76,8 @@ export function calculatePackageStatus(
   }
   if (snapshot.clickCount >= 100 && snapshot.conversionRate < 0.06) return 'conversion_weak';
   if (snapshot.exposureCount >= 1500 && snapshot.orderCount < 8) return 'poor_sales';
-  if (snapshot.verifyRate >= 0.7 && snapshot.refundRate <= 0.05) return 'high_verify';
+  if (snapshot.verifyRate >= HEALTHY_VERIFY_RATE_THRESHOLD && snapshot.refundRate <= 0.05)
+    return 'high_verify';
   if (snapshot.paidOrderCount >= 12 && snapshot.verifyRate < 0.25) return 'low_verify';
 
   return 'healthy_sales';
@@ -63,9 +99,7 @@ export function calculatePromotionScore(
   else if (stockRatio <= 0.8) score = 68;
   else score = 50;
 
-  if (status === 'nearly_sold_out') score += 4;
-  if (status === 'pending_launch') score -= 6;
-  if (status === 'sold_out') score -= 30;
+  score += STATUS_SCORE_DELTA[status];
 
   const finalScore = Math.round(clamp(score));
   return { score: finalScore, level: scoreLevel(finalScore) };
@@ -81,9 +115,9 @@ export function generateStrategy(
   const snapshotTime = new Date(snapshot.snapshotTime).getTime();
   const inventoryBacklogDays =
     saleStart > 0 && snapshotTime > saleStart
-      ? Math.floor((snapshotTime - saleStart) / (24 * 60 * 60 * 1000))
+      ? Math.floor((snapshotTime - saleStart) / MS_PER_DAY)
       : 0;
-  const isBacklog = pkg.stockLeft > 0 && inventoryBacklogDays >= 3;
+  const isBacklog = pkg.stockLeft > 0 && inventoryBacklogDays >= INVENTORY_BACKLOG_DAYS_THRESHOLD;
 
   if (status === 'sold_out' && pkg.fallbackPackageId) {
     return {
@@ -136,11 +170,7 @@ export function generateStrategy(
     };
   }
 
-  if (
-    status === 'conversion_weak' ||
-    status === 'unclear_selling_point' ||
-    status === 'poor_sales'
-  ) {
+  if (WEAK_CONVERSION_STATUSES.has(status)) {
     return {
       recommendedStrategy: 'conversion_optimize',
       reason: `曝光或点击已有基础，但下单表现偏弱，建议换卖点、补充使用规则和消费场景。`,

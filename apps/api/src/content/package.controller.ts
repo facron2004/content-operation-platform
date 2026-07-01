@@ -39,10 +39,8 @@ export class PackageController {
     @Query('page') page?: string,
     @Query('pageSize') pageSize?: string
   ) {
-    const min =
-      inventoryMin !== undefined && inventoryMin !== '' ? Number(inventoryMin) : undefined;
-    const max =
-      inventoryMax !== undefined && inventoryMax !== '' ? Number(inventoryMax) : undefined;
+    const min = inventoryMin ? Number(inventoryMin) : undefined;
+    const max = inventoryMax ? Number(inventoryMax) : undefined;
     const result = this.contentService.getRecommendations({
       date,
       areaId: areaIdSnake ?? areaIdCamel,
@@ -143,7 +141,7 @@ export class PackageController {
     this.packageDetailService.clearCache(packageId);
     return {
       success: true,
-      message: packageId ? 'Cache cleared for package ' + packageId : 'All package cache cleared'
+      message: packageId ? `Cache cleared for package ${packageId}` : 'All package cache cleared'
     };
   }
 

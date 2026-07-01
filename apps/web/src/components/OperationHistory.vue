@@ -1,24 +1,24 @@
 <template>
   <el-dialog v-model="visible" title="操作历史" width="800px" :close-on-click-modal="false">
     <div class="history-controls">
-      <el-input v-model="searchText" placeholder="搜索操作..." clearable style="width: 300px">
+      <el-input v-model="searchText" placeholder="搜索操作..." clearable class="search-input">
         <template #prefix>
           <el-icon><Search /></el-icon>
         </template>
       </el-input>
-      <el-select v-model="filterType" placeholder="筛选类型" clearable style="width: 150px">
+      <el-select v-model="filterType" placeholder="筛选类型" clearable class="filter-select">
         <el-option label="处理预警" value="alert_resolve" />
         <el-option label="批量处理" value="alert_batch_resolve" />
         <el-option label="生成文案" value="copy_generate" />
         <el-option label="审核文案" value="copy_audit" />
         <el-option label="更新配置" value="config_update" />
       </el-select>
-      <div style="flex: 1"></div>
+      <div class="history-spacer" />
       <el-button @click="exportCSV">导出 CSV</el-button>
       <el-button type="danger" @click="clearHistory">清空历史</el-button>
     </div>
 
-    <el-table :data="filteredRecords" height="400" style="margin-top: 16px">
+    <el-table :data="filteredRecords" height="400" class="history-table">
       <el-table-column label="时间" width="160">
         <template #default="{ row }">
           {{ formatTime(row.timestamp) }}
@@ -51,7 +51,6 @@
     </div>
   </el-dialog>
 
-  <!-- 详情对话框 -->
   <el-dialog v-model="detailsVisible" title="操作详情" width="600px">
     <div v-if="selectedRecord" class="details-content">
       <p>
@@ -98,7 +97,6 @@ const filterType = ref('');
 const detailsVisible = ref(false);
 const selectedRecord = ref<OperationRecord | null>(null);
 
-// 筛选记录
 const filteredRecords = computed(() => {
   let result = records.value;
 
@@ -118,16 +116,13 @@ const filteredRecords = computed(() => {
   return result;
 });
 
-// 统计
 const successCount = computed(() => records.value.filter((r) => r.result === 'success').length);
 const errorCount = computed(() => records.value.filter((r) => r.result === 'error').length);
 
-// 格式化时间
 function formatTime(timestamp: number): string {
   return new Date(timestamp).toLocaleString('zh-CN');
 }
 
-// 获取类型标签
 function getTypeLabel(type: OperationRecord['type']): string {
   const labels: Record<OperationRecord['type'], string> = {
     alert_resolve: '处理预警',
@@ -139,13 +134,11 @@ function getTypeLabel(type: OperationRecord['type']): string {
   return labels[type] || type;
 }
 
-// 显示详情
 function showDetails(record: OperationRecord) {
   selectedRecord.value = record;
   detailsVisible.value = true;
 }
 
-// 导出 CSV
 function exportCSV() {
   try {
     const csv = exportToCSV();
@@ -160,7 +153,6 @@ function exportCSV() {
   }
 }
 
-// 清空历史
 async function clearHistory() {
   try {
     await ElMessageBox.confirm('确定要清空所有操作历史吗？此操作不可恢复。', '警告', {
@@ -174,12 +166,10 @@ async function clearHistory() {
   }
 }
 
-// 刷新记录
 function refresh() {
   records.value = getAll();
 }
 
-// 暴露刷新方法
 defineExpose({ refresh });
 </script>
 
@@ -188,6 +178,23 @@ defineExpose({ refresh });
   display: flex;
   align-items: center;
   gap: 12px;
+  flex-wrap: wrap;
+}
+
+.search-input {
+  width: 300px;
+}
+
+.filter-select {
+  width: 150px;
+}
+
+.history-spacer {
+  flex: 1;
+}
+
+.history-table {
+  margin-top: 16px;
 }
 
 .history-stats {
@@ -195,9 +202,11 @@ defineExpose({ refresh });
   gap: 24px;
   margin-top: 12px;
   padding: 12px;
-  border-radius: 6px;
-  background: #f5f5f5;
-  font-size: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--soft);
+  color: var(--ink-soft);
+  font-size: 13px;
 }
 
 .details-content p {
@@ -207,9 +216,25 @@ defineExpose({ refresh });
 
 .details-content pre {
   padding: 12px;
-  border-radius: 4px;
-  background: #f5f5f5;
+  border-radius: 6px;
+  background: var(--soft);
   overflow-x: auto;
   font-size: 12px;
+}
+
+@media (max-width: 960px) {
+  .search-input,
+  .filter-select {
+    width: 100%;
+  }
+
+  .history-spacer {
+    display: none;
+  }
+
+  .history-stats {
+    flex-direction: column;
+    gap: 8px;
+  }
 }
 </style>

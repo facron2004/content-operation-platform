@@ -1,8 +1,11 @@
 <template>
   <section v-if="topPackages.length" class="panel focus-panel">
     <div class="panel-head">
-      <h2>优先处理套餐</h2>
-      <span class="muted-cell">按高危程度、预警数量和动作优先级排序</span>
+      <div>
+        <h2>优先处理套餐</h2>
+        <p>按高危程度、预警数量和动作优先级排序</p>
+      </div>
+      <span class="muted-cell">点击卡片可直接进入套餐详情</span>
     </div>
     <div class="focus-grid">
       <article
@@ -58,6 +61,24 @@ defineEmits<{
 </script>
 
 <style scoped>
+.focus-panel {
+  overflow: hidden;
+}
+
+.panel-head h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.panel-head p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .focus-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
@@ -74,7 +95,8 @@ defineEmits<{
   transition:
     border-color 0.16s ease,
     box-shadow 0.16s ease,
-    transform 0.16s ease;
+    transform 0.16s ease,
+    background-color 0.16s ease;
 }
 
 .focus-card:hover {

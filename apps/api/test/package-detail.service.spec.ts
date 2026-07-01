@@ -51,7 +51,7 @@ describe('PackageDetailService detail parser', () => {
     `);
 
     expect(detail.packageTitle).toBe('2-3人豪华餐8荤4素炭烤鲜牛肉');
-    expect(detail.sections.map((section: any) => section.title)).toEqual([
+    expect(detail.sections.map((section) => section.title)).toEqual([
       '8荤4素2主食',
       '饮品2选1',
       '其他'

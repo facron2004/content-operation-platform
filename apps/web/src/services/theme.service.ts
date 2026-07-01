@@ -25,11 +25,12 @@ class ThemeService {
     // 构造函数已完成所有初始化，此方法仅作为显式调用点
   }
 
-  getTheme() {
+  /** 响应式 ref:对外暴露,供 useTheme 通过 .value 解包 */
+  get themeRef() {
     return this.theme;
   }
 
-  getEffectiveTheme() {
+  get effectiveThemeRef() {
     return this.effectiveTheme;
   }
 
@@ -100,8 +101,8 @@ export const themeService = new ThemeService();
 // Vue composable — 返回响应式引用
 export function useTheme() {
   return {
-    theme: computed(() => themeService.getTheme().value),
-    effectiveTheme: computed(() => themeService.getEffectiveTheme().value),
+    theme: computed(() => themeService.themeRef.value),
+    effectiveTheme: computed(() => themeService.effectiveThemeRef.value),
     setTheme: (theme: Theme) => themeService.setTheme(theme),
     toggleTheme: () => themeService.toggleTheme()
   };

@@ -33,18 +33,23 @@ defineEmits<{ refresh: [] }>();
   gap: 20px;
   padding: 22px;
   border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--panel);
-  box-shadow: var(--shadow);
+  border-radius: var(--radius-lg);
+  background:
+    radial-gradient(circle at top right, rgba(37, 99, 235, 0.08), transparent 28%),
+    linear-gradient(180deg, var(--panel) 0%, rgba(251, 252, 254, 0.98) 100%);
+  box-shadow: var(--shadow-soft);
 }
 
 .page-hero h2 {
-  margin: 0;
+  margin: 4px 0 0;
   font-size: 26px;
+  font-weight: 800;
+  line-height: 1.2;
 }
 
 .page-hero p:not(.eyebrow) {
   margin: 8px 0 0;
   color: var(--muted);
+  line-height: 1.6;
 }
 </style>

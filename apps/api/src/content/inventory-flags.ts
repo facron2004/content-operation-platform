@@ -5,6 +5,11 @@ import type {
   InventorySalesLevel,
   InventoryTrendPoint
 } from '@content/shared';
+import {
+  INVENTORY_BACKLOG_DAYS_THRESHOLD,
+  INVENTORY_SLOW_DAYS_THRESHOLD,
+  sortByDateKey
+} from '../domain/utils';
 
 export type { InventoryFlagInput, InventoryFlagResult };
 
@@ -33,7 +38,7 @@ export function normalizeInventoryTrend(trend: InventoryTrendPoint[]) {
     }
   }
 
-  return Array.from(byDate.values()).sort((a, b) => a.date.localeCompare(b.date));
+  return Array.from(byDate.values()).sort(sortByDateKey((item) => item.date));
 }
 
 export function buildInventoryFlag(input: InventoryFlagInput): InventoryFlagResult {
@@ -54,7 +59,7 @@ export function buildInventoryFlag(input: InventoryFlagInput): InventoryFlagResu
     inventoryUnsoldDays += 1;
   }
 
-  if (inventoryUnsoldDays >= 3) {
+  if (inventoryUnsoldDays >= INVENTORY_BACKLOG_DAYS_THRESHOLD) {
     return {
       inventoryFlag: 'unsold_3d_slow',
       inventoryFlagLabel: '连续3天未售罄',
@@ -66,7 +71,7 @@ export function buildInventoryFlag(input: InventoryFlagInput): InventoryFlagResu
     };
   }
 
-  if (inventoryUnsoldDays >= 2) {
+  if (inventoryUnsoldDays >= INVENTORY_SLOW_DAYS_THRESHOLD) {
     return {
       inventoryFlag: 'unsold_2d',
       inventoryFlagLabel: '连续2天未售罄',

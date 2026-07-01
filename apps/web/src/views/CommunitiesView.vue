@@ -134,15 +134,19 @@ const plannedTimeForGroup = (groupType: string, index: number): string => {
 };
 
 const pushRows = computed(() =>
-  communities.value.flatMap((group) =>
-    (group.todayRecommendedPackages ?? []).slice(0, 1).map((pkg: OperationCard, index: number) => ({
-      groupName: group.groupName,
-      packageName: pkg.packageName,
-      plannedTime: plannedTimeForGroup(group.groupType, index),
-      reason: pkg.reason,
-      nextAction: pkg.nextAction
-    }))
-  )
+  communities.value.flatMap((group) => {
+    const pkg: OperationCard | undefined = group.todayRecommendedPackages?.[0];
+    if (!pkg) return [];
+    return [
+      {
+        groupName: group.groupName,
+        packageName: pkg.packageName,
+        plannedTime: plannedTimeForGroup(group.groupType, 0),
+        reason: pkg.reason,
+        nextAction: pkg.nextAction
+      }
+    ];
+  })
 );
 
 onMounted(() => load());

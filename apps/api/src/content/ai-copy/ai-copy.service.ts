@@ -7,6 +7,7 @@ import type {
   PromotionScore,
   StrategyType
 } from '@content/shared';
+import { COPY_VERSION_LETTERS } from '@content/shared';
 import { auditCopyText } from '../../domain/copy-rules';
 import type { PackageDetail } from '../package-detail.service';
 import { AIClientManager } from './ai-client.manager';
@@ -15,8 +16,7 @@ import { ResponseParser } from './response.parser';
 import { RetryHandler } from './retry.handler';
 import { CopyGenerator } from './copy.generator';
 import type { AICopyStatus, AICopyConfigUpdate } from './types';
-
-const versionLetters = ['A', 'B', 'C', 'D', 'E'];
+import { parseNumber } from './types';
 
 @Injectable()
 export class AICopyService {
@@ -32,8 +32,8 @@ export class AICopyService {
       baseURL: this.config.get<string>('AI_API_BASE_URL'),
       model: this.config.get<string>('AI_MODEL'),
       providerName: this.config.get<string>('AI_PROVIDER_NAME'),
-      temperature: this.parseNumber(this.config.get<string>('AI_TEMPERATURE'), 0.7),
-      maxTokens: this.parseNumber(this.config.get<string>('AI_MAX_TOKENS'), 900)
+      temperature: parseNumber(this.config.get<string>('AI_TEMPERATURE'), 0.7),
+      maxTokens: parseNumber(this.config.get<string>('AI_MAX_TOKENS'), 900)
     });
 
     this.retryHandler = new RetryHandler();
@@ -132,7 +132,7 @@ export class AICopyService {
         title: polishedDraft.title.slice(0, 48),
         body: polishedDraft.body.slice(0, 360),
         cta: polishedDraft.cta || '立即下单',
-        copyVersion: versionLetters[index] ?? `${index + 1}`,
+        copyVersion: COPY_VERSION_LETTERS[index] ?? `${index + 1}`,
         strategyType,
         riskLevel: audit.riskLevel,
         riskTips: [...promotion.riskTips, ...audit.riskTips],
@@ -143,10 +143,5 @@ export class AICopyService {
         updatedAt: now
       };
     });
-  }
-
-  private parseNumber(value: string | number | undefined, fallback: number): number {
-    const parsed = value === undefined ? Number.NaN : Number(value);
-    return Number.isFinite(parsed) ? parsed : fallback;
   }
 }

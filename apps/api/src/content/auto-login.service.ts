@@ -2,6 +2,14 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { assertHostnameNotPrivateAsync } from './jeesite-bargain-adapter';
+import { DEFAULT_USER_AGENT } from './http-headers';
+
+/** JeeSite 登录后构造的完整 Cookie 模板,使用 `${0}` 替换 sessionId。 */
+const BARGAIN_COOKIE_TEMPLATE =
+  'skinName=skin-green; jeesite.session.id=${sessionId}; pageSize=10; pageNo=1';
+
+const buildBargainCookie = (sessionId: string): string =>
+  BARGAIN_COOKIE_TEMPLATE.replace('${sessionId}', sessionId);
 
 interface LoginResult {
   success: boolean;
@@ -248,7 +256,7 @@ export class AutoLoginService implements OnModuleInit {
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
           Cookie: initialCookieString,
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'User-Agent': DEFAULT_USER_AGENT,
           Referer: loginPageUrl
         },
         body: formData.toString(),
@@ -314,12 +322,9 @@ export class AutoLoginService implements OnModuleInit {
 
         this.logger.debug('Session ID obtained from redirect');
 
-        // 构建完整的 Cookie 字符串
-        const cookieString = `skinName=skin-green; jeesite.session.id=${sessionId}; pageSize=10; pageNo=1`;
-
         // 验证 Cookie 是否有效
         this.logger.debug('Validating new cookie...');
-        const isValid = await this.validateCookie(cookieString);
+        const isValid = await this.validateCookie(buildBargainCookie(sessionId));
         if (!isValid) {
           this.logger.error('Login succeeded but cookie validation failed');
           return {
@@ -332,7 +337,7 @@ export class AutoLoginService implements OnModuleInit {
 
         return {
           success: true,
-          cookie: cookieString
+          cookie: buildBargainCookie(sessionId)
         };
       }
 
@@ -372,12 +377,9 @@ export class AutoLoginService implements OnModuleInit {
 
       this.logger.debug('Session ID obtained');
 
-      // 构建完整的 Cookie 字符串
-      const cookieString = `skinName=skin-green; jeesite.session.id=${sessionId}; pageSize=10; pageNo=1`;
-
       // 验证 Cookie 是否有效
       this.logger.debug('Validating new cookie...');
-      const isValid = await this.validateCookie(cookieString);
+      const isValid = await this.validateCookie(buildBargainCookie(sessionId));
       if (!isValid) {
         this.logger.error('Login succeeded but cookie validation failed');
         return {
@@ -390,7 +392,7 @@ export class AutoLoginService implements OnModuleInit {
 
       return {
         success: true,
-        cookie: cookieString
+        cookie: buildBargainCookie(sessionId)
       };
     } catch (error) {
       this.logger.error(`Login error: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -493,7 +495,7 @@ export class AutoLoginService implements OnModuleInit {
         currentCookie = part;
       } else {
         // 这是当前 cookie 的延续（可能是 expires 日期）
-        currentCookie += ', ' + part;
+        currentCookie = `${currentCookie}, ${part}`;
       }
     }
 

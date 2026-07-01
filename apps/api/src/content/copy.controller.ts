@@ -34,8 +34,10 @@ export class CopyController {
     @Query('page') page?: string,
     @Query('pageSize') pageSize?: string
   ) {
-    const safePage = page !== undefined && page !== '' ? Number(page) : undefined;
-    const safePageSize = pageSize !== undefined && pageSize !== '' ? Number(pageSize) : undefined;
+    const parsedPage = Number(page);
+    const parsedPageSize = Number(pageSize);
+    const safePage = Number.isFinite(parsedPage) ? parsedPage : undefined;
+    const safePageSize = Number.isFinite(parsedPageSize) ? parsedPageSize : undefined;
     return this.copyService.listCopies({ auditStatus, channel }, safePage, safePageSize);
   }
 

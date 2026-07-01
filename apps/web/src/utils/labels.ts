@@ -83,35 +83,58 @@ export const levelTagType: Record<string, TagType> = {
   D: 'danger'
 };
 
-/** 根据风险等级（danger / warning / success / info）返回 Element Plus tag 类型 */
+// --- 等级 → Element Plus Tag 类型的统一查找表 ---
+// 所有 *TagType 函数的实现等价(把 level: 'success' | 'danger' | 'warning' | 'info' 映射到 TagType),
+// 单一查找表,所有具名函数都从这里取,保持调用点的语义命名(便于阅读)。
+
+type AlertLevel = 'success' | 'danger' | 'warning' | 'info';
+
+const LEVEL_TO_TAG_TYPE: Record<AlertLevel, TagType> = {
+  success: 'success',
+  danger: 'danger',
+  warning: 'warning',
+  info: 'info'
+};
+
+const ALERT_LEVELS: readonly AlertLevel[] = ['success', 'danger', 'warning', 'info'];
+
+const isAlertLevel = (value: string): value is AlertLevel =>
+  (ALERT_LEVELS as readonly string[]).includes(value);
+
+const normalizeLevel = (level?: string): AlertLevel =>
+  level && isAlertLevel(level) ? level : 'info';
+
+/** 根据风险等级返回 Element Plus tag 类型 */
 export function riskTagType(level?: string): TagType {
-  if (level === 'danger') return 'danger';
-  if (level === 'warning') return 'warning';
-  if (level === 'success') return 'success';
-  return 'info';
+  return LEVEL_TO_TAG_TYPE[normalizeLevel(level)];
 }
 
 /** 库存标记 tag 类型 */
 export function inventoryTagType(level?: string): TagType {
-  if (level === 'danger') return 'danger';
-  if (level === 'warning') return 'warning';
-  return 'info';
+  return LEVEL_TO_TAG_TYPE[normalizeLevel(level)];
 }
 
 /** 销售判断 tag 类型 */
 export function salesTagType(level?: string): TagType {
-  if (level === 'success') return 'success';
-  if (level === 'danger') return 'danger';
-  if (level === 'warning') return 'warning';
-  return 'info';
+  return LEVEL_TO_TAG_TYPE[normalizeLevel(level)];
 }
 
 /** 作战标签 tag 类型 */
 export function operationTagType(level?: string): TagType {
-  if (level === 'danger') return 'danger';
-  if (level === 'warning') return 'warning';
-  if (level === 'success') return 'success';
-  return 'info';
+  return LEVEL_TO_TAG_TYPE[normalizeLevel(level)];
+}
+
+/** 警报 tag 类型(语义同 riskTagType,用于 Dashboard 中的 alertTagType) */
+export function alertTagType(level?: string): TagType {
+  return LEVEL_TO_TAG_TYPE[normalizeLevel(level)];
+}
+
+/** 预警等级中文文本 */
+export function levelText(level?: string): string {
+  const normalized = normalizeLevel(level);
+  if (normalized === 'danger') return '高危';
+  if (normalized === 'warning') return '警告';
+  return '提醒';
 }
 
 // --- 格式化辅助函数 ---
@@ -168,18 +191,4 @@ export function scoreTooltip(
 /** 判断商家名称是否需要 tooltip（含逗号表示多店通用） */
 export function isMerchantNameTruncated(merchantName: string): boolean {
   return merchantName.includes(',');
-}
-
-/** 预警等级中文文本 */
-export function levelText(level?: string): string {
-  if (level === 'danger') return '高危';
-  if (level === 'warning') return '警告';
-  return '提醒';
-}
-
-/** 警报 tag 类型（同 riskTagType 但语义不同：用于 Dashboard 中的 alertTagType） */
-export function alertTagType(level?: string): TagType {
-  if (level === 'danger') return 'danger';
-  if (level === 'warning') return 'warning';
-  return 'info';
 }

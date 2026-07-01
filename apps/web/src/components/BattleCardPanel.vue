@@ -1,11 +1,15 @@
 <template>
   <section v-if="selectedPackage" class="panel battle-card-panel">
-    <div class="panel-head">
-      <h2>套餐推广作战卡</h2>
-      <el-button type="primary" :loading="battleCardLoading" @click="$emit('generate')">
-        生成作战卡
-      </el-button>
-    </div>
+    <SectionHeader
+      title="套餐推广作战卡"
+      description="把推荐理由、人群、渠道和多场景文案一次性整理好。"
+    >
+      <template #actions>
+        <el-button type="primary" :loading="battleCardLoading" @click="$emit('generate')">
+          生成作战卡
+        </el-button>
+      </template>
+    </SectionHeader>
     <div v-if="battleCard" class="battle-card-grid">
       <div class="battle-card-summary">
         <strong>{{ battleCard.packageName }}</strong>
@@ -59,6 +63,7 @@
 import type { BattleCard, RecommendPackageItem } from '@content/shared';
 import { channelLabels } from '../utils/labels';
 import EmptyState from './EmptyState.vue';
+import SectionHeader from './SectionHeader.vue';
 
 defineProps<{
   selectedPackage: RecommendPackageItem | undefined;
@@ -84,8 +89,8 @@ defineEmits<{
   min-width: 0;
   padding: 12px;
   border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #fff;
+  border-radius: var(--radius-sm);
+  background: var(--panel);
 }
 
 .battle-card-summary {

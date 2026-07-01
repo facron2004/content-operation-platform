@@ -16,8 +16,20 @@ import type { RecommendQuery, RecommendationResult } from './content.service';
 type GetRecommendationsFn = (q: RecommendQuery) => Promise<RecommendationResult>;
 
 // Prisma 行类型:显式声明,跨方法共享,避免内联 (typeof copies)[number] 漂移
-type CopyRow = Prisma.GeneratedCopyGetPayload<Record<string, never>>;
-type PerfRow = Prisma.CopyPerformanceGetPayload<Record<string, never>>;
+type CopyRow = Prisma.GeneratedCopyGetPayload<{
+  select: { contentId: true; title: true; copyVersion: true; scenario: true };
+}>;
+type PerfRow = Prisma.CopyPerformanceGetPayload<{
+  select: {
+    contentId: true;
+    channel: true;
+    conversionRate: true;
+    orderCount: true;
+    groupId: true;
+  };
+}>;
+// getPerformance 路径下 mapPerformance 透传所有字段,需要全行
+type FullPerfRow = Prisma.CopyPerformanceGetPayload<Record<string, never>>;
 
 @Injectable()
 export class DashboardService {
@@ -41,8 +53,21 @@ export class DashboardService {
     const cardMap = this.operationCardMap(packages);
     const cards = Array.from(cardMap.values());
     const [performances, copies] = await Promise.all([
-      this.prisma.copyPerformance.findMany({ orderBy: { createdAt: 'desc' }, take: 200 }),
-      this.prisma.generatedCopy.findMany({ take: 500 })
+      this.prisma.copyPerformance.findMany({
+        orderBy: { createdAt: 'desc' },
+        take: 200,
+        select: {
+          contentId: true,
+          channel: true,
+          conversionRate: true,
+          orderCount: true,
+          groupId: true
+        }
+      }),
+      this.prisma.generatedCopy.findMany({
+        take: 500,
+        select: { contentId: true, title: true, copyVersion: true, scenario: true }
+      })
     ]);
     const copiesById = new Map<string, CopyRow>(copies.map((c: CopyRow) => [c.contentId, c]));
     const performanceRows = performances.map((p: PerfRow) => ({
@@ -207,10 +232,13 @@ export class DashboardService {
   async getPerformance(getRecommendations: GetRecommendationsFn) {
     const [performances, copies] = await Promise.all([
       this.prisma.copyPerformance.findMany({ orderBy: { createdAt: 'desc' }, take: 200 }),
-      this.prisma.generatedCopy.findMany({ take: 500 })
+      this.prisma.generatedCopy.findMany({
+        take: 500,
+        select: { contentId: true, title: true, copyVersion: true, scenario: true }
+      })
     ]);
     const copiesById = new Map<string, CopyRow>(copies.map((c: CopyRow) => [c.contentId, c]));
-    const performanceRows = performances.map((p: PerfRow) => ({
+    const performanceRows = performances.map((p: FullPerfRow) => ({
       contentId: p.contentId,
       title: copiesById.get(p.contentId)?.title ?? '-',
       channel: p.channel as Channel,
@@ -223,7 +251,7 @@ export class DashboardService {
     const review = buildDailyReview(this.yesterdayKey(), cards, performanceRows);
 
     return {
-      items: performances.map((p: PerfRow) => {
+      items: performances.map((p: FullPerfRow) => {
         const copy = copiesById.get(p.contentId);
         return {
           ...mapPerformance(p),
@@ -231,7 +259,7 @@ export class DashboardService {
           title: copy?.title ?? '-'
         };
       }),
-      versionComparison: performances.map((p: PerfRow) => {
+      versionComparison: performances.map((p: FullPerfRow) => {
         const copy = copiesById.get(p.contentId);
         return {
           copyVersion: copy?.copyVersion ?? '-',

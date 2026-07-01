@@ -1,5 +1,6 @@
 import { Test, type TestingModule } from '@nestjs/testing';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
+import type { Prisma } from '@prisma/client';
 import type { ContentPackage, SalesSnapshot } from '@content/shared';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { CopyService } from '../src/content/copy.service';
@@ -416,7 +417,7 @@ describe('CopyService', () => {
         historyScore: 75
       });
       mockPrisma.generatedCopy.update.mockImplementationOnce(
-        async ({ data }: { where: unknown; data: any }) => ({
+        async ({ data }: { where: unknown; data: Prisma.GeneratedCopyUpdateInput }) => ({
           contentId: 'C2',
           packageId: 'PKG-COPY-001',
           areaId: 'A001',

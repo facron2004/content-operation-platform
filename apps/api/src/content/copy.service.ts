@@ -4,7 +4,9 @@ import type {
   AuditStatus,
   Channel,
   ContentPackage,
+  CopiesResponse,
   GeneratedCopy,
+  GenerateCopiesResponse,
   GenerateCopyRequest,
   SalesSnapshot
 } from '@content/shared';
@@ -49,7 +51,7 @@ export class CopyService {
     });
   }
 
-  async generateCopies(request: GenerateCopyRequest) {
+  async generateCopies(request: GenerateCopyRequest): Promise<GenerateCopiesResponse> {
     if (!request.packageId || !request.channel) {
       throw new BadRequestException('packageId、channel 必填');
     }
@@ -84,7 +86,7 @@ export class CopyService {
     await this.prisma.generatedCopy.createMany({ data: copies.map(copyToDb) });
 
     // 不再自动生成模拟效果数据——CopyPerformance 记录应在真实埋点上报时写入
-    // TODO: 接入真实埋点后，由 tracking webhook 创建 CopyPerformance 记录
+    // (预留:接入 tracking webhook 后由 webhook 创建)
 
     return { contentList: copies };
   }
@@ -93,7 +95,7 @@ export class CopyService {
     filters: { auditStatus?: AuditStatus; channel?: Channel },
     page?: number,
     pageSize?: number
-  ) {
+  ): Promise<CopiesResponse> {
     const { offset, ...pagination } = resolvePagination(page, pageSize, 0);
 
     const [rows, total] = await Promise.all([
@@ -121,7 +123,7 @@ export class CopyService {
     };
   }
 
-  async auditCopy(contentId: string, request: AuditCopyRequest) {
+  async auditCopy(contentId: string, request: AuditCopyRequest): Promise<GeneratedCopy> {
     const row = await this.prisma.generatedCopy.findUnique({ where: { contentId } });
     if (!row) throw new NotFoundException('文案不存在');
 

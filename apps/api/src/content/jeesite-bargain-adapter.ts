@@ -1,5 +1,5 @@
 import type { ContentPackage, SalesSnapshot } from '@content/shared';
-import { clamp } from '../domain/utils';
+import { clamp, clampNonNegative } from '../domain/utils';
 import { splitList } from './mappers';
 
 type AnyRecord = Record<string, unknown>;
@@ -49,7 +49,7 @@ const valueAtPath = (row: AnyRecord, key: string): unknown => {
 const pick = (row: AnyRecord, keys: readonly string[]) => {
   for (const key of keys) {
     const value = valueAtPath(row, key);
-    if (value !== undefined && value !== null && value !== '') return value;
+    if (value != null && value !== '') return value;
   }
   return undefined;
 };
@@ -69,14 +69,17 @@ const number = (row: AnyRecord, keys: RowFieldSet, fallback = 0) => {
   return fallback;
 };
 
+const TRUTHY_VALUES = new Set(['1', 'true', 'yes', 'y', 'on', '是', '开启', '启用']);
+const FALSY_VALUES = new Set(['0', 'false', 'no', 'n', 'off', '否', '关闭', '禁用']);
+
 const boolean = (row: AnyRecord, keys: RowFieldSet, fallback = false) => {
   const value = pick(row, keys);
   if (typeof value === 'boolean') return value;
   if (typeof value === 'number') return value === 1;
   if (typeof value === 'string') {
     const normalized = value.trim().toLowerCase();
-    if (['1', 'true', 'yes', 'y', 'on', '是', '开启', '启用'].includes(normalized)) return true;
-    if (['0', 'false', 'no', 'n', 'off', '否', '关闭', '禁用'].includes(normalized)) return false;
+    if (TRUTHY_VALUES.has(normalized)) return true;
+    if (FALSY_VALUES.has(normalized)) return false;
   }
   return fallback;
 };
@@ -505,11 +508,11 @@ export function mapJeesiteBargainListToDataset(
       );
     })();
     const stockTotal = Number.isFinite(stockTotalFromRow)
-      ? Math.max(0, stockTotalFromRow)
-      : Math.max(0, orderCount + (Number.isFinite(stockLeftFromRow) ? stockLeftFromRow : 0));
+      ? clampNonNegative(stockTotalFromRow)
+      : clampNonNegative(orderCount + (Number.isFinite(stockLeftFromRow) ? stockLeftFromRow : 0));
     const stockLeft = Number.isFinite(stockLeftFromRow)
       ? clamp(stockLeftFromRow, 0, stockTotal || stockLeftFromRow)
-      : Math.max(0, stockTotal - orderCount);
+      : clampNonNegative(stockTotal - orderCount);
 
     const useRules = splitList(
       text(row, [
@@ -580,7 +583,7 @@ export function mapJeesiteBargainListToDataset(
       ['refundAmountCents', 'refund_amount_cents'],
       refundCount * resolvedSalePrice
     );
-    const soldCount = Math.max(0, stockTotal - stockLeft);
+    const soldCount = clampNonNegative(stockTotal - stockLeft);
     const startTime = dateText(
       row,
       [

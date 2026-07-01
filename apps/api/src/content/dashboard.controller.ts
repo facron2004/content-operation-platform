@@ -1,6 +1,7 @@
 ﻿import { Controller, Get, Inject, Query } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import type { UserRole } from '@content/shared';
+import { USER_ROLES } from '@content/shared';
 import { ContentService } from './content.service';
 import { DashboardService } from './dashboard.service';
 import { OpsTodayQueryDto } from './content.dto';
@@ -36,10 +37,7 @@ export class DashboardController {
   @Get('ops/review')
   async getOperationReview(@Query('date') date?: string, @Query('role') role?: string) {
     const validRole =
-      role &&
-      ['platform_operator', 'area_operator', 'merchant_operator', 'auditor', 'admin'].includes(role)
-        ? (role as UserRole)
-        : undefined;
+      role && (USER_ROLES as readonly string[]).includes(role) ? (role as UserRole) : undefined;
     const result = await this.dashboardService.getTodayOperationConsole(validRole, (q) =>
       this.contentService.getRecommendations(q)
     );

@@ -5,6 +5,14 @@ export type UserRole =
   | 'auditor'
   | 'admin';
 
+export const USER_ROLES: readonly UserRole[] = [
+  'platform_operator',
+  'area_operator',
+  'merchant_operator',
+  'auditor',
+  'admin'
+];
+
 export type PackageType = 'welfare' | 'commission' | 'fallback';
 
 export type PackageStatus =
@@ -382,7 +390,13 @@ export const currentPrice = (pkg: ContentPackage): number =>
   pkg.temporarySalePrice ?? pkg.salePrice;
 
 export const formatPrice = (value?: number | null, decimals = 0): string =>
-  value != null && Number.isFinite(value) ? Number(value.toFixed(decimals)).toString() : '-';
+  value != null && Number.isFinite(value) ? Number(value.toFixed(decimals)) : '-';
+
+/** 文案版本号字母表(A-E) —— 模板生成与 AI 生成共用,避免各路径重复定义 */
+export const COPY_VERSION_LETTERS = ['A', 'B', 'C', 'D', 'E'] as const;
+
+/** 默认运营场景(用户未填 scenario 时回落) —— 模板/AI 两条路径共用 */
+export const DEFAULT_SCENARIO = '日常运营推荐';
 
 // ============================================================================
 // 跨服务查询契约 (cross-service query contracts)
@@ -440,40 +454,18 @@ export function latestSnapshotsByPackage<T extends { packageId: string; snapshot
   return result;
 }
 
-/** 从快照列表中取指定 packageId 的最新快照(简化版) */
-export function latestSnapshotForPackage<T extends { packageId: string; snapshotTime: string }>(
-  snapshots: T[],
-  packageId: string
-): T | null {
-  let best: T | null = null;
-  let bestTime = 0;
-  for (const s of snapshots) {
-    if (s.packageId !== packageId) continue;
-    const t = new Date(s.snapshotTime).getTime();
-    if (Number.isFinite(t) && t > bestTime) {
-      best = s;
-      bestTime = t;
-    }
-  }
-  return best;
-}
+/** 把数字格式化为两位字符串(前导 0) */
+const padTwo = (n: number): string => String(n).padStart(2, '0');
 
 /** 格式化日期为 YYYY-MM-DD(本地时间) */
 export function localDateKey(date: Date): string {
   const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
+  return `${year}-${padTwo(date.getMonth() + 1)}-${padTwo(date.getDate())}`;
 }
 
 // ============================================================================
 // 分页工具 (跨前后端共用)
 // ============================================================================
-
-export interface PaginationParams {
-  page?: number;
-  pageSize?: number;
-}
 
 export interface PaginationMeta {
   page: number;

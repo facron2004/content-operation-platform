@@ -13,6 +13,13 @@ import type {
 import { currentPrice } from '@content/shared';
 import { clamp, formatPrice, uniqueText } from './utils';
 
+// 品类分类正则 —— 多处复用,集中在这里便于调整。
+// FOODIE/WELLNESS/PARENT_CHILD/FITNESS 用作 audience/time/group 推断的入口。
+const FOODIE_CATEGORY_RE = /餐|饮|甜品|烧烤|火锅|中餐|西餐/;
+const WELLNESS_CATEGORY_RE = /按摩|水疗|足浴|美容|美发|SPA|汤泉/;
+const PARENT_CHILD_CATEGORY_RE = /亲子|儿童/;
+const FITNESS_CATEGORY_RE = /健身|运动|练习场/;
+
 export function buildBattleCard(
   pkg: RecommendPackageItem,
   score: PackageScoreBreakdown,
@@ -74,7 +81,7 @@ export function buildDerivedCommunities(
       const avgConversion = rows.reduce((sum, row) => sum + row.conversionRate, 0) / rows.length;
       const topCards = rows
         .map((row) => cards.get(row.packageId))
-        .filter((row): row is OperationCard => Boolean(row))
+        .filter((row): row is OperationCard => !!row)
         .sort((a, b) => b.score - a.score)
         .slice(0, 3);
       const topScore = topCards[0]?.score ?? 0;
@@ -213,32 +220,32 @@ function primaryUseRule(pkg: ContentPackage) {
 
 function inferAudience(pkg: ContentPackage) {
   if (/亲子|儿童|乐园/.test(pkg.category + pkg.packageName)) return ['亲子家庭', '周末出行用户'];
-  if (/水疗|按摩|足浴|SPA|汤泉/.test(pkg.category + pkg.packageName))
+  if (WELLNESS_CATEGORY_RE.test(pkg.category + pkg.packageName))
     return ['下班放松用户', '附近白领'];
-  if (/健身|运动|练习场/.test(pkg.category + pkg.packageName))
+  if (FITNESS_CATEGORY_RE.test(pkg.category + pkg.packageName))
     return ['运动爱好者', '周末体验用户'];
   if (/双人|2人/.test(pkg.packageName)) return ['双人结伴用户', '晚餐决策用户'];
   return ['附近用户', '价格敏感用户', '本地生活高频用户'];
 }
 
 function recommendPushTime(pkg: ContentPackage) {
-  if (/餐|饭|烧烤|火锅|甜品|饮品/.test(pkg.category + pkg.packageName)) return '11:30 或 17:40';
-  if (/按摩|水疗|足浴|汤泉/.test(pkg.category + pkg.packageName)) return '18:30 或 20:30';
+  if (FOODIE_CATEGORY_RE.test(pkg.category + pkg.packageName)) return '11:30 或 17:40';
+  if (WELLNESS_CATEGORY_RE.test(pkg.category + pkg.packageName)) return '18:30 或 20:30';
   if (/亲子|运动|景点|门票/.test(pkg.category + pkg.packageName)) return '周五 18:00 或周六 10:00';
   return '12:00 或 18:00';
 }
 
 function inferGroupType(category: string): CommunityGroup['groupType'] {
-  if (/餐|饮|甜品|烧烤|火锅|中餐|西餐/.test(category)) return 'foodie';
-  if (/亲子|儿童/.test(category)) return 'parent_child';
-  if (/按摩|水疗|足浴|美容|美发|SPA|汤泉/.test(category)) return 'wellness';
+  if (FOODIE_CATEGORY_RE.test(category)) return 'foodie';
+  if (PARENT_CHILD_CATEGORY_RE.test(category)) return 'parent_child';
+  if (WELLNESS_CATEGORY_RE.test(category)) return 'wellness';
   return 'mixed';
 }
 
 function communityTypeLabel(category: string) {
-  if (/餐|饮|甜品|烧烤|火锅|中餐|西餐/.test(category)) return '吃喝';
-  if (/按摩|水疗|足浴|美容|美发|SPA|汤泉/.test(category)) return '休闲';
-  if (/亲子|儿童/.test(category)) return '亲子';
+  if (FOODIE_CATEGORY_RE.test(category)) return '吃喝';
+  if (WELLNESS_CATEGORY_RE.test(category)) return '休闲';
+  if (PARENT_CHILD_CATEGORY_RE.test(category)) return '亲子';
   return '本地生活';
 }
 

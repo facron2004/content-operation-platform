@@ -101,26 +101,34 @@ export function useRecommendationsPage() {
 
   watch(
     () => roleStore.currentRole,
-    async () => {
-      await Promise.all([load(true), loadCategoryOptions()]);
+    () => {
+      Promise.all([load(true), loadCategoryOptions()]).catch(() => {
+        /* 错误已由拦截器处理 */
+      });
     }
   );
   watch(
     () => filters.areaId,
-    async () => {
-      await Promise.all([load(true), loadCategoryOptions()]);
+    () => {
+      Promise.all([load(true), loadCategoryOptions()]).catch(() => {
+        /* 错误已由拦截器处理 */
+      });
     }
   );
   watch(
     () => filters.category,
-    async () => {
-      await load(true);
+    () => {
+      load(true).catch(() => {
+        /* 错误已由拦截器处理 */
+      });
     }
   );
   watch(
     () => filters.unsoldOnly,
     () => {
-      load(true);
+      load(true).catch(() => {
+        /* 错误已由拦截器处理 */
+      });
     }
   );
 

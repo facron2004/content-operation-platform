@@ -178,13 +178,17 @@ export class CopyGenerator {
 
   private inferPackageNoun(pkg: ContentPackage): string {
     const name = pkg.packageName.replace(/[|｜]/g, ' ').replace(/\d+$/g, '');
-    if (name.includes('双人')) return '双人餐';
-    if (name.includes('单人')) return '单人餐';
-    if (name.includes('多人')) return '多人餐';
-    if (name.includes('烤肉')) return '烤肉';
-    if (name.includes('火锅')) return '火锅';
-    if (name.includes('下午茶')) return '下午茶';
-    if (name.includes('亲子')) return '亲子套餐';
+    const KEYWORD_TO_NOUN: Array<[string, string]> = [
+      ['双人', '双人餐'],
+      ['单人', '单人餐'],
+      ['多人', '多人餐'],
+      ['烤肉', '烤肉'],
+      ['火锅', '火锅'],
+      ['下午茶', '下午茶'],
+      ['亲子', '亲子套餐']
+    ];
+    const matched = KEYWORD_TO_NOUN.find(([keyword]) => name.includes(keyword));
+    if (matched) return matched[1];
     if (pkg.category && pkg.category !== '餐饮') return pkg.category;
     return '这份套餐';
   }
