@@ -1,5 +1,5 @@
 import { Logger, ServiceUnavailableException } from '@nestjs/common';
-import { exponentialBackoff } from '@content/shared';
+import { exponentialBackoff, sleep } from '@content/shared';
 import { RETRY_BASE_DELAY_MS, RETRY_MAX_DELAY_MS } from '../../domain/utils';
 
 export class RetryHandler {
@@ -52,7 +52,7 @@ export class RetryHandler {
           this.logger.warn(
             `AI copy attempt ${attempt + 1} failed (${err.message}), retrying in ${delayMs}ms...`
           );
-          await new Promise((r) => setTimeout(r, delayMs));
+          await sleep(delayMs);
           continue;
         }
 

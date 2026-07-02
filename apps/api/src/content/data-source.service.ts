@@ -6,7 +6,7 @@ import {
   Inject
 } from '@nestjs/common';
 import type { ContentPackage, SalesSnapshot } from '@content/shared';
-import { clamp, exponentialBackoff, isRecord } from '@content/shared';
+import { clamp, exponentialBackoff, isRecord, sleep } from '@content/shared';
 import { LOGIN_FORM_HTML_MARKER, LOGIN_PAGE_MARKERS } from '../common/login-markers';
 import {
   PAGE_FAILURE_RATIO_THRESHOLD,
@@ -114,7 +114,7 @@ export class DataSourceService {
               `External backend request failed (${packagesUrl}): ${detail}`
             );
           }
-          await this.sleep(exponentialBackoff(attempt, RETRY_BASE_DELAY_MS, RETRY_MAX_DELAY_MS));
+          await sleep(exponentialBackoff(attempt, RETRY_BASE_DELAY_MS, RETRY_MAX_DELAY_MS));
         }
       }
       throw new ServiceUnavailableException('External backend request failed after retries');
@@ -271,12 +271,6 @@ export class DataSourceService {
     } finally {
       clearTimeout(timer);
     }
-  }
-
-  private sleep(ms: number): Promise<void> {
-    return new Promise<void>((resolve) => {
-      setTimeout(resolve, ms);
-    });
   }
 
   private buildCacheKey(source: string) {

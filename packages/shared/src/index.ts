@@ -481,6 +481,12 @@ export const clamp = (value: number, min = 0, max = 100): number =>
 export const exponentialBackoff = (attempt: number, baseMs: number, maxMs: number): number =>
   Math.min(maxMs, baseMs * Math.pow(2, attempt));
 
+/** sleep N 毫秒 — 跨重试/退避路径共用,避免每个文件都重写 setTimeout 包装。 */
+export const sleep = (ms: number): Promise<void> =>
+  new Promise<void>((resolve) => {
+    setTimeout(resolve, ms);
+  });
+
 /** 格式化日期为 YYYY-MM-DD(本地时间) */
 export function localDateKey(date: Date): string {
   const year = date.getFullYear();

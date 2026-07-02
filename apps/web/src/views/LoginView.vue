@@ -60,6 +60,7 @@ import { ElMessage } from 'element-plus';
 import axios from 'axios';
 import { useRouter, useRoute } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
+import { extractErrorMessage } from '../services/http-client';
 
 const authStore = useAuthStore();
 const router = useRouter();
@@ -91,11 +92,7 @@ async function handleLogin() {
     const redirect = (Array.isArray(rawRedirect) ? rawRedirect[0] : rawRedirect) || '/';
     router.push(redirect);
   } catch (e: unknown) {
-    const msg =
-      axios.isAxiosError(e) && e.response?.data?.message
-        ? e.response.data.message
-        : '登录失败，请检查网络连接';
-    error.value = msg;
+    error.value = extractErrorMessage(e, '登录失败，请检查网络连接');
   } finally {
     loading.value = false;
   }
