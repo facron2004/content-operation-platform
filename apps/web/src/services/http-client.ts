@@ -2,6 +2,7 @@ import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios';
 import { ElMessage } from 'element-plus';
 import NProgress from 'nprogress';
 import 'nprogress/nprogress.css';
+import { exponentialBackoff } from '@content/shared';
 import { useAuthStore } from '../stores/auth';
 
 NProgress.configure({
@@ -105,7 +106,7 @@ client.interceptors.response.use(
     const config = error.config as RetryableConfig | undefined;
     if (config && shouldRetry(error) && (config.retryCount ?? 0) < MAX_RETRIES) {
       config.retryCount = (config.retryCount ?? 0) + 1;
-      const retryDelay = RETRY_DELAY * Math.pow(2, config.retryCount - 1);
+      const retryDelay = exponentialBackoff(config.retryCount - 1, RETRY_DELAY, RETRY_DELAY * 8);
       await delay(retryDelay);
       if (config.retryCount > 1) {
         ElMessage.info(`正在重试... (${config.retryCount}/${MAX_RETRIES})`);

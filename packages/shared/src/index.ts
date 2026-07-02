@@ -473,6 +473,14 @@ const padTwo = (n: number): string => String(n).padStart(2, '0');
 export const clamp = (value: number, min = 0, max = 100): number =>
   Math.min(max, Math.max(min, value));
 
+/**
+ * 指数退避(2^attempt * base),结果被 maxMs 封顶。
+ * 前后端共用 —— ai-copy/retry.handler、content/data-source、
+ * auto-login 登录冷却、web http-client 请求重试都依赖同一公式。
+ */
+export const exponentialBackoff = (attempt: number, baseMs: number, maxMs: number): number =>
+  Math.min(maxMs, baseMs * Math.pow(2, attempt));
+
 /** 格式化日期为 YYYY-MM-DD(本地时间) */
 export function localDateKey(date: Date): string {
   const year = date.getFullYear();

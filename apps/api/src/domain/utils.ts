@@ -211,13 +211,3 @@ export const CTR_UNCLEAR_SELLING_POINT_MAX = 0.05;
 /** poor_sales 判定所需的最低曝光量(>= 此值但订单数 < POOR_SALES_ORDER_COUNT_THRESHOLD),
  *  promotion-rules 使用。 */
 export const EXPOSURE_POOR_SALES_MIN = 1500;
-
-/**
- * 指数退避(2^attempt * base),结果被 maxMs 封顶。
- * 用于:
- * - ai-copy/retry.handler (RETRY_BASE_DELAY_MS / RETRY_MAX_DELAY_MS, attempt 0/1/2)
- * - content/data-source.service 同上
- * - content/auto-login.service 登录失败冷却 (COOLDOWN_BASE_MS / COOLDOWN_MAX_MS, attempt 起始 0)
- */
-export const exponentialBackoff = (attempt: number, baseMs: number, maxMs: number): number =>
-  Math.min(maxMs, baseMs * Math.pow(2, attempt));

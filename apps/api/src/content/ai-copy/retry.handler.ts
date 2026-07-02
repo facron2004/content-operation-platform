@@ -1,5 +1,6 @@
 import { Logger, ServiceUnavailableException } from '@nestjs/common';
-import { RETRY_BASE_DELAY_MS, RETRY_MAX_DELAY_MS, exponentialBackoff } from '../../domain/utils';
+import { exponentialBackoff } from '@content/shared';
+import { RETRY_BASE_DELAY_MS, RETRY_MAX_DELAY_MS } from '../../domain/utils';
 
 export class RetryHandler {
   private readonly logger = new Logger(RetryHandler.name);

@@ -6,13 +6,12 @@ import {
   Inject
 } from '@nestjs/common';
 import type { ContentPackage, SalesSnapshot } from '@content/shared';
-import { clamp, isRecord } from '@content/shared';
+import { clamp, exponentialBackoff, isRecord } from '@content/shared';
 import { LOGIN_FORM_HTML_MARKER, LOGIN_PAGE_MARKERS } from '../common/login-markers';
 import {
   PAGE_FAILURE_RATIO_THRESHOLD,
   RETRY_BASE_DELAY_MS,
-  RETRY_MAX_DELAY_MS,
-  exponentialBackoff
+  RETRY_MAX_DELAY_MS
 } from '../domain/utils';
 import { mapJeesiteBargainListToDataset, normalizeJeesiteBaseUrl } from './jeesite-bargain-adapter';
 import { AutoLoginService } from './auto-login.service';

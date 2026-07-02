@@ -1,10 +1,10 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { isRecord } from '@content/shared';
+import { isRecord, exponentialBackoff } from '@content/shared';
 import { assertHostnameNotPrivateAsync } from './jeesite-bargain-adapter';
 import { DEFAULT_USER_AGENT } from './http-headers';
-import { MS_PER_MINUTE, exponentialBackoff } from '../domain/utils';
+import { MS_PER_MINUTE } from '../domain/utils';
 import { containsLoginPageMarker, LOGIN_INVALID_CREDENTIALS_MARKER } from '../common/login-markers';
 
 /** JeeSite 登录后构造的完整 Cookie 模板,使用 `${0}` 替换 sessionId。 */
