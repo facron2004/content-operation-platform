@@ -106,7 +106,7 @@ export class DataSourceService {
             );
           }
           return payload;
-        } catch (error) {
+        } catch (error: unknown) {
           if (attempt === retries) {
             if (error instanceof ServiceUnavailableException) throw error;
             const detail = error instanceof Error ? error.message : String(error);
@@ -189,7 +189,7 @@ export class DataSourceService {
     }
     try {
       return await normalizeJeesiteBaseUrl(raw);
-    } catch (err) {
+    } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       throw new BadRequestException(`EXTERNAL_API_BASE_URL is invalid: ${message}`);
     }

@@ -85,7 +85,7 @@ export class AutoLoginService implements OnModuleInit {
           }
         }
       }
-    } catch (err) {
+    } catch (err: unknown) {
       this.logger.error('Failed to load cookie from cache file:', err);
     }
   }
@@ -95,7 +95,7 @@ export class AutoLoginService implements OnModuleInit {
       const cachePath = path.resolve(process.cwd(), '.cookie.cache');
       await fs.writeFile(cachePath, cookie, 'utf8');
       this.logger.log('Saved valid cookie to .cookie.cache');
-    } catch (err) {
+    } catch (err: unknown) {
       this.logger.error('Failed to save cookie to cache file:', err);
     }
   }
@@ -226,7 +226,7 @@ export class AutoLoginService implements OnModuleInit {
     // 就能让本服务主动探测内网或窃取云凭证。
     try {
       await assertHostnameNotPrivateAsync(new URL(baseUrl).hostname);
-    } catch (err) {
+    } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       this.logger.error(`SSRF guard rejected EXTERNAL_API_BASE_URL: ${message}`);
       return {
@@ -427,7 +427,7 @@ export class AutoLoginService implements OnModuleInit {
         success: true,
         cookie: buildBargainCookie(sessionId)
       };
-    } catch (error) {
+    } catch (error: unknown) {
       this.logger.error(`Login error: ${error instanceof Error ? error.message : 'Unknown error'}`);
       return {
         success: false,

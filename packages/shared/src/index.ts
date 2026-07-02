@@ -395,6 +395,15 @@ export const formatPrice = (value?: number | null, decimals = 0): string => {
   return Number(value.toFixed(decimals)).toString();
 };
 
+/**
+ * 百分比格式化(0.123 -> "12.3%"),NaN/null 回落为 '-'。
+ * 前后端文案共用,避免各自维护一套 (rate * 100).toFixed(N) + '%'。
+ */
+export const formatRatePercent = (value?: number | null, decimals = 1): string => {
+  if (value == null || !Number.isFinite(value)) return '-';
+  return `${(value * 100).toFixed(decimals)}%`;
+};
+
 /** 文案版本号字母表(A-E) —— 模板生成与 AI 生成共用,避免各路径重复定义 */
 export const COPY_VERSION_LETTERS = ['A', 'B', 'C', 'D', 'E'] as const;
 

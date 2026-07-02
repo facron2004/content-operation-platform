@@ -1,5 +1,5 @@
 // --- 中文标签映射 ---
-import { localDateKey } from '@content/shared';
+import { formatRatePercent } from '@content/shared';
 
 export const statusLabels: Record<string, string> = {
   pending_launch: '待开售',
@@ -16,33 +16,10 @@ export const statusLabels: Record<string, string> = {
   conversion_weak: '转化偏弱'
 };
 
-export const strategyLabels: Record<string, string> = {
-  preheat: '预热策略',
-  launch: '开抢策略',
-  sprint: '冲刺策略',
-  fallback: '承接策略',
-  wake_up: '唤醒策略',
-  conversion_optimize: '转化优化',
-  verify_reminder: '核销提醒',
-  merchant_co_promotion: '商家共推',
-  leader_growth: '团长裂变'
-};
-
 export const channelLabels: Record<string, string> = {
   wechat_group: '微信群',
   moments: '朋友圈',
   merchant_share: '商家转发'
-};
-
-export const operationTagLabels: Record<string, string> = {
-  hot_restock_needed: '爆品待补货',
-  continuous_slow: '连续滞销',
-  high_refund_risk: '高退款风险',
-  high_verify_quality: '高核销优质',
-  ending_clearance: '临期清仓',
-  price_advantage: '价格优势明显',
-  fallback_package: '承接套餐',
-  community_focus: '社群专推'
 };
 
 export const alertTypeLabels: Record<string, string> = {
@@ -64,12 +41,6 @@ export const groupTypeLabels: Record<string, string> = {
   merchant: '商家群',
   wellness: '休闲养生',
   mixed: '综合群'
-};
-
-export const packageTypeLabels: Record<string, string> = {
-  commission: '佣金套餐',
-  welfare: '福利套餐',
-  fallback: '承接套餐'
 };
 
 // --- Element Plus Tag 类型映射 ---
@@ -157,10 +128,7 @@ export function formatMoney(value?: number, decimals = 0): string {
 }
 
 /** 百分比格式化 */
-export function percent(value?: number, decimals = 1): string {
-  if (value == null || Number.isNaN(value)) return '-';
-  return `${(value * 100).toFixed(decimals)}%`;
-}
+export const percent = formatRatePercent;
 
 /** 时间格式化（仅显示时:分） */
 export function formatTime(value?: string): string {
@@ -168,14 +136,6 @@ export function formatTime(value?: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '-';
   return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
-}
-
-/** 日期格式化（YYYY-MM-DD） */
-export function formatDate(value?: string): string {
-  if (!value) return '-';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '-';
-  return localDateKey(date);
 }
 
 /** 评分 tooltip：用 dimensions 拼接成 "维度 分数 / 维度 分数" */
@@ -187,9 +147,4 @@ export function scoreTooltip(
     .slice(0, 4)
     .map((item) => `${item.label} ${Math.round(item.score)}`)
     .join(' / ');
-}
-
-/** 判断商家名称是否需要 tooltip（含逗号表示多店通用） */
-export function isMerchantNameTruncated(merchantName: string): boolean {
-  return merchantName.includes(',');
 }

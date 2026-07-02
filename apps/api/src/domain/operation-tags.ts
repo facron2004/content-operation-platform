@@ -6,7 +6,7 @@ import type {
   RecommendPackageItem,
   SalesSnapshot
 } from '@content/shared';
-import { currentPrice } from '@content/shared';
+import { currentPrice, formatRatePercent } from '@content/shared';
 import {
   DEEP_DISCOUNT_RATIO_THRESHOLD,
   HEALTHY_VERIFY_RATE_THRESHOLD,
@@ -81,7 +81,7 @@ export function buildOperationTags(
     add(
       'high_refund_risk',
       'danger',
-      `退款率 ${(snapshot.refundRate * 100).toFixed(1)}%，需要人工确认`
+      `退款率 ${formatRatePercent(snapshot.refundRate)}，需要人工确认`
     );
   }
   if (
@@ -163,7 +163,7 @@ export function buildOperationAlerts(
       'high_refund',
       'danger',
       '高退款',
-      `退款率 ${(snapshot.refundRate * 100).toFixed(1)}%`,
+      `退款率 ${formatRatePercent(snapshot.refundRate)}`,
       '暂停强推，核对规则、库存和履约'
     );
   if (
@@ -174,7 +174,7 @@ export function buildOperationAlerts(
       'low_verify',
       'warning',
       '低核销',
-      `核销率 ${(snapshot.verifyRate * 100).toFixed(1)}%`,
+      `核销率 ${formatRatePercent(snapshot.verifyRate)}`,
       '生成到店提醒和预约说明'
     );
   if (!pkg.useRules.length)

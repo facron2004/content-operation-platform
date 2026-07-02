@@ -57,7 +57,7 @@ export class DailyInventoryCrawlerService {
     this.autoRecordedDates.add(targetDate);
     try {
       return await this.recordDatasetInventory(dataset, targetDate);
-    } catch (error) {
+    } catch (error: unknown) {
       this.autoRecordedDates.delete(targetDate);
       throw error;
     }

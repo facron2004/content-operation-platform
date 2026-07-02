@@ -235,17 +235,7 @@ export interface CookieUpdateResponse {
 }
 
 // ==================== Alert Actions ====================
-
-export interface AlertResolveResponse {
-  success: boolean;
-  message?: string;
-}
-
-export interface AlertBatchResolveResponse {
-  success: boolean;
-  resolved: number;
-  failed: number;
-  errors?: string[];
-}
+// (AlertResolveResponse / AlertBatchResolveResponse removed — no consumers; controllers
+// return untyped JSON and the web side does not import these types.)
 
 // ==================== Battle Card ====================

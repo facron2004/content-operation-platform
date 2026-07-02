@@ -7,6 +7,7 @@ import type {
   SalesSnapshot,
   StrategyType
 } from '@content/shared';
+import { formatRatePercent } from '@content/shared';
 import {
   clamp,
   CONVERSION_WEAK_RATE_THRESHOLD,
@@ -173,7 +174,7 @@ export function generateStrategy(
   if (status === 'nearly_sold_out' || status === 'surging') {
     return {
       recommendedStrategy: 'sprint',
-      reason: `当前库存剩余 ${pkg.stockLeft} 份，转化率 ${(snapshot.conversionRate * 100).toFixed(1)}%，适合继续做库存冲刺。`,
+      reason: `当前库存剩余 ${pkg.stockLeft} 份，转化率 ${formatRatePercent(snapshot.conversionRate)}，适合继续做库存冲刺。`,
       riskTips: ['避免使用全网最低、最后疯抢等绝对化表述'],
       recommendedChannels:
         level === 'S' ? ['wechat_group', 'moments', 'merchant_share'] : ['wechat_group', 'moments'],
@@ -184,7 +185,7 @@ export function generateStrategy(
   if (status === 'high_refund_risk') {
     return {
       recommendedStrategy: 'conversion_optimize',
-      reason: `退款率 ${(snapshot.refundRate * 100).toFixed(1)}%，建议暂停强推广并由运营检查套餐规则和履约情况。`,
+      reason: `退款率 ${formatRatePercent(snapshot.refundRate)}，建议暂停强推广并由运营检查套餐规则和履约情况。`,
       riskTips: ['高退款套餐不得自动生成强推广文案', '建议人工确认商家履约'],
       recommendedChannels: [],
       copyAngles: ['规则解释', '到店限制说明']
@@ -204,7 +205,7 @@ export function generateStrategy(
   if (status === 'low_verify') {
     return {
       recommendedStrategy: 'verify_reminder',
-      reason: `支付后核销率仅 ${(snapshot.verifyRate * 100).toFixed(1)}%，适合生成到店提醒和预约说明。`,
+      reason: `支付后核销率仅 ${formatRatePercent(snapshot.verifyRate)}，适合生成到店提醒和预约说明。`,
       riskTips: ['提醒预约方式，不承诺核销收益'],
       recommendedChannels: ['wechat_group'],
       copyAngles: ['到店提醒', '预约方式', '使用时段']

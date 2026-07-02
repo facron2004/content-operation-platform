@@ -64,7 +64,7 @@ export class HtmlFetcher {
       }
 
       return html;
-    } catch (error) {
+    } catch (error: unknown) {
       this.logger.error(
         `Failed to fetch package detail ${packageId}:`,
         error instanceof Error ? error.message : String(error)

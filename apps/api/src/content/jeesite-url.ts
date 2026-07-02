@@ -123,7 +123,7 @@ export async function assertHostnameNotPrivateAsync(hostname: string): Promise<v
         else resolveAll(addresses);
       });
     });
-  } catch (err) {
+  } catch (err: unknown) {
     throw new Error(
       `EXTERNAL_API_BASE_URL DNS resolution failed for ${hostname}: ${err instanceof Error ? err.message : String(err)}`
     );
