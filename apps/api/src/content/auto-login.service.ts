@@ -5,6 +5,7 @@ import { isRecord, exponentialBackoff } from '@content/shared';
 import { assertHostnameNotPrivateAsync } from './jeesite-bargain-adapter';
 import { DEFAULT_USER_AGENT } from './http-headers';
 import { MS_PER_MINUTE } from '../domain/utils';
+import { msToISO } from '../common/format';
 import { containsLoginPageMarker, LOGIN_INVALID_CREDENTIALS_MARKER } from '../common/login-markers';
 
 /** JeeSite 登录后构造的完整 Cookie 模板,使用 `${0}` 替换 sessionId。 */
@@ -587,7 +588,7 @@ export class AutoLoginService implements OnModuleInit {
         : null,
       failedAttempts: this.failedAttempts,
       cooldownMinutes: cooldownRemainingMinutes,
-      lastLoginTime: this.lastLoginTime > 0 ? new Date(this.lastLoginTime).toISOString() : null
+      lastLoginTime: msToISO(this.lastLoginTime)
     };
   }
 

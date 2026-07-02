@@ -1,7 +1,7 @@
 import type { ContentPackage, SalesSnapshot } from '@content/shared';
 import { isRecord } from '@content/shared';
 import { clamp, clampNonNegative, MS_PER_DAY } from '../domain/utils';
-import { safeRatio, nowISO } from '../common/format';
+import { futureISO, safeRatio, nowISO } from '../common/format';
 import { splitList } from './mappers';
 
 // URL 归一化与 SSRF 防御已下沉到独立模块,这里 re-export 以保持旧的导入路径不破坏,
@@ -464,7 +464,7 @@ export function mapJeesiteBargainListToDataset(
         'expireTime',
         'expire_time'
       ],
-      new Date(Date.now() + MS_PER_DAY * 7).toISOString()
+      futureISO(MS_PER_DAY * 7)
     );
     const rating = number(row, ['rating', 'score', 'merchantScore', 'merchant_score'], 4.6);
     const scoreSeed = rating > 5 ? rating : rating * 18;
