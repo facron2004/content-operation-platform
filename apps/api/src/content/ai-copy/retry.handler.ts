@@ -1,5 +1,5 @@
 import { Logger, ServiceUnavailableException } from '@nestjs/common';
-import { RETRY_BASE_DELAY_MS } from '../../domain/utils';
+import { RETRY_BASE_DELAY_MS, RETRY_MAX_DELAY_MS, exponentialBackoff } from '../../domain/utils';
 
 export class RetryHandler {
   private readonly logger = new Logger(RetryHandler.name);
@@ -47,7 +47,7 @@ export class RetryHandler {
         const isRetryable = statusCode === undefined || statusCode >= 500;
 
         if (attempt < this.maxRetries && isRetryable) {
-          const delayMs = RETRY_BASE_DELAY_MS * Math.pow(2, attempt);
+          const delayMs = exponentialBackoff(attempt, RETRY_BASE_DELAY_MS, RETRY_MAX_DELAY_MS);
           this.logger.warn(
             `AI copy attempt ${attempt + 1} failed (${err.message}), retrying in ${delayMs}ms...`
           );

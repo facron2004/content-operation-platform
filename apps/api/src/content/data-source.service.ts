@@ -11,7 +11,8 @@ import { LOGIN_FORM_HTML_MARKER, LOGIN_PAGE_MARKERS } from '../common/login-mark
 import {
   PAGE_FAILURE_RATIO_THRESHOLD,
   RETRY_BASE_DELAY_MS,
-  RETRY_MAX_DELAY_MS
+  RETRY_MAX_DELAY_MS,
+  exponentialBackoff
 } from '../domain/utils';
 import { mapJeesiteBargainListToDataset, normalizeJeesiteBaseUrl } from './jeesite-bargain-adapter';
 import { AutoLoginService } from './auto-login.service';
@@ -114,9 +115,7 @@ export class DataSourceService {
               `External backend request failed (${packagesUrl}): ${detail}`
             );
           }
-          await this.sleep(
-            Math.min(RETRY_BASE_DELAY_MS * Math.pow(2, attempt), RETRY_MAX_DELAY_MS)
-          );
+          await this.sleep(exponentialBackoff(attempt, RETRY_BASE_DELAY_MS, RETRY_MAX_DELAY_MS));
         }
       }
       throw new ServiceUnavailableException('External backend request failed after retries');

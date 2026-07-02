@@ -4,7 +4,7 @@ import * as path from 'path';
 import { isRecord } from '@content/shared';
 import { assertHostnameNotPrivateAsync } from './jeesite-bargain-adapter';
 import { DEFAULT_USER_AGENT } from './http-headers';
-import { MS_PER_MINUTE } from '../domain/utils';
+import { MS_PER_MINUTE, exponentialBackoff } from '../domain/utils';
 import { containsLoginPageMarker, LOGIN_INVALID_CREDENTIALS_MARKER } from '../common/login-markers';
 
 /** JeeSite 登录后构造的完整 Cookie 模板,使用 `${0}` 替换 sessionId。 */
@@ -39,7 +39,7 @@ const fetchWithTimeout = async (input: string, init?: RequestInit): Promise<Resp
 
 /** 计算当前失败次数下的退避等待时长(ms)。 */
 const computeCooldownMs = (failedAttempts: number): number =>
-  Math.min(COOLDOWN_MAX_MS, COOLDOWN_BASE_MS * Math.pow(2, failedAttempts - 3));
+  exponentialBackoff(failedAttempts - 3, COOLDOWN_BASE_MS, COOLDOWN_MAX_MS);
 
 interface LoginResult {
   success: boolean;
@@ -393,7 +393,7 @@ export class AutoLoginService implements OnModuleInit {
       }
 
       // 解析 Cookie - 处理多个 Set-Cookie 头
-      const cookies = this.parseCookies(loginSetCookieHeader);
+      const cookies = this.parseAllSetCookies(loginSetCookieHeader);
       this.logger.debug(`Parsed cookies: ${JSON.stringify(Object.keys(cookies))}`);
 
       const sessionId = cookies['jeesite.session.id'];
@@ -480,26 +480,6 @@ export class AutoLoginService implements OnModuleInit {
     } catch {
       return false;
     }
-  }
-
-  private parseCookies(setCookieHeader: string): Record<string, string> {
-    const cookies: Record<string, string> = {};
-
-    // Set-Cookie 头可能包含多个 cookie，但不能简单用逗号分割
-    // 因为 expires 属性也包含逗号。我们需要更智能的解析
-    // 通常每个 cookie 以 "name=value" 开始，后面跟着属性（用分号分隔）
-
-    // 先尝试按分号分割，取第一个 name=value 对
-    const firstCookie = setCookieHeader.split(';')[0];
-    const parts = firstCookie.split('=');
-    if (parts.length >= 2) {
-      const name = parts[0].trim();
-      const value = parts.slice(1).join('=').trim(); // 处理值中可能包含 = 的情况
-      cookies[name] = value;
-      this.logger.debug(`Parsed cookie: ${name}=***`);
-    }
-
-    return cookies;
   }
 
   private parseAllSetCookies(setCookieHeader: string): Record<string, string> {

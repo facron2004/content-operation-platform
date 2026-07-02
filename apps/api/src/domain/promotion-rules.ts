@@ -10,7 +10,12 @@ import type {
 import { formatRatePercent } from '@content/shared';
 import {
   clamp,
+  CLICK_CONVERSION_WEAK_MIN,
   CONVERSION_WEAK_RATE_THRESHOLD,
+  CTR_UNCLEAR_SELLING_POINT_MAX,
+  EXPOSURE_COLD_START_MAX,
+  EXPOSURE_POOR_SALES_MIN,
+  EXPOSURE_UNCLEAR_SELLING_POINT_MIN,
   HEALTHY_VERIFY_RATE_THRESHOLD,
   HEALTHY_VERIFY_REFUND_RATE_CAP,
   HIGH_REFUND_RATE_THRESHOLD,
@@ -83,13 +88,22 @@ export function calculatePackageStatus(
     snapshot.conversionRate >= SURGING_CONVERSION_RATE_THRESHOLD
   )
     return 'surging';
-  if (snapshot.exposureCount < 500) return 'cold_start';
-  if (snapshot.exposureCount >= 1500 && snapshot.clickCount / snapshot.exposureCount < 0.05) {
+  if (snapshot.exposureCount < EXPOSURE_COLD_START_MAX) return 'cold_start';
+  if (
+    snapshot.exposureCount >= EXPOSURE_UNCLEAR_SELLING_POINT_MIN &&
+    snapshot.clickCount / snapshot.exposureCount < CTR_UNCLEAR_SELLING_POINT_MAX
+  ) {
     return 'unclear_selling_point';
   }
-  if (snapshot.clickCount >= 100 && snapshot.conversionRate < CONVERSION_WEAK_RATE_THRESHOLD)
+  if (
+    snapshot.clickCount >= CLICK_CONVERSION_WEAK_MIN &&
+    snapshot.conversionRate < CONVERSION_WEAK_RATE_THRESHOLD
+  )
     return 'conversion_weak';
-  if (snapshot.exposureCount >= 1500 && snapshot.orderCount < POOR_SALES_ORDER_COUNT_THRESHOLD)
+  if (
+    snapshot.exposureCount >= EXPOSURE_POOR_SALES_MIN &&
+    snapshot.orderCount < POOR_SALES_ORDER_COUNT_THRESHOLD
+  )
     return 'poor_sales';
   if (
     snapshot.verifyRate >= HEALTHY_VERIFY_RATE_THRESHOLD &&
