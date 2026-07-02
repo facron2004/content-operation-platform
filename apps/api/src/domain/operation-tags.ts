@@ -8,8 +8,13 @@ import type {
 } from '@content/shared';
 import { currentPrice } from '@content/shared';
 import {
+  DEEP_DISCOUNT_RATIO_THRESHOLD,
   HEALTHY_VERIFY_RATE_THRESHOLD,
+  HEALTHY_VERIFY_REFUND_RATE_CAP,
   HIGH_REFUND_RATE_THRESHOLD,
+  LOW_VERIFY_PAID_ORDER_COUNT_THRESHOLD,
+  LOW_VERIFY_RATE_THRESHOLD,
+  MS_PER_HOUR,
   SALES_SPEED_HOT_THRESHOLD
 } from './utils';
 
@@ -53,7 +58,7 @@ export function buildOperationTags(
   };
   const price = currentPrice(pkg);
   const discount = pkg.originalPrice > 0 ? price / pkg.originalPrice : 1;
-  const endHours = (new Date(pkg.endTime).getTime() - now.getTime()) / 36e5;
+  const endHours = (new Date(pkg.endTime).getTime() - now.getTime()) / MS_PER_HOUR;
 
   if (
     isHotByDailyStock(pkg) ||
@@ -79,13 +84,16 @@ export function buildOperationTags(
       `退款率 ${(snapshot.refundRate * 100).toFixed(1)}%，需要人工确认`
     );
   }
-  if (snapshot.verifyRate >= HEALTHY_VERIFY_RATE_THRESHOLD && snapshot.refundRate <= 0.05) {
+  if (
+    snapshot.verifyRate >= HEALTHY_VERIFY_RATE_THRESHOLD &&
+    snapshot.refundRate <= HEALTHY_VERIFY_REFUND_RATE_CAP
+  ) {
     add('high_verify_quality', 'success', '核销质量好，适合做口碑和商家共推');
   }
   if (endHours > 0 && endHours <= 48 && pkg.stockLeft > 0) {
     add('ending_clearance', 'warning', '距离结束不足 48 小时，适合清仓提醒');
   }
-  if (discount <= 0.5 && price > 0) {
+  if (discount <= DEEP_DISCOUNT_RATIO_THRESHOLD && price > 0) {
     add('price_advantage', 'success', '当前价低于原价 5 折，可突出价格利益点');
   }
   if (pkg.packageType === 'fallback' || pkg.fallbackPackageId) {
@@ -158,7 +166,10 @@ export function buildOperationAlerts(
       `退款率 ${(snapshot.refundRate * 100).toFixed(1)}%`,
       '暂停强推，核对规则、库存和履约'
     );
-  if (snapshot.paidOrderCount >= 10 && snapshot.verifyRate < 0.25)
+  if (
+    snapshot.paidOrderCount >= LOW_VERIFY_PAID_ORDER_COUNT_THRESHOLD &&
+    snapshot.verifyRate < LOW_VERIFY_RATE_THRESHOLD
+  )
     add(
       'low_verify',
       'warning',
@@ -166,7 +177,7 @@ export function buildOperationAlerts(
       `核销率 ${(snapshot.verifyRate * 100).toFixed(1)}%`,
       '生成到店提醒和预约说明'
     );
-  if (pkg.useRules.length === 0)
+  if (!pkg.useRules.length)
     add(
       'missing_use_rules',
       'warning',
@@ -174,7 +185,7 @@ export function buildOperationAlerts(
       '套餐缺少使用规则，文案风险较高',
       '抓取详情或人工补充规则'
     );
-  if (pkg.sellingPoints.length === 0)
+  if (!pkg.sellingPoints.length)
     add(
       'missing_selling_points',
       'info',

@@ -1,8 +1,11 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { isRecord } from '@content/shared';
 import { assertHostnameNotPrivateAsync } from './jeesite-bargain-adapter';
 import { DEFAULT_USER_AGENT } from './http-headers';
+import { MS_PER_MINUTE } from '../domain/utils';
+import { containsLoginPageMarker, LOGIN_INVALID_CREDENTIALS_MARKER } from '../common/login-markers';
 
 /** JeeSite 登录后构造的完整 Cookie 模板,使用 `${0}` 替换 sessionId。 */
 const BARGAIN_COOKIE_TEMPLATE =
@@ -10,6 +13,33 @@ const BARGAIN_COOKIE_TEMPLATE =
 
 const buildBargainCookie = (sessionId: string): string =>
   BARGAIN_COOKIE_TEMPLATE.replace('${sessionId}', sessionId);
+
+/** 已缓存 Cookie 的有效期上限(2 小时),超过则视为过期需重新登录。 */
+const CACHED_COOKIE_TTL_MS = 2 * 60 * MS_PER_MINUTE;
+
+/** 登录失败指数退避的基准时长(5 分钟),第 N 次失败后等待 `BASE * 2^(N-3)`。 */
+const COOLDOWN_BASE_MS = 5 * MS_PER_MINUTE;
+
+/** 登录失败指数退避的最大等待时长(30 分钟)。 */
+const COOLDOWN_MAX_MS = 30 * MS_PER_MINUTE;
+
+/** 登录/校验阶段的网络请求超时上限,避免远端卡顿时阻塞请求链路。 */
+const LOGIN_FETCH_TIMEOUT_MS = 8_000;
+
+/** fetch with timeout:通过 AbortController 在超时后取消请求,避免挂起。 */
+const fetchWithTimeout = async (input: string, init?: RequestInit): Promise<Response> => {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), LOGIN_FETCH_TIMEOUT_MS);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
+/** 计算当前失败次数下的退避等待时长(ms)。 */
+const computeCooldownMs = (failedAttempts: number): number =>
+  Math.min(COOLDOWN_MAX_MS, COOLDOWN_BASE_MS * Math.pow(2, failedAttempts - 3));
 
 interface LoginResult {
   success: boolean;
@@ -116,7 +146,7 @@ export class AutoLoginService implements OnModuleInit {
     if (this.failedAttempts < 3) return undefined;
 
     const timeSinceLastFail = now - this.lastFailedTime;
-    const waitTime = Math.min(30 * 60 * 1000, 5 * 60 * 1000 * Math.pow(2, this.failedAttempts - 3));
+    const waitTime = computeCooldownMs(this.failedAttempts);
     if (timeSinceLastFail >= waitTime) {
       this.logger.log('Cooldown period expired, resetting failed attempts counter');
       this.failedAttempts = 0;
@@ -131,7 +161,7 @@ export class AutoLoginService implements OnModuleInit {
   }
 
   private getFreshCachedCookie(now: number) {
-    if (this.cachedCookie && now - this.lastLoginTime < 2 * 60 * 60 * 1000) {
+    if (this.cachedCookie && now - this.lastLoginTime < CACHED_COOKIE_TTL_MS) {
       this.logger.debug('Using cached cookie');
       return this.cachedCookie;
     }
@@ -212,7 +242,7 @@ export class AutoLoginService implements OnModuleInit {
       const loginPageUrl = `${baseUrl}/login`;
       this.logger.debug(`Fetching login page: ${loginPageUrl}`);
 
-      const pageResponse = await fetch(loginPageUrl, {
+      const pageResponse = await fetchWithTimeout(loginPageUrl, {
         method: 'GET',
         redirect: 'manual'
       });
@@ -343,7 +373,10 @@ export class AutoLoginService implements OnModuleInit {
 
       // 如果不是重定向，检查响应内容
       const responseText = await loginResponse.text();
-      if (responseText.includes('loginForm') || responseText.includes('用户名或密码错误')) {
+      if (
+        responseText.includes('loginForm') ||
+        responseText.includes(LOGIN_INVALID_CREDENTIALS_MARKER)
+      ) {
         this.logger.error('Login failed: Invalid credentials or login form still present');
         return {
           success: false,
@@ -417,7 +450,7 @@ export class AutoLoginService implements OnModuleInit {
 
       const testUrl = `${baseUrl}/bargain/bargainCommodity/listData?pageSize=1&pageNo=1`;
 
-      const response = await fetch(testUrl, {
+      const response = await fetchWithTimeout(testUrl, {
         headers: {
           Cookie: cookie,
           'x-ajax': 'json'
@@ -430,22 +463,17 @@ export class AutoLoginService implements OnModuleInit {
 
       const text = await response.text();
       // 检查是否返回了登录页面
-      if (text.includes('loginForm') || text.includes('/a/login')) {
+      if (containsLoginPageMarker(text)) {
         return false;
       }
 
       // 检查是否返回了有效的 JSON
       try {
         const data = JSON.parse(text);
-        if (
-          data &&
-          typeof data === 'object' &&
-          'result' in data &&
-          (data as { result?: unknown }).result === 'login'
-        ) {
+        if (isRecord(data) && data.result === 'login') {
           return false;
         }
-        return data && typeof data === 'object';
+        return isRecord(data);
       } catch {
         return false;
       }
@@ -564,10 +592,7 @@ export class AutoLoginService implements OnModuleInit {
         ? Math.max(
             0,
             Math.ceil(
-              (Math.min(30 * 60 * 1000, 5 * 60 * 1000 * Math.pow(2, this.failedAttempts - 3)) -
-                (now - this.lastFailedTime)) /
-                1000 /
-                60
+              (computeCooldownMs(this.failedAttempts) - (now - this.lastFailedTime)) / 60000
             )
           )
         : 0;

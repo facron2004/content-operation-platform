@@ -6,6 +6,8 @@ import {
   HttpStatus,
   Logger
 } from '@nestjs/common';
+import { isRecord } from '@content/shared';
+import { nowISO } from './format';
 import type { Response } from 'express';
 
 @Catch()
@@ -18,17 +20,16 @@ export class GlobalExceptionFilter implements ExceptionFilter {
 
     let status = HttpStatus.INTERNAL_SERVER_ERROR;
     let message = 'Internal Server Error';
-    let details: unknown = undefined;
+    let details: unknown;
 
     if (exception instanceof HttpException) {
       status = exception.getStatus();
       const res = exception.getResponse();
       if (typeof res === 'string') {
         message = res;
-      } else if (typeof res === 'object' && res !== null) {
-        const obj = res as Record<string, unknown>;
-        message = (obj.message as string) ?? exception.message;
-        details = obj;
+      } else if (isRecord(res)) {
+        message = (res.message as string) ?? exception.message;
+        details = res;
       }
     } else if (exception instanceof Error) {
       message = exception.message;
@@ -40,7 +41,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     const body: Record<string, unknown> = {
       statusCode: status,
       message,
-      timestamp: new Date().toISOString(),
+      timestamp: nowISO(),
       path: response.req?.url
     };
 

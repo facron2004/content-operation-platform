@@ -9,12 +9,20 @@ import type {
 } from '@content/shared';
 import {
   clamp,
+  CONVERSION_WEAK_RATE_THRESHOLD,
   HEALTHY_VERIFY_RATE_THRESHOLD,
+  HEALTHY_VERIFY_REFUND_RATE_CAP,
   HIGH_REFUND_RATE_THRESHOLD,
   INVENTORY_BACKLOG_DAYS_THRESHOLD,
+  LOW_VERIFY_PAID_ORDER_COUNT_THRESHOLD,
+  LOW_VERIFY_RATE_THRESHOLD,
   MS_PER_DAY,
+  NEARLY_SOLD_OUT_PAID_ORDER_THRESHOLD,
+  POOR_SALES_ORDER_COUNT_THRESHOLD,
   SALES_SPEED_HOT_THRESHOLD,
-  scoreLevel
+  scoreLevel,
+  SURGING_CONVERSION_RATE_THRESHOLD,
+  SURGING_SALES_SPEED_THRESHOLD
 } from './utils';
 
 interface StrategyResult {
@@ -63,22 +71,35 @@ export function calculatePackageStatus(
   const stockRatio = pkg.stockTotal === 0 ? 0 : pkg.stockLeft / pkg.stockTotal;
   if (
     stockRatio < 0.2 &&
-    snapshot.paidOrderCount >= 10 &&
+    snapshot.paidOrderCount >= NEARLY_SOLD_OUT_PAID_ORDER_THRESHOLD &&
     snapshot.salesSpeed >= SALES_SPEED_HOT_THRESHOLD
   ) {
     return 'nearly_sold_out';
   }
 
-  if (snapshot.salesSpeed >= 20 && snapshot.conversionRate >= 0.1) return 'surging';
+  if (
+    snapshot.salesSpeed >= SURGING_SALES_SPEED_THRESHOLD &&
+    snapshot.conversionRate >= SURGING_CONVERSION_RATE_THRESHOLD
+  )
+    return 'surging';
   if (snapshot.exposureCount < 500) return 'cold_start';
   if (snapshot.exposureCount >= 1500 && snapshot.clickCount / snapshot.exposureCount < 0.05) {
     return 'unclear_selling_point';
   }
-  if (snapshot.clickCount >= 100 && snapshot.conversionRate < 0.06) return 'conversion_weak';
-  if (snapshot.exposureCount >= 1500 && snapshot.orderCount < 8) return 'poor_sales';
-  if (snapshot.verifyRate >= HEALTHY_VERIFY_RATE_THRESHOLD && snapshot.refundRate <= 0.05)
+  if (snapshot.clickCount >= 100 && snapshot.conversionRate < CONVERSION_WEAK_RATE_THRESHOLD)
+    return 'conversion_weak';
+  if (snapshot.exposureCount >= 1500 && snapshot.orderCount < POOR_SALES_ORDER_COUNT_THRESHOLD)
+    return 'poor_sales';
+  if (
+    snapshot.verifyRate >= HEALTHY_VERIFY_RATE_THRESHOLD &&
+    snapshot.refundRate <= HEALTHY_VERIFY_REFUND_RATE_CAP
+  )
     return 'high_verify';
-  if (snapshot.paidOrderCount >= 12 && snapshot.verifyRate < 0.25) return 'low_verify';
+  if (
+    snapshot.paidOrderCount >= LOW_VERIFY_PAID_ORDER_COUNT_THRESHOLD &&
+    snapshot.verifyRate < LOW_VERIFY_RATE_THRESHOLD
+  )
+    return 'low_verify';
 
   return 'healthy_sales';
 }

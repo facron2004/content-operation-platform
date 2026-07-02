@@ -6,10 +6,17 @@ import type {
   PromotionScore,
   StrategyType
 } from '@content/shared';
-import { COPY_VERSION_LETTERS, currentPrice, DEFAULT_SCENARIO } from '@content/shared';
+import {
+  COPY_VERSION_LETTERS,
+  clamp,
+  currentPrice,
+  DEFAULT_SCENARIO,
+  randomShortId
+} from '@content/shared';
 import { getSubwayStation } from './subway-stations';
 import { getCategoryEmoji, getDishEmoji } from './category-emoji';
-import { priceString } from './utils';
+import { escapeRegExp, priceString } from './utils';
+import { nowISO, safeRatio } from '../common/format';
 
 // Re-export for external consumers
 import type { PackageDetail } from '../content/package-detail.service';
@@ -29,10 +36,24 @@ interface AuditResult {
 
 const forbiddenWords = ['全网最低', '最后疯抢', '错过后悔', '稳赚', '保证返利'];
 
+// 审核用的业务正则 —— 提到模块顶层,避免每次 auditCopyText 调用都重编译
+const INVENTED_PRICE_RE =
+  /(?:原价|福利价|优惠价|今日价|当前可用价)\s*\d+(?:\.\d+)?|(?:\d+(?:\.\d+)?)\s*元/;
+const BARGAIN_PRICE_9_9_RE = /(^|[^\d.])9\.9([^\d.]|$)/;
+const STOCK_MENTION_RE = /剩余\d+|限量\d+/;
+const SOLD_OUT_FORBIDDEN_RE = /开抢|可抢|抢购/;
+
 // ---- 纯工具函数 ----
 
 const calculateSavings = (originalPrice: number, currentPrice: number): number =>
   Math.round(originalPrice - currentPrice);
+
+/**
+ * 折扣"折"值(currentPrice / originalPrice * 10,四舍五入)。
+ * 文案里"5 折"对应 5;"10 折"对应原价。
+ */
+const priceToDiscount = (currentPrice: number, originalPrice: number): number =>
+  Math.round(safeRatio(currentPrice, originalPrice) * 10);
 
 const getStoreCount = (useRules: string[]): number | null => {
   for (const rule of useRules) {
@@ -73,7 +94,7 @@ const extractBrandFullName = (merchantName: string): string =>
 
 const simplifyPackageName = (packageName: string, brandShort: string): string => {
   const cleaned = packageName.replace(
-    new RegExp(`^${brandShort.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*[|｜]\\s*`, 'i'),
+    new RegExp(`^${escapeRegExp(brandShort)}\\s*[|｜]\\s*`, 'i'),
     ''
   );
   return cleaned.trim() || packageName;
@@ -107,7 +128,7 @@ const buildLocationLine = (
   locationNames: string[]
 ): string => {
   const storeCount = getStoreCount(pkg.useRules);
-  if (storeCount && storeCount > 1 && locationNames.length > 0) {
+  if ((storeCount ?? 0) > 1 && locationNames.length > 0) {
     const shown = locationNames.slice(0, 5).join('/');
     const suffix = locationNames.length > 5 ? '等' : '';
     return `📍 ${storeCount}店适用：${shown}${suffix}  打开定位搜${brandShort}就近下单核销！`;
@@ -139,7 +160,7 @@ const buildTitleCtx = (pkg: ContentPackage): TitleCtx => {
     category: pkg.category,
     currentPrice: pkgPrice,
     savings: calculateSavings(pkg.originalPrice, pkgPrice),
-    discountZhe: Math.round((pkgPrice / pkg.originalPrice) * 10),
+    discountZhe: priceToDiscount(pkgPrice, pkg.originalPrice),
     storeCount: getStoreCount(pkg.useRules),
     locationNames: extractLocationNames(pkg.merchantName)
   };
@@ -250,19 +271,17 @@ export function auditCopyText(pkg: ContentPackage, copy: CopyDraftForAudit): Aud
   const pkgPrice = currentPrice(pkg);
   const expectedPrices = [priceString(pkg.originalPrice), priceString(pkgPrice)];
   const hasKnownPrice = expectedPrices.some((price) => price && text.includes(price));
-  const inventedPrice =
-    /(?:原价|福利价|优惠价|今日价|当前可用价)\s*\d+(?:\.\d+)?|(?:\d+(?:\.\d+)?)\s*元/.test(text) &&
-    !hasKnownPrice;
-  if (inventedPrice || (/(^|[^\d.])9\.9([^\d.]|$)/.test(text) && !expectedPrices.includes('9.9'))) {
+  const inventedPrice = INVENTED_PRICE_RE.test(text) && !hasKnownPrice;
+  if (inventedPrice || (BARGAIN_PRICE_9_9_RE.test(text) && !expectedPrices.includes('9.9'))) {
     riskTips.push('文案价格与套餐价格不一致');
   }
 
-  const mentionsStock = /剩余\d+|限量\d+/.test(text);
+  const mentionsStock = STOCK_MENTION_RE.test(text);
   if (mentionsStock && !text.includes(`${pkg.stockLeft}`) && !text.includes(`${pkg.stockTotal}`)) {
     riskTips.push('文案库存与实时库存不一致');
   }
 
-  if (pkg.stockLeft <= 0 && /开抢|可抢|抢购/.test(text)) {
+  if (pkg.stockLeft <= 0 && SOLD_OUT_FORBIDDEN_RE.test(text)) {
     riskTips.push('售罄套餐不得继续宣传可抢');
   }
 
@@ -273,8 +292,8 @@ export function auditCopyText(pkg: ContentPackage, copy: CopyDraftForAudit): Aud
     }
   }
 
-  const riskLevel = riskTips.some(
-    (tip) => tip.includes('禁用') || tip.includes('价格') || tip.includes('库存')
+  const riskLevel = riskTips.some((tip) =>
+    ['禁用', '价格', '库存'].some((keyword) => tip.includes(keyword))
   )
     ? 'high'
     : riskTips.length > 0
@@ -298,9 +317,9 @@ export function generateTemplateCopies(
   request: GenerateCopyRequest,
   packageDetail: PackageDetail | null = null
 ): GeneratedCopy[] {
-  const count = Math.max(1, Math.min(request.copyCount || 3, 5));
+  const count = clamp(request.copyCount || 3, 1, 5);
   const scenario = request.scenario?.trim() || DEFAULT_SCENARIO;
-  const now = new Date().toISOString();
+  const now = nowISO();
   const baseTimestamp = Date.now();
 
   // 预计算一次共享上下文
@@ -334,7 +353,7 @@ export function generateTemplateCopies(
     const audit = auditCopyText(pkg, { title, body, strategyType: config.strategy });
 
     return {
-      contentId: `C${baseTimestamp}${Math.random().toString(36).slice(2, 7)}`,
+      contentId: `C${baseTimestamp}${randomShortId()}`,
       packageId: pkg.packageId,
       areaId: pkg.areaId,
       merchantId: pkg.merchantId,

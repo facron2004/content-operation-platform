@@ -1,5 +1,5 @@
 import { computed, ref, watch, type Ref } from 'vue';
-import type { OperationAlert, OperationCard } from '@content/shared';
+import { localDateKey, type OperationAlert, type OperationCard } from '@content/shared';
 import { api, type ConsoleResponse } from '../../../services/api';
 import { clearDashboardCache } from '../../../services/cache.service';
 
@@ -105,7 +105,7 @@ export function useDashboard(role: Ref<string | undefined>) {
   const activeFocus = ref('all');
 
   const summary = computed(() => consoleData.value.summary);
-  const todayText = computed(() => new Date().toISOString().slice(0, 10));
+  const todayText = computed(() => localDateKey(new Date()));
 
   const load = async (force = false) => {
     loading.value = true;

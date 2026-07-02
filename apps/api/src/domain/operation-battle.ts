@@ -11,7 +11,16 @@ import type {
   OperationCard
 } from '@content/shared';
 import { currentPrice } from '@content/shared';
-import { clamp, formatPrice, uniqueText } from './utils';
+import {
+  clamp,
+  DEEP_DISCOUNT_RATIO_THRESHOLD,
+  formatPrice,
+  HIGH_CONVERSION_RATE_THRESHOLD,
+  LOW_STOCK_WARNING_THRESHOLD,
+  MAX_DERIVED_COMMUNITY_GROUPS,
+  uniqueText
+} from './utils';
+import { nowISO } from '../common/format';
 
 // 品类分类正则 —— 多处复用,集中在这里便于调整。
 // FOODIE/WELLNESS/PARENT_CHILD/FITNESS 用作 audience/time/group 推断的入口。
@@ -47,7 +56,7 @@ export function buildBattleCard(
   return {
     packageId: pkg.packageId,
     packageName: pkg.packageName,
-    generatedAt: new Date().toISOString(),
+    generatedAt: nowISO(),
     recommendationReason: score.reasons[0] ?? tags[0]?.reason ?? pkg.reason,
     targetAudience: audience,
     suitableChannels: channels,
@@ -74,7 +83,7 @@ export function buildDerivedCommunities(
     grouped.set(key, [...(grouped.get(key) ?? []), pkg]);
   }
 
-  return Array.from(grouped.entries())
+  return [...grouped.entries()]
     .map(([key, rows], index) => {
       const [areaId] = key.split(':');
       const first = rows[0];
@@ -99,7 +108,7 @@ export function buildDerivedCommunities(
       } satisfies CommunityGroup;
     })
     .sort((a, b) => b.activityScore - a.activityScore)
-    .slice(0, 12);
+    .slice(0, MAX_DERIVED_COMMUNITY_GROUPS);
 }
 
 export function buildCommunityTasks(communities: CommunityGroup[]): CommunityPushTask[] {
@@ -155,7 +164,7 @@ export function buildDailyReview(
       groupName: row.groupId!,
       conversionRate: row.conversionRate,
       reason:
-        row.conversionRate >= 0.12
+        row.conversionRate >= HIGH_CONVERSION_RATE_THRESHOLD
           ? '昨日转化高，建议继续安排同品类'
           : '有转化基础，可继续小流量测试'
     }));
@@ -188,7 +197,7 @@ export function buildDailyReview(
 function buildSellingPoints(pkg: RecommendPackageItem, price: number) {
   const discount = pkg.originalPrice > 0 ? price / pkg.originalPrice : 1;
   const pricePoint =
-    discount <= 0.5
+    discount <= DEEP_DISCOUNT_RATIO_THRESHOLD
       ? `到手约 ${Math.round(discount * 100) / 10} 折`
       : price > 0
         ? `当前售价 ${formatPrice(price, 2)} 元`
@@ -205,7 +214,8 @@ function buildSellingPoints(pkg: RecommendPackageItem, price: number) {
 
 function stockCue(pkg: RecommendPackageItem) {
   if (pkg.stockLeft <= 0) return 'JeeSite 显示当前已售罄，先确认补货或承接套餐';
-  if (pkg.stockLeft <= 10) return `JeeSite 剩余 ${pkg.stockLeft} 份，适合做限量提醒`;
+  if (pkg.stockLeft <= LOW_STOCK_WARNING_THRESHOLD)
+    return `JeeSite 剩余 ${pkg.stockLeft} 份，适合做限量提醒`;
   if (pkg.inventorySoldOutDays >= 2) return `近几日多次售罄，当前补到 ${pkg.stockLeft} 份`;
   if (pkg.inventoryObservedDays >= 2 && pkg.inventorySoldOutDays === 0)
     return `近 ${pkg.inventoryObservedDays} 天未售罄，当前剩余 ${pkg.stockLeft} 份`;
@@ -213,9 +223,8 @@ function stockCue(pkg: RecommendPackageItem) {
 }
 
 function primaryUseRule(pkg: ContentPackage) {
-  return (
-    uniqueText(pkg.useRules).find((rule) => rule.length <= 34) ?? uniqueText(pkg.useRules)[0] ?? ''
-  );
+  const rules = uniqueText(pkg.useRules);
+  return rules.find((rule) => rule.length <= 34) ?? rules[0] ?? '';
 }
 
 function inferAudience(pkg: ContentPackage) {

@@ -2,8 +2,11 @@ import type { PackageScoreBreakdown, RecommendPackageItem, SalesSnapshot } from 
 import { currentPrice } from '@content/shared';
 import {
   clamp,
+  COMMISSION_RATE_SCORE_WEIGHT,
+  GROSS_PROFIT_SCORE_WEIGHT,
   HEALTHY_VERIFY_RATE_THRESHOLD,
   HIGH_REFUND_RATE_THRESHOLD,
+  REFUND_RATE_SCORE_MULTIPLIER,
   scoreLevel
 } from './utils';
 
@@ -19,7 +22,9 @@ export function buildPackageScore(
     pkg.inventoryObservedDays > 0 ? pkg.inventorySoldOutDays / pkg.inventoryObservedDays : 0;
   const neverSoldOutInWindow =
     pkg.inventoryObservedDays >= 2 && pkg.inventorySoldOutDays === 0 && pkg.stockLeft > 0;
-  const commissionSpace = clamp(pkg.commissionRate * 450 + pkg.grossProfit * 2);
+  const commissionSpace = clamp(
+    pkg.commissionRate * COMMISSION_RATE_SCORE_WEIGHT + pkg.grossProfit * GROSS_PROFIT_SCORE_WEIGHT
+  );
 
   const dimensions = [
     {
@@ -65,7 +70,7 @@ export function buildPackageScore(
     {
       key: 'refund_health',
       label: '退款健康度',
-      score: clamp(100 - snapshot.refundRate * 520),
+      score: clamp(100 - snapshot.refundRate * REFUND_RATE_SCORE_MULTIPLIER),
       weight: 0.13,
       reason:
         snapshot.refundRate >= HIGH_REFUND_RATE_THRESHOLD

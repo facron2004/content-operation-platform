@@ -389,8 +389,11 @@ export interface RecommendPackageItem extends ContentPackage {
 export const currentPrice = (pkg: ContentPackage): number =>
   pkg.temporarySalePrice ?? pkg.salePrice;
 
-export const formatPrice = (value?: number | null, decimals = 0): string =>
-  value != null && Number.isFinite(value) ? Number(value.toFixed(decimals)) : '-';
+export const formatPrice = (value?: number | null, decimals = 0): string => {
+  if (value == null || !Number.isFinite(value)) return '-';
+  // toFixed 返回带末尾 0 的字符串,Number() 转回 number 会自动去除
+  return Number(value.toFixed(decimals)).toString();
+};
 
 /** 文案版本号字母表(A-E) —— 模板生成与 AI 生成共用,避免各路径重复定义 */
 export const COPY_VERSION_LETTERS = ['A', 'B', 'C', 'D', 'E'] as const;
@@ -457,11 +460,18 @@ export function latestSnapshotsByPackage<T extends { packageId: string; snapshot
 /** 把数字格式化为两位字符串(前导 0) */
 const padTwo = (n: number): string => String(n).padStart(2, '0');
 
+/** 将数值限制在 [min, max] 范围内(默认 [0, 100]) */
+export const clamp = (value: number, min = 0, max = 100): number =>
+  Math.min(max, Math.max(min, value));
+
 /** 格式化日期为 YYYY-MM-DD(本地时间) */
 export function localDateKey(date: Date): string {
   const year = date.getFullYear();
   return `${year}-${padTwo(date.getMonth() + 1)}-${padTwo(date.getDate())}`;
 }
+
+/** 生成 5 位 base36 随机后缀,用于短 ID(contentId 等不需要密码学强度的场景) */
+export const randomShortId = (): string => Math.random().toString(36).slice(2, 7);
 
 // ============================================================================
 // 分页工具 (跨前后端共用)
@@ -490,7 +500,7 @@ export function paginate<T>(
   pageSize?: number,
   total?: number
 ): PaginatedResult<T> {
-  const safePageSize = Math.min(200, Math.max(1, Math.floor(pageSize ?? 50)));
+  const safePageSize = clamp(Math.floor(pageSize ?? 50), 1, 200);
   const safePage = Math.max(1, Math.floor(page ?? 1));
   const safeTotal = total ?? items.length;
   const offset = (safePage - 1) * safePageSize;
@@ -510,7 +520,7 @@ export function paginate<T>(
  * 适用于"先 count 再 findMany"的 Prisma 模式。
  */
 export function resolvePagination(page?: number, pageSize?: number, total = 0) {
-  const safePageSize = Math.min(200, Math.max(1, Math.floor(pageSize ?? 50)));
+  const safePageSize = clamp(Math.floor(pageSize ?? 50), 1, 200);
   const safePage = Math.max(1, Math.floor(page ?? 1));
   return {
     page: safePage,
@@ -568,6 +578,10 @@ export const ALERT_TYPES = [
 export const PACKAGE_TYPES = ['welfare', 'commission', 'fallback'] as const;
 export const SALE_STATUSES = ['pending', 'selling', 'recycle'] as const;
 export const INVENTORY_PRIORITIES = ['normal', 'backlog_3d'] as const;
+
+/** 非数组的对象守卫,跨 API/前端共用,避免重复 `typeof === 'object' && !== null` 写法。 */
+export const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
 
 // ==================== API Response Types ====================
 export * from './api-types';

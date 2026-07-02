@@ -24,6 +24,9 @@ function isInputEvent(event: KeyboardEvent): boolean {
   );
 }
 
+/** 平台判断：用户是否为 macOS（决定快捷键展示使用 ⌘ 还是 Ctrl）。模块级一次性计算。 */
+const IS_MAC = /mac|iphone|ipad/i.test(navigator.platform);
+
 export function useKeyboardShortcuts() {
   const shortcuts: ShortcutDefinition[] = [];
 
@@ -37,8 +40,7 @@ export function useKeyboardShortcuts() {
     // 不在表单输入元素中触发快捷键
     if (isInputEvent(event)) return;
 
-    const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
-    const cmdOrCtrl = isMac ? event.metaKey : event.ctrlKey;
+    const cmdOrCtrl = IS_MAC ? event.metaKey : event.ctrlKey;
 
     for (const shortcut of shortcuts) {
       const ctrlMatch = shortcut.ctrl ? cmdOrCtrl : !cmdOrCtrl;
@@ -130,8 +132,7 @@ export function useGlobalShortcuts() {
 
   // 显示快捷键帮助（使用 Element Plus 弹窗替代原生 alert）
   function showShortcutHelp() {
-    const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
-    const modKey = isMac ? 'Cmd' : 'Ctrl';
+    const modKey = IS_MAC ? 'Cmd' : 'Ctrl';
 
     const helpHtml = globalShortcuts
       .map((s) => {

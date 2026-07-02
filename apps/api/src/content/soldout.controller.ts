@@ -5,7 +5,6 @@ import {
   Inject,
   Query,
   Res,
-  HttpCode,
   Headers,
   UnauthorizedException
 } from '@nestjs/common';
@@ -54,7 +53,6 @@ export class SoldoutController {
    * `SOLDOUT_COLLECT_TOKEN` 环境变量。空 token 时拒绝所有调用(默认安全)。
    */
   @Post('soldout-links/collect')
-  @HttpCode(200)
   @ApiOperation({ summary: '触发售罄套餐收集(刷新 + 落盘 markdown)' })
   async collectSoldout(
     @Query('refresh') refresh?: string,

@@ -82,18 +82,15 @@ function computeInventoryBacklogDays(pkg: ContentPackage, snapshot: SalesSnapsho
 }
 
 /** 库存 flag 优先级:normal < unsold_today < unsold_2d < unsold_3d_slow */
-function inventoryPriorityRank(flag: RecommendPackageItem['inventoryFlag']): number {
-  switch (flag) {
-    case 'normal':
-      return 0;
-    case 'unsold_today':
-      return 1;
-    case 'unsold_2d':
-      return 2;
-    case 'unsold_3d_slow':
-      return 3;
-  }
-}
+const INVENTORY_PRIORITY_RANK: Record<RecommendPackageItem['inventoryFlag'], number> = {
+  normal: 0,
+  unsold_today: 1,
+  unsold_2d: 2,
+  unsold_3d_slow: 3
+};
+
+const inventoryPriorityRank = (flag: RecommendPackageItem['inventoryFlag']): number =>
+  INVENTORY_PRIORITY_RANK[flag];
 
 /**
  * 批量计算推荐套餐列表的派生字段(promotion / inventory / score / tags / alerts)。
@@ -347,18 +344,14 @@ export class ContentService {
       .map((entry) => entry.item)
       .filter((item) => this.isSellingPackage(item))
       .filter((item) => (query.category ? item.category === query.category : true))
-      .filter((item) =>
-        query.inventoryMin !== undefined ? item.stockLeft >= query.inventoryMin : true
-      )
-      .filter((item) =>
-        query.inventoryMax !== undefined ? item.stockLeft <= query.inventoryMax : true
-      )
+      .filter((item) => query.inventoryMin == null || item.stockLeft >= query.inventoryMin)
+      .filter((item) => query.inventoryMax == null || item.stockLeft <= query.inventoryMax)
       .filter((item) =>
         query.inventoryFlag === 'unsold' ? item.inventoryFlag !== 'normal' : true
       );
 
     return {
-      date: query.date ?? new Date().toISOString().slice(0, 10),
+      date: query.date ?? localDateKey(new Date()),
       areaId: query.areaId ?? 'all',
       packages: packagesWithScores
     };
@@ -527,8 +520,8 @@ export class ContentService {
     );
     const fallbackTrends = this.buildLiveInventoryTrends(snapshots, days, asOf);
     for (const [packageId, points] of fallbackTrends.entries()) {
-      if (!mergedTrends.has(packageId) || (mergedTrends.get(packageId)?.length ?? 0) === 0)
-        mergedTrends.set(packageId, points);
+      const existing = mergedTrends.get(packageId);
+      if (!existing || existing.length === 0) mergedTrends.set(packageId, points);
     }
     return mergedTrends;
   }

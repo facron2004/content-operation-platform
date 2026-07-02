@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { AutoLoginService } from '../auto-login.service';
 import { normalizeJeesiteBaseUrl } from '../jeesite-bargain-adapter';
 import { DEFAULT_USER_AGENT } from '../http-headers';
+import { containsLoginPageMarker } from '../../common/login-markers';
 
 @Injectable()
 export class HtmlFetcher {
@@ -48,14 +49,14 @@ export class HtmlFetcher {
       const html = await response.text();
 
       // Check if login page returned
-      if (html.includes('loginForm') || html.includes('/a/login')) {
+      if (containsLoginPageMarker(html)) {
         if (autoRetryLogin) {
           this.logger.warn('Detected login page, attempting auto login and retry');
           this.autoLoginService.clearCache();
           const newCookie = await this.autoLoginService.ensureValidCookie(true);
           if (newCookie) {
             this.logger.log('Auto login successful, retrying package detail fetch');
-            return await this.fetchHtml(packageId, false);
+            return this.fetchHtml(packageId, false);
           }
         }
         this.logger.error('Failed to fetch package detail: authentication required');

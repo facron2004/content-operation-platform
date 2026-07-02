@@ -1,3 +1,5 @@
+import { randomShortId } from '@content/shared';
+
 export interface OperationRecord {
   id: string;
   timestamp: number;
@@ -22,7 +24,7 @@ class OperationHistoryService {
   add(record: Omit<OperationRecord, 'id' | 'timestamp'>): void {
     const newRecord: OperationRecord = {
       ...record,
-      id: `${Date.now()}_${Math.random().toString(36).slice(2)}`,
+      id: `${Date.now()}_${randomShortId()}`,
       timestamp: Date.now()
     };
 

@@ -3,11 +3,15 @@ import './config/load-env';
 import compression from 'compression';
 import { join, dirname } from 'path';
 import { existsSync } from 'fs';
+import express from 'express';
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
+import { Logger, ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 import { securityHeaders } from './common';
 import type { Request, Response, NextFunction } from 'express';
+
+/** bootstrap 阶段的简易日志器,绕过 Nest DI 提前输出。 */
+const bootstrapLogger = new Logger('Bootstrap');
 
 /** 解析前端静态资源目录，兼容 pkg 打包后的 exe 环境 */
 function resolvePublicDir(): string {
@@ -58,7 +62,7 @@ async function bootstrap() {
   const expressApp = app.getHttpAdapter().getInstance();
   const publicDir = resolvePublicDir();
   if (existsSync(publicDir)) {
-    expressApp.use(require('express').static(publicDir));
+    expressApp.use(express.static(publicDir));
     // Vue history 路由回落：非 /api 请求统一返回 index.html
     expressApp.get('*splat', (req: Request, res: Response, next: NextFunction) => {
       if (req.path.startsWith('/api') || req.path.startsWith('/health')) return next();
@@ -69,17 +73,17 @@ async function bootstrap() {
         next();
       }
     });
-    console.log(`Static files served from: ${publicDir}`);
+    bootstrapLogger.log(`Static files served from: ${publicDir}`);
   }
 
   const port = Number(process.env.PORT ?? 3100);
   // P0-4 默认绑定 127.0.0.1，防止局域网访问；设置 HOST=0.0.0.0 可显式开放
   const host = process.env.HOST ?? '127.0.0.1';
   await app.listen(port, host);
-  console.log(`Content Ops API listening on http://${host}:${port}/api`);
+  bootstrapLogger.log(`Content Ops API listening on http://${host}:${port}/api`);
 }
 
 bootstrap().catch((err) => {
-  console.error('Failed to start Content Ops API:', err);
+  bootstrapLogger.error('Failed to start Content Ops API:', err);
   process.exit(1);
 });

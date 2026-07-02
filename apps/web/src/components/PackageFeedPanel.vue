@@ -86,7 +86,7 @@
         <div v-else-if="packageDetail?.sections.length" class="detail-section-list">
           <div
             v-for="section in packageDetail.sections"
-            :key="section.title"
+            :key="section.title + (section.selectionRule ?? '')"
             class="detail-section-item"
           >
             <strong>

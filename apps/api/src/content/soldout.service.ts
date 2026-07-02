@@ -1,9 +1,10 @@
 import { Injectable, Logger, Inject } from '@nestjs/common';
 import { mkdirSync, existsSync } from 'node:fs';
 import { resolve, join } from 'node:path';
-import type { ContentPackage, SalesSnapshot } from '@content/shared';
+import { localDateKey, type ContentPackage, type SalesSnapshot } from '@content/shared';
 import { DataSourceService } from './data-source.service';
 import { adminFormUrl } from './jeesite-bargain-adapter';
+import { DEFAULT_JEESITE_BASE_URL } from './jeesite-url';
 
 export interface SoldoutPackageItem {
   packageId: string;
@@ -49,14 +50,14 @@ export class SoldoutService {
     const soldOutItems = this.extractSoldout(dataset.packages, dataset.snapshots, baseUrl);
 
     const collectedAt = new Date();
-    const date = collectedAt.toISOString().slice(0, 10);
+    const date = localDateKey(collectedAt);
     const markdown = this.renderMarkdown(soldOutItems, baseUrl, collectedAt);
     const markdownPath = this.resolveMarkdownPath(options.outputDir, date);
 
     const result: SoldoutCollectResult = {
       collectedAt: collectedAt.toISOString(),
       date,
-      baseUrl: baseUrl || 'https://zdm.zhsh1.cn/a',
+      baseUrl: baseUrl || DEFAULT_JEESITE_BASE_URL,
       total: soldOutItems.length,
       items: soldOutItems,
       markdown,
@@ -106,7 +107,7 @@ export class SoldoutService {
     lines.push(`# 售罄套餐链接收集`);
     lines.push('');
     lines.push(`- 收集时间: ${collectedAt.toLocaleString('zh-CN', { hour12: false })}`);
-    lines.push(`- 数据源: ${baseUrl || 'https://zdm.zhsh1.cn/a'} (JeeSite bargain/listData)`);
+    lines.push(`- 数据源: ${baseUrl || DEFAULT_JEESITE_BASE_URL} (JeeSite bargain/listData)`);
     lines.push(`- 售罄套餐数: **${items.length}**`);
     lines.push('');
 

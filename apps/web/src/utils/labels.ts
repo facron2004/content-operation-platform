@@ -1,4 +1,5 @@
 // --- 中文标签映射 ---
+import { localDateKey } from '@content/shared';
 
 export const statusLabels: Record<string, string> = {
   pending_launch: '待开售',
@@ -174,7 +175,7 @@ export function formatDate(value?: string): string {
   if (!value) return '-';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '-';
-  return date.toISOString().slice(0, 10);
+  return localDateKey(date);
 }
 
 /** 评分 tooltip：用 dimensions 拼接成 "维度 分数 / 维度 分数" */

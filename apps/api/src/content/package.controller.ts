@@ -12,6 +12,10 @@ import {
   UpdateCookieDto
 } from './content.dto';
 import { Public } from '../auth';
+import { nowISO } from '../common/format';
+
+/** 把字节数四舍五入到两位小数的 MB。 */
+const toMB = (bytes: number): number => Math.round((bytes / (1024 * 1024)) * 100) / 100;
 
 @ApiTags('packages')
 @Controller('api/content')
@@ -199,11 +203,11 @@ export class PackageController {
     return {
       status: 'ok',
       uptime: Math.round(process.uptime()),
-      timestamp: new Date().toISOString(),
+      timestamp: nowISO(),
       // Sanitized memory: only expose total heap size, not detailed breakdown
       memory: {
-        heapUsedMB: Math.round((mem.heapUsed / 1024 / 1024) * 100) / 100,
-        heapTotalMB: Math.round((mem.heapTotal / 1024 / 1024) * 100) / 100
+        heapUsedMB: toMB(mem.heapUsed),
+        heapTotalMB: toMB(mem.heapTotal)
       },
       nodeVersion: process.version
     };

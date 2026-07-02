@@ -2,19 +2,32 @@ import type { PrismaClient } from '@prisma/client';
 
 /** 检测表是否缺少字段，缺少则自动 ALTER TABLE ADD COLUMN */
 async function migrateAddColumns(prisma: PrismaClient) {
-  interface ColumnInfo { cid: number; name: string; type: string; notnull: number; dflt_value: string | null; pk: number }
+  interface ColumnInfo {
+    cid: number;
+    name: string;
+    type: string;
+    notnull: number;
+    dflt_value: string | null;
+    pk: number;
+  }
 
   const checkAndAdd = async (table: string, column: string, colType: string, nullable = true) => {
     try {
       const rows = await prisma.$queryRawUnsafe<ColumnInfo[]>(`PRAGMA table_info("${table}")`);
       const exists = rows.some((r) => r.name === column);
       if (!exists) {
-        const nullableClause = nullable ? '' : ` NOT NULL DEFAULT ${colType === 'TEXT' ? "''" : '0'}`;
-        await prisma.$executeRawUnsafe(`ALTER TABLE "${table}" ADD COLUMN "${column}" ${colType}${nullableClause}`);
+        const nullableClause = nullable
+          ? ''
+          : ` NOT NULL DEFAULT ${colType === 'TEXT' ? "''" : '0'}`;
+        await prisma.$executeRawUnsafe(
+          `ALTER TABLE "${table}" ADD COLUMN "${column}" ${colType}${nullableClause}`
+        );
         console.log(`[migrate] Added column "${table}"."${column}" (${colType})`);
       }
-    } catch (err: any) {
-      console.warn(`[migrate] Failed to add "${table}"."${column}": ${err.message}`);
+    } catch (err: unknown) {
+      console.warn(
+        `[migrate] Failed to add "${table}"."${column}": ${err instanceof Error ? err.message : String(err)}`
+      );
     }
   };
 
@@ -61,11 +74,21 @@ export async function ensureDatabaseSchema(prisma: PrismaClient) {
       "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
   `);
-  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "ContentPackage_areaId_idx" ON "ContentPackage"("areaId");`);
-  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "ContentPackage_merchantId_idx" ON "ContentPackage"("merchantId");`);
-  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "ContentPackage_saleStatus_idx" ON "ContentPackage"("saleStatus");`);
-  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "ContentPackage_category_idx" ON "ContentPackage"("category");`);
-  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "ContentPackage_areaId_saleStatus_idx" ON "ContentPackage"("areaId", "saleStatus");`);
+  await prisma.$executeRawUnsafe(
+    `CREATE INDEX IF NOT EXISTS "ContentPackage_areaId_idx" ON "ContentPackage"("areaId");`
+  );
+  await prisma.$executeRawUnsafe(
+    `CREATE INDEX IF NOT EXISTS "ContentPackage_merchantId_idx" ON "ContentPackage"("merchantId");`
+  );
+  await prisma.$executeRawUnsafe(
+    `CREATE INDEX IF NOT EXISTS "ContentPackage_saleStatus_idx" ON "ContentPackage"("saleStatus");`
+  );
+  await prisma.$executeRawUnsafe(
+    `CREATE INDEX IF NOT EXISTS "ContentPackage_category_idx" ON "ContentPackage"("category");`
+  );
+  await prisma.$executeRawUnsafe(
+    `CREATE INDEX IF NOT EXISTS "ContentPackage_areaId_saleStatus_idx" ON "ContentPackage"("areaId", "saleStatus");`
+  );
 
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS "SalesSnapshot" (
@@ -93,10 +116,18 @@ export async function ensureDatabaseSchema(prisma: PrismaClient) {
       CONSTRAINT "SalesSnapshot_packageId_fkey" FOREIGN KEY ("packageId") REFERENCES "ContentPackage" ("packageId") ON DELETE CASCADE ON UPDATE CASCADE
     );
   `);
-  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "SalesSnapshot_packageId_snapshotTime_idx" ON "SalesSnapshot"("packageId", "snapshotTime");`);
-  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "SalesSnapshot_areaId_idx" ON "SalesSnapshot"("areaId");`);
-  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "SalesSnapshot_snapshotTime_idx" ON "SalesSnapshot"("snapshotTime");`);
-  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "SalesSnapshot_merchantId_idx" ON "SalesSnapshot"("merchantId");`);
+  await prisma.$executeRawUnsafe(
+    `CREATE INDEX IF NOT EXISTS "SalesSnapshot_packageId_snapshotTime_idx" ON "SalesSnapshot"("packageId", "snapshotTime");`
+  );
+  await prisma.$executeRawUnsafe(
+    `CREATE INDEX IF NOT EXISTS "SalesSnapshot_areaId_idx" ON "SalesSnapshot"("areaId");`
+  );
+  await prisma.$executeRawUnsafe(
+    `CREATE INDEX IF NOT EXISTS "SalesSnapshot_snapshotTime_idx" ON "SalesSnapshot"("snapshotTime");`
+  );
+  await prisma.$executeRawUnsafe(
+    `CREATE INDEX IF NOT EXISTS "SalesSnapshot_merchantId_idx" ON "SalesSnapshot"("merchantId");`
+  );
 
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS "PromotionScore" (
@@ -116,8 +147,12 @@ export async function ensureDatabaseSchema(prisma: PrismaClient) {
       CONSTRAINT "PromotionScore_packageId_fkey" FOREIGN KEY ("packageId") REFERENCES "ContentPackage" ("packageId") ON DELETE CASCADE ON UPDATE CASCADE
     );
   `);
-  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "PromotionScore_packageId_calculatedAt_idx" ON "PromotionScore"("packageId", "calculatedAt");`);
-  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "PromotionScore_areaId_idx" ON "PromotionScore"("areaId");`);
+  await prisma.$executeRawUnsafe(
+    `CREATE INDEX IF NOT EXISTS "PromotionScore_packageId_calculatedAt_idx" ON "PromotionScore"("packageId", "calculatedAt");`
+  );
+  await prisma.$executeRawUnsafe(
+    `CREATE INDEX IF NOT EXISTS "PromotionScore_areaId_idx" ON "PromotionScore"("areaId");`
+  );
 
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS "GeneratedCopy" (
@@ -142,11 +177,21 @@ export async function ensureDatabaseSchema(prisma: PrismaClient) {
       CONSTRAINT "GeneratedCopy_packageId_fkey" FOREIGN KEY ("packageId") REFERENCES "ContentPackage" ("packageId") ON DELETE CASCADE ON UPDATE CASCADE
     );
   `);
-  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "GeneratedCopy_auditStatus_idx" ON "GeneratedCopy"("auditStatus");`);
-  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "GeneratedCopy_packageId_idx" ON "GeneratedCopy"("packageId");`);
-  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "GeneratedCopy_areaId_idx" ON "GeneratedCopy"("areaId");`);
-  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "GeneratedCopy_auditStatus_channel_idx" ON "GeneratedCopy"("auditStatus", "channel");`);
-  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "GeneratedCopy_createdAt_idx" ON "GeneratedCopy"("createdAt");`);
+  await prisma.$executeRawUnsafe(
+    `CREATE INDEX IF NOT EXISTS "GeneratedCopy_auditStatus_idx" ON "GeneratedCopy"("auditStatus");`
+  );
+  await prisma.$executeRawUnsafe(
+    `CREATE INDEX IF NOT EXISTS "GeneratedCopy_packageId_idx" ON "GeneratedCopy"("packageId");`
+  );
+  await prisma.$executeRawUnsafe(
+    `CREATE INDEX IF NOT EXISTS "GeneratedCopy_areaId_idx" ON "GeneratedCopy"("areaId");`
+  );
+  await prisma.$executeRawUnsafe(
+    `CREATE INDEX IF NOT EXISTS "GeneratedCopy_auditStatus_channel_idx" ON "GeneratedCopy"("auditStatus", "channel");`
+  );
+  await prisma.$executeRawUnsafe(
+    `CREATE INDEX IF NOT EXISTS "GeneratedCopy_createdAt_idx" ON "GeneratedCopy"("createdAt");`
+  );
 
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS "CopyPerformance" (
@@ -170,10 +215,18 @@ export async function ensureDatabaseSchema(prisma: PrismaClient) {
       CONSTRAINT "CopyPerformance_contentId_fkey" FOREIGN KEY ("contentId") REFERENCES "GeneratedCopy" ("contentId") ON DELETE CASCADE ON UPDATE CASCADE
     );
   `);
-  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "CopyPerformance_contentId_idx" ON "CopyPerformance"("contentId");`);
-  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "CopyPerformance_packageId_idx" ON "CopyPerformance"("packageId");`);
-  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "CopyPerformance_channel_idx" ON "CopyPerformance"("channel");`);
-  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "CopyPerformance_groupId_idx" ON "CopyPerformance"("groupId");`);
+  await prisma.$executeRawUnsafe(
+    `CREATE INDEX IF NOT EXISTS "CopyPerformance_contentId_idx" ON "CopyPerformance"("contentId");`
+  );
+  await prisma.$executeRawUnsafe(
+    `CREATE INDEX IF NOT EXISTS "CopyPerformance_packageId_idx" ON "CopyPerformance"("packageId");`
+  );
+  await prisma.$executeRawUnsafe(
+    `CREATE INDEX IF NOT EXISTS "CopyPerformance_channel_idx" ON "CopyPerformance"("channel");`
+  );
+  await prisma.$executeRawUnsafe(
+    `CREATE INDEX IF NOT EXISTS "CopyPerformance_groupId_idx" ON "CopyPerformance"("groupId");`
+  );
 
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS "JeeSiteInventoryDailySnapshot" (

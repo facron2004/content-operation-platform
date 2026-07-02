@@ -7,8 +7,9 @@ import type {
   PromotionScore,
   StrategyType
 } from '@content/shared';
-import { COPY_VERSION_LETTERS } from '@content/shared';
+import { COPY_VERSION_LETTERS, clamp, randomShortId } from '@content/shared';
 import { auditCopyText } from '../../domain/copy-rules';
+import { nowISO } from '../../common/format';
 import type { PackageDetail } from '../package-detail.service';
 import { AIClientManager } from './ai-client.manager';
 import { PromptBuilder } from './prompt.builder';
@@ -61,7 +62,7 @@ export class AICopyService {
       );
     }
 
-    const count = Math.max(1, Math.min(request.copyCount || 3, 5));
+    const count = clamp(request.copyCount || 3, 1, 5);
     const prompt = this.promptBuilder.buildPrompt(pkg, promotion, request, packageDetail, count);
     const status = this.clientManager.getStatus();
 
@@ -104,7 +105,7 @@ export class AICopyService {
     packageDetail: PackageDetail | null,
     count: number
   ): GeneratedCopy[] {
-    const now = new Date().toISOString();
+    const now = nowISO();
     const completedDrafts = this.copyGenerator.completeDrafts(
       pkg,
       request,
@@ -123,7 +124,7 @@ export class AICopyService {
       });
 
       return {
-        contentId: `AI${Date.now()}${Math.random().toString(36).slice(2, 7)}`,
+        contentId: `AI${Date.now()}${randomShortId()}`,
         packageId: pkg.packageId,
         areaId: pkg.areaId,
         merchantId: pkg.merchantId,

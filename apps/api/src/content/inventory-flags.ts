@@ -99,16 +99,26 @@ export function buildInventoryFlag(input: InventoryFlagInput): InventoryFlagResu
  * 与旧 `buildInventorySalesStatus` 等价,只是不再调用 normalizeInventoryTrend。
  * 批量路径上由 buildRecommendPackageItems 负责 normalize,避免每个套餐重复 sort。
  */
-function buildInventorySalesStatusFromNormalized(normalizedTrend: InventoryTrendPoint[]) {
+type InventorySalesStatus = {
+  inventorySalesFlag: InventorySalesFlag;
+  inventorySalesLabel: string;
+  inventorySalesLevel: InventorySalesLevel;
+  inventoryObservedDays: number;
+  inventorySoldOutDays: number;
+};
+
+function buildInventorySalesStatusFromNormalized(
+  normalizedTrend: InventoryTrendPoint[]
+): InventorySalesStatus {
   const recentTrend = normalizedTrend.slice(-3);
   const inventoryObservedDays = recentTrend.length;
   const inventorySoldOutDays = recentTrend.filter((point) => point.remainingStock <= 0).length;
 
   if (inventoryObservedDays >= 3 && inventorySoldOutDays === inventoryObservedDays) {
     return {
-      inventorySalesFlag: 'hot_sold_out_recent' as InventorySalesFlag,
+      inventorySalesFlag: 'hot_sold_out_recent',
       inventorySalesLabel: '连续售罄·热销',
-      inventorySalesLevel: 'success' as InventorySalesLevel,
+      inventorySalesLevel: 'success',
       inventoryObservedDays,
       inventorySoldOutDays
     };
@@ -116,18 +126,18 @@ function buildInventorySalesStatusFromNormalized(normalizedTrend: InventoryTrend
 
   if (inventoryObservedDays >= 3 && inventorySoldOutDays === 0) {
     return {
-      inventorySalesFlag: 'slow_never_sold_out' as InventorySalesFlag,
+      inventorySalesFlag: 'slow_never_sold_out',
       inventorySalesLabel: '连续未售罄·滞销',
-      inventorySalesLevel: 'danger' as InventorySalesLevel,
+      inventorySalesLevel: 'danger',
       inventoryObservedDays,
       inventorySoldOutDays
     };
   }
 
   return {
-    inventorySalesFlag: 'observing' as InventorySalesFlag,
+    inventorySalesFlag: 'observing',
     inventorySalesLabel: '观察中',
-    inventorySalesLevel: 'info' as InventorySalesLevel,
+    inventorySalesLevel: 'info',
     inventoryObservedDays,
     inventorySoldOutDays
   };

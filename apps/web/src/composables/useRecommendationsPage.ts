@@ -29,7 +29,7 @@ export function useRecommendationsPage() {
       if (pkg.areaId && pkg.areaName && !areaMap.has(pkg.areaId))
         areaMap.set(pkg.areaId, pkg.areaName);
     }
-    areaOptions.value = Array.from(areaMap.entries()).map(([value, label]) => ({ value, label }));
+    areaOptions.value = [...areaMap.entries()].map(([value, label]) => ({ value, label }));
   };
 
   const load = async (force = false) => {

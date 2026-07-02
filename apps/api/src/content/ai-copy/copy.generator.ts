@@ -2,7 +2,15 @@ import type { ContentPackage, GenerateCopyRequest } from '@content/shared';
 import { currentPrice } from '@content/shared';
 import type { PackageDetail } from '../package-detail.service';
 import type { AICopyDraft } from './types';
+import { escapeRegExp } from '../../domain/utils';
 import { ResponseParser } from './response.parser';
+
+/** 文案"品质好/性价比高"等泛泛表达 —— 检测/剔除共用同一组关键词,提取到模块顶层避免重复正则。 */
+const GENERIC_PHRASES_BASE = '品质好|性价比高|不容错过|心动不如行动|优惠力度大|吃货必备|赶快冲';
+const GENERIC_PHRASES_PATTERN = new RegExp(`${GENERIC_PHRASES_BASE}`, 'g');
+const GENERIC_PHRASES_DETECT = new RegExp(`${GENERIC_PHRASES_BASE}|尊敬的用户|欢迎选购`);
+/** 商家简称里常出现的实体后缀,合并为单一字符类以便一次扫描。 */
+const MERCHANT_SUFFIX_PATTERN = /餐厅|饭店|酒楼|门店|小吃|烧烤|烤肉|火锅|料理|茶饮|甜品/g;
 
 export class CopyGenerator {
   private readonly parser = new ResponseParser();
@@ -150,19 +158,17 @@ export class CopyGenerator {
         typeof price === 'number' && Number.isFinite(price) && price > 0 && price !== pkgPrice
     );
     return wrongPrices.some((price) =>
-      new RegExp(`(?:￥|¥|价|元|\\b)${this.escapeRegExp(String(price))}(?:元|\\b)`).test(text)
+      new RegExp(`(?:￥|¥|价|元|\\b)${escapeRegExp(String(price))}(?:元|\\b)`).test(text)
     );
   }
 
   private looksGenericBody(body: string): boolean {
-    return /品质好|性价比高|不容错过|心动不如行动|优惠力度大|吃货必备|赶快冲|尊敬的用户|欢迎选购/.test(
-      body
-    );
+    return GENERIC_PHRASES_DETECT.test(body);
   }
 
   private stripBadPhrases(body: string): string {
     return body
-      .replace(/品质好|性价比高|不容错过|心动不如行动|优惠力度大|吃货必备|赶快冲/g, '')
+      .replace(GENERIC_PHRASES_PATTERN, '')
       .replace(/\n{3,}/g, '\n\n')
       .trim();
   }
@@ -208,10 +214,7 @@ export class CopyGenerator {
       .split(',')[0]
       .replace(/（.*?）/g, '')
       .trim();
-    const normalized = shortName.replace(
-      /餐厅|饭店|酒楼|门店|小吃|烧烤|烤肉|火锅|料理|茶饮|甜品/g,
-      ''
-    );
+    const normalized = shortName.replace(MERCHANT_SUFFIX_PATTERN, '');
     const ambiguousFoodWords = [
       '绿茶',
       '茶',
@@ -240,9 +243,5 @@ export class CopyGenerator {
 
   private shortArea(areaName: string): string {
     return areaName.length > 6 ? areaName.slice(0, 6) : areaName;
-  }
-
-  private escapeRegExp(value: string): string {
-    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
 }

@@ -11,14 +11,19 @@ import { buildOperationCardMap } from './package-detail-helpers';
 import { PrismaService } from '../prisma/prisma.service';
 import { AlertService } from './alert.service';
 import { mapPerformance } from './mappers';
+import { safeRatio, nowISO } from '../common/format';
 import type { RecommendQuery, RecommendationResult } from './content.service';
 
 type GetRecommendationsFn = (q: RecommendQuery) => Promise<RecommendationResult>;
 
 // Prisma 行类型:显式声明,跨方法共享,避免内联 (typeof copies)[number] 漂移
-type CopyRow = Prisma.GeneratedCopyGetPayload<{
-  select: { contentId: true; title: true; copyVersion: true; scenario: true };
-}>;
+const COPY_SELECT = {
+  contentId: true,
+  title: true,
+  copyVersion: true,
+  scenario: true
+} as const;
+type CopyRow = Prisma.GeneratedCopyGetPayload<{ select: typeof COPY_SELECT }>;
 type PerfRow = Prisma.CopyPerformanceGetPayload<{
   select: {
     contentId: true;
@@ -66,7 +71,7 @@ export class DashboardService {
       }),
       this.prisma.generatedCopy.findMany({
         take: 500,
-        select: { contentId: true, title: true, copyVersion: true, scenario: true }
+        select: COPY_SELECT
       })
     ]);
     const copiesById = new Map<string, CopyRow>(copies.map((c: CopyRow) => [c.contentId, c]));
@@ -134,7 +139,7 @@ export class DashboardService {
         warningAlertCount: warningAlerts.length,
         activeAlertCount: alerts.length,
         resolvedAlertCount: allAlerts.length - alerts.length,
-        updatedAt: new Date().toISOString(),
+        updatedAt: nowISO(),
         dataSource: 'JeeSite',
         sellingOnly: true
       },
@@ -210,8 +215,8 @@ export class DashboardService {
       totalOrderCount: orderCount,
       totalVerifyCount: verifyCount,
       totalGmv: Number(gmv.toFixed(2)),
-      contentConversionRate: clickCount === 0 ? 0 : Number((orderCount / clickCount).toFixed(4)),
-      verifyConversionRate: orderCount === 0 ? 0 : Number((verifyCount / orderCount).toFixed(4)),
+      contentConversionRate: safeRatio(orderCount, clickCount),
+      verifyConversionRate: safeRatio(verifyCount, orderCount),
       statusDistribution: packagesSummary.countByStatus,
       topPackages: packagesSummary.top5,
       riskPackages:
@@ -234,7 +239,7 @@ export class DashboardService {
       this.prisma.copyPerformance.findMany({ orderBy: { createdAt: 'desc' }, take: 200 }),
       this.prisma.generatedCopy.findMany({
         take: 500,
-        select: { contentId: true, title: true, copyVersion: true, scenario: true }
+        select: COPY_SELECT
       })
     ]);
     const copiesById = new Map<string, CopyRow>(copies.map((c: CopyRow) => [c.contentId, c]));

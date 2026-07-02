@@ -6,7 +6,13 @@ import {
   Inject
 } from '@nestjs/common';
 import type { ContentPackage, SalesSnapshot } from '@content/shared';
-import { RETRY_BASE_DELAY_MS } from '../domain/utils';
+import { clamp, isRecord } from '@content/shared';
+import { LOGIN_FORM_HTML_MARKER, LOGIN_PAGE_MARKERS } from '../common/login-markers';
+import {
+  PAGE_FAILURE_RATIO_THRESHOLD,
+  RETRY_BASE_DELAY_MS,
+  RETRY_MAX_DELAY_MS
+} from '../domain/utils';
 import { mapJeesiteBargainListToDataset, normalizeJeesiteBaseUrl } from './jeesite-bargain-adapter';
 import { AutoLoginService } from './auto-login.service';
 
@@ -30,7 +36,7 @@ export class DataSourceService {
   constructor(@Inject(AutoLoginService) private readonly autoLoginService: AutoLoginService) {}
 
   async loadDataset(options: LoadDatasetOptions = {}): Promise<ContentDataset> {
-    const forceRefresh = options.forceRefresh === true;
+    const forceRefresh = Boolean(options.forceRefresh);
     const source = process.env.CONTENT_DATA_SOURCE ?? 'jeesite';
     const cacheKey = this.buildCacheKey(source);
     const now = Date.now();
@@ -49,7 +55,7 @@ export class DataSourceService {
     })();
 
     try {
-      return await this.inFlight;
+      return this.inFlight;
     } finally {
       this.inFlight = null;
     }
@@ -88,12 +94,7 @@ export class DataSourceService {
           const fetchConfig = await this.buildFetchConfig();
           const packagesResponse = await this.fetchWithTimeout(packagesUrl, fetchConfig);
           const payload = await this.parseExternalResponse(packagesResponse);
-          if (
-            typeof payload === 'object' &&
-            payload !== null &&
-            'result' in payload &&
-            (payload as { result?: unknown }).result === 'login'
-          ) {
+          if (isRecord(payload) && payload.result === 'login') {
             if (
               autoRetryLogin &&
               (await this.retryLogin('Cookie expired, attempting auto login and retry'))
@@ -107,11 +108,15 @@ export class DataSourceService {
           return payload;
         } catch (error) {
           if (attempt === retries) {
-            throw error instanceof ServiceUnavailableException
-              ? error
-              : new ServiceUnavailableException('External backend request failed');
+            if (error instanceof ServiceUnavailableException) throw error;
+            const detail = error instanceof Error ? error.message : String(error);
+            throw new ServiceUnavailableException(
+              `External backend request failed (${packagesUrl}): ${detail}`
+            );
           }
-          await this.sleep(Math.min(RETRY_BASE_DELAY_MS * Math.pow(2, attempt), 3000));
+          await this.sleep(
+            Math.min(RETRY_BASE_DELAY_MS * Math.pow(2, attempt), RETRY_MAX_DELAY_MS)
+          );
         }
       }
       throw new ServiceUnavailableException('External backend request failed after retries');
@@ -149,7 +154,7 @@ export class DataSourceService {
         this.logger.warn(
           `Paginated fetch partial failure: ${failedPages.length}/${pages.length} pages failed (pages: ${failedPages.join(', ')})`
         );
-        if (failureRatio > 0.3) {
+        if (failureRatio > PAGE_FAILURE_RATIO_THRESHOLD) {
           throw new ServiceUnavailableException(
             `External data fetch too many failures: ${failedPages.length}/${pages.length} pages failed. Results would be incomplete.`
           );
@@ -158,7 +163,7 @@ export class DataSourceService {
     }
 
     const dataset = mapJeesiteBargainListToDataset({ list: mergedList }, { baseUrl });
-    if (dataset.packages.length === 0) {
+    if (!dataset.packages.length) {
       throw new ServiceUnavailableException('External backend returned empty dataset');
     }
     return dataset;
@@ -225,7 +230,7 @@ export class DataSourceService {
     }
 
     const text = await response.text();
-    if (text.includes('<form') || text.includes('/a/login') || text.includes('loginForm')) {
+    if ([LOGIN_FORM_HTML_MARKER, ...LOGIN_PAGE_MARKERS].some((marker) => text.includes(marker))) {
       throw new ServiceUnavailableException(
         'External backend requires authentication (received HTML/login)'
       );
@@ -244,19 +249,16 @@ export class DataSourceService {
   }
 
   private pushPageRows(payload: unknown, mergedList: unknown[]) {
-    if (typeof payload !== 'object' || payload === null) return;
-    const list = (payload as Record<string, unknown>).list;
+    if (!isRecord(payload)) return;
+    const list = payload.list;
     if (Array.isArray(list)) mergedList.push(...list);
   }
 
   private collectPages(firstPayload: unknown) {
-    const firstRecord =
-      typeof firstPayload === 'object' && firstPayload !== null
-        ? (firstPayload as Record<string, unknown>)
-        : {};
+    const firstRecord = isRecord(firstPayload) ? firstPayload : {};
     const totalCount = Number(firstRecord.count ?? 0);
     const pageSize = Number(firstRecord.pageSize ?? 100) || 100;
-    const totalPages = Math.min(100, Math.max(1, Math.ceil(totalCount / pageSize)));
+    const totalPages = clamp(Math.ceil(totalCount / pageSize), 1, 100);
     const mergedList: unknown[] = [];
     this.pushPageRows(firstPayload, mergedList);
     return { mergedList, totalPages };

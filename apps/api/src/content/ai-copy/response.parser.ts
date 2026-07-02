@@ -18,9 +18,9 @@ export class ResponseParser {
       if (Array.isArray(copies)) {
         const drafts = copies
           .map((item) => ({
-            title: String(item?.title ?? '').trim(),
-            body: String(item?.body ?? '').trim(),
-            cta: String(item?.cta ?? '').trim()
+            title: (item?.title ?? '').toString().trim(),
+            body: (item?.body ?? '').toString().trim(),
+            cta: (item?.cta ?? '').toString().trim()
           }))
           .filter((item) => item.title && item.body);
         if (drafts.length > 0) return drafts.slice(0, count);

@@ -1,3 +1,5 @@
+import { randomShortId } from '@content/shared';
+
 export interface Notification {
   id: string;
   type: 'alert' | 'success' | 'warning' | 'info';
@@ -8,14 +10,17 @@ export interface Notification {
   actionUrl?: string;
 }
 
+/** 添加新通知时客户端提供的字段,id/timestamp/read 由服务生成。 */
+export type NotificationDraft = Omit<Notification, 'id' | 'timestamp' | 'read'>;
+
 class NotificationService {
   private notifications: Notification[] = [];
   private listeners: Set<(notifications: Notification[]) => void> = new Set();
 
-  add(notification: Omit<Notification, 'id' | 'timestamp' | 'read'>) {
+  add(notification: NotificationDraft) {
     const newNotification: Notification = {
       ...notification,
-      id: `${Date.now()}_${Math.random().toString(36).slice(2)}`,
+      id: `${Date.now()}_${randomShortId()}`,
       timestamp: Date.now(),
       read: false
     };
@@ -70,8 +75,7 @@ export const notificationService = new NotificationService();
 // Vue composable
 export function useNotifications() {
   return {
-    add: (notification: Omit<Notification, 'id' | 'timestamp' | 'read'>) =>
-      notificationService.add(notification),
+    add: (notification: NotificationDraft) => notificationService.add(notification),
     getAll: () => notificationService.getAll(),
     getUnread: () => notificationService.getUnread(),
     markAsRead: (id: string) => notificationService.markAsRead(id),
