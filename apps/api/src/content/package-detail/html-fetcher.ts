@@ -1,5 +1,6 @@
 import { Injectable, Logger, Inject } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { describeError } from '@content/shared';
 import { AutoLoginService } from '../auto-login.service';
 import { normalizeJeesiteBaseUrl } from '../jeesite-bargain-adapter';
 import { DEFAULT_USER_AGENT } from '../http-headers';
@@ -65,10 +66,7 @@ export class HtmlFetcher {
 
       return html;
     } catch (error: unknown) {
-      this.logger.error(
-        `Failed to fetch package detail ${packageId}:`,
-        error instanceof Error ? error.message : String(error)
-      );
+      this.logger.error(`Failed to fetch package detail ${packageId}:`, describeError(error));
       return null;
     }
   }

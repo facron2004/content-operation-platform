@@ -6,7 +6,7 @@ import {
   Inject
 } from '@nestjs/common';
 import type { ContentPackage, SalesSnapshot } from '@content/shared';
-import { clamp, exponentialBackoff, isRecord, sleep } from '@content/shared';
+import { clamp, describeError, exponentialBackoff, isRecord, sleep } from '@content/shared';
 import { LOGIN_FORM_HTML_MARKER, LOGIN_PAGE_MARKERS } from '../common/login-markers';
 import {
   PAGE_FAILURE_RATIO_THRESHOLD,
@@ -109,9 +109,8 @@ export class DataSourceService {
         } catch (error: unknown) {
           if (attempt === retries) {
             if (error instanceof ServiceUnavailableException) throw error;
-            const detail = error instanceof Error ? error.message : String(error);
             throw new ServiceUnavailableException(
-              `External backend request failed (${packagesUrl}): ${detail}`
+              `External backend request failed (${packagesUrl}): ${describeError(error)}`
             );
           }
           await sleep(exponentialBackoff(attempt, RETRY_BASE_DELAY_MS, RETRY_MAX_DELAY_MS));
@@ -140,9 +139,7 @@ export class DataSourceService {
             this.pushPageRows(result.value, mergedList);
           } else {
             failedPages.push(batch[idx]);
-            this.logger.warn(
-              `Failed to fetch page ${batch[idx]}: ${result.reason instanceof Error ? result.reason.message : String(result.reason)}`
-            );
+            this.logger.warn(`Failed to fetch page ${batch[idx]}: ${describeError(result.reason)}`);
           }
         });
       }
@@ -188,8 +185,7 @@ export class DataSourceService {
     try {
       return await normalizeJeesiteBaseUrl(raw);
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      throw new BadRequestException(`EXTERNAL_API_BASE_URL is invalid: ${message}`);
+      throw new BadRequestException(`EXTERNAL_API_BASE_URL is invalid: ${describeError(err)}`);
     }
   }
 
