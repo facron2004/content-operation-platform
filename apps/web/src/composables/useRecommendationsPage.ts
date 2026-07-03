@@ -5,6 +5,12 @@ import { api } from '../services/api';
 import { clearPackageCache } from '../services/cache.service';
 import { useRoleStore } from '../stores/role';
 
+/** 把"已被 http-client 拦截器统一处理过"的 promise 调成 fire-and-forget,避免
+ * watch 回调里重复写 catch swallow 模板。 */
+const swallowHandled = <T>(promise: Promise<T>): void => {
+  promise.catch(() => undefined);
+};
+
 export function useRecommendationsPage() {
   const router = useRouter();
   const roleStore = useRoleStore();
@@ -105,35 +111,19 @@ export function useRecommendationsPage() {
 
   watch(
     () => roleStore.currentRole,
-    () => {
-      Promise.all([load(true), loadCategoryOptions()]).catch(() => {
-        /* 错误已由拦截器处理 */
-      });
-    }
+    () => swallowHandled(Promise.all([load(true), loadCategoryOptions()]))
   );
   watch(
     () => filters.areaId,
-    () => {
-      Promise.all([load(true), loadCategoryOptions()]).catch(() => {
-        /* 错误已由拦截器处理 */
-      });
-    }
+    () => swallowHandled(Promise.all([load(true), loadCategoryOptions()]))
   );
   watch(
     () => filters.category,
-    () => {
-      load(true).catch(() => {
-        /* 错误已由拦截器处理 */
-      });
-    }
+    () => swallowHandled(load(true))
   );
   watch(
     () => filters.unsoldOnly,
-    () => {
-      load(true).catch(() => {
-        /* 错误已由拦截器处理 */
-      });
-    }
+    () => swallowHandled(load(true))
   );
 
   onMounted(async () => {

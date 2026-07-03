@@ -96,7 +96,7 @@ client.interceptors.request.use(
   },
   (error) => {
     endProgress();
-    ElMessage.error('请求发送失败');
+    ElMessage.error(extractErrorMessage(error, '请求发送失败'));
     return Promise.reject(error);
   }
 );
