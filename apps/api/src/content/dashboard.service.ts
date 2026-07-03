@@ -12,6 +12,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AlertService } from './alert.service';
 import { mapPerformance } from './mappers';
 import { safeRatio, nowISO } from '../common/format';
+import { getFallbackDate } from '../domain/utils';
 import type { RecommendQuery, RecommendationResult } from './content.service';
 
 type GetRecommendationsFn = (q: RecommendQuery) => Promise<RecommendationResult>;
@@ -289,8 +290,6 @@ export class DashboardService {
   private operationCardMap = buildOperationCardMap;
 
   private yesterdayKey(): string {
-    const date = new Date();
-    date.setDate(date.getDate() - 1);
-    return localDateKey(date);
+    return localDateKey(getFallbackDate());
   }
 }
