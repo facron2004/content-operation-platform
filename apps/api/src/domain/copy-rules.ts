@@ -8,14 +8,13 @@ import type {
 } from '@content/shared';
 import {
   COPY_VERSION_LETTERS,
-  clamp,
   currentPrice,
   DEFAULT_SCENARIO,
   randomShortId
 } from '@content/shared';
 import { getSubwayStation } from './subway-stations';
 import { getCategoryEmoji, getDishEmoji } from './category-emoji';
-import { escapeRegExp, priceString } from './utils';
+import { clamp, escapeRegExp, priceString } from './utils';
 import { nowISO, safeRatio } from '../common/format';
 
 // Re-export for external consumers
