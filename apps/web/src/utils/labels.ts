@@ -34,6 +34,14 @@ export const alertTypeLabels: Record<string, string> = {
   merchant_abnormal: '商家异常'
 };
 
+export const auditStatusLabels: Record<string, string> = {
+  draft: '草稿',
+  pending: '待审核',
+  approved: '通过',
+  rejected: '驳回',
+  risk: '风险'
+};
+
 export const groupTypeLabels: Record<string, string> = {
   office: '办公人群',
   parent_child: '亲子家庭',
@@ -76,30 +84,28 @@ const isAlertLevel = (value: string): value is AlertLevel =>
 const normalizeLevel = (level?: string): AlertLevel =>
   level && isAlertLevel(level) ? level : 'info';
 
-/** 根据风险等级返回 Element Plus tag 类型 */
-export function riskTagType(level?: string): TagType {
+/** 把风险/库存/销售等统一等级字符串映射到 Element Plus tag 类型。 */
+export function levelToTagType(level?: string): TagType {
   return LEVEL_TO_TAG_TYPE[normalizeLevel(level)];
 }
+
+// 语义化别名 —— 保留调用点的领域命名(risk/inventory/sales/operation/alert),
+// 同时确保任何等级的映射都走同一个查找表,改一处即可同步。
+
+/** 根据风险等级返回 Element Plus tag 类型 */
+export const riskTagType = levelToTagType;
 
 /** 库存标记 tag 类型 */
-export function inventoryTagType(level?: string): TagType {
-  return LEVEL_TO_TAG_TYPE[normalizeLevel(level)];
-}
+export const inventoryTagType = levelToTagType;
 
 /** 销售判断 tag 类型 */
-export function salesTagType(level?: string): TagType {
-  return LEVEL_TO_TAG_TYPE[normalizeLevel(level)];
-}
+export const salesTagType = levelToTagType;
 
 /** 作战标签 tag 类型 */
-export function operationTagType(level?: string): TagType {
-  return LEVEL_TO_TAG_TYPE[normalizeLevel(level)];
-}
+export const operationTagType = levelToTagType;
 
 /** 警报 tag 类型(语义同 riskTagType,用于 Dashboard 中的 alertTagType) */
-export function alertTagType(level?: string): TagType {
-  return LEVEL_TO_TAG_TYPE[normalizeLevel(level)];
-}
+export const alertTagType = levelToTagType;
 
 /** 预警等级中文文本 */
 export function levelText(level?: string): string {

@@ -76,7 +76,7 @@ import { onMounted, reactive, ref } from 'vue';
 import { ElMessage } from 'element-plus';
 import type { AuditStatus, GeneratedCopy } from '@content/shared';
 import { api } from '../services/api';
-import { channelLabels } from '../utils/labels';
+import { auditStatusLabels, channelLabels } from '../utils/labels';
 import TableSkeleton from '../components/TableSkeleton.vue';
 import EmptyState from '../components/EmptyState.vue';
 
@@ -85,12 +85,9 @@ const status = ref<AuditStatus>('pending');
 const copies = ref<GeneratedCopy[]>([]);
 const selected = ref<GeneratedCopy | null>(null);
 const draft = reactive({ title: '', body: '', auditRemark: '' });
-const statusOptions = [
-  { label: '待审核', value: 'pending' },
-  { label: '通过', value: 'approved' },
-  { label: '风险', value: 'risk' },
-  { label: '驳回', value: 'rejected' }
-];
+const statusOptions = (Object.entries(auditStatusLabels) as Array<[string, string]>)
+  .filter(([value]) => value !== 'draft')
+  .map(([value, label]) => ({ label, value }));
 
 const load = async () => {
   loading.value = true;

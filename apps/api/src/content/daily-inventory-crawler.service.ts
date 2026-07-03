@@ -12,6 +12,10 @@ interface DailyInventoryRow {
   remainingStock: number;
 }
 
+/** 把 Date 或 ISO string 统一归一为 ISO string —— 避免每个调用点重复 `new Date(x).toISOString()`。 */
+const toISOTimestamp = (value: Date | string): string =>
+  value instanceof Date ? value.toISOString() : new Date(value).toISOString();
+
 @Injectable()
 export class DailyInventoryCrawlerService {
   private readonly logger = new Logger(DailyInventoryCrawlerService.name);
@@ -126,7 +130,7 @@ export class DailyInventoryCrawlerService {
       const params = batch.flatMap(({ pkg, snapshot, remainingStock }) => [
         pkg.packageId,
         batchDate,
-        new Date(snapshot.snapshotTime).toISOString(),
+        toISOTimestamp(snapshot.snapshotTime),
         pkg.packageName,
         pkg.merchantName,
         pkg.areaName,
@@ -217,7 +221,7 @@ export class DailyInventoryCrawlerService {
     const points = result.get(row.packageId) ?? [];
     points.push({
       date: row.date,
-      snapshotTime: new Date(row.snapshotTime).toISOString(),
+      snapshotTime: toISOTimestamp(row.snapshotTime),
       remainingStock: this.normalizeStock(row.remainingStock)
     });
     result.set(row.packageId, points);

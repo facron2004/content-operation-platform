@@ -4,6 +4,7 @@ import type { OperationAlert } from '@content/shared';
 import { api } from '../../../services/api';
 import { clearAlertCache } from '../../../services/cache.service';
 import { useOperationHistory } from '../../../services/operation-history';
+import { extractErrorMessage } from '../../../services/http-client';
 
 export interface AlertSummary {
   totalCount: number;
@@ -139,7 +140,7 @@ export function useAlerts(role: Ref<string | undefined>) {
       recordError(
         ids.length === 1 ? 'alert_resolve' : 'alert_batch_resolve',
         ids.length === 1 ? '处理预警失败' : `批量处理 ${ids.length} 条预警失败`,
-        error instanceof Error ? error.message : '未知错误',
+        extractErrorMessage(error, '未知错误'),
         { alertIds: ids }
       );
     } finally {
