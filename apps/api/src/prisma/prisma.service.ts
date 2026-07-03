@@ -86,8 +86,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
       // 启动时自动迁移：给已存在的表补齐新增字段
       await this.migrateAddColumns();
     } catch (error: unknown) {
-      const err = error instanceof Error ? error : new Error(String(error));
-      this.logger.error(`Database connection failed: ${err.message}`);
+      this.logger.error(`Database connection failed: ${describeError(error)}`);
 
       const prismaCode = getPrismaErrorCode(error);
       if (prismaCode === 'P1003') {
