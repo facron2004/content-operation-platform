@@ -30,7 +30,7 @@ export class RetryHandler {
         clearTimeout(timeoutId);
         const err = error instanceof Error ? error : new Error(String(error));
 
-        if (err.name === 'AbortError' || err.message?.includes('aborted')) {
+        if (err.name === 'AbortError' || err.message.includes('aborted')) {
           this.logger.warn(
             `AI copy generation timed out after ${this.timeoutMs}ms for package ${packageId}`
           );

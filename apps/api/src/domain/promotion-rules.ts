@@ -7,7 +7,7 @@ import type {
   SalesSnapshot,
   StrategyType
 } from '@content/shared';
-import { formatRatePercent } from '@content/shared';
+import { formatRatePercent, nowISO } from '@content/shared';
 import {
   clamp,
   CLICK_CONVERSION_WEAK_MIN,
@@ -259,6 +259,6 @@ export function buildPromotionScore(
     riskTips: strategy.riskTips,
     recommendedChannels: strategy.recommendedChannels,
     copyAngles: strategy.copyAngles,
-    calculatedAt: now.toISOString()
+    calculatedAt: nowISO(now)
   };
 }

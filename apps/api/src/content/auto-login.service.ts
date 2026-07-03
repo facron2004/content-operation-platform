@@ -228,7 +228,7 @@ export class AutoLoginService implements OnModuleInit {
     try {
       await assertHostnameNotPrivateAsync(new URL(baseUrl).hostname);
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
+      const message = describeError(err);
       this.logger.error(`SSRF guard rejected EXTERNAL_API_BASE_URL: ${message}`);
       return {
         success: false,

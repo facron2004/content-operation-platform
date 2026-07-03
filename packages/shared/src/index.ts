@@ -498,7 +498,7 @@ export const sleep = (ms: number): Promise<void> =>
   });
 
 /** 当前时间的 ISO 字符串(UTC),统一封装以避免散落的 new Date().toISOString()。 */
-export const nowISO = (): string => new Date().toISOString();
+export const nowISO = (date: Date = new Date()): string => date.toISOString();
 
 /** 从 now 起 offsetMs 之后的 ISO 字符串(UTC),用于 fallback 到期时间等场景。 */
 export const futureISO = (offsetMs: number): string =>

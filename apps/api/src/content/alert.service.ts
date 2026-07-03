@@ -51,7 +51,7 @@ export class AlertService {
     );
     // resolvedDate 与 resolve* 写入保持一致:当天 localDateKey(now),
     // 而不是 recommendations.date(回填/历史日期会让已处理记录查不到)。
-    const resolvedAlertIds = await this.loadResolvedAlertIds(localDateKey(new Date()));
+    const resolvedAlertIds = await this.loadResolvedAlertIds(this.todayKey());
     const activeAlerts = allAlerts.filter((alert) => !resolvedAlertIds.has(alert.alertId));
     const filteredAlerts = this.filterAlerts(activeAlerts, query);
     const pagination = this.resolvePagination(query.page, query.pageSize, filteredAlerts.length);
@@ -70,7 +70,7 @@ export class AlertService {
 
   async resolveOperationAlert(alertId: string, resolvedBy = 'operator') {
     if (!alertId) throw new BadRequestException('alertId 必填');
-    const resolvedDate = localDateKey(new Date());
+    const resolvedDate = this.todayKey();
     const promise = this.upsertResolution(alertId, resolvedDate, resolvedBy);
     await promise;
     return { success: true, alertId, resolvedDate, message: '预警已标记为已处理' };
@@ -79,7 +79,7 @@ export class AlertService {
   async resolveOperationAlerts(alertIds: string[], resolvedBy = 'operator') {
     const uniqueAlertIds = [...new Set((alertIds ?? []).map((id) => id?.trim()).filter(Boolean))];
     if (!uniqueAlertIds.length) throw new BadRequestException('alertIds 不能为空');
-    const resolvedDate = localDateKey(new Date());
+    const resolvedDate = this.todayKey();
     await this.prisma.$transaction(
       uniqueAlertIds.map((alertId) => this.upsertResolution(alertId, resolvedDate, resolvedBy))
     );
@@ -217,5 +217,10 @@ export class AlertService {
       pageSize: safePageSize,
       offset: (clampedPage - 1) * safePageSize
     };
+  }
+
+  /** 当天 localDateKey —— 同一方法多次调用重新取,避免跨天场景下出现日期漂移。 */
+  private todayKey(): string {
+    return localDateKey(new Date());
   }
 }

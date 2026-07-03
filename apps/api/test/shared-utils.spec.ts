@@ -156,6 +156,11 @@ describe('nowISO / futureISO / msToISO', () => {
     expect(ts).toBeLessThanOrEqual(after);
   });
 
+  it('nowISO accepts an explicit Date for deterministic output', () => {
+    const fixed = new Date('2026-05-11T18:00:00.000Z');
+    expect(nowISO(fixed)).toBe('2026-05-11T18:00:00.000Z');
+  });
+
   it('futureISO adds the requested offset', () => {
     const before = Date.now();
     const iso = futureISO(1000);
