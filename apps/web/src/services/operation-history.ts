@@ -1,4 +1,4 @@
-import { randomShortId } from '@content/shared';
+import { describeError, randomShortId } from '@content/shared';
 
 export interface OperationRecord {
   id: string;
@@ -88,7 +88,8 @@ class OperationHistoryService {
         this.records = JSON.parse(stored);
       }
     } catch (error) {
-      console.error('Failed to load operation history:', error);
+      // 局部存储被外部篡改/损坏时(常见 SyntaxError)只 log,不让初始化崩溃
+      console.error('Failed to load operation history:', describeError(error));
       this.records = [];
     }
   }
@@ -98,7 +99,8 @@ class OperationHistoryService {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(this.records));
     } catch (error) {
-      console.error('Failed to save operation history:', error);
+      // 配额溢出 / 隐私模式禁用 storage 都会走到这里,继续运行但保留日志
+      console.error('Failed to save operation history:', describeError(error));
     }
   }
 

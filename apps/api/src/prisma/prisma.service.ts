@@ -2,6 +2,7 @@ import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/commo
 import { Prisma } from '@prisma/client';
 import { join, dirname } from 'path';
 import { existsSync } from 'fs';
+import { describeError } from '@content/shared';
 
 /** 提取 Prisma 已知错误码,避免 unsafe cast;非 Prisma 错误返回 undefined。 */
 function getPrismaErrorCode(error: unknown): string | undefined {
@@ -129,8 +130,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
       }
     } catch (err: unknown) {
       // 表可能还不存在（首次启动），忽略错误
-      const message = err instanceof Error ? err.message : String(err);
-      this.logger.warn(`Skipping column migration: ${message}`);
+      this.logger.warn(`Skipping column migration: ${describeError(err)}`);
     }
   }
 

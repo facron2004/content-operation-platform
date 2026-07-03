@@ -1,8 +1,8 @@
 import type { PromotionLevel } from '@content/shared';
-import { clamp, formatPrice } from '@content/shared';
+import { clamp, clampNonNegative, formatPrice, safeRatio } from '@content/shared';
 
 // 重新导出 shared 的权威版本,domain 层统一从 utils 引入
-export { clamp, formatPrice };
+export { clamp, clampNonNegative, formatPrice, safeRatio };
 
 /**
  * 库存滞销/连续未售罄的临界天数,跨 promotion-rules / content.service / inventory-flags 共用。
@@ -32,11 +32,6 @@ export const HEALTHY_VERIFY_RATE_THRESHOLD = 0.7;
  * `>= SALES_SPEED_HOT_THRESHOLD` 视为"快销",触发 nearly_sold_out / hot_restock_needed 等标签。
  */
 export const SALES_SPEED_HOT_THRESHOLD = 5;
-
-/** 将数值限制在 [min, max] 范围内(重导出见文件头) */
-
-/** 将数值钳到非负数,语义等同 Math.max(0, value) */
-export const clampNonNegative = (value: number): number => Math.max(0, value);
 
 /** 一天的毫秒数,跨库存滞销 / 套餐上架天数计算共用 */
 export const MS_PER_DAY = 24 * 60 * 60 * 1000;

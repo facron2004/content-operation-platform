@@ -2,7 +2,11 @@ import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios';
 import { ElMessage } from 'element-plus';
 import NProgress from 'nprogress';
 import 'nprogress/nprogress.css';
-import { exponentialBackoff, sleep } from '@content/shared';
+import {
+  exponentialBackoff,
+  extractErrorMessage as extractErrorMessageBase,
+  sleep
+} from '@content/shared';
 import { useAuthStore } from '../stores/auth';
 
 NProgress.configure({
@@ -52,22 +56,12 @@ async function restoreAuth(): Promise<string | null> {
   return authStore.loginLocally();
 }
 
-/** 从任意错误对象中抽取可展示给用户的字符串。
+/** 从任意错误对象中抽取可展示给用户的字符串(axios 友好版)。
  *  优先读 axios 响应体里的 message / error,再退到 Error.message,
- *  最后用 fallback。web 各处错误处理统一走这里,避免重复 isinstance 判断。 */
+ *  最后用 fallback。实现已下沉到 packages/shared,这里只包一层默认 isAxiosError 判别,
+ *  保持调用点 `extractErrorMessage(error)` 的简洁签名不变。 */
 export function extractErrorMessage(error: unknown, fallback = '请求失败'): string {
-  if (axios.isAxiosError(error)) {
-    const data = error.response?.data as { message?: string; error?: string } | undefined;
-    const message = data?.message || data?.error;
-    if (message) return message;
-    if (error.code === 'ECONNABORTED' || /timeout/i.test(error.message)) {
-      return '请求超时,请稍后重试';
-    }
-    if (!error.response) return '网络连接失败,请检查网络';
-    return `请求失败 (${error.response.status})`;
-  }
-  if (error instanceof Error && error.message) return error.message;
-  return fallback;
+  return extractErrorMessageBase(error, { isAxiosError: axios.isAxiosError, fallback });
 }
 
 function redirectToLogin() {

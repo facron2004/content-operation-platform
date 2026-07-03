@@ -473,6 +473,16 @@ const padTwo = (n: number): string => String(n).padStart(2, '0');
 export const clamp = (value: number, min = 0, max = 100): number =>
   Math.min(max, Math.max(min, value));
 
+/** 把数值钳到非负数 —— 不复用 clamp 是因为 clamp 默认 max=100 会误伤大于 100 的合法值。 */
+export const clampNonNegative = (value: number): number => Math.max(0, value);
+
+/**
+ * 安全除法(分母为 0 时返回 0),保留 precision 位小数。
+ * 跨前后端业务统计共用,避免 NaN 污染分数/比率字段。
+ */
+export const safeRatio = (numerator: number, denominator: number, precision = 4): number =>
+  denominator === 0 ? 0 : Number((numerator / denominator).toFixed(precision));
+
 /**
  * 指数退避(2^attempt * base),结果被 maxMs 封顶。
  * 前后端共用 —— ai-copy/retry.handler、content/data-source、
@@ -495,6 +505,75 @@ export function localDateKey(date: Date): string {
 
 /** 生成 5 位 base36 随机后缀,用于短 ID(contentId 等不需要密码学强度的场景) */
 export const randomShortId = (): string => Math.random().toString(36).slice(2, 7);
+
+/**
+ * 把任意错误归一成"是否来自 axios"。避免在 shared 层硬依赖 axios,
+ * web 端通过 options.isAxiosError 传入 axios.isAxiosError,其它环境(null/undefined)
+ * 统一走 Error / 兜底分支,保持前后端都能复用。
+ */
+type AxiosLikeError = {
+  isAxiosError?: boolean;
+  code?: string;
+  message?: string;
+  response?: { status?: number; data?: unknown };
+};
+
+export interface ExtractErrorMessageOptions {
+  /** 判别 axios 错误。web 端传入 `axios.isAxiosError`,其它端不传。 */
+  isAxiosError?: (error: unknown) => error is AxiosLikeError;
+  /** 兜底文案 */
+  fallback?: string;
+  /** 读 message / error 字段时使用的键名集合,默认 ['message', 'error'] */
+  responseMessageKeys?: readonly string[];
+}
+
+const DEFAULT_RESPONSE_KEYS: readonly string[] = ['message', 'error'];
+
+const readResponseMessage = (data: unknown, keys: readonly string[]): string | undefined => {
+  if (typeof data !== 'object' || data === null) return undefined;
+  const record = data as Record<string, unknown>;
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === 'string' && value.length > 0) return value;
+  }
+  return undefined;
+};
+
+/** 把任意 thrown 值归一成可读字符串(优先 Error.message),用于 catch 后的日志。 */
+export const describeError = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error);
+
+/**
+ * 从任意错误对象中抽取可展示给用户的字符串。
+ * - axios 错误:优先读 response.data.message / error,再按状态码/超时/无响应分支回落
+ * - 普通 Error:返回 .message
+ * - 其它:返回 fallback
+ * web 端常见错误处理统一走这里,避免重复 isinstance 判断。
+ */
+export function extractErrorMessage(
+  error: unknown,
+  options: ExtractErrorMessageOptions = {}
+): string {
+  const {
+    isAxiosError,
+    fallback = '请求失败',
+    responseMessageKeys = DEFAULT_RESPONSE_KEYS
+  } = options;
+  if (isAxiosError && isAxiosError(error)) {
+    const axiosLike = error as AxiosLikeError;
+    const message = readResponseMessage(axiosLike.response?.data, responseMessageKeys);
+    if (message) return message;
+    if (axiosLike.code === 'ECONNABORTED' || /timeout/i.test(axiosLike.message ?? '')) {
+      return '请求超时,请稍后重试';
+    }
+    if (!axiosLike.response) return '网络连接失败,请检查网络';
+    const status = axiosLike.response.status;
+    if (typeof status === 'number') return `请求失败 (${status})`;
+    return fallback;
+  }
+  if (error instanceof Error && error.message) return error.message;
+  return fallback;
+}
 
 // ============================================================================
 // 分页工具 (跨前后端共用)
