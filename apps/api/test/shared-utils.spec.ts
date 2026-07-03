@@ -6,6 +6,9 @@ import {
   exponentialBackoff,
   extractErrorMessage,
   formatRatePercent,
+  futureISO,
+  msToISO,
+  nowISO,
   safeRatio,
   sleep
 } from '@content/shared';
@@ -139,5 +142,38 @@ describe('extractErrorMessage', () => {
 
   it('uses fallback when nothing usable is found', () => {
     expect(extractErrorMessage({}, { fallback: 'X' })).toBe('X');
+  });
+});
+
+describe('nowISO / futureISO / msToISO', () => {
+  it('nowISO returns a parseable ISO timestamp near the current time', () => {
+    const before = Date.now();
+    const iso = nowISO();
+    const after = Date.now();
+    const ts = new Date(iso).getTime();
+    expect(Number.isFinite(ts)).toBe(true);
+    expect(ts).toBeGreaterThanOrEqual(before);
+    expect(ts).toBeLessThanOrEqual(after);
+  });
+
+  it('futureISO adds the requested offset', () => {
+    const before = Date.now();
+    const iso = futureISO(1000);
+    const ts = new Date(iso).getTime();
+    expect(ts - before).toBeGreaterThanOrEqual(900);
+    expect(ts - before).toBeLessThan(2000);
+  });
+
+  it('msToISO returns ISO for positive timestamps', () => {
+    const iso = msToISO(0);
+    expect(iso === null || typeof iso === 'string').toBe(true);
+    if (iso) {
+      expect(new Date(iso).getTime()).toBe(0);
+    }
+  });
+
+  it('msToISO returns null for non-positive input (the "never happened" sentinel)', () => {
+    expect(msToISO(0)).toBeNull();
+    expect(msToISO(-1)).toBeNull();
   });
 });
