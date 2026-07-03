@@ -87,7 +87,7 @@ export class AutoLoginService implements OnModuleInit {
         }
       }
     } catch (err: unknown) {
-      this.logger.error('Failed to load cookie from cache file:', err);
+      this.logger.error(`Failed to load cookie from cache file: ${describeError(err)}`);
     }
   }
 
@@ -97,7 +97,7 @@ export class AutoLoginService implements OnModuleInit {
       await fs.writeFile(cachePath, cookie, 'utf8');
       this.logger.log('Saved valid cookie to .cookie.cache');
     } catch (err: unknown) {
-      this.logger.error('Failed to save cookie to cache file:', err);
+      this.logger.error(`Failed to save cookie to cache file: ${describeError(err)}`);
     }
   }
 

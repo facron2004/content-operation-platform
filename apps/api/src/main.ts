@@ -8,6 +8,7 @@ import { NestFactory } from '@nestjs/core';
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 import { securityHeaders } from './common';
+import { describeError } from '@content/shared';
 import type { Request, Response, NextFunction } from 'express';
 
 /** bootstrap 阶段的简易日志器,绕过 Nest DI 提前输出。 */
@@ -84,6 +85,6 @@ async function bootstrap() {
 }
 
 bootstrap().catch((err) => {
-  bootstrapLogger.error('Failed to start Content Ops API:', err);
+  bootstrapLogger.error(`Failed to start Content Ops API: ${describeError(err)}`);
   process.exit(1);
 });

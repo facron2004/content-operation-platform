@@ -85,7 +85,11 @@
 import { ref, computed } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { Search } from '@element-plus/icons-vue';
-import { useOperationHistory, type OperationRecord } from '../services/operation-history';
+import {
+  useOperationHistory,
+  operationHistory,
+  type OperationRecord
+} from '../services/operation-history';
 
 const visible = defineModel<boolean>('visible', { default: false });
 
@@ -123,16 +127,7 @@ function formatTime(timestamp: number): string {
   return new Date(timestamp).toLocaleString('zh-CN');
 }
 
-function getTypeLabel(type: OperationRecord['type']): string {
-  const labels: Record<OperationRecord['type'], string> = {
-    alert_resolve: '处理预警',
-    alert_batch_resolve: '批量处理',
-    copy_generate: '生成文案',
-    copy_audit: '审核文案',
-    config_update: '更新配置'
-  };
-  return labels[type] || type;
-}
+const { getTypeLabel } = operationHistory;
 
 function showDetails(record: OperationRecord) {
   selectedRecord.value = record;

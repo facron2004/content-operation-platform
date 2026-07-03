@@ -1,6 +1,6 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import type { RecommendPackageItem } from '@content/shared';
+import type { PaginationMeta, RecommendPackageItem } from '@content/shared';
 import { api } from '../services/api';
 import { clearPackageCache } from '../services/cache.service';
 import { useRoleStore } from '../stores/role';
@@ -17,7 +17,11 @@ export function useRecommendationsPage() {
     category: '',
     unsoldOnly: false
   });
-  const pagination = reactive({ page: 1, pageSize: 50, total: 0 });
+  const pagination = reactive<Omit<PaginationMeta, 'totalPages'>>({
+    page: 1,
+    pageSize: 50,
+    total: 0
+  });
   let loadRequestId = 0;
   let categoryOptionsRequestId = 0;
 

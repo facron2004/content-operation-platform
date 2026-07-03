@@ -13,6 +13,8 @@ import { writeFileSync } from 'node:fs';
 import { timingSafeEqual } from 'node:crypto';
 import type { Response } from 'express';
 import { SoldoutService } from './soldout.service';
+
+const INVALID_INTERNAL_TOKEN_MESSAGE = 'Missing or invalid x-internal-token header.';
 import { Public } from '../auth';
 
 @ApiTags('soldout')
@@ -101,12 +103,12 @@ export class SoldoutController {
       );
     }
     if (!provided || provided.length !== expected.length) {
-      throw new UnauthorizedException('Missing or invalid x-internal-token header.');
+      throw new UnauthorizedException(INVALID_INTERNAL_TOKEN_MESSAGE);
     }
     const expectedBuf = Buffer.from(expected);
     const providedBuf = Buffer.from(provided);
     if (!timingSafeEqual(expectedBuf, providedBuf)) {
-      throw new UnauthorizedException('Missing or invalid x-internal-token header.');
+      throw new UnauthorizedException(INVALID_INTERNAL_TOKEN_MESSAGE);
     }
   }
 }

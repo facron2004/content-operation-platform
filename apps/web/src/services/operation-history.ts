@@ -105,10 +105,10 @@ class OperationHistoryService {
   }
 
   // 获取类型标签
-  private getTypeLabel(type: OperationRecord['type']): string {
+  getTypeLabel(type: OperationRecord['type']): string {
     const labels: Record<OperationRecord['type'], string> = {
       alert_resolve: '处理预警',
-      alert_batch_resolve: '批量处理预警',
+      alert_batch_resolve: '批量处理',
       copy_generate: '生成文案',
       copy_audit: '审核文案',
       config_update: '更新配置'

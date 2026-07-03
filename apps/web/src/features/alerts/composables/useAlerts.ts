@@ -1,6 +1,6 @@
 import { computed, ref, reactive, watch, onBeforeUnmount, type Ref } from 'vue';
 import { ElMessage } from 'element-plus';
-import type { OperationAlert } from '@content/shared';
+import type { OperationAlert, PaginationMeta } from '@content/shared';
 import { api } from '../../../services/api';
 import { clearAlertCache } from '../../../services/cache.service';
 import { useOperationHistory } from '../../../services/operation-history';
@@ -50,7 +50,11 @@ export function useAlerts(role: Ref<string | undefined>) {
   const alerts = ref<AlertItem[]>([]);
   const alertResponse = ref<AlertResponse | null>(null);
   const filters = reactive({ keyword: '', level: '', type: '' });
-  const pagination = reactive({ page: 1, pageSize: 80, total: 0, totalPages: 1 });
+  const pagination = reactive<Omit<PaginationMeta, 'totalPages'>>({
+    page: 1,
+    pageSize: 80,
+    total: 0
+  });
   let filterTimer: ReturnType<typeof window.setTimeout> | undefined;
   let loadRequestId = 0; // Race condition guard
   let resolveRequestId = 0;
@@ -92,7 +96,6 @@ export function useAlerts(role: Ref<string | undefined>) {
       pagination.page = data.pagination?.page ?? pagination.page;
       pagination.pageSize = data.pagination?.pageSize ?? pagination.pageSize;
       pagination.total = data.pagination?.total ?? alerts.value.length;
-      pagination.totalPages = data.pagination?.totalPages ?? 1;
     } catch {
       if (requestId !== loadRequestId) return;
       loadError.value = '预警数据加载失败，请稍后重试';
