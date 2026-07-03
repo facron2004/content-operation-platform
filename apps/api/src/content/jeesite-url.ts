@@ -13,6 +13,8 @@
  */
 
 /** 默认基础 URL,外部 EXTERNAL_API_BASE_URL 未配置时的兜底;集中在此便于 SSRF/合规审计 */
+import { describeError } from '@content/shared';
+
 export const DEFAULT_JEESITE_BASE_URL = 'https://zdm.zhsh1.cn/a';
 
 export const adminFormUrl = (baseUrl: string | undefined, id: string) => {
@@ -125,7 +127,7 @@ export async function assertHostnameNotPrivateAsync(hostname: string): Promise<v
     });
   } catch (err: unknown) {
     throw new Error(
-      `EXTERNAL_API_BASE_URL DNS resolution failed for ${hostname}: ${err instanceof Error ? err.message : String(err)}`
+      `EXTERNAL_API_BASE_URL DNS resolution failed for ${hostname}: ${describeError(err)}`
     );
   }
   for (const { address } of addrs) {
