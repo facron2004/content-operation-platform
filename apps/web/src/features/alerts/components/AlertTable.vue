@@ -60,17 +60,12 @@
       </el-table-column>
     </el-table>
 
-    <div class="alert-pagination">
-      <el-pagination
-        :current-page="pagination.page"
-        :page-size="pagination.pageSize"
-        :page-sizes="[50, 80, 120]"
-        layout="total, sizes, prev, pager, next"
-        :total="pagination.total"
-        @current-change="$emit('page-change', $event)"
-        @size-change="$emit('size-change', $event)"
-      />
-    </div>
+    <PaginationFooter
+      :pagination="pagination"
+      :page-sizes="[50, 80, 120]"
+      @page-change="$emit('page-change', $event)"
+      @size-change="$emit('size-change', $event)"
+    />
   </section>
 </template>
 
@@ -79,6 +74,7 @@ import { computed } from 'vue';
 import type { OperationAlert } from '@content/shared';
 import { alertTypeLabels, riskTagType, levelText } from '../../../utils/labels';
 import SectionHeader from '../../../components/SectionHeader.vue';
+import PaginationFooter from '../../../components/PaginationFooter.vue';
 
 const props = defineProps<{
   alerts: (OperationAlert & { priorityScore?: number })[];

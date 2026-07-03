@@ -71,15 +71,8 @@ export class AlertService {
   async resolveOperationAlert(alertId: string, resolvedBy = 'operator') {
     if (!alertId) throw new BadRequestException('alertId 必填');
     const resolvedDate = localDateKey(new Date());
-    if (this.prisma.operationAlertResolution) {
-      await this.prisma.operationAlertResolution.upsert({
-        where: { alertId_resolvedDate: { alertId, resolvedDate } },
-        update: { resolvedBy, resolvedAt: new Date() },
-        create: { alertId, resolvedDate, resolvedBy, resolvedAt: new Date() }
-      });
-    } else {
-      await this.prisma.$executeRawUnsafe(ALERT_UPSERT_SQL, alertId, resolvedDate, resolvedBy);
-    }
+    const promise = this.upsertResolution(alertId, resolvedDate, resolvedBy);
+    await promise;
     return { success: true, alertId, resolvedDate, message: '预警已标记为已处理' };
   }
 
@@ -87,23 +80,9 @@ export class AlertService {
     const uniqueAlertIds = [...new Set((alertIds ?? []).map((id) => id?.trim()).filter(Boolean))];
     if (!uniqueAlertIds.length) throw new BadRequestException('alertIds 不能为空');
     const resolvedDate = localDateKey(new Date());
-    if (this.prisma.operationAlertResolution) {
-      await this.prisma.$transaction(
-        uniqueAlertIds.map((alertId) =>
-          this.prisma.operationAlertResolution.upsert({
-            where: { alertId_resolvedDate: { alertId, resolvedDate } },
-            update: { resolvedBy, resolvedAt: new Date() },
-            create: { alertId, resolvedDate, resolvedBy, resolvedAt: new Date() }
-          })
-        )
-      );
-    } else {
-      await this.prisma.$transaction(
-        uniqueAlertIds.map((alertId) =>
-          this.prisma.$executeRawUnsafe(ALERT_UPSERT_SQL, alertId, resolvedDate, resolvedBy)
-        )
-      );
-    }
+    await this.prisma.$transaction(
+      uniqueAlertIds.map((alertId) => this.upsertResolution(alertId, resolvedDate, resolvedBy))
+    );
     return {
       success: true,
       alertIds: uniqueAlertIds,
@@ -111,6 +90,24 @@ export class AlertService {
       resolvedDate,
       message: '预警已标记为已处理'
     };
+  }
+
+  /**
+   * 返回 OperationAlertResolution upsert 的 Prisma client promise。
+   * 注意:`return` 必须直接返回 `prisma.X.upsert(...)` 的引用,不要 await,
+   * Prisma 6 的 `$transaction` 会校验 promise 数组元素必须是 Prisma Client
+   * promise,普通 Promise/async 函数返回会被拒("All elements of the array
+   * need to be Prisma Client promises")。
+   */
+  private upsertResolution(alertId: string, resolvedDate: string, resolvedBy: string) {
+    if (this.prisma.operationAlertResolution) {
+      return this.prisma.operationAlertResolution.upsert({
+        where: { alertId_resolvedDate: { alertId, resolvedDate } },
+        update: { resolvedBy, resolvedAt: new Date() },
+        create: { alertId, resolvedDate, resolvedBy, resolvedAt: new Date() }
+      });
+    }
+    return this.prisma.$executeRawUnsafe(ALERT_UPSERT_SQL, alertId, resolvedDate, resolvedBy);
   }
 
   /** 供 DashboardService 内部使用 */

@@ -118,18 +118,12 @@
         </template>
       </el-table>
       <!-- 服务端分页 -->
-      <div class="table-footer">
-        <span class="muted-cell">共 {{ pagination.total }} 条</span>
-        <el-pagination
-          v-model:current-page="pagination.page"
-          v-model:page-size="pagination.pageSize"
-          :page-sizes="[30, 50, 100]"
-          layout="total, sizes, prev, pager, next"
-          :total="pagination.total"
-          @current-change="loadPage"
-          @size-change="loadPage"
-        />
-      </div>
+      <PaginationFooter
+        :pagination="pagination"
+        :page-sizes="[30, 50, 100]"
+        @page-change="loadPage"
+        @size-change="loadPage"
+      />
     </section>
   </section>
 </template>
@@ -145,6 +139,7 @@ import {
 } from '../utils/labels';
 import TableSkeleton from '../components/TableSkeleton.vue';
 import EmptyState from '../components/EmptyState.vue';
+import PaginationFooter from '../components/PaginationFooter.vue';
 import { useRecommendationsPage } from '../composables/useRecommendationsPage';
 
 const {
