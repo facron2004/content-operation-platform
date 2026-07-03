@@ -1,7 +1,7 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { isRecord, exponentialBackoff } from '@content/shared';
+import { describeError, isRecord, exponentialBackoff } from '@content/shared';
 import { assertHostnameNotPrivateAsync } from './jeesite-bargain-adapter';
 import { DEFAULT_USER_AGENT } from './http-headers';
 import { MS_PER_MINUTE } from '../domain/utils';
@@ -429,10 +429,10 @@ export class AutoLoginService implements OnModuleInit {
         cookie: buildBargainCookie(sessionId)
       };
     } catch (error: unknown) {
-      this.logger.error(`Login error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      this.logger.error(`Login error: ${describeError(error)}`);
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error'
+        error: describeError(error)
       };
     }
   }

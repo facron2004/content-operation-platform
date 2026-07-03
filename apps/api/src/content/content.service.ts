@@ -426,7 +426,7 @@ export class ContentService {
   async generateBattleCard(packageId: string) {
     const recommendations = await this.getRecommendations({ status: 'selling' });
     const pkg = recommendations.packages.find((item) => item.packageId === packageId);
-    if (!pkg?.scoreBreakdown) throw new NotFoundException('套餐不存在');
+    if (!pkg?.scoreBreakdown) throw new NotFoundException(`套餐不存在: ${packageId}`);
     return buildBattleCard(pkg, pkg.scoreBreakdown, pkg.operationTags ?? []);
   }
 

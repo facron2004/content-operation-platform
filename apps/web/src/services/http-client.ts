@@ -133,7 +133,7 @@ client.interceptors.response.use(
 
     const status = error.response.status;
     const data = error.response.data as { message?: string; error?: string } | undefined;
-    const message = data?.message || data?.error;
+    const message = data?.message || data?.error || '';
 
     if (status === 401 && config && !config.__authRetried__) {
       config.__authRetried__ = true;
