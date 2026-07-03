@@ -63,7 +63,7 @@ export class CopyService {
     };
 
     const resolved = await this.resolvePackageAndSnapshot(normalizedRequest.packageId);
-    if (!resolved) throw new NotFoundException('套餐不存在');
+    if (!resolved) throw new NotFoundException(`套餐不存在: ${normalizedRequest.packageId}`);
 
     const { pkg, snapshot } = resolved;
     await this.ensurePackagePersisted(pkg);
@@ -129,7 +129,7 @@ export class CopyService {
     const packageRow = await this.prisma.contentPackage.findUnique({
       where: { packageId: row.packageId }
     });
-    if (!packageRow) throw new NotFoundException('套餐不存在');
+    if (!packageRow) throw new NotFoundException(`套餐不存在: ${row.packageId}`);
 
     const pkg = mapPackage(packageRow);
     const title = request.title ?? row.title;

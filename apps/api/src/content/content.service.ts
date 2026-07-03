@@ -361,7 +361,7 @@ export class ContentService {
 
   async getPackageAnalysis(packageId: string) {
     const resolved = await this.resolveLocalPackageAndSnapshot(packageId);
-    if (!resolved) throw new NotFoundException('套餐不存在');
+    if (!resolved) throw new NotFoundException(`套餐不存在: ${packageId}`);
 
     const { pkg, snapshot, snapshots } = resolved;
     const asOf = this.resolveAsOfDate(undefined, [snapshot]);
