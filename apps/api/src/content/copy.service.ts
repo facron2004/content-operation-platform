@@ -10,7 +10,7 @@ import type {
   GenerateCopyRequest,
   SalesSnapshot
 } from '@content/shared';
-import { resolvePagination } from '@content/shared';
+import { resolvePagination, describeError } from '@content/shared';
 import { auditCopyText, generateTemplateCopies } from '../domain/copy-rules';
 import { buildPromotionScore } from '../domain/promotion-rules';
 import { getFallbackDate } from '../domain/utils';
@@ -75,8 +75,7 @@ export class CopyService {
         normalizedRequest.packageId
       );
     } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : String(error);
-      this.logger.warn(`获取套餐详情失败 ${normalizedRequest.packageId}: ${msg}`);
+      this.logger.warn(`获取套餐详情失败 ${normalizedRequest.packageId}: ${describeError(error)}`);
     }
 
     const copies = normalizedRequest.useAI

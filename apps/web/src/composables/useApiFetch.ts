@@ -1,5 +1,6 @@
 import { ref } from 'vue';
 import { api } from '../services/api';
+import { extractErrorMessage } from '../services/http-client';
 
 /**
  * 通用数据加载 composable — 消除各视图中重复的 loading/error/force-refresh 模式。
@@ -32,8 +33,9 @@ export function useApiFetch<T>(fetcher: () => Promise<T>, options: UseApiFetchOp
     try {
       if (force && clearCacheOnForce) api.clearCache();
       data.value = await fetcher();
-    } catch {
-      error.value = errorMessage;
+    } catch (err) {
+      // 真实错误从 axios 响应里抽,fallback 才是 errorMessage —— 让 UI 能区分"通用失败"与"具体 4xx"
+      error.value = extractErrorMessage(err, errorMessage);
     } finally {
       loading.value = false;
     }

@@ -2,6 +2,7 @@ import { computed, ref, watch, type Ref } from 'vue';
 import { localDateKey, type OperationAlert, type OperationCard } from '@content/shared';
 import { api, type ConsoleResponse } from '../../../services/api';
 import { clearDashboardCache } from '../../../services/cache.service';
+import { extractErrorMessage } from '../../../services/http-client';
 
 export interface ConsoleSummary {
   sellingCount: number;
@@ -114,8 +115,11 @@ export function useDashboard(role: Ref<string | undefined>) {
       if (force) clearDashboardCache();
       const data = await api.getTodayOperationConsole({ role: role.value });
       consoleData.value = mapConsoleResponse(data as ConsoleResponse);
-    } catch {
-      loadError.value = '作战台数据加载失败，请稍后重试；如反复出现请重新登录';
+    } catch (err) {
+      loadError.value = extractErrorMessage(
+        err,
+        '作战台数据加载失败，请稍后重试；如反复出现请重新登录'
+      );
       consoleData.value = emptyConsoleData;
     } finally {
       loading.value = false;

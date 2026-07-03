@@ -7,8 +7,12 @@ const cache = new Map<string, { data: unknown; expiresAt: number }>();
 const pendingRequests = new Map<string, Promise<unknown>>();
 
 function getCacheKey(url: string, params?: Record<string, unknown>): string {
-  // Use sorted keys for consistent cache keys regardless of object key order
-  const sortedParams = params ? Object.fromEntries(Object.entries(params).sort()) : {};
+  // Filter undefined/null so {areaId: undefined} and {} produce the same key —
+  // 否则 { areaId: undefined } 会被 stringify 成 "{\"areaId\":undefined}",与省略键不一致。
+  const cleaned = params
+    ? Object.fromEntries(Object.entries(params).filter(([, v]) => v !== undefined && v !== null))
+    : {};
+  const sortedParams = Object.fromEntries(Object.entries(cleaned).sort());
   return `${url}:${JSON.stringify(sortedParams)}`;
 }
 
