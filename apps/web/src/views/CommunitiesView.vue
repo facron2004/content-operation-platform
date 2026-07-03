@@ -1,13 +1,6 @@
 <template>
   <section v-loading="loading" class="page-stack">
-    <el-alert
-      v-if="loadError"
-      :title="loadError"
-      type="error"
-      show-icon
-      closable
-      style="margin-bottom: 12px"
-    />
+    <ErrorAlert :message="loadError" style="margin-bottom: 12px" />
     <div class="community-toolbar">
       <div>
         <p class="eyebrow">Community Operations</p>
@@ -102,6 +95,7 @@ import { api } from '../services/api';
 import { useRoleStore } from '../stores/role';
 import { groupTypeLabels, percent as formatPercent } from '../utils/labels';
 import { useApiFetch } from '../composables/useApiFetch';
+import ErrorAlert from '../components/ErrorAlert.vue';
 
 interface CommunitiesData {
   items: CommunityGroup[];

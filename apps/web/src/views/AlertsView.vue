@@ -19,14 +19,7 @@
       </div>
     </section>
 
-    <el-alert
-      v-if="loadError"
-      :title="loadError"
-      type="error"
-      show-icon
-      closable
-      class="page-alert"
-    />
+    <ErrorAlert :message="loadError" />
 
     <AlertMetrics :summary="summary" />
 
@@ -106,6 +99,7 @@ import AlertMetrics from '../features/alerts/components/AlertMetrics.vue';
 import FocusPackageGrid from '../features/alerts/components/FocusPackageGrid.vue';
 import AlertFilters from '../features/alerts/components/AlertFilters.vue';
 import AlertTable from '../features/alerts/components/AlertTable.vue';
+import ErrorAlert from '../components/ErrorAlert.vue';
 
 const router = useRouter();
 const roleStore = useRoleStore();

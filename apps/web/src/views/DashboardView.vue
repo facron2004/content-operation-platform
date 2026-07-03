@@ -30,14 +30,7 @@
       </div>
     </section>
 
-    <el-alert
-      v-if="loadError"
-      :title="loadError"
-      type="error"
-      show-icon
-      closable
-      class="page-alert"
-    />
+    <ErrorAlert :message="loadError" />
 
     <DashboardMetrics :summary="summary" />
 
@@ -137,6 +130,7 @@ import CommunityTaskPanel from '../features/dashboard/components/CommunityTaskPa
 import ReviewPanel from '../features/dashboard/components/ReviewPanel.vue';
 import AlertPreview from '../features/dashboard/components/AlertPreview.vue';
 import OperationSection from '../components/OperationSection.vue';
+import ErrorAlert from '../components/ErrorAlert.vue';
 
 const router = useRouter();
 const roleStore = useRoleStore();

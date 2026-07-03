@@ -1,13 +1,6 @@
 <template>
   <section v-loading="loading" class="page-stack performance-console">
-    <el-alert
-      v-if="loadError"
-      :title="loadError"
-      type="error"
-      show-icon
-      closable
-      class="page-alert"
-    />
+    <ErrorAlert :message="loadError" />
 
     <section class="panel review-hero">
       <div class="panel-head hero-head">
@@ -91,6 +84,7 @@ import ChartPanel from '../components/ChartPanel.vue';
 import { api } from '../services/api';
 import { channelLabels, percent as formatPercent } from '../utils/labels';
 import { useApiFetch } from '../composables/useApiFetch';
+import ErrorAlert from '../components/ErrorAlert.vue';
 
 type PerformanceData = PerformanceResponse;
 
