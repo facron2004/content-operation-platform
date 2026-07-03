@@ -1,6 +1,6 @@
 {
   "name": "@content/api",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "private": true,
   "bin": "dist/main.js",
   "scripts": {

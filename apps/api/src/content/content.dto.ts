@@ -8,41 +8,44 @@ import {
   Min,
   Max,
   MinLength,
-  MaxLength
+  MaxLength,
+  ValidationOptions
 } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
+import { applyDecorators } from '@nestjs/common';
 import type { Channel, AuditStatus, UserRole } from '@content/shared';
 import { ALERT_LEVELS, ALERT_TYPES, AUDIT_DECISION_STATUSES, CHANNELS } from '@content/shared';
 
+// DTO 装饰器组合 —— 减少"@IsOptional @IsString @MaxLength(N)"重复链。
+// 抽到本文件顶部是因为这些组合只在 DTO 内使用,跨模块共享意义不大。
+const requiredString = (maxLength?: number) =>
+  maxLength !== undefined
+    ? applyDecorators(IsString(), MinLength(1), MaxLength(maxLength))
+    : applyDecorators(IsString());
+
+const optionalString = (maxLength?: number, options?: ValidationOptions) =>
+  maxLength !== undefined
+    ? applyDecorators(IsOptional(options), IsString(), MaxLength(maxLength))
+    : applyDecorators(IsOptional(options), IsString());
+
 // --- Cookie Update ---
 export class UpdateCookieDto {
-  @IsString()
-  @MinLength(1)
-  @MaxLength(5000)
+  @requiredString(5000)
   cookie!: string;
 }
 
 // --- AI Copy Config ---
 export class AICopyConfigDto {
-  @IsOptional()
-  @IsString()
-  @MinLength(1)
-  @MaxLength(200)
+  @optionalString(200)
   apiKey?: string;
 
-  @IsString()
-  @MinLength(1)
-  @MaxLength(500)
+  @requiredString(500)
   baseURL!: string;
 
-  @IsString()
-  @MinLength(1)
-  @MaxLength(100)
+  @requiredString(100)
   model!: string;
 
-  @IsOptional()
-  @IsString()
-  @MaxLength(100)
+  @optionalString(100)
   providerName?: string;
 
   @IsOptional()
@@ -62,22 +65,17 @@ export class AICopyConfigDto {
 
 // --- Copy Generation ---
 export class GenerateCopyDto {
-  @IsString()
-  @MinLength(1)
+  @requiredString()
   packageId!: string;
 
   @IsString()
   @IsIn(CHANNELS)
   channel!: Channel;
 
-  @IsOptional()
-  @IsString()
-  @MaxLength(200)
+  @optionalString(200)
   scenario?: string;
 
-  @IsOptional()
-  @IsString()
-  @MaxLength(200)
+  @optionalString(200)
   tone?: string;
 
   @IsOptional()
@@ -87,17 +85,14 @@ export class GenerateCopyDto {
   @Type(() => Number)
   copyCount?: number;
 
-  @IsOptional()
-  @IsString()
-  @MaxLength(500)
+  @optionalString(500)
   extraInstruction?: string;
 
   @IsOptional()
   @IsBoolean()
   useAI?: boolean;
 
-  @IsOptional()
-  @IsString()
+  @optionalString()
   createdBy?: string;
 }
 
@@ -107,34 +102,25 @@ export class AuditCopyDto {
   @IsIn(AUDIT_DECISION_STATUSES)
   auditStatus!: Extract<AuditStatus, 'approved' | 'rejected' | 'risk'>;
 
-  @IsOptional()
-  @IsString()
-  @MaxLength(500)
+  @optionalString(500)
   title?: string;
 
-  @IsOptional()
-  @IsString()
-  @MaxLength(5000)
+  @optionalString(5000)
   body?: string;
 
-  @IsOptional()
-  @IsString()
-  @MaxLength(1000)
+  @optionalString(1000)
   auditRemark?: string;
 }
 
 // --- Battle Card ---
 export class BattleCardGenerateDto {
-  @IsString()
-  @MinLength(1)
+  @requiredString()
   packageId!: string;
 }
 
 // --- Alert Resolution ---
 export class AlertResolveDto {
-  @IsOptional()
-  @IsString()
-  @MaxLength(100)
+  @optionalString(100)
   resolvedBy?: string;
 }
 
@@ -143,9 +129,7 @@ export class AlertResolveBatchDto {
   @IsString({ each: true })
   alertIds!: string[];
 
-  @IsOptional()
-  @IsString()
-  @MaxLength(100)
+  @optionalString(100)
   resolvedBy?: string;
 }
 
@@ -162,8 +146,7 @@ export class PackageDetailQueryDto {
 
 // --- Alert Query ---
 export class AlertQueryDto {
-  @IsOptional()
-  @IsString()
+  @optionalString()
   role?: UserRole;
 
   @IsOptional()
@@ -177,9 +160,7 @@ export class AlertQueryDto {
   @IsIn(ALERT_TYPES)
   type?: string;
 
-  @IsOptional()
-  @IsString()
-  @MaxLength(100)
+  @optionalString(100)
   keyword?: string;
 
   @IsOptional()
@@ -198,7 +179,6 @@ export class AlertQueryDto {
 
 // --- Ops today query ---
 export class OpsTodayQueryDto {
-  @IsOptional()
-  @IsString()
+  @optionalString()
   role?: UserRole;
 }
