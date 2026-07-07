@@ -112,7 +112,7 @@ npm run build:exe
 | `npm run dev` | 启动前后端开发服务器 |
 | `npm run build` | 构建 shared → api → web 三个包 |
 | `npm run build:exe` | 构建并打包为 Windows exe |
-| `npm test` | 运行后端单元测试（22 个文件，251 个用例） |
+| `npm test` | 运行后端单元测试（24 个文件，291 个用例） |
 | `npm run prepare:db` | 初始化 / 更新 SQLite 表结构 |
 | `npm run db:purge-mock` | 清除数据库中的 mock 数据 |
 
@@ -164,7 +164,7 @@ npm run build:exe
 │   │   │   ├── content/         # 核心业务模块
 │   │   │   ├── domain/          # 领域规则（推广评分、运营标签、文案规则）
 │   │   │   └── prisma/          # 数据库服务（含自动迁移）
-│   │   └── test/                # 单元测试（22 个文件，251 个用例）
+│   │   └── test/                # 单元测试（24 个文件，291 个用例）
 │   └── web/                     # Vue 3 前端
 │       ├── src/
 │       │   ├── components/      # 通用组件（布局、骨架屏、空状态等）
