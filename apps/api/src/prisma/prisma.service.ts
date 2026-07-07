@@ -82,9 +82,6 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     try {
       await this.$connect();
       this.logger.log('Database connection successful');
-
-      // 启动时自动迁移：给已存在的表补齐新增字段
-      await this.migrateAddColumns();
     } catch (error: unknown) {
       this.logger.error(`Database connection failed: ${describeError(error)}`);
 
@@ -100,36 +97,6 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
       this.logger.error(`File exists: ${exists}`);
 
       throw error;
-    }
-  }
-
-  /**
-   * 检测并补齐 ContentPackage 表中可能缺失的列（兼容旧数据库）
-   */
-  private async migrateAddColumns(): Promise<void> {
-    const columns: Array<{ name: string; type: string }> = [
-      { name: 'temporarySalePrice', type: 'REAL' },
-      { name: 'detailSummary', type: 'TEXT' },
-      { name: 'saleStatus', type: 'TEXT' }
-    ];
-
-    try {
-      const existingColumns = (await this.$queryRawUnsafe(
-        'PRAGMA table_info("ContentPackage")'
-      )) as Array<{ name: string }>;
-      const existingNames = new Set(existingColumns.map((c: { name: string }) => c.name));
-
-      for (const col of columns) {
-        if (!existingNames.has(col.name)) {
-          await this.$executeRawUnsafe(
-            `ALTER TABLE "ContentPackage" ADD COLUMN "${col.name}" ${col.type}`
-          );
-          this.logger.log(`Added column "ContentPackage"."${col.name}"`);
-        }
-      }
-    } catch (err: unknown) {
-      // 表可能还不存在（首次启动），忽略错误
-      this.logger.warn(`Skipping column migration: ${describeError(err)}`);
     }
   }
 

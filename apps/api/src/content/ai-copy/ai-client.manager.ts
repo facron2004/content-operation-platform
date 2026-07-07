@@ -1,7 +1,8 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import OpenAI from 'openai';
 import type { AICopyStatus, AICopyConfigUpdate } from './types';
 import { parseNumber } from './types';
+import { assertHostnameNotPrivateAsync } from '../jeesite-bargain-adapter';
 
 @Injectable()
 export class AIClientManager {
@@ -17,6 +18,16 @@ export class AIClientManager {
     }
   }
 
+  /** SSRF 防护：校验 AI baseURL 不指向私网/loopback/元数据服务 */
+  private async assertBaseURLSafe(baseURL: string): Promise<void> {
+    try {
+      const hostname = new URL(baseURL).hostname;
+      await assertHostnameNotPrivateAsync(hostname);
+    } catch (err: unknown) {
+      throw new BadRequestException(`AI baseURL is not allowed: ${baseURL}`);
+    }
+  }
+
   getClient(): OpenAI | null {
     return this.client;
   }
@@ -25,14 +36,21 @@ export class AIClientManager {
     return this.status;
   }
 
-  updateConfig(update: AICopyConfigUpdate): AICopyStatus {
+  async updateConfig(update: AICopyConfigUpdate): Promise<AICopyStatus> {
+    const baseURL = this.normalizeText(update.baseURL) ?? this.status.baseURL;
+    await this.assertBaseURLSafe(baseURL);
     this.status = this.applyConfig({
       apiKey: this.normalizeText(update.apiKey) ?? this.apiKey ?? undefined,
-      baseURL: this.normalizeText(update.baseURL) ?? this.status.baseURL,
+      baseURL,
       model: this.normalizeText(update.model) ?? this.status.model,
       providerName: this.normalizeText(update.providerName) ?? this.status.providerName,
-      temperature: parseNumber(update.temperature, this.status.temperature),
-      maxTokens: Math.round(parseNumber(update.maxTokens, this.status.maxTokens))
+      temperature: Math.min(
+        2,
+        Math.max(0, parseNumber(update.temperature, this.status.temperature))
+      ),
+      maxTokens: Math.round(
+        Math.min(8000, Math.max(100, parseNumber(update.maxTokens, this.status.maxTokens)))
+      )
     });
     return this.status;
   }

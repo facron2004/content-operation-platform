@@ -58,6 +58,11 @@ export const router = createRouter({
           path: 'performance',
           name: 'performance',
           component: () => import('./views/PerformanceView.vue')
+        },
+        {
+          path: ':pathMatch(.*)*',
+          name: 'not-found',
+          component: () => import('./views/NotFoundView.vue')
         }
       ]
     }

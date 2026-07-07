@@ -21,7 +21,8 @@ export const JWT_SECRET = assertNotDefault(
   DEFAULT_JWT_SECRET,
   'JWT_SECRET'
 );
-export const JWT_EXPIRES_IN = '24h';
+export const JWT_EXPIRES_IN = (process.env.JWT_EXPIRES_IN ??
+  '2h') as `${number}${'s' | 'm' | 'h' | 'd'}`;
 export const ADMIN_USERNAME = process.env.AUTH_USERNAME || 'admin';
 export const ADMIN_PASSWORD = assertNotDefault(
   process.env.AUTH_PASSWORD,

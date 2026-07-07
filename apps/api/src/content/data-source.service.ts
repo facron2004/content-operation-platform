@@ -48,17 +48,17 @@ export class DataSourceService {
       return this.cache.data;
 
     this.inFlight = (async () => {
-      this.lastFetchTime = Date.now();
-      const data = await this.loadDatasetBySource(source);
-      this.cache = { key: cacheKey, expiresAt: Date.now() + this.resolveCacheTtlMs(), data };
-      return data;
+      try {
+        this.lastFetchTime = Date.now();
+        const data = await this.loadDatasetBySource(source);
+        this.cache = { key: cacheKey, expiresAt: Date.now() + this.resolveCacheTtlMs(), data };
+        return data;
+      } finally {
+        this.inFlight = null;
+      }
     })();
 
-    try {
-      return this.inFlight;
-    } finally {
-      this.inFlight = null;
-    }
+    return this.inFlight;
   }
 
   private getFreshCache(cacheKey: string, now: number) {
@@ -75,7 +75,10 @@ export class DataSourceService {
   }
 
   private resolveCacheTtlMs() {
-    return Math.max(1000, Number(process.env.CONTENT_CACHE_TTL_MS ?? 300000));
+    return Math.max(
+      1000,
+      Number(process.env.CONTENT_DATASET_CACHE_TTL_MS ?? process.env.CONTENT_CACHE_TTL_MS ?? 300000)
+    );
   }
 
   private async loadExternalDataset(): Promise<ContentDataset> {

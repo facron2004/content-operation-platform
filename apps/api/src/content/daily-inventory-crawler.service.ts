@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { ContentPackage, InventoryTrendPoint, SalesSnapshot } from '@content/shared';
-import { localDateKey } from '@content/shared';
+import { latestSnapshotsByPackage, localDateKey } from '@content/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { sortByDateKey } from '../domain/utils';
 import { DataSourceService, type ContentDataset } from './data-source.service';
@@ -19,7 +19,6 @@ const toISOTimestamp = (value: Date | string): string =>
 @Injectable()
 export class DailyInventoryCrawlerService {
   private readonly logger = new Logger(DailyInventoryCrawlerService.name);
-  private ensureTablePromise: Promise<void> | null = null;
   private readonly autoRecordedDates = new Set<string>();
 
   constructor(
@@ -38,7 +37,6 @@ export class DailyInventoryCrawlerService {
   }
 
   async recordDatasetInventory(dataset: ContentDataset, date?: string) {
-    await this.ensureTable();
     const targetDate = this.resolveDateKey(date);
     const rows = this.collectInventoryRows(dataset, targetDate);
     await this.persistInventoryRows(rows);
@@ -68,7 +66,6 @@ export class DailyInventoryCrawlerService {
   }
 
   async loadRecentInventoryTrends(packageIds: string[], days: number, asOf: Date) {
-    await this.ensureTable();
     const uniquePackageIds = [...new Set(packageIds.filter(Boolean))];
     const result = new Map<string, InventoryTrendPoint[]>();
     if (uniquePackageIds.length === 0) return result;
@@ -92,17 +89,8 @@ export class DailyInventoryCrawlerService {
     return result;
   }
 
-  private async ensureTable() {
-    if (!this.ensureTablePromise) {
-      this.ensureTablePromise = this.createTable();
-    }
-    return this.ensureTablePromise;
-  }
-
   private collectInventoryRows(dataset: ContentDataset, _targetDate: string) {
-    const snapshotsByPackage = new Map(
-      dataset.snapshots.map((snapshot) => [snapshot.packageId, snapshot])
-    );
+    const snapshotsByPackage = latestSnapshotsByPackage(dataset.snapshots);
     const rows: Array<{ pkg: ContentPackage; snapshot: SalesSnapshot; remainingStock: number }> =
       [];
 
@@ -161,29 +149,6 @@ export class DailyInventoryCrawlerService {
         ...params
       );
     }
-  }
-
-  private async createTable() {
-    await this.prisma.$executeRawUnsafe(`
-      CREATE TABLE IF NOT EXISTS "JeeSiteInventoryDailySnapshot" (
-        "packageId" TEXT NOT NULL,
-        "snapshotDate" TEXT NOT NULL,
-        "snapshotTime" DATETIME NOT NULL,
-        "packageName" TEXT NOT NULL,
-        "merchantName" TEXT NOT NULL,
-        "areaName" TEXT NOT NULL,
-        "saleStatus" TEXT,
-        "remainingStock" INTEGER NOT NULL,
-        "soldOut" INTEGER NOT NULL,
-        "sourceField" TEXT NOT NULL,
-        "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        PRIMARY KEY ("packageId", "snapshotDate")
-      );
-    `);
-    await this.prisma.$executeRawUnsafe(
-      `CREATE INDEX IF NOT EXISTS "JeeSiteInventoryDailySnapshot_snapshotDate_idx" ON "JeeSiteInventoryDailySnapshot"("snapshotDate");`
-    );
   }
 
   private resolveDateKey(date?: string) {

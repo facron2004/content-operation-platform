@@ -166,6 +166,8 @@ export class AutoLoginService implements OnModuleInit {
       this.logger.debug('Using cached cookie');
       return this.cachedCookie;
     }
+    // 清空过期值，避免阻塞 getEnvironmentCookie 的 !this.cachedCookie 回退
+    this.cachedCookie = null;
     return null;
   }
 
@@ -282,7 +284,7 @@ export class AutoLoginService implements OnModuleInit {
       this.logger.debug(`Submitting login form to: ${loginUrl}`);
       this.logger.debug('Form data prepared with masked credentials');
 
-      const loginResponse = await fetch(loginUrl, {
+      const loginResponse = await fetchWithTimeout(loginUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',

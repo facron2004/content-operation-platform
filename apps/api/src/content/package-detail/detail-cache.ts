@@ -25,6 +25,8 @@ export class DetailCache {
   }
 
   set(packageId: string, data: PackageDetail): void {
+    // P2-9: Strip rawHtml before caching to prevent excessive memory usage
+    const cacheableData = data.rawHtml ? { ...data, rawHtml: undefined } : data;
     // LRU eviction: if at capacity, remove the oldest entry
     if (this.cache.size >= this.maxSize) {
       const oldestKey = this.cache.keys().next().value;
@@ -34,7 +36,7 @@ export class DetailCache {
       }
     }
     this.cache.set(packageId, {
-      data,
+      data: cacheableData,
       expiry: Date.now() + this.cacheTTL
     });
   }

@@ -182,3 +182,62 @@ export class OpsTodayQueryDto {
   @optionalString()
   role?: UserRole;
 }
+
+// --- Recommendations query ---
+export class RecommendationsQueryDto {
+  @optionalString(20)
+  date?: string;
+
+  @optionalString(100)
+  area_id?: string;
+
+  @optionalString(100)
+  areaId?: string;
+
+  @optionalString(100)
+  merchant_id?: string;
+
+  @optionalString(100)
+  merchantId?: string;
+
+  @optionalString()
+  role?: UserRole;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['selling'])
+  status?: 'selling';
+
+  @optionalString(200)
+  category?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  inventoryMin?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  inventoryMax?: number;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['unsold'])
+  inventoryFlag?: 'unsold';
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(1)
+  page?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(1)
+  @Max(200)
+  pageSize?: number;
+}

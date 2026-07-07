@@ -7,6 +7,7 @@ import {
   extractErrorMessage as extractErrorMessageBase,
   sleep
 } from '@content/shared';
+import { router } from '../router';
 import { useAuthStore } from '../stores/auth';
 
 NProgress.configure({
@@ -23,6 +24,7 @@ const client = axios.create({
 let requestCount = 0;
 let isRedirectingToLogin = false;
 let authRestoreInflight: Promise<string | null> | null = null;
+const inFlightControllers = new Map<string, AbortController>();
 
 type RetryableConfig = InternalAxiosRequestConfig & {
   retryCount?: number;
@@ -67,10 +69,11 @@ export function extractErrorMessage(error: unknown, fallback = '请求失败'): 
 function redirectToLogin() {
   if (isRedirectingToLogin) return;
   isRedirectingToLogin = true;
-  setTimeout(() => {
-    isRedirectingToLogin = false;
-  }, 500);
-  window.location.hash = '#/login';
+  router.push({ name: 'login' }).finally(() => {
+    setTimeout(() => {
+      isRedirectingToLogin = false;
+    }, 500);
+  });
 }
 
 function setAuthorization(config: InternalAxiosRequestConfig, token: string) {
@@ -90,6 +93,14 @@ client.interceptors.request.use(
       if (token) setAuthorization(config, token);
     }
 
+    // P2-8: AbortController — cancel previous in-flight request to the same URL
+    const requestKey = `${config.method}:${config.baseURL ?? ''}${config.url ?? ''}`;
+    const prev = inFlightControllers.get(requestKey);
+    if (prev) prev.abort();
+    const controller = new AbortController();
+    inFlightControllers.set(requestKey, controller);
+    config.signal = controller.signal;
+
     const retryConfig = config as RetryableConfig;
     retryConfig.retryCount = retryConfig.retryCount ?? 0;
     return config;
@@ -104,10 +115,18 @@ client.interceptors.request.use(
 client.interceptors.response.use(
   (response) => {
     endProgress();
+    // Clean up AbortController
+    const key = `${response.config.method}:${response.config.baseURL ?? ''}${response.config.url ?? ''}`;
+    inFlightControllers.delete(key);
     return response;
   },
   async (error: AxiosError) => {
     endProgress();
+    // Clean up AbortController
+    if (error.config) {
+      const key = `${error.config.method}:${error.config.baseURL ?? ''}${error.config.url ?? ''}`;
+      inFlightControllers.delete(key);
+    }
 
     const config = error.config as RetryableConfig | undefined;
     if (config && shouldRetry(error) && (config.retryCount ?? 0) < MAX_RETRIES) {

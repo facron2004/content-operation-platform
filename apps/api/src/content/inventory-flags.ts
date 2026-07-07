@@ -83,12 +83,16 @@ export function buildInventoryFlag(input: InventoryFlagInput): InventoryFlagResu
     };
   }
 
+  if (inventoryUnsoldDays === 0) {
+    return normalResult(normalizedTrend);
+  }
+
   return {
     inventoryFlag: 'unsold_today',
     inventoryFlagLabel: '今日未售罄',
     inventoryFlagLevel: 'info',
     ...inventorySalesStatus,
-    inventoryUnsoldDays: Math.max(1, inventoryUnsoldDays),
+    inventoryUnsoldDays,
     inventoryTrend: normalizedTrend,
     priority: 1
   };

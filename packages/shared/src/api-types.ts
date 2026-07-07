@@ -1,5 +1,13 @@
 // ==================== API Response Types ====================
 // Shared between backend controllers and frontend API service
+//
+// ⚠️ CIRCULAR DEPENDENCY GUARD
+// The imports below MUST remain `import type` (type-only).
+// index.ts re-exports this file via `export * from './api-types'`.
+// Changing any of these to a runtime import would create a real
+// circular dependency at runtime. If you need a runtime value
+// (constant, function, class) from the shared package, create a
+// separate file (e.g. domain-types.ts) to break the cycle.
 
 import type {
   CommunityGroup,

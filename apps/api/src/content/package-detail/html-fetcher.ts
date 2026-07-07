@@ -17,9 +17,12 @@ export class HtmlFetcher {
 
   async fetchHtml(packageId: string, autoRetryLogin = true): Promise<string | null> {
     try {
-      const baseUrl = normalizeJeesiteBaseUrl(
-        this.configService.get<string>('EXTERNAL_API_BASE_URL') ?? 'https://zdm.zhsh1.cn'
-      );
+      const rawBaseUrl = this.configService.get<string>('EXTERNAL_API_BASE_URL');
+      if (!rawBaseUrl) {
+        this.logger.error('EXTERNAL_API_BASE_URL is not configured');
+        return null;
+      }
+      const baseUrl = await normalizeJeesiteBaseUrl(rawBaseUrl);
       const url = `${baseUrl}/a/bargain/bargainCommodity/form?id=${encodeURIComponent(packageId)}`;
 
       const cookie =

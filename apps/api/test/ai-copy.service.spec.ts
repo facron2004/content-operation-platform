@@ -108,10 +108,10 @@ describe('AICopyService', () => {
     });
   });
 
-  it('updates runtime AI config and only exposes a masked API key', () => {
+  it('updates runtime AI config and only exposes a masked API key', async () => {
     const service = new AICopyService(new ConfigService({}));
 
-    const status = service.updateConfig({
+    const status = await service.updateConfig({
       apiKey: 'sk-1234567890abcdef',
       baseURL: 'https://api.example.com/v1',
       model: 'custom-copy-model',

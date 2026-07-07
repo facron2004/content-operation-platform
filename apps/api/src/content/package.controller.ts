@@ -9,7 +9,8 @@ import {
   PackageDetailQueryDto,
   AICopyConfigDto,
   BattleCardGenerateDto,
-  UpdateCookieDto
+  UpdateCookieDto,
+  RecommendationsQueryDto
 } from './content.dto';
 import { Public } from '../auth';
 import { nowISO } from '../common/format';
@@ -28,35 +29,19 @@ export class PackageController {
 
   @Get('packages/recommend')
   @ApiOperation({ summary: '套餐推荐列表' })
-  getRecommendations(
-    @Query('date') date?: string,
-    @Query('area_id') areaIdSnake?: string,
-    @Query('areaId') areaIdCamel?: string,
-    @Query('merchant_id') merchantIdSnake?: string,
-    @Query('merchantId') merchantIdCamel?: string,
-    @Query('role') role?: UserRole,
-    @Query('status') status?: 'selling',
-    @Query('category') category?: string,
-    @Query('inventoryMin') inventoryMin?: string,
-    @Query('inventoryMax') inventoryMax?: string,
-    @Query('inventoryFlag') inventoryFlag?: 'unsold',
-    @Query('page') page?: string,
-    @Query('pageSize') pageSize?: string
-  ) {
-    const min = inventoryMin ? Number(inventoryMin) : undefined;
-    const max = inventoryMax ? Number(inventoryMax) : undefined;
+  getRecommendations(@Query() query: RecommendationsQueryDto) {
     const result = this.contentService.getRecommendations({
-      date,
-      areaId: areaIdSnake ?? areaIdCamel,
-      merchantId: merchantIdSnake ?? merchantIdCamel,
-      role,
-      status,
-      category,
-      inventoryMin: Number.isFinite(min) ? min : undefined,
-      inventoryMax: Number.isFinite(max) ? max : undefined,
-      inventoryFlag
+      date: query.date,
+      areaId: query.area_id ?? query.areaId,
+      merchantId: query.merchant_id ?? query.merchantId,
+      role: query.role,
+      status: query.status,
+      category: query.category,
+      inventoryMin: query.inventoryMin,
+      inventoryMax: query.inventoryMax,
+      inventoryFlag: query.inventoryFlag
     });
-    if (page !== undefined || pageSize !== undefined) {
+    if (query.page !== undefined || query.pageSize !== undefined) {
       return result.then(
         ({
           date: resultDate,
@@ -68,7 +53,7 @@ export class PackageController {
           packages: RecommendPackageItem[];
         }) => {
           // 推荐接口在 controller 层做二次切片:service 返回全量,controller 按 page/pageSize 切片
-          const paged = paginate(packages, Number(page) || 1, Number(pageSize) || 50);
+          const paged = paginate(packages, Number(query.page) || 1, Number(query.pageSize) || 50);
           // paginate 会再次 clamp page 到合法范围;还原 totalPages 的"非零即 1"语义
           return {
             date: resultDate,

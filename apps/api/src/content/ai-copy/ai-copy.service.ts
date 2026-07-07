@@ -7,7 +7,8 @@ import type {
   PromotionScore,
   StrategyType
 } from '@content/shared';
-import { COPY_VERSION_LETTERS, clamp, randomShortId } from '@content/shared';
+import { COPY_VERSION_LETTERS, clamp } from '@content/shared';
+import { randomUUID } from 'crypto';
 import { auditCopyText } from '../../domain/copy-rules';
 import { nowISO } from '../../common/format';
 import type { PackageDetail } from '../package-detail.service';
@@ -45,7 +46,7 @@ export class AICopyService {
     return this.clientManager.getStatus();
   }
 
-  updateConfig(update: AICopyConfigUpdate): AICopyStatus {
+  async updateConfig(update: AICopyConfigUpdate): Promise<AICopyStatus> {
     return this.clientManager.updateConfig(update);
   }
 
@@ -124,7 +125,7 @@ export class AICopyService {
       });
 
       return {
-        contentId: `AI${Date.now()}${randomShortId()}`,
+        contentId: `AI${randomUUID()}`,
         packageId: pkg.packageId,
         areaId: pkg.areaId,
         merchantId: pkg.merchantId,

@@ -1,5 +1,6 @@
 import { Body, Controller, ForbiddenException, Inject, Post, Req } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { IsString, MinLength } from 'class-validator';
 import type { Request } from 'express';
 import { AuthService } from './auth.service';
@@ -21,6 +22,7 @@ export class AuthController {
   constructor(@Inject(AuthService) private readonly authService: AuthService) {}
 
   @Public()
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Post('login')
   login(@Body() body: LoginDto) {
     return this.authService.login(body.username, body.password);
