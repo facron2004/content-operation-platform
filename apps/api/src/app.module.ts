@@ -5,12 +5,26 @@ import { ContentModule } from './content/content.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule, JwtAuthGuard } from './auth';
 import { GlobalExceptionFilter } from './common';
+import { GmvModule } from './gmv/gmv.module';
+import { MerchantModule } from './merchant/merchant.module';
+import { MerchantSalesModule } from './merchant-sales/merchant-sales.module';
+import { MovementModule } from './movement/movement.module';
+import { OverviewModule } from './overview/overview.module';
+import { RefundModule } from './refund/refund.module';
+import { ZeroSalesModule } from './zero-sales/zero-sales.module';
 
 @Module({
   imports: [
     PrismaModule,
     ContentModule,
     AuthModule,
+    GmvModule,
+    MerchantModule,
+    MerchantSalesModule,
+    MovementModule,
+    OverviewModule,
+    RefundModule,
+    ZeroSalesModule,
     ThrottlerModule.forRoot([
       {
         name: 'short',
