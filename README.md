@@ -46,12 +46,22 @@
 
 ## 快速开始
 
-### 本地开发
+### 一键启动（Windows）
+
+双击项目根目录下的 `start.bat`，脚本会自动完成环境检查、依赖安装、数据库初始化和服务启动，最后自动打开浏览器访问 `http://localhost:3100`。
+
+### 手动启动
 
 ```bash
+# 推荐使用 pnpm（项目已包含 pnpm-lock.yaml）
+pnpm install
+pnpm run prepare:db       # 初始化 SQLite 表结构
+pnpm run dev              # 启动前后端开发服务器
+
+# 或使用 npm
 npm install
-npm run prepare:db       # 初始化 SQLite 表结构
-npm run dev              # 启动前后端开发服务器
+npm run prepare:db
+npm run dev
 ```
 
 访问 `http://localhost:3100`。开发时后端 API 运行在内部端口 3101，前端通过 Vite 代理统一从 3100 端口提供 `/api` 访问。
