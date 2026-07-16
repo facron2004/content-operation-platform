@@ -143,6 +143,16 @@ const ratio = (value: number) => {
  *  修复:当字符串没有时区后缀(用 Z / +/- 结尾与否判断),默认按 +08:00 解析。
  */
 const dateText = (row: AnyRecord, keys: RowFieldSet, fallback: string) => {
+  // 数值型 epoch 特判: JeSite 老订单的 createDate/updateDate 常返回秒级(10位)或
+  // 毫秒级(13位)时间戳, 原逻辑会当字符串解析失败并回退, 导致 orderTime 存成裸时间戳。
+  for (const key of keys) {
+    const raw = row[key as string];
+    if (typeof raw === 'number' && Number.isFinite(raw)) {
+      const ms = raw < 1e12 ? raw * 1000 : raw; // 10位=秒 → 毫秒
+      const d = new Date(ms);
+      if (!Number.isNaN(d.getTime())) return d.toISOString();
+    }
+  }
   const value = text(row, keys);
   if (!value) return fallback;
   const normalized = value.includes(' ') ? value.replace(' ', 'T') : value;
@@ -181,6 +191,7 @@ export function mapJeesiteOrderListToDataset(payload: unknown): {
     const paidAmountBonus = number(row, ['balanceIntegral'], 0) / 100;
     const settledAmount = paidAmount + paidAmountWallet;
     const orderTime = dateText(row, ['createDate', 'createDateStr'], nowISO());
+    const payDate = dateText(row, ['payDate', 'pay_date', 'paymentDate'], orderTime);
     const updatedTime = dateText(row, ['updateDate'], orderTime);
     const isPaid = orderStatus === 20 || orderStatus === 30 || orderStatus === -30;
     const isRefunded = orderStatus === -30;
@@ -196,7 +207,7 @@ export function mapJeesiteOrderListToDataset(payload: unknown): {
       areaId: text(row, ['areaId', 'districtId', 'cityId']),
       areaName: text(row, ['areaName', 'districtName', 'cityName']),
       orderTime,
-      paidTime: isPaid ? orderTime : null,
+      paidTime: isPaid ? payDate : null,
       verifyTime: orderStatus === 30 ? updatedTime : null,
       // refundTime 留给专门的 refund 端点填具体退款时间,这里先 fallback 到 updateDate
       refundTime: isRefunded ? updatedTime : null,

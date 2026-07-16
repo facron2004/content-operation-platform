@@ -364,7 +364,7 @@ export class GmvService {
 
     const rows = await this.prisma.orderHeader.findMany({
       where: {
-        orderTime: { gte: weekStart, lt: todayEnd },
+        paidTime: { gte: weekStart, lt: todayEnd },
         status: { in: ['paid', 'verified'] },
         merchantName: { not: null }
       },
@@ -525,7 +525,7 @@ export class GmvService {
 
     const rows = await this.prisma.orderHeader.findMany({
       where: {
-        orderTime: { gte: weekStart, lt: todayEnd },
+        paidTime: { gte: weekStart, lt: todayEnd },
         status: { in: ['paid', 'verified'] },
         merchantId: { not: null }
       },
@@ -573,7 +573,7 @@ export class GmvService {
 
     const rows = await this.prisma.orderHeader.findMany({
       where: {
-        orderTime: { gte: dayStart, lt: dayEnd },
+        paidTime: { gte: dayStart, lt: dayEnd },
         status: { in: ['paid', 'verified'] }
       },
       select: {
@@ -642,11 +642,11 @@ export class GmvService {
   }
 
   private async computeFromOrderHeader(date: string): Promise<GmvTodayPayload> {
-    // 用 +08:00 解析日期字串得到当天的 UTC 时间范围。Prisma 端用 [start, end)。
+    // 用 +08:00 解析日期字串得到当天的 UTC 时间范围。按 paidTime 聚合（跟 JeSite payDate 口径一致）。
     const { start: dayStart, end: dayEnd } = beijingDayRangeUtc(date);
     const rows = await this.prisma.orderHeader.findMany({
       where: {
-        orderTime: { gte: dayStart, lt: dayEnd },
+        paidTime: { gte: dayStart, lt: dayEnd },
         status: { in: ['paid', 'verified'] }
       },
       select: {
@@ -961,5 +961,32 @@ export class GmvService {
       `JeSite refresh [${startDate} → ${endDate}] pages=${pageNo} fetched=${fetched} upserted=${upserted} errors=${errors}`
     );
     return { startDate, endDate, fetched, upserted, skipped, errors, pagesFetched: pageNo };
+  }
+
+  /** Dev-only probe — 临时恢复 */
+  async probeRefundEndpoint(path: string) {
+    if (!this.autoLogin) {
+      return { ok: false, note: 'autoLogin missing' };
+    }
+    const cookieHeader = await this.autoLogin.ensureValidCookie(true);
+    const baseUrl = process.env.EXTERNAL_API_BASE_URL;
+    if (!baseUrl) return { ok: false, note: 'EXTERNAL_API_BASE_URL missing' };
+    const url = new URL(`${baseUrl.replace(/\/$/, '')}${path.startsWith('/') ? path : `/${path}`}`);
+    try {
+      const res = await fetch(url.toString(), {
+        headers: { Cookie: cookieHeader ?? '', 'x-ajax': 'json', Accept: 'application/json' }
+      });
+      const ct = res.headers.get('content-type');
+      const text = await res.text();
+      let payload: unknown;
+      try {
+        payload = JSON.parse(text);
+      } catch {
+        payload = text.slice(0, 1000);
+      }
+      return { ok: true, status: res.status, contentType: ct, payload, note: `URL=${url.toString()}` };
+    } catch (e) {
+      return { ok: false, note: `err ${(e as Error).message}` };
+    }
   }
 }
