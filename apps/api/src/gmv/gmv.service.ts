@@ -917,6 +917,8 @@ export class GmvService {
               packageId: o.packageId || null,
               merchantId: o.merchantId || null,
               merchantName: o.merchantName || null,
+              areaId: o.areaId || null,
+              areaName: o.areaName || null,
               orderTime: new Date(o.orderTime),
               paidTime: o.paidTime ? new Date(o.paidTime) : null,
               verifyTime: o.verifyTime ? new Date(o.verifyTime) : null,
@@ -925,6 +927,8 @@ export class GmvService {
               paidAmount: o.paidAmount,
               paidAmountWallet: o.paidAmountWallet,
               paidAmountBonus: o.paidAmountBonus,
+              refundAmount: o.refundAmount ?? 0,
+              verifyAmount: o.verifyAmount ?? 0,
               status: o.status
             }
           });

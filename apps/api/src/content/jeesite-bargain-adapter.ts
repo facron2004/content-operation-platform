@@ -49,7 +49,7 @@ export interface MappedOrderRecord {
   verifyAmount: number;
   pointEarned: number;
   pointUsed: number;
-  status: 'paid' | 'verified' | 'cancelled';
+  status: 'paid' | 'verified' | 'cancelled' | 'refunded';
 }
 
 const listKeys = ['list', 'rows', 'records', 'items', 'data', 'page', 'result'] as const;
@@ -183,6 +183,7 @@ export function mapJeesiteOrderListToDataset(payload: unknown): {
     const orderTime = dateText(row, ['createDate', 'createDateStr'], nowISO());
     const updatedTime = dateText(row, ['updateDate'], orderTime);
     const isPaid = orderStatus === 20 || orderStatus === 30 || orderStatus === -30;
+    const isRefunded = orderStatus === -30;
 
     orders.push({
       orderId,
@@ -197,16 +198,22 @@ export function mapJeesiteOrderListToDataset(payload: unknown): {
       orderTime,
       paidTime: isPaid ? orderTime : null,
       verifyTime: orderStatus === 30 ? updatedTime : null,
-      refundTime: orderStatus === -30 ? updatedTime : null,
+      // refundTime 留给专门的 refund 端点填具体退款时间,这里先 fallback 到 updateDate
+      refundTime: isRefunded ? updatedTime : null,
       orderAmount: number(row, ['totalPrice'], settledAmount + paidAmountBonus),
       paidAmount,
       paidAmountWallet,
       paidAmountBonus,
-      refundAmount: orderStatus === -30 ? settledAmount : 0,
+      // 注意:JeSite listData 对 status=-30 (refunded) 不返回单独的 refundAmount
+      // 字段。我们退而求其次,用订单本身的 payPrice (paidAmount) 作为"已退款
+      // 金额"近似值。下游拿到的 refundAmount 是"这单曾被支付的金额",作为
+      // 退款汇总的兜底。精确退款额需要 JeSite 后台手工查或接入另一个
+      // refundOrder 端点(目前未发现)。
+      refundAmount: isRefunded ? settledAmount : 0,
       verifyAmount: orderStatus === 30 ? settledAmount : 0,
       pointEarned: 0,
       pointUsed: Math.round(number(row, ['balanceIntegral'], 0)),
-      status: orderStatus === 30 ? 'verified' : isPaid ? 'paid' : 'cancelled'
+      status: isRefunded ? 'refunded' : orderStatus === 30 ? 'verified' : isPaid ? 'paid' : 'cancelled'
     });
   }
 
