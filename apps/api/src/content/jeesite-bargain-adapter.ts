@@ -27,6 +27,31 @@ type DatasetOptions = {
   now?: string;
 };
 
+export interface MappedOrderRecord {
+  orderId: string;
+  memberId: string;
+  memberName: string;
+  memberPhone: string;
+  packageId: string;
+  merchantId: string;
+  merchantName: string;
+  areaId: string;
+  areaName: string;
+  orderTime: string;
+  paidTime: string | null;
+  verifyTime: string | null;
+  refundTime: string | null;
+  orderAmount: number;
+  paidAmount: number;
+  paidAmountWallet: number;
+  paidAmountBonus: number;
+  refundAmount: number;
+  verifyAmount: number;
+  pointEarned: number;
+  pointUsed: number;
+  status: 'paid' | 'verified' | 'cancelled';
+}
+
 const listKeys = ['list', 'rows', 'records', 'items', 'data', 'page', 'result'] as const;
 
 type RowFieldSet = readonly string[];
@@ -110,11 +135,21 @@ const ratio = (value: number) => {
   return value > 1 ? value / 100 : value;
 };
 
+/** JeSite 后台返的日期字符串(如 "2026-07-15 14:30:00")是 Beijing 本地时间,不带时区后缀。
+ *  Node 的 `new Date('2026-07-15T14:30:00')` 默认按运行进程时区解析,在 UTC 服务器上会算成
+ *  UTC 14:30,实际业务含义是 Beijing 14:30 (= UTC 06:30)。直接 toISOString() 会把它当
+ *  UTC 写入 DB,后续按 Beijing 切日查询时偏移 8 小时,导致凌晨订单落到前一天。
+ *
+ *  修复:当字符串没有时区后缀(用 Z / +/- 结尾与否判断),默认按 +08:00 解析。
+ */
 const dateText = (row: AnyRecord, keys: RowFieldSet, fallback: string) => {
   const value = text(row, keys);
   if (!value) return fallback;
   const normalized = value.includes(' ') ? value.replace(' ', 'T') : value;
-  const date = new Date(normalized);
+  // 判断是否已带时区:Z / +HH:MM / -HH:MM (末尾)
+  const hasTz = /[Zz]$|[+-]\d{2}:\d{2}$/.test(normalized);
+  const withTz = hasTz ? normalized : `${normalized}+08:00`;
+  const date = new Date(withTz);
   return Number.isNaN(date.getTime()) ? fallback : date.toISOString();
 };
 
@@ -129,6 +164,54 @@ const mapSaleStatus = (state: number): ContentPackage['saleStatus'] => {
   if (state === -20) return 'recycle';
   return 'pending';
 };
+
+export function mapJeesiteOrderListToDataset(payload: unknown): {
+  orders: MappedOrderRecord[];
+} {
+  const rows = extractRows(payload);
+  const orders: MappedOrderRecord[] = [];
+
+  for (const row of rows) {
+    const orderId = text(row, ['id', 'orderId', 'orderCode']);
+    if (!orderId) continue;
+
+    const orderStatus = Math.round(number(row, ['orderStatus'], 0));
+    const paidAmount = number(row, ['payPrice'], 0);
+    const paidAmountWallet = number(row, ['deductionBalance'], 0);
+    const paidAmountBonus = number(row, ['balanceIntegral'], 0) / 100;
+    const settledAmount = paidAmount + paidAmountWallet;
+    const orderTime = dateText(row, ['createDate', 'createDateStr'], nowISO());
+    const updatedTime = dateText(row, ['updateDate'], orderTime);
+    const isPaid = orderStatus === 20 || orderStatus === 30 || orderStatus === -30;
+
+    orders.push({
+      orderId,
+      memberId: text(row, ['centerMemberId', 'centerMember.id']),
+      memberName: text(row, ['memberName']),
+      memberPhone: text(row, ['memberPhone']),
+      packageId: text(row, ['bargainCommodityId', 'bargainCommodity.id']),
+      merchantId: text(row, ['corePartnerId', 'corePartner.id']),
+      merchantName: text(row, ['corePartner.name', 'businessUserName']),
+      areaId: text(row, ['areaId', 'districtId', 'cityId']),
+      areaName: text(row, ['areaName', 'districtName', 'cityName']),
+      orderTime,
+      paidTime: isPaid ? orderTime : null,
+      verifyTime: orderStatus === 30 ? updatedTime : null,
+      refundTime: orderStatus === -30 ? updatedTime : null,
+      orderAmount: number(row, ['totalPrice'], settledAmount + paidAmountBonus),
+      paidAmount,
+      paidAmountWallet,
+      paidAmountBonus,
+      refundAmount: orderStatus === -30 ? settledAmount : 0,
+      verifyAmount: orderStatus === 30 ? settledAmount : 0,
+      pointEarned: 0,
+      pointUsed: Math.round(number(row, ['balanceIntegral'], 0)),
+      status: orderStatus === 30 ? 'verified' : isPaid ? 'paid' : 'cancelled'
+    });
+  }
+
+  return { orders };
+}
 
 export function mapJeesiteBargainListToDataset(
   payload: unknown,

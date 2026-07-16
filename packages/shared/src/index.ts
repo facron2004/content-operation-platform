@@ -513,6 +513,54 @@ export function localDateKey(date: Date): string {
   return `${year}-${padTwo(date.getMonth() + 1)}-${padTwo(date.getDate())}`;
 }
 
+/** 业务"日期"统一按北京时间 (UTC+8) 切日。
+ *
+ *  为什么不用 `localDateKey`:
+ *  Node 在 Linux 服务器默认 UTC,在 Windows 是本地时区;部署到任何机房都不一致。
+ *  显式按 +08:00 取日,可以保证"业务今天"和 JeSite 后台的"今天"对得上。
+ *
+ *  切日点:北京 0:00 = UTC 16:00(前一天)。即 UTC 16:00:00 之后的请求算"新的一天"。
+ */
+export function beijingDateKey(input: Date | string | number = new Date()): string {
+  const d = input instanceof Date ? input : new Date(input);
+  // toISOString 是 UTC;取前 10 char 后,如果 UTC 时间 >= 16:00:00,Beijing 已经进入"次日",
+  // 这时要按"UTC 日期 + 1"取日。
+  const utcDateStr = d.toISOString().slice(0, 10); // YYYY-MM-DD of UTC clock
+  const utcHour = d.getUTCHours();
+  if (utcHour >= 16) {
+    // UTC >=16 时 = Beijing 已经到次日;把 UTC 日期字符串推进一天。
+    return shiftDateString(utcDateStr, 1);
+  }
+  return utcDateStr;
+}
+
+/** 给定 YYYY-MM-DD,加 N 天,返回新的 YYYY-MM-DD(支持负数)。
+ *  用 Date.UTC 避免任何时区修正,纯日历计算。 */
+function shiftDateString(yyyyMmDd: string, days: number): string {
+  const [y, m, d] = yyyyMmDd.split('-').map(Number);
+  const t = Date.UTC(y, m - 1, d) + days * 86400000;
+  const shifted = new Date(t);
+  return `${shifted.getUTCFullYear()}-${padTwo(shifted.getUTCMonth() + 1)}-${padTwo(shifted.getUTCDate())}`;
+}
+
+/** 给定 Beijing 当天的 YYYY-MM-DD,返回对应的 UTC 时间范围 [dayStart, dayEnd):
+ *   dayStart = 北京 0:00 (= UTC 16:00 前一日)
+ *   dayEnd   = 北京次日 0:00 (= UTC 16:00 当日)
+ *
+ *  传给 Prisma where orderTime 时,用 dayStart..dayEnd 即可保证：
+ *  - 北京 7/15 0:00 的订单  → orderTime=UTC 7/14 16:00  → 落在 dayStart..dayEnd [..) 区间
+ *  - 北京 7/15 23:59 的订单 → orderTime=UTC 7/15 15:59  → 仍在区间
+ *  - 北京 7/16 0:00 的订单  → orderTime=UTC 7/15 16:00  → 已经在新一天 [..)
+ *
+ *  返回 [start, end),end 是排他的,SQL 写 `< end` 即可。
+ */
+export function beijingDayRangeUtc(date: string): { start: Date; end: Date } {
+  // 直接拿"YYYY-MM-DDT00:00:00+08:00"解析 — Node 的 Date 解析器原生支持 ISO + 时区偏移
+  const start = new Date(`${date}T00:00:00+08:00`);
+  const end = new Date(start.getTime() + 24 * 3600 * 1000);
+  return { start, end };
+}
+
 /** 生成 5 位 base36 随机后缀,用于短 ID(contentId 等不需要密码学强度的场景) */
 export const randomShortId = (): string => Math.random().toString(36).slice(2, 7);
 
@@ -694,6 +742,27 @@ export const INVENTORY_PRIORITIES = ['normal', 'backlog_3d'] as const;
 /** 非数组的对象守卫,跨 API/前端共用,避免重复 `typeof === 'object' && !== null` 写法。 */
 export const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
+
+// ==================== 规则配置类型 ====================
+export const RULE_TYPES = ['promotion', 'copy', 'inventory', 'alert'] as const;
+export type RuleType = typeof RULE_TYPES[number];
+
+export type RuleConfigPayload = Record<string, unknown>;
+
+export interface RuleConfig {
+  id: string;
+  tenantId?: string | null;
+  merchantId?: string | null;
+  type: RuleType;
+  name: string;
+  version: number;
+  isActive: boolean;
+  payload: RuleConfigPayload;
+  comment?: string | null;
+  createdBy?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
 
 // ==================== API Response Types ====================
 export * from './api-types';

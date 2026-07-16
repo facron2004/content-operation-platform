@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
+import { beijingDateKey } from '@content/shared';
 import { GmvService } from './gmv.service';
 import {
   GmvByMerchantQueryDto,
@@ -53,7 +54,7 @@ export class GmvController {
     description: '刷新按钮用:默认拉今天,也可指定 startDate/endDate (YYYY-MM-DD)'
   })
   async refresh(@Body() body: GmvRefreshBodyDto) {
-    const today = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+    const today = beijingDateKey(new Date());
     const endDate = body.endDate ?? today;
     const startDate = body.startDate ?? endDate;
     if (startDate > endDate) {
