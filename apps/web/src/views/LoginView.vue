@@ -44,10 +44,35 @@
               @keyup.enter="handleLogin"
             />
           </el-form-item>
-          <el-button type="primary" class="login-button" :loading="loading" @click="handleLogin">
-            登录进入作战台
-          </el-button>
+          <div class="login-actions">
+            <el-button type="primary" class="login-button" :loading="loading" @click="handleLogin">
+              登录进入作战台
+            </el-button>
+            <el-button
+              type="info"
+              plain
+              class="login-fill"
+              :disabled="loading"
+              title="填入默认开发账号 admin / contentops2024"
+              @click="fillDefaults"
+            >
+              一键填默认账号
+            </el-button>
+          </div>
           <p v-if="error" class="login-error">{{ error }}</p>
+          <p v-else class="login-hint">
+            开发环境默认账号：
+            <code>admin</code>
+            /
+            <code>contentops2024</code>
+            （生产环境请在
+            <code>.env</code>
+            中覆盖
+            <code>AUTH_USERNAME</code>
+            /
+            <code>AUTH_PASSWORD</code>
+            ）
+          </p>
         </el-form>
       </div>
     </section>
@@ -72,6 +97,14 @@ const form = reactive({
   username: '',
   password: ''
 });
+
+/** 一键填默认开发账号。把账号信息直接写在源码里而不是读 .env,
+ *  是因为 .env 不进前端 bundle,前端拿不到。生产部署时把这个按钮禁用 / 移除即可。 */
+function fillDefaults() {
+  form.username = 'admin';
+  form.password = 'contentops2024';
+  error.value = null;
+}
 
 async function handleLogin() {
   if (!form.username.trim() || !form.password.trim()) {
@@ -248,6 +281,42 @@ async function handleLogin() {
   width: 100%;
   margin-top: 8px;
   height: 44px;
+}
+
+.login-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.login-actions .login-button {
+  flex: 1;
+  margin-top: 8px;
+}
+
+.login-fill {
+  margin-top: 8px;
+  height: 44px;
+}
+
+.login-hint {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border: 1px dashed rgba(37, 99, 235, 0.24);
+  border-radius: 10px;
+  background: rgba(239, 246, 255, 0.6);
+  color: var(--ink-soft);
+  font-size: 12px;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.login-hint code {
+  padding: 1px 6px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  background: rgba(15, 23, 42, 0.06);
+  border-radius: 4px;
 }
 
 .login-error {
