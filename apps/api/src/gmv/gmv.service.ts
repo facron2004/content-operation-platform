@@ -644,21 +644,24 @@ export class GmvService {
   private async computeFromOrderHeader(date: string): Promise<GmvTodayPayload> {
     // 用 +08:00 解析日期字串得到当天的 UTC 时间范围。按 paidTime 聚合（跟 JeSite payDate 口径一致）。
     const { start: dayStart, end: dayEnd } = beijingDayRangeUtc(date);
-    const rows = await this.prisma.orderHeader.findMany({
-      where: {
-        paidTime: { gte: dayStart, lt: dayEnd },
-        status: { in: ['paid', 'verified'] }
-      },
-      select: {
-        orderTime: true,
-        paidAmount: true,
-        paidAmountWallet: true,
-        paidAmountBonus: true,
-        paidAmountCard: true,
-        refundAmount: true,
-        verifyAmount: true
-      }
-    });
+    // 注意:libsql adapter 对 Date 对象的 gte/lt 有 bug,传 ISO 字符串绕过。
+    const startIso = dayStart.toISOString();
+    const endIso = dayEnd.toISOString();
+    const rows = await this.prisma.$queryRawUnsafe(
+      `SELECT "paidAmount", "paidAmountWallet", "paidAmountBonus", "paidAmountCard",
+              "refundAmount", "verifyAmount"
+       FROM "OrderHeader"
+       WHERE "paidTime" >= ? AND "paidTime" < ?
+         AND "status" IN ('paid','verified')`,
+      startIso, endIso
+    ) as Array<{
+      paidAmount: number;
+      paidAmountWallet: number;
+      paidAmountBonus: number;
+      paidAmountCard: number;
+      refundAmount: number;
+      verifyAmount: number;
+    }>;
 
     let online = 0, wallet = 0, bonus = 0, card = 0, refund = 0, verify = 0;
     for (const r of rows) {
