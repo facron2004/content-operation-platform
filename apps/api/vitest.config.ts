@@ -16,7 +16,7 @@ export default defineConfig({
     include: ['test/**/*.spec.ts'],
     // 仅扫描 API 源码，避免遍历整个 monorepo 拖慢 collect
     pool: 'forks',
-    isolate: false,
+    isolate: true,
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json-summary', 'html'],
