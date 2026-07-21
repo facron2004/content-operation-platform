@@ -10,6 +10,16 @@ const BOOT_LOGGER = new Logger('PrismaService');
 export class PrismaService extends PrismaClient implements OnModuleDestroy, OnModuleInit {
   private readonly logger = new Logger(PrismaService.name);
   constructor() {
+    // Priority 1: Use DATABASE_URL env var directly (e.g., CI sets absolute path)
+    const envUrl = process.env.DATABASE_URL;
+    if (envUrl) {
+      super({
+        adapter: new PrismaLibSQL({ url: envUrl })
+      });
+      return;
+    }
+
+    // Priority 2: Scan filesystem for dev.db
     const { finalDbPath, exists } = resolveDevDbPath();
     if (!exists)
       BOOT_LOGGER.warn(`dev.db not found at ${finalDbPath}. libsql will create it on first query.`);

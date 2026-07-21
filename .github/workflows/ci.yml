@@ -76,6 +76,9 @@ jobs:
         env:
           DATABASE_URL: "file:./prisma/dev.db"
 
+      - name: Verify database file
+        run: ls -la prisma/dev.db && echo "DATABASE_URL from env: ${{ env.DATABASE_URL }}"
+
       - name: Run tests
         run: npm run test -w @content/api
         env:
