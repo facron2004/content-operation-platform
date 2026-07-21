@@ -79,7 +79,7 @@ jobs:
       - name: Run tests
         run: npm run test -w @content/api
         env:
-          DATABASE_URL: "file:${GITHUB_WORKSPACE}/prisma/dev.db"
+          DATABASE_URL: "file:${{ github.workspace }}/prisma/dev.db"
 
   # ── 构建验证 ────────────────────────────────────
   build:
