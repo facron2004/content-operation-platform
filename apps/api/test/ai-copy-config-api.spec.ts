@@ -19,7 +19,7 @@ describe('AI copy config API', () => {
         .post('/api/content/ai-copy/config')
         .send({
           apiKey: 'sk-front-config-secret',
-          baseURL: 'https://ai.example.com/v1',
+          baseURL: 'https://example.com/v1',
           model: 'front-copy-model',
           providerName: '前台AI',
           temperature: 0.5,
@@ -30,7 +30,7 @@ describe('AI copy config API', () => {
       expect(response.body).toMatchObject({
         enabled: true,
         providerName: '前台AI',
-        baseURL: 'https://ai.example.com/v1',
+        baseURL: 'https://example.com/v1',
         model: 'front-copy-model',
         missing: [],
         maskedApiKey: 'sk-f**********cret',
