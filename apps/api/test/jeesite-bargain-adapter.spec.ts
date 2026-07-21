@@ -1,5 +1,111 @@
 import { describe, expect, it } from 'vitest';
-import { mapJeesiteBargainListToDataset } from '../src/content/jeesite-bargain-adapter';
+import {
+  mapJeesiteBargainListToDataset,
+  mapJeesiteOrderListToDataset
+} from '../src/content/jeesite-bargain-adapter';
+
+describe('mapJeesiteOrderListToDataset', () => {
+  it('maps paid and verified order fields used by the GMV ETL', () => {
+    const { orders } = mapJeesiteOrderListToDataset({
+      list: [
+        {
+          id: 'order-1',
+          centerMemberId: 'member-1',
+          bargainCommodityId: 'package-1',
+          corePartnerId: 'merchant-1',
+          corePartner: { name: 'Merchant One' },
+          createDate: '2026-07-15 10:00:00',
+          updateDate: '2026-07-15 11:00:00',
+          payPrice: 80,
+          deductionBalance: 20,
+          balanceIntegral: 500,
+          totalPrice: 105,
+          orderStatus: 30
+        }
+      ]
+    });
+
+    expect(orders).toHaveLength(1);
+    expect(orders[0]).toMatchObject({
+      orderId: 'order-1',
+      memberId: 'member-1',
+      packageId: 'package-1',
+      merchantId: 'merchant-1',
+      merchantName: 'Merchant One',
+      paidAmount: 80,
+      paidAmountWallet: 20,
+      paidAmountBonus: 5,
+      verifyAmount: 100,
+      status: 'verified'
+    });
+  });
+
+  it('keeps completed (40) and post-pay refund (-20) as paid-side orders with paidTime', () => {
+    const { orders } = mapJeesiteOrderListToDataset({
+      list: [
+        {
+          id: 'order-40',
+          centerMemberId: 'm-40',
+          bargainCommodityId: 'p-40',
+          corePartnerId: 'merchant-40',
+          corePartner: { name: 'Done Shop' },
+          createDate: '2026-07-18 15:22',
+          updateDate: '2026-07-18 22:34',
+          payDate: '2026-07-18 15:22:15',
+          verificationTime: '2026-07-18 15:35:00',
+          payPrice: 68,
+          deductionBalance: 0,
+          totalPrice: 93.1,
+          orderStatus: 40,
+          isEvaluate: 1
+        },
+        {
+          id: 'order-neg20',
+          centerMemberId: 'm-neg20',
+          bargainCommodityId: 'p-neg20',
+          corePartnerId: 'merchant-neg20',
+          corePartner: { name: 'Refund Shop' },
+          createDate: '2026-07-18 20:24',
+          updateDate: '2026-07-18 22:30',
+          payDate: '2026-07-18 20:24:42',
+          payPrice: 9.5,
+          deductionBalance: 0,
+          refundPrice: 9.5,
+          totalPrice: 9.5,
+          orderStatus: -20
+        },
+        {
+          id: 'order-open',
+          centerMemberId: 'm-open',
+          bargainCommodityId: 'p-open',
+          corePartnerId: 'merchant-open',
+          createDate: '2026-07-18 12:00',
+          payPrice: 10,
+          orderStatus: 10
+        }
+      ]
+    });
+
+    expect(orders).toHaveLength(3);
+
+    const completed = orders.find((o) => o.orderId === 'order-40')!;
+    expect(completed.status).toBe('verified');
+    expect(completed.paidTime).toBe('2026-07-18T07:22:15.000Z');
+    expect(completed.verifyTime).toBe('2026-07-18T07:35:00.000Z');
+    expect(completed.verifyAmount).toBe(68);
+    expect(completed.refundAmount).toBe(0);
+
+    const refunded = orders.find((o) => o.orderId === 'order-neg20')!;
+    expect(refunded.status).toBe('refunded');
+    expect(refunded.paidTime).toBe('2026-07-18T12:24:42.000Z');
+    expect(refunded.refundAmount).toBe(9.5);
+    expect(refunded.refundTime).toBe('2026-07-18T14:30:00.000Z');
+
+    const open = orders.find((o) => o.orderId === 'order-open')!;
+    expect(open.status).toBe('cancelled');
+    expect(open.paidTime).toBeNull();
+  });
+});
 
 describe('JeeSite bargain backend adapter', () => {
   it('maps bargainCommodity listData rows into packages and sales snapshots', () => {

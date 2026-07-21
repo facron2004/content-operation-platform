@@ -7,6 +7,7 @@ import { join } from 'path';
 const repoRoot = join(__dirname, '..', '..');
 const devDbPath = join(repoRoot, 'prisma', 'dev.db').replace(/\\/g, '/');
 process.env.DATABASE_URL ??= `file:${devDbPath}`;
+process.env.EXTERNAL_API_BASE_URL ??= 'https://zdm.zhsh1.cn/a';
 
 export default defineConfig({
   test: {

@@ -1,6 +1,6 @@
 {
   "name": "content-ops-ai-mvp",
-  "version": "0.1.5",
+  "version": "0.2.0",
   "private": true,
   "engines": {
     "node": ">=20.0.0"
@@ -22,6 +22,7 @@
     "db:push": "tsx prisma/create-schema.ts",
     "db:purge-mock": "tsx scripts/purge-mock-data.ts",
     "prepare:db": "npm run db:push",
+    "check:schema": "tsx scripts/check-schema.ts",
     "start:api": "npm run start -w @content/api",
     "lint": "eslint \"apps/**/*.ts\" \"apps/**/*.vue\" \"packages/**/*.ts\" --fix --max-warnings 50",
     "lint:check": "eslint \"apps/**/*.ts\" \"apps/**/*.vue\" \"packages/**/*.ts\" --max-warnings 50",
@@ -29,6 +30,10 @@
     "format:check": "prettier --check \"apps/**/*.{ts,vue}\" \"packages/**/*.ts\"",
     "typecheck": "npm run build -w @content/shared && tsc --noEmit -p apps/api/tsconfig.json && vue-tsc --noEmit -p apps/web/tsconfig.json",
     "check": "npm run lint:check && npm run format:check && npm run typecheck",
+    "verify": "npm run format:check && npm run lint:check && npm run typecheck && npm run test && npm run build",
+    "test:aisenyu": "node scripts/test-aisenyu-gateway.js",
+    "test:codex-aisenyu": "node scripts/test-codex-aisenyu.js",
+    "setup:codex-aisenyu": "python scripts/setup-codex-aisenyu.py",
     "prepare": "husky"
   },
   "lint-staged": {
@@ -55,7 +60,6 @@
     "lint-staged": "^15.0.0",
     "playwright": "^1.59.1",
     "prettier": "^3.0.0",
-    "prisma": "^6.0.0",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
     "typescript-eslint": "^8.0.0",
@@ -64,5 +68,11 @@
     "vitest": "^3.0.0",
     "vue-eslint-parser": "^9.0.0"
   },
-  "prisma": {}
+  "prisma": {},
+  "dependencies": {
+    "@libsql/client": "0.17.4",
+    "@prisma/adapter-libsql": "6.19.3",
+    "@prisma/client": "6.19.3",
+    "prisma": "6.19.3"
+  }
 }

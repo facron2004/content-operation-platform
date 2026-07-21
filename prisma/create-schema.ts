@@ -1,13 +1,14 @@
 import { PrismaClient } from '@prisma/client';
+import { PrismaLibSQL } from '@prisma/adapter-libsql';
 import { ensureDatabaseSchema } from './seed-data';
 
-const prisma = new PrismaClient({
-  datasources: {
-    db: {
-      url: process.env.DATABASE_URL ?? 'file:./prisma/dev.db'
-    }
-  }
-});
+const dbUrl = process.env.DATABASE_URL ?? 'file:./prisma/dev.db';
+const absPath = dbUrl.replace(/^file:(\.\/)?/, '');
+const resolved = require('path').resolve(absPath).replace(/\\/g, '/');
+const adapterUrl = /^[a-zA-Z]:\//.test(resolved) ? `file:///${resolved}` : resolved;
+
+const adapter = new PrismaLibSQL({ url: adapterUrl });
+const prisma = new PrismaClient({ adapter });
 
 ensureDatabaseSchema(prisma)
   .then(async () => {
@@ -18,4 +19,3 @@ ensureDatabaseSchema(prisma)
     await prisma.$disconnect();
     process.exit(1);
   });
-

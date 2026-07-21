@@ -1,9 +1,10 @@
 import { Body, Controller, Get, Inject, Param, Post, Query } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
+import { ConfigService } from '@nestjs/config';
 import type { RecommendPackageItem, UserRole } from '@content/shared';
 import { paginate } from '@content/shared';
 import { ContentService } from './content.service';
-import { PackageDetailService } from './package-detail.service';
+import { PackageDetailService } from './package-detail';
 import { AutoLoginService } from './auto-login.service';
 import {
   PackageDetailQueryDto,
@@ -14,6 +15,9 @@ import {
 } from './content.dto';
 import { Public } from '../auth';
 import { nowISO } from '../common/format';
+import { PrismaService } from '../prisma/prisma.service';
+import { geocodeMerchantsFromPartnerShop } from '../merchant/merchant-geocoder';
+import { HtmlFetcher } from './package-detail/html-fetcher';
 
 /** 把字节数四舍五入到两位小数的 MB。 */
 const toMB = (bytes: number): number => Math.round((bytes / (1024 * 1024)) * 100) / 100;
@@ -24,7 +28,9 @@ export class PackageController {
   constructor(
     @Inject(ContentService) private readonly contentService: ContentService,
     @Inject(PackageDetailService) private readonly packageDetailService: PackageDetailService,
-    @Inject(AutoLoginService) private readonly autoLoginService: AutoLoginService
+    @Inject(AutoLoginService) private readonly autoLoginService: AutoLoginService,
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(ConfigService) private readonly configService: ConfigService
   ) {}
 
   @Get('packages/recommend')
@@ -159,6 +165,71 @@ export class PackageController {
   @Post('inventory/daily-crawl')
   crawlDailyInventory(@Query('date') date?: string) {
     return this.contentService.crawlDailyInventory(date);
+  }
+
+  @Public()
+  @Post('sync-merchants')
+  @ApiOperation({ summary: '从 JeeSite 拉取套餐数据并同步商家地址到 Merchant 表' })
+  syncMerchants() {
+    return this.contentService.syncMerchantsFromJeeSite();
+  }
+
+  @Public()
+  @Post('geocode-merchants')
+  @ApiOperation({ summary: '从 JeeSite 合作商店铺表抓取 longitude/latitude 回填 Merchant 表' })
+  geocodeMerchants() {
+    return geocodeMerchantsFromPartnerShop(this.prisma, this.configService, this.autoLoginService);
+  }
+
+  @Public()
+  @Post('geocode-from-partner-shop')
+  @ApiOperation({ summary: '从 JeeSite 合作商店铺表抓取 longitude/latitude（别名）' })
+  geocodeFromPartnerShop() {
+    return geocodeMerchantsFromPartnerShop(this.prisma, this.configService, this.autoLoginService);
+  }
+
+  @Public()
+  @Get('debug-raw/:packageId')
+  @ApiOperation({ summary: '调试：返回套餐表单页的完整 HTML，检查坐标字段' })
+  async debugRaw(@Param('packageId') packageId: string) {
+    const fetcher = new HtmlFetcher(this.configService, this.autoLoginService);
+    const html = await fetcher.fetchHtml(packageId);
+    if (!html) return { error: 'No HTML returned from fetcher' };
+    return {
+      length: html.length,
+      hasLongitude: html.includes('longitude'),
+      hasLatitude: html.includes('latitude'),
+      hasLoginPage: html.includes('loginForm'),
+      hasCommodityDetail: html.includes('commodityDetailUE'),
+      preview: html.substring(0, 2000)
+    };
+  }
+
+  @Public()
+  @Get('debug-partner-shop/:merchantId')
+  @ApiOperation({ summary: '调试：抓取合作商店铺表单页，检查坐标字段' })
+  async debugPartnerShop(@Param('merchantId') merchantId: string) {
+    const fetcher = new HtmlFetcher(this.configService, this.autoLoginService);
+    const html = await fetcher.fetchCustomUrl(
+      `/core/corePartnerShop/form?id=${encodeURIComponent(merchantId)}`
+    );
+    if (!html) return { error: 'No HTML returned from fetcher' };
+    const longMatch = html.match(/id="longitude"[^>]*value="([^"]+)"/);
+    const latMatch = html.match(/id="latitude"[^>]*value="([^"]+)"/);
+    return {
+      length: html.length,
+      longitude: longMatch?.[1] || null,
+      latitude: latMatch?.[1] || null,
+      hasLongitude: html.includes('longitude'),
+      hasLatitude: html.includes('latitude'),
+      hasLoginPage: html.includes('loginForm'),
+      title: html.match(/<title>([^<]+)<\/title>/)?.[1] || null,
+      inputSnippet:
+        html.substring(
+          Math.max(0, html.indexOf('longitude') - 100),
+          Math.min(html.length, html.indexOf('longitude') + 200)
+        ) || null
+    };
   }
 
   @Get('communities')

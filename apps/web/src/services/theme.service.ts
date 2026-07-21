@@ -1,104 +1,101 @@
-import { ref, watch, computed } from 'vue';
+import { computed, ref, watch, type Ref } from 'vue';
 
-type Theme = 'light' | 'dark' | 'auto';
+export type Theme = 'light' | 'dark' | 'auto';
 
 const STORAGE_KEY = 'theme_preference';
 
-class ThemeService {
-  private theme = ref<Theme>('auto');
-  private effectiveTheme = ref<'light' | 'dark'>('light');
-
-  constructor() {
-    this.loadTheme();
-    this.applyTheme();
-    this.watchSystemTheme();
-
-    // 监听主题变化
-    watch(this.theme, () => {
-      this.saveTheme();
-      this.applyTheme();
-    });
+function loadStoredTheme(): Theme {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored && ['light', 'dark', 'auto'].includes(stored)) return stored as Theme;
+  } catch {
+    /* ignore */
   }
+  return 'auto';
+}
 
-  /** 显式初始化入口，确保单例在应用启动时完成构造 */
-  init(): void {
-    // 构造函数已完成所有初始化，此方法仅作为显式调用点
-  }
-
-  /** 响应式 ref:对外暴露,供 useTheme 通过 .value 解包 */
-  get themeRef() {
-    return this.theme;
-  }
-
-  get effectiveThemeRef() {
-    return this.effectiveTheme;
-  }
-
-  setTheme(theme: Theme) {
-    this.theme.value = theme;
-  }
-
-  toggleTheme() {
-    const themes: Theme[] = ['light', 'dark', 'auto'];
-    const currentIndex = themes.indexOf(this.theme.value);
-    const nextIndex = (currentIndex + 1) % themes.length;
-    this.theme.value = themes[nextIndex];
-  }
-
-  private loadTheme() {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored && ['light', 'dark', 'auto'].includes(stored)) {
-        this.theme.value = stored as Theme;
-      }
-    } catch {
-      // Ignore localStorage errors
-    }
-  }
-
-  private saveTheme() {
-    try {
-      localStorage.setItem(STORAGE_KEY, this.theme.value);
-    } catch {
-      // Ignore localStorage errors
-    }
-  }
-
-  private applyTheme() {
-    const effective = this.resolveEffectiveTheme();
-    this.effectiveTheme.value = effective;
-
-    // 应用到 DOM
-    if (effective === 'dark') {
-      document.documentElement.classList.add('dark');
-      document.documentElement.setAttribute('data-theme', 'dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-      document.documentElement.setAttribute('data-theme', 'light');
-    }
-  }
-
-  private resolveEffectiveTheme(): 'light' | 'dark' {
-    if (this.theme.value === 'auto') {
-      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-    }
-    return this.theme.value;
-  }
-
-  private watchSystemTheme() {
-    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-    mediaQuery.addEventListener('change', () => {
-      if (this.theme.value === 'auto') {
-        this.applyTheme();
-      }
-    });
+function saveStoredTheme(theme: Theme) {
+  try {
+    localStorage.setItem(STORAGE_KEY, theme);
+  } catch {
+    /* ignore */
   }
 }
 
-// 单例
+function resolveEffectiveTheme(theme: Theme): 'light' | 'dark' {
+  if (theme === 'auto')
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  return theme;
+}
+
+function applyThemeToDom(effective: 'light' | 'dark') {
+  const root = document.documentElement;
+  if (effective === 'dark') {
+    root.classList.add('dark');
+    root.setAttribute('data-theme', 'dark');
+  } else {
+    root.classList.remove('dark');
+    root.setAttribute('data-theme', 'light');
+  }
+}
+
+function loadThemeInto(theme: Ref<Theme>) {
+  theme.value = loadStoredTheme();
+}
+
+function saveThemeFrom(theme: Ref<Theme>) {
+  saveStoredTheme(theme.value);
+}
+
+function applyThemeState(theme: Ref<Theme>, effectiveTheme: Ref<'light' | 'dark'>) {
+  const effective = resolveEffectiveTheme(theme.value);
+  effectiveTheme.value = effective;
+  applyThemeToDom(effective);
+}
+
+function watchSystemTheme(theme: Ref<Theme>, apply: () => void) {
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+    if (theme.value === 'auto') apply();
+  });
+}
+
+function nextTheme(current: Theme): Theme {
+  const themes: Theme[] = ['light', 'dark', 'auto'];
+  return themes[(themes.indexOf(current) + 1) % themes.length];
+}
+
+export class ThemeService {
+  private theme = ref<Theme>('auto');
+  private effectiveTheme = ref<'light' | 'dark'>('light');
+  constructor() {
+    loadThemeInto(this.theme);
+    this.applyTheme();
+    watchSystemTheme(this.theme, () => this.applyTheme());
+    watch(this.theme, () => {
+      saveThemeFrom(this.theme);
+      this.applyTheme();
+    });
+  }
+  init(): void {}
+  get themeRef() {
+    return this.theme;
+  }
+  get effectiveThemeRef() {
+    return this.effectiveTheme;
+  }
+  setTheme(theme: Theme) {
+    this.theme.value = theme;
+  }
+  toggleTheme() {
+    this.theme.value = nextTheme(this.theme.value);
+  }
+  private applyTheme() {
+    applyThemeState(this.theme, this.effectiveTheme);
+  }
+}
+
 export const themeService = new ThemeService();
 
-// Vue composable — 返回响应式引用
 export function useTheme() {
   return {
     theme: computed(() => themeService.themeRef.value),

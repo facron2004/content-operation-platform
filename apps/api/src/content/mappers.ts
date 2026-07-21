@@ -7,16 +7,11 @@ import type {
   StrategyType
 } from '@content/shared';
 import { PACKAGE_TYPES, SALE_STATUSES } from '@content/shared';
-// 直接复用 Prisma 生成的 row 类型,避免字段漂移;新增字段时 Prisma 报错即提醒
 import type {
   ContentPackage as PrismaContentPackage,
   GeneratedCopy as PrismaGeneratedCopy,
   CopyPerformance as PrismaCopyPerformance
 } from '@prisma/client';
-
-type DbPackage = PrismaContentPackage;
-type DbCopy = PrismaGeneratedCopy;
-type DbPerformance = PrismaCopyPerformance;
 
 export const splitList = (value: string | null | undefined) =>
   value
@@ -28,10 +23,10 @@ export const splitList = (value: string | null | undefined) =>
 
 export const joinList = (items: string[]) => items.join('｜');
 
-const castEnum = <T extends string>(value: string, allowed: readonly T[], fallback: T): T =>
+export const castEnum = <T extends string>(value: string, allowed: readonly T[], fallback: T): T =>
   (allowed as readonly string[]).includes(value) ? (value as T) : fallback;
 
-export function mapPackage(row: DbPackage): ContentPackage {
+export function mapPackage(row: PrismaContentPackage): ContentPackage {
   return {
     packageId: row.packageId,
     packageName: row.packageName,
@@ -97,7 +92,7 @@ export function packageToDb(pkg: ContentPackage) {
   };
 }
 
-export function mapCopy(row: DbCopy): GeneratedCopy {
+export function mapCopy(row: PrismaGeneratedCopy): GeneratedCopy {
   return {
     contentId: row.contentId,
     packageId: row.packageId,
@@ -120,7 +115,7 @@ export function mapCopy(row: DbCopy): GeneratedCopy {
   };
 }
 
-export function mapPerformance(row: DbPerformance): CopyPerformance {
+export function mapPerformance(row: PrismaCopyPerformance): CopyPerformance {
   return {
     id: row.id,
     contentId: row.contentId,

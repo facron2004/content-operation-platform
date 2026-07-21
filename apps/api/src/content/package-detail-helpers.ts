@@ -5,13 +5,9 @@ import type {
   SalesSnapshot
 } from '@content/shared';
 import { latestSnapshotsByPackage } from '@content/shared';
-import type { DataSourceService } from './data-source.service';
 import { toOperationCard } from '../domain/operation-rules';
+import type { DataSourceService } from './data-source.service';
 
-/**
- * 从数据源解析套餐 + 最新快照。
- * 优先读取实时数据源,确保文案生成能拿到套餐详情与当前售价等最新字段。
- */
 export async function resolvePackageAndSnapshot(
   packageId: string,
   dataSource: DataSourceService
@@ -23,7 +19,6 @@ export async function resolvePackageAndSnapshot(
   return pkg && snapshot ? { pkg, snapshot, snapshots: packageSnapshots } : null;
 }
 
-/** 将推荐套餐列表转换为 packageId → OperationCard 映射 */
 export function buildOperationCardMap(
   packages: RecommendPackageItem[]
 ): Map<string, OperationCard> {

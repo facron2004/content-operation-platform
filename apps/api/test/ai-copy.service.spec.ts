@@ -1,8 +1,8 @@
 import { ConfigService } from '@nestjs/config';
 import type { ContentPackage, GenerateCopyRequest, PromotionScore } from '@content/shared';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { AICopyService } from '../src/content/ai-copy.service';
-import type { PackageDetail } from '../src/content/package-detail.service';
+import { AICopyService } from '../src/content/ai-copy';
+import type { PackageDetail } from '../src/content/package-detail';
 
 const openAiMocks = vi.hoisted(() => ({
   create: vi.fn()
@@ -297,5 +297,121 @@ describe('AICopyService', () => {
     expect(copy.title).not.toContain('想吃绿茶');
     expect(copy.title).not.toContain('双人餐1');
     expect(copy.title).toBe('今晚双人餐可用');
+  });
+
+  it('rejects generation when AI is not configured', async () => {
+    const service = new AICopyService(new ConfigService({}));
+    await expect(service.generateCopies(pkg, promotion, request, detail)).rejects.toMatchObject({
+      response: expect.objectContaining({
+        message: expect.stringContaining('AI文案接口未配置')
+      })
+    });
+    expect(openAiMocks.create).not.toHaveBeenCalled();
+  });
+
+  it('surfaces API failures after retryable 5xx attempts are exhausted', async () => {
+    const apiError = Object.assign(new Error('upstream unavailable'), { status: 503 });
+    openAiMocks.create
+      .mockRejectedValueOnce(apiError)
+      .mockRejectedValueOnce(apiError)
+      .mockRejectedValueOnce(apiError);
+
+    const service = new AICopyService(new ConfigService({ AI_API_KEY: 'test-key' }));
+    await expect(service.generateCopies(pkg, promotion, request, detail)).rejects.toThrow(
+      'upstream unavailable'
+    );
+    expect(openAiMocks.create).toHaveBeenCalledTimes(3);
+  });
+
+  it('does not retry client 4xx failures from the AI provider', async () => {
+    const clientError = Object.assign(new Error('invalid request'), { status: 400 });
+    openAiMocks.create.mockRejectedValueOnce(clientError);
+
+    const service = new AICopyService(new ConfigService({ AI_API_KEY: 'test-key' }));
+    await expect(service.generateCopies(pkg, promotion, request, detail)).rejects.toThrow(
+      'invalid request'
+    );
+    expect(openAiMocks.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('falls back to plain-text parsing when the model returns non-JSON content', async () => {
+    openAiMocks.create.mockResolvedValueOnce({
+      choices: [
+        {
+          message: {
+            content:
+              '标题：宝安烤肉今晚推\n正文：老张炭火烤肉双人餐还剩18份，当前售价39.9元，需提前2小时预约。'
+          }
+        }
+      ]
+    });
+
+    const service = new AICopyService(new ConfigService({ AI_API_KEY: 'test-key' }));
+    const copies = await service.generateCopies(
+      pkg,
+      promotion,
+      { ...request, copyCount: 1 },
+      detail
+    );
+
+    expect(copies).toHaveLength(1);
+    expect(copies[0].title).toContain('宝安烤肉');
+    expect(copies[0].body).toContain('39.9');
+  });
+
+  it('throws when the AI endpoint returns empty content', async () => {
+    openAiMocks.create.mockResolvedValueOnce({
+      choices: [{ message: { content: '   ' } }]
+    });
+
+    const service = new AICopyService(new ConfigService({ AI_API_KEY: 'test-key' }));
+    await expect(
+      service.generateCopies(pkg, promotion, { ...request, copyCount: 1 }, detail)
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({
+        message: expect.stringContaining('未返回有效内容')
+      })
+    });
+  });
+
+  it('times out when the AI provider never responds', async () => {
+    const previousTimeout = process.env.AI_GENERATE_TIMEOUT_MS;
+    process.env.AI_GENERATE_TIMEOUT_MS = '40';
+
+    openAiMocks.create.mockImplementationOnce(
+      (_body: unknown, options?: { signal?: AbortSignal }) =>
+        new Promise((_resolve, reject) => {
+          const signal = options?.signal;
+          if (!signal) {
+            reject(new Error('missing abort signal'));
+            return;
+          }
+          if (signal.aborted) {
+            const err = new Error('aborted');
+            err.name = 'AbortError';
+            reject(err);
+            return;
+          }
+          signal.addEventListener('abort', () => {
+            const err = new Error('aborted');
+            err.name = 'AbortError';
+            reject(err);
+          });
+        })
+    );
+
+    try {
+      const service = new AICopyService(new ConfigService({ AI_API_KEY: 'test-key' }));
+      await expect(
+        service.generateCopies(pkg, promotion, { ...request, copyCount: 1 }, detail)
+      ).rejects.toMatchObject({
+        response: expect.objectContaining({
+          message: expect.stringContaining('超时')
+        })
+      });
+    } finally {
+      if (previousTimeout === undefined) delete process.env.AI_GENERATE_TIMEOUT_MS;
+      else process.env.AI_GENERATE_TIMEOUT_MS = previousTimeout;
+    }
   });
 });

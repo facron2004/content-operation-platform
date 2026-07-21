@@ -33,9 +33,7 @@
 
   --panel-bg: #131826;
   --hover-bg: #1b2232;
-}
 
-[data-theme='dark'] {
   /* Element Plus 暗黑模式变量 */
   --el-bg-color: #0d1117;
   --el-bg-color-page: #0a0d14;

@@ -8,6 +8,53 @@ export class HtmlParser {
 
   parsePackageDetail(packageId: string, html: string, saveRawHtml = false): PackageDetail {
     const $ = cheerio.load(html);
+
+    // Extract merchant coordinates from form inputs
+    const lngInput = $('#longitude');
+    const latInput = $('#latitude');
+    let merchantLng: number | undefined;
+    let merchantLat: number | undefined;
+    if (lngInput.length) {
+      const rawLng = lngInput.val();
+      merchantLng = rawLng ? parseFloat(String(rawLng)) : undefined;
+      this.logger.debug(`longitude input found, value: ${rawLng} → ${merchantLng}`);
+    } else {
+      // Try alternative selectors
+      const altLng = $('input[name="longitude"]').first();
+      if (altLng.length) {
+        const rawLng = altLng.val();
+        merchantLng = rawLng ? parseFloat(String(rawLng)) : undefined;
+        this.logger.debug(`longitude[name] found: ${rawLng} → ${merchantLng}`);
+      }
+    }
+    if (latInput.length) {
+      const rawLat = latInput.val();
+      merchantLat = rawLat ? parseFloat(String(rawLat)) : undefined;
+      this.logger.debug(`latitude input found, value: ${rawLat} → ${merchantLat}`);
+    } else {
+      const altLat = $('input[name="latitude"]').first();
+      if (altLat.length) {
+        const rawLat = altLat.val();
+        merchantLat = rawLat ? parseFloat(String(rawLat)) : undefined;
+        this.logger.debug(`latitude[name] found: ${rawLat} → ${merchantLat}`);
+      }
+    }
+    // As last resort, search entire HTML text for lat/lng pattern
+    if (!merchantLng || !merchantLat) {
+      const bodyText = $('body').text() || '';
+      const lngMatch = bodyText.match(/经度[：:]\s*([\d.]+)/);
+      const latMatch = bodyText.match(/纬度[：:]\s*([\d.]+)/);
+      if (lngMatch) merchantLng = parseFloat(lngMatch[1]);
+      if (latMatch) merchantLat = parseFloat(latMatch[1]);
+      if (lngMatch || latMatch) {
+        this.logger.debug(`Found coords via Chinese text: ${merchantLat}, ${merchantLng}`);
+      }
+    }
+    if (merchantLng && merchantLat) {
+      this.logger.log(`Extracted coordinates: ${merchantLat}, ${merchantLng}`);
+    } else {
+      this.logger.debug(`No coordinates found for ${packageId}`);
+    }
     const sections: PackageDetailSection[] = [];
 
     const detailScript = $('#commodityDetailUE').html();
@@ -107,6 +154,8 @@ export class HtmlParser {
       packageId,
       packageTitle: parsedTitle,
       sections: parsedSections,
+      merchantLat,
+      merchantLng,
       rawHtml: saveRawHtml ? detailScript : undefined,
       fetchedAt: new Date()
     };

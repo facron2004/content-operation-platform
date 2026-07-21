@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { describeError } from '@content/shared';
 import { AutoLoginService } from '../auto-login.service';
 import { normalizeJeesiteBaseUrl } from '../jeesite-bargain-adapter';
-import { DEFAULT_USER_AGENT } from '../http-headers';
+import { DEFAULT_USER_AGENT } from '../jeesite-url';
 import { containsLoginPageMarker } from '../../common/login-markers';
 
 @Injectable()
@@ -23,13 +23,39 @@ export class HtmlFetcher {
         return null;
       }
       const baseUrl = await normalizeJeesiteBaseUrl(rawBaseUrl);
-      const url = `${baseUrl}/a/bargain/bargainCommodity/form?id=${encodeURIComponent(packageId)}`;
+      const url = `${baseUrl}/bargain/bargainCommodity/form?id=${encodeURIComponent(packageId)}`;
+      return this.fetchUrl(url, autoRetryLogin);
+    } catch (error: unknown) {
+      this.logger.error(`Failed to fetch package detail ${packageId}:`, describeError(error));
+      return null;
+    }
+  }
 
+  /**
+   * 抓取任意 JeeSite 表单页（用于商家坐标提取等场景）
+   */
+  async fetchCustomUrl(path: string, autoRetryLogin = true): Promise<string | null> {
+    try {
+      const rawBaseUrl = this.configService.get<string>('EXTERNAL_API_BASE_URL');
+      if (!rawBaseUrl) return null;
+      const baseUrl = await normalizeJeesiteBaseUrl(rawBaseUrl);
+      const url = path.startsWith('http')
+        ? path
+        : `${baseUrl}${path.startsWith('/') ? '' : '/'}${path}`;
+      return this.fetchUrl(url, autoRetryLogin);
+    } catch (error: unknown) {
+      this.logger.error(`Failed to fetch ${path}:`, describeError(error));
+      return null;
+    }
+  }
+
+  private async fetchUrl(url: string, autoRetryLogin = true): Promise<string | null> {
+    try {
       const cookie =
         (await this.autoLoginService.ensureValidCookie()) ||
         this.configService.get<string>('EXTERNAL_API_COOKIE');
 
-      this.logger.log(`Fetching package detail: ${packageId}`);
+      this.logger.log(`Fetching: ${url}`);
 
       const headers: Record<string, string> = {
         'User-Agent': DEFAULT_USER_AGENT
@@ -52,24 +78,23 @@ export class HtmlFetcher {
 
       const html = await response.text();
 
-      // Check if login page returned
       if (containsLoginPageMarker(html)) {
         if (autoRetryLogin) {
           this.logger.warn('Detected login page, attempting auto login and retry');
           this.autoLoginService.clearCache();
           const newCookie = await this.autoLoginService.ensureValidCookie(true);
           if (newCookie) {
-            this.logger.log('Auto login successful, retrying package detail fetch');
-            return this.fetchHtml(packageId, false);
+            this.logger.log('Auto login successful, retrying');
+            return this.fetchUrl(url, false);
           }
         }
-        this.logger.error('Failed to fetch package detail: authentication required');
+        this.logger.error('Authentication required');
         return null;
       }
 
       return html;
     } catch (error: unknown) {
-      this.logger.error(`Failed to fetch package detail ${packageId}:`, describeError(error));
+      this.logger.error(`Failed to fetch ${url}:`, describeError(error));
       return null;
     }
   }

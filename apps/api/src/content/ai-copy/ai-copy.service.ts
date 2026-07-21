@@ -11,7 +11,7 @@ import { COPY_VERSION_LETTERS, clamp } from '@content/shared';
 import { randomUUID } from 'crypto';
 import { auditCopyText } from '../../domain/copy-rules';
 import { nowISO } from '../../common/format';
-import type { PackageDetail } from '../package-detail.service';
+import type { PackageDetail } from '../package-detail';
 import { AIClientManager } from './ai-client.manager';
 import { PromptBuilder } from './prompt.builder';
 import { ResponseParser } from './response.parser';

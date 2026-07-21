@@ -16,8 +16,8 @@ import { buildPromotionScore } from '../domain/promotion-rules';
 import { getFallbackDate } from '../domain/utils';
 import { PrismaService } from '../prisma/prisma.service';
 import { DataSourceService } from './data-source.service';
-import { PackageDetailService } from './package-detail.service';
-import { AICopyService } from './ai-copy.service';
+import { PackageDetailService } from './package-detail';
+import { AICopyService } from './ai-copy';
 import { copyToDb, joinList, mapCopy, mapPackage, packageToDb } from './mappers';
 import { resolvePackageAndSnapshot } from './package-detail-helpers';
 
@@ -122,7 +122,10 @@ export class CopyService {
     };
   }
 
-  async auditCopy(contentId: string, request: AuditCopyRequest): Promise<GeneratedCopy> {
+  async auditCopy(
+    contentId: string,
+    request: AuditCopyRequest
+  ): Promise<GeneratedCopy & { distributionTaskId?: string }> {
     const row = await this.prisma.generatedCopy.findUnique({ where: { contentId } });
     if (!row) throw new NotFoundException('文案不存在');
 
@@ -144,6 +147,11 @@ export class CopyService {
         ? 'risk'
         : request.auditStatus;
 
+    // Increment versionNo per packageId+channel
+    const latestVersion = await this.prisma.generatedCopy.count({
+      where: { packageId: row.packageId, channel: row.channel }
+    });
+
     const updated = await this.prisma.generatedCopy.update({
       where: { contentId },
       data: {
@@ -154,10 +162,35 @@ export class CopyService {
           request.auditRemark ??
           (machineAudit.riskTips.length > 0 ? machineAudit.riskTips.join('；') : null),
         riskLevel: machineAudit.riskLevel,
-        riskTips: joinList(machineAudit.riskTips)
+        riskTips: joinList(machineAudit.riskTips),
+        versionNo: latestVersion + 1
       }
     });
 
-    return mapCopy(updated);
+    const result = mapCopy(updated);
+
+    // Auto-create DistributionTask when approved
+    let distributionTaskId: string | undefined;
+    if (finalStatus === 'approved') {
+      const taskId = `task_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      try {
+        await this.prisma.$executeRawUnsafe(
+          `INSERT INTO "DistributionTask" ("taskId", "contentId", "packageId", "channel", "title", "body", "cta", "status", "createdAt", "updatedAt")
+           VALUES (?, ?, ?, ?, ?, ?, ?, 'draft', datetime('now'), datetime('now'))`,
+          taskId,
+          contentId,
+          row.packageId,
+          row.channel,
+          title,
+          body,
+          row.cta
+        );
+        distributionTaskId = taskId;
+      } catch (err: unknown) {
+        this.logger.warn(`Auto-create task failed for copy ${contentId}: ${describeError(err)}`);
+      }
+    }
+
+    return { ...result, distributionTaskId };
   }
 }

@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Inject } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AutoLoginService } from '../auto-login.service';
 import { HtmlFetcher } from './html-fetcher';
@@ -13,7 +13,10 @@ export class PackageDetailService {
   private readonly fetcher: HtmlFetcher;
   private readonly parser = new HtmlParser();
 
-  constructor(configService: ConfigService, autoLoginService: AutoLoginService) {
+  constructor(
+    @Inject(ConfigService) configService: ConfigService,
+    @Inject(AutoLoginService) autoLoginService: AutoLoginService
+  ) {
     this.fetcher = new HtmlFetcher(configService, autoLoginService);
   }
 

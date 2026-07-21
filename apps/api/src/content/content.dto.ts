@@ -6,27 +6,15 @@ import {
   IsIn,
   IsArray,
   Min,
-  Max,
-  MinLength,
-  MaxLength,
-  ValidationOptions
+  Max
 } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
-import { applyDecorators } from '@nestjs/common';
 import type { Channel, AuditStatus, UserRole } from '@content/shared';
 import { ALERT_LEVELS, ALERT_TYPES, AUDIT_DECISION_STATUSES, CHANNELS } from '@content/shared';
+import { optionalString, requiredString } from './dto-decorators';
 
-// DTO 装饰器组合 —— 减少"@IsOptional @IsString @MaxLength(N)"重复链。
-// 抽到本文件顶部是因为这些组合只在 DTO 内使用,跨模块共享意义不大。
-const requiredString = (maxLength?: number) =>
-  maxLength !== undefined
-    ? applyDecorators(IsString(), MinLength(1), MaxLength(maxLength))
-    : applyDecorators(IsString());
-
-const optionalString = (maxLength?: number, options?: ValidationOptions) =>
-  maxLength !== undefined
-    ? applyDecorators(IsOptional(options), IsString(), MaxLength(maxLength))
-    : applyDecorators(IsOptional(options), IsString());
+export { optionalString, requiredString } from './dto-decorators';
+export { CreateRuleDto, ListRulesQueryDto } from './rule-config.dto';
 
 // --- Cookie Update ---
 export class UpdateCookieDto {

@@ -53,15 +53,10 @@
 ### 手动启动
 
 ```bash
-# 推荐使用 pnpm（项目已包含 pnpm-lock.yaml）
-pnpm install
-pnpm run prepare:db       # 初始化 SQLite 表结构
-pnpm run dev              # 启动前后端开发服务器
-
-# 或使用 npm
+# 使用 npm（与 CI 一致；package-lock.json 为唯一锁文件）
 npm install
-npm run prepare:db
-npm run dev
+npm run prepare:db       # 初始化 SQLite 表结构
+npm run dev              # 启动前后端开发服务器
 ```
 
 访问 `http://localhost:3100`。开发时后端 API 运行在内部端口 3101，前端通过 Vite 代理统一从 3100 端口提供 `/api` 访问。
@@ -114,6 +109,25 @@ npm run build:exe
 | `DATABASE_URL` | SQLite 数据库路径 | `file:./dev.db` |
 
 `HOST` 默认绑定 `127.0.0.1` 防止局域网暴露。如需局域网访问，设置 `HOST=0.0.0.0`。
+
+## 金钱数据真源（GMV / Overview / 退款）
+
+运营看板金额统一口径（**bonus 不进 GMV 分母**）：
+
+| 层级 | 角色 |
+|------|------|
+| **OrderHeader** | 真源。今日 KPI 始终直读；历史日无缓存时回退到 OH |
+| **DailyMetrics** | 预聚合缓存。历史趋势优先读 DM；GMV 刷新 / `etl-orders` 写 OH 后会 **range recompute** |
+| **PackageSalesDaily.salesAmount** | 套餐日金额，由 OH 按 `packageId` + 北京日汇总写入（库存 diff 只负责 `salesQty`） |
+| **SalesSnapshot** | **不参与** GMV / Overview / 退款金钱读路径（内容推荐内存形状可保留） |
+
+刷新方式（无内置定时调度）：
+
+1. 前端 GMV 看板「刷新 / 回填」→ 拉 JeSite 订单 → recompute DM + PSD.salesAmount + 商家日指标  
+2. `npx tsx scripts/etl-orders.ts <start> <end>`（需绝对 `DATABASE_URL` 与 JeSite cookie）  
+3. `npx tsx scripts/backfill-daily-metrics.ts` / `backfill-sales-daily.ts`（金额 pass 含在后者）
+
+分账结算入口为建设中占位，不代表已有结算真源。
 
 ## 常用命令
 

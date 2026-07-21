@@ -15,6 +15,9 @@ export interface PackageDetail {
   sections: PackageDetailSection[];
   rawHtml?: string;
   fetchedAt: Date;
+  /** 从表单提取的商家坐标 */
+  merchantLat?: number;
+  merchantLng?: number;
 }
 
 export interface ParsedDetail {

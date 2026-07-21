@@ -8,16 +8,11 @@
     <MetricTile label="社群任务" :value="summary.communityTaskCount" />
   </div>
 </template>
-
 <script setup lang="ts">
 import MetricTile from '../../../components/MetricTile.vue';
 import type { ConsoleSummary } from '../composables/useDashboard';
-
-defineProps<{
-  summary: ConsoleSummary;
-}>();
+defineProps<{ summary: ConsoleSummary }>();
 </script>
-
 <style scoped>
 .metric-summary-strip {
   margin-top: 2px;

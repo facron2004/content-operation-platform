@@ -107,7 +107,7 @@ describe('AutoLoginService', () => {
       expect(fs.writeFile).toHaveBeenCalledWith(
         expect.any(String),
         'skinName=skin-green; jeesite.session.id=fresh-session; pageSize=10; pageNo=1',
-        'utf8'
+        { encoding: 'utf8', mode: 0o600 }
       );
     });
 
@@ -143,6 +143,40 @@ describe('AutoLoginService', () => {
         'skinName=skin-green; jeesite.session.id=fresh-session; pageSize=10; pageNo=1'
       );
       expect(cookie).not.toBe('mock-env-cookie');
+    });
+
+    it('shares one login attempt across concurrent forced refreshes', async () => {
+      process.env.EXTERNAL_API_USERNAME = 'login-user';
+      process.env.EXTERNAL_API_PASSWORD = 'login-password';
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce({
+          headers: { get: vi.fn().mockReturnValue('initial=abc; Path=/') }
+        })
+        .mockResolvedValueOnce({
+          status: 302,
+          headers: {
+            get: vi.fn((name: string) =>
+              name === 'set-cookie' ? 'jeesite.session.id=shared-session; Path=/; HttpOnly' : '/'
+            )
+          }
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          text: vi.fn().mockResolvedValue(JSON.stringify({ count: 1, list: [] }))
+        });
+      vi.stubGlobal('fetch', fetchMock);
+
+      const [first, second] = await Promise.all([
+        service.ensureValidCookie(true),
+        service.ensureValidCookie(true)
+      ]);
+
+      expect(first).toBe(
+        'skinName=skin-green; jeesite.session.id=shared-session; pageSize=10; pageNo=1'
+      );
+      expect(second).toBe(first);
+      expect(fetchMock).toHaveBeenCalledTimes(3);
     });
   });
 
@@ -180,7 +214,10 @@ describe('AutoLoginService', () => {
 
       const res = await service.updateManualCookie('new-valid-cookie');
       expect(res.success).toBe(true);
-      expect(fs.writeFile).toHaveBeenCalledWith(expect.any(String), 'new-valid-cookie', 'utf8');
+      expect(fs.writeFile).toHaveBeenCalledWith(expect.any(String), 'new-valid-cookie', {
+        encoding: 'utf8',
+        mode: 0o600
+      });
 
       const status = await service.getCookieStatus();
       expect(status.isValid).toBe(true);

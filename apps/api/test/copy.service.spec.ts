@@ -6,8 +6,8 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { CopyService } from '../src/content/copy.service';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { DataSourceService } from '../src/content/data-source.service';
-import { PackageDetailService } from '../src/content/package-detail.service';
-import { AICopyService } from '../src/content/ai-copy.service';
+import { PackageDetailService } from '../src/content/package-detail';
+import { AICopyService } from '../src/content/ai-copy';
 
 // ---- fixtures ----
 

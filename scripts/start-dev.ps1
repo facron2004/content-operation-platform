@@ -44,6 +44,12 @@ foreach ($port in $devPorts) {
 Write-Host "`n端口清理完成，正在启动统一入口开发服务器..." -ForegroundColor Cyan
 Start-Sleep -Seconds 1
 
-# 启动开发服务器
+# 启动开发服务器（由 scripts/dev-unified.js 负责：只构建一次 shared、先等 API 就绪再起前端）
 Set-Location $PSScriptRoot\..
+$env:NODE_ENV = if ($env:NODE_ENV) { $env:NODE_ENV } else { "development" }
+$env:DEV_OPEN_BROWSER = if ($env:DEV_OPEN_BROWSER) { $env:DEV_OPEN_BROWSER } else { "1" }
+$env:DEV_PUBLIC_PORT = if ($env:DEV_PUBLIC_PORT) { $env:DEV_PUBLIC_PORT } else { "3100" }
+$env:DEV_API_PORT = if ($env:DEV_API_PORT) { $env:DEV_API_PORT } else { "3101" }
+$env:PORT = $env:DEV_API_PORT
+$env:HOST = if ($env:HOST) { $env:HOST } else { "127.0.0.1" }
 npm run dev

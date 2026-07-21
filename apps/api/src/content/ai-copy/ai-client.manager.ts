@@ -23,7 +23,7 @@ export class AIClientManager {
     try {
       const hostname = new URL(baseURL).hostname;
       await assertHostnameNotPrivateAsync(hostname);
-    } catch (err: unknown) {
+    } catch {
       throw new BadRequestException(`AI baseURL is not allowed: ${baseURL}`);
     }
   }

@@ -1,4 +1,13 @@
-// ===== 中台 GMV 看板 API 类型 =====
+import { withForce } from './with-force';
+
+export interface GmvCompareDelta {
+  totalGmv?: number | null;
+  paidOrderCount?: number | null;
+  avgOrderValue?: number | null;
+  refundRate?: number | null;
+  verifyRate?: number | null;
+  monthGmv?: number | null;
+}
 
 export interface GmvKpi {
   date: string;
@@ -14,8 +23,14 @@ export interface GmvKpi {
   paidOrderCount: number;
   paidAmountBonus: number;
   paidAmountWallet: number;
+  avgOrderValue: number;
+  monthGmv: number;
+  monthGmvOnline: number;
+  monthGmvWallet: number;
+  platformCommission: number;
+  compare?: GmvCompareDelta;
   updatedAt: string;
-  dataSource: 'DailyMetrics' | 'SalesSnapshot';
+  dataSource: 'DailyMetrics' | 'SalesSnapshot' | 'OrderHeader';
 }
 
 export interface GmvTrendPoint {
@@ -27,6 +42,13 @@ export interface GmvTrendPoint {
   totalRefund: number;
   refundRate: number;
   verifyRate: number;
+  paidOrderCount: number;
+}
+
+export interface GmvHourlyPoint {
+  hour: number;
+  label: string;
+  totalGmv: number;
   paidOrderCount: number;
 }
 
@@ -51,38 +73,63 @@ export interface GmvMerchantRow {
   paidOrderCount: number;
 }
 
-export async function refreshGmvFromJeesite(startDate?: string, endDate?: string) {
+export type GmvTrendGranularity = 'day' | 'week' | 'month';
+
+async function gmvClient() {
   const { default: client } = await import('../http-client');
-  const res = await client.post<{
-    startDate: string;
-    endDate: string;
-    fetched: number;
-    upserted: number;
-    skipped: number;
-    errors: number;
-    pagesFetched: number;
-    kpi: GmvKpi;
-  }>(`/gmv/refresh?_=${Date.now()}`, { startDate, endDate });
-  return res.data;
+  return client;
+}
+
+export async function refreshGmvFromJeesite(startDate?: string, endDate?: string) {
+  return (
+    await (
+      await gmvClient()
+    ).post<{
+      startDate: string;
+      endDate: string;
+      fetched: number;
+      upserted: number;
+      skipped: number;
+      errors: number;
+      pagesFetched: number;
+      kpi: GmvKpi;
+    }>(`/gmv/refresh?_=${Date.now()}`, { startDate, endDate })
+  ).data;
 }
 
 export async function getGmvToday(date?: string, force = false) {
-  const { default: client } = await import('../http-client');
-  // force=true 同时拼 ?_=ts(防 axios 缓存/AbortController) + ?force=true(告诉后端绕过 5min 缓存)
-  const suffix = force ? `?_=${Date.now()}&force=true` : '';
-  const url = `/gmv/today${suffix}`;
-  const res = await client.get<GmvKpi>(url, { params: date ? { date } : undefined });
-  return res.data;
+  return (
+    await (
+      await gmvClient()
+    ).get<GmvKpi>(withForce('/gmv/today', force), {
+      params: date ? { date } : undefined
+    })
+  ).data;
 }
 
-export async function getGmvTrend(days: 7 | 30, endDate?: string, force = false) {
-  const { default: client } = await import('../http-client');
-  const suffix = force ? `?_=${Date.now()}&force=true` : '';
-  const url = `/gmv/trend${suffix}`;
-  const params: Record<string, unknown> = { days };
-  if (endDate) params.endDate = endDate;
-  const res = await client.get<GmvTrendPoint[]>(url, { params });
-  return res.data;
+export async function getGmvTrend(
+  days: 7 | 30 | 90 | 365,
+  endDate?: string,
+  force = false,
+  granularity: GmvTrendGranularity = 'day'
+) {
+  return (
+    await (
+      await gmvClient()
+    ).get<GmvTrendPoint[]>(withForce('/gmv/trend', force), {
+      params: { days, granularity, ...(endDate ? { endDate } : {}) }
+    })
+  ).data;
+}
+
+export async function getGmvHourly(date?: string, force = false) {
+  return (
+    await (
+      await gmvClient()
+    ).get<GmvHourlyPoint[]>(withForce('/gmv/hourly', force), {
+      params: date ? { date } : undefined
+    })
+  ).data;
 }
 
 export async function getGmvDistribution(
@@ -91,12 +138,11 @@ export async function getGmvDistribution(
   force = false
 ) {
   const { default: client } = await import('../http-client');
-  const suffix = force ? `?_=${Date.now()}&force=true` : '';
-  const url = `/gmv/distribution${suffix}`;
-  const res = await client.get<GmvDistributionRow[]>(url, {
-    params: { dim, limit }
-  });
-  return res.data;
+  return (
+    await client.get<GmvDistributionRow[]>(withForce('/gmv/distribution', force), {
+      params: { dim, limit }
+    })
+  ).data;
 }
 
 export async function getGmvByMerchant(
@@ -106,10 +152,10 @@ export async function getGmvByMerchant(
   force = false
 ) {
   const { default: client } = await import('../http-client');
-  const suffix = force ? `?_=${Date.now()}&force=true` : '';
-  const url = `/gmv/by-merchant${suffix}`;
-  const res = await client.get<{ items: GmvMerchantRow[]; hasMore: boolean }>(url, {
-    params: { sortBy, page, pageSize }
-  });
-  return res.data;
+  return (
+    await client.get<{ items: GmvMerchantRow[]; hasMore: boolean }>(
+      withForce('/gmv/by-merchant', force),
+      { params: { sortBy, page, pageSize } }
+    )
+  ).data;
 }

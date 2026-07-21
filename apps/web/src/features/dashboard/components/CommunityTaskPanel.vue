@@ -28,70 +28,12 @@
     />
   </section>
 </template>
-
 <script setup lang="ts">
 import SectionHeader from '../../../components/SectionHeader.vue';
 import EmptyState from '../../../components/EmptyState.vue';
 import { channelLabels } from '../../../utils/labels';
 import type { CommunityTask } from '../composables/useDashboard';
-
-defineProps<{
-  tasks: CommunityTask[];
-}>();
-
-defineEmits<{
-  navigate: [path: string];
-  'generate-card': [packageId: string];
-}>();
+defineProps<{ tasks: CommunityTask[] }>();
+defineEmits<{ navigate: [path: string]; 'generate-card': [packageId: string] }>();
 </script>
-
-<style scoped>
-.panel-head h2 {
-  margin: 0;
-  color: var(--ink);
-  font-size: 15px;
-  font-weight: 800;
-}
-
-.panel-head p {
-  margin: 4px 0 0;
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.5;
-}
-
-.task-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.task-row {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 14px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background: var(--panel);
-  box-shadow: var(--shadow-soft);
-}
-
-.task-row strong {
-  display: block;
-  margin-bottom: 6px;
-  color: var(--ink);
-}
-
-.task-row span {
-  color: var(--muted);
-  font-size: 13px;
-}
-
-.task-row p {
-  margin: 8px 0 0;
-  color: var(--ink-soft);
-  line-height: 1.5;
-}
-</style>
+<style src="../../../styles/components/community-task-panel.css" scoped></style>

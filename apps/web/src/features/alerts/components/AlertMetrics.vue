@@ -7,16 +7,11 @@
     <MetricTile label="今日已处理" :value="summary.resolvedCount" />
   </div>
 </template>
-
 <script setup lang="ts">
 import MetricTile from '../../../components/MetricTile.vue';
 import type { AlertSummary } from '../composables/useAlerts';
-
-defineProps<{
-  summary: AlertSummary;
-}>();
+defineProps<{ summary: AlertSummary }>();
 </script>
-
 <style scoped>
 .alert-metrics {
   grid-template-columns: repeat(5, minmax(0, 1fr));

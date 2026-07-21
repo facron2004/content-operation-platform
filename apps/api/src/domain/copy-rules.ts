@@ -15,10 +15,11 @@ import {
 import { getSubwayStation } from './subway-stations';
 import { getCategoryEmoji, getDishEmoji } from './category-emoji';
 import { clamp, escapeRegExp, priceString } from './utils';
+import type { CopyRuleConfig } from './rules-defaults';
 import { nowISO, safeRatio } from '../common/format';
 
 // Re-export for external consumers
-import type { PackageDetail } from '../content/package-detail.service';
+import type { PackageDetail } from '../content/package-detail';
 export type { PackageDetail };
 
 interface CopyDraftForAudit {
@@ -259,11 +260,16 @@ const buildCta = (pkg: ContentPackage): string => {
 
 // ---- 审核逻辑 ----
 
-export function auditCopyText(pkg: ContentPackage, copy: CopyDraftForAudit): AuditResult {
+export function auditCopyText(
+  pkg: ContentPackage,
+  copy: CopyDraftForAudit,
+  rules?: Pick<CopyRuleConfig, 'forbiddenWords'>
+): AuditResult {
   const riskTips: string[] = [];
   const text = `${copy.title}\n${copy.body}`;
+  const words = rules?.forbiddenWords ?? forbiddenWords;
 
-  for (const word of forbiddenWords) {
+  for (const word of words) {
     if (text.includes(word)) riskTips.push(`包含禁用或绝对化表述：${word}`);
   }
 

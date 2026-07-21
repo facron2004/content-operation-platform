@@ -1,5 +1,6 @@
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
 }
 
 datasource db {
@@ -50,29 +51,50 @@ model ContentPackage {
   @@index([areaId, saleStatus])
 }
 
+model Merchant {
+  merchantId   String   @id
+  merchantName String   @default("")
+  areaId       String?
+  areaName     String?
+  address      String?  @default("")
+  lat          Float?
+  lng          Float?
+  totalSku     Int      @default(0)
+  firstSeenAt  DateTime @default(now())
+  lastSeenAt   DateTime @updatedAt
+
+  @@index([areaId])
+  @@index([merchantName])
+}
+
 model SalesSnapshot {
-  id              String         @id @default(cuid())
-  packageId       String
-  areaId          String
-  merchantId      String
-  snapshotTime    DateTime
-  exposureCount   Int
-  clickCount      Int
-  orderCount      Int
-  paidOrderCount  Int
-  refundCount     Int
-  verifyCount     Int
-  gmv             Float
-  paidAmount      Float
-  refundAmount    Float
-  conversionRate  Float
-  verifyRate      Float
-  refundRate      Float
-  sellThroughRate Float
-  remainingStock  Int
-  salesSpeed      Float
-  createdAt       DateTime       @default(now())
-  package         ContentPackage @relation(fields: [packageId], references: [packageId], onDelete: Cascade)
+  id               String         @id @default(cuid())
+  packageId        String
+  areaId           String
+  merchantId       String
+  snapshotTime     DateTime
+  exposureCount    Int
+  clickCount       Int
+  orderCount       Int
+  paidOrderCount   Int
+  refundCount      Int
+  verifyCount      Int
+  gmv              Float
+  paidAmount       Float
+  paidAmountOnline Float          @default(0)
+  paidAmountWallet Float          @default(0)
+  paidAmountBonus  Float          @default(0)
+  paidAmountCard   Float          @default(0)
+  refundAmount     Float
+  verifyAmount     Float          @default(0)
+  conversionRate   Float
+  verifyRate       Float
+  refundRate       Float
+  sellThroughRate  Float
+  remainingStock   Int
+  salesSpeed       Float
+  createdAt        DateTime       @default(now())
+  package          ContentPackage @relation(fields: [packageId], references: [packageId], onDelete: Cascade)
 
   @@index([packageId, snapshotTime])
   @@index([areaId])
@@ -117,6 +139,9 @@ model GeneratedCopy {
   auditStatus  String
   auditRemark  String?
   createdBy    String
+  versionNo    Int            @default(1)
+  sourceContentId String?
+  isReusable   Boolean        @default(false)
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
   package      ContentPackage @relation(fields: [packageId], references: [packageId], onDelete: Cascade)
@@ -136,6 +161,7 @@ model CopyPerformance {
   channel        String
   groupId        String?
   leaderId       String?
+  taskId         String?
   exposureCount  Int
   clickCount     Int
   orderCount     Int
@@ -181,4 +207,185 @@ model OperationAlertResolution {
 
   @@id([alertId, resolvedDate])
   @@index([resolvedDate])
+}
+
+model DailyMetrics {
+  date             String @id
+  totalGmv         Float  @default(0)
+  gmvOnline        Float  @default(0)
+  gmvWallet        Float  @default(0)
+  gmvBonus         Float  @default(0)
+  gmvCard          Float  @default(0)
+  totalRefund      Float  @default(0)
+  refundRate       Float  @default(0)
+  totalVerify      Float  @default(0)
+  verifyRate       Float  @default(0)
+  totalOrders      Int    @default(0)
+  paidOrderCount   Int    @default(0)
+  verifyCount      Int    @default(0)
+  refundCount      Int    @default(0)
+  activeMerchants  Int    @default(0)
+  activeMembers    Int    @default(0)
+  movingSkus       Int    @default(0)
+  stagnantSkus     Int    @default(0)
+  paidAmountBonus  Float  @default(0)
+  paidAmountWallet Float  @default(0)
+  updatedAt        DateTime @updatedAt
+}
+
+model OrderHeader {
+  orderId          String   @id
+  memberId         String?
+  packageId        String?
+  merchantId       String?
+  merchantName     String?
+  areaId           String?
+  areaName         String?
+  orderTime        DateTime
+  paidTime         DateTime?
+  verifyTime       DateTime?
+  refundTime       DateTime?
+  orderAmount      Float
+  paidAmount       Float    @default(0)
+  paidAmountWallet Float    @default(0)
+  paidAmountBonus  Float    @default(0)
+  paidAmountCard   Float    @default(0)
+  refundAmount     Float    @default(0)
+  verifyAmount     Float    @default(0)
+  pointEarned      Int      @default(0)
+  pointUsed        Int      @default(0)
+  status           String
+  channel          String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([memberId, orderTime])
+  @@index([packageId])
+  @@index([orderTime])
+  @@index([merchantId])
+  @@index([merchantName])
+  @@index([merchantName, orderTime])
+  @@index([status])
+  @@index([paidTime])
+}
+
+model Member {
+  memberId      String @id
+  nickname      String?
+  phone         String?
+  level         String?
+  pointsBalance Int    @default(0)
+  walletBalance Float  @default(0)
+  firstOrderAt  DateTime?
+  lastOrderAt   DateTime?
+  totalGmv      Float  @default(0)
+  totalOrders   Int    @default(0)
+  tags          String?
+  firstSeenAt   DateTime @default(now())
+  lastSeenAt    DateTime @updatedAt
+
+  pointLedgers MemberPointLedger[]
+  orderPoints  OrderPoint[]
+
+  @@index([phone])
+  @@index([lastOrderAt])
+  @@index([totalGmv])
+  @@index([level])
+}
+
+model MemberPointLedger {
+  id         String   @id @default(cuid())
+  memberId   String
+  orderId    String?
+  delta      Int
+  balance    Int
+  reason     String
+  occurredAt DateTime
+  createdAt  DateTime @default(now())
+
+  member     Member   @relation(fields: [memberId], references: [memberId], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([memberId, occurredAt])
+  @@index([reason])
+  @@index([orderId])
+}
+
+model OrderPoint {
+  id       String @id @default(cuid())
+  orderId  String
+  memberId String
+  delta    Int
+  type     String
+  createdAt DateTime @default(now())
+
+  member   Member @relation(fields: [memberId], references: [memberId], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([orderId, type])
+  @@index([memberId])
+}
+
+model RepurchaseCohort {
+  cohortMonth    String @id
+  totalMembers   Int    @default(0)
+  repeat30Count  Int    @default(0)
+  repeat60Count  Int    @default(0)
+  repeat90Count  Int    @default(0)
+  updatedAt      DateTime @updatedAt
+}
+
+model MerchantDailyMetrics {
+  merchantName     String
+  date             String
+  areaName         String?
+  paidOrderCount   Int      @default(0)
+  paidAmountOnline Float    @default(0)
+  paidAmountWallet Float    @default(0)
+  paidAmountBonus  Float    @default(0)
+  paidAmountCard   Float    @default(0)
+  refundAmount     Float    @default(0)
+  verifyAmount     Float    @default(0)
+  orderCount       Int      @default(0)
+  packageCount     Int      @default(0)
+  updatedAt        DateTime @updatedAt
+
+  @@id([merchantName, date])
+  @@index([date])
+  @@index([merchantName, date])
+}
+
+// Daily package sales derived from inventory diffs / order ETL.
+// Live DBs may still carry a legacy "revenue" column; readers prefer salesAmount.
+model PackageSalesDaily {
+  id          String   @id @default(cuid())
+  packageId   String
+  date        String
+  salesQty    Int      @default(0)
+  salesAmount Float    @default(0)
+  refundQty   Int      @default(0)
+  deltaSource String?
+  computedAt  DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([packageId, date])
+  @@index([date])
+  @@index([packageId, date])
+}
+
+model RuleConfig {
+  id         String   @id @default(cuid())
+  tenantId   String?
+  merchantId String?
+  type       String
+  name       String
+  version    Int
+  isActive   Boolean
+  payload    String
+  comment    String?
+  createdBy  String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([tenantId, merchantId, type])
+  @@index([isActive])
 }

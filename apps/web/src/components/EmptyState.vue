@@ -8,56 +8,17 @@
     </el-button>
   </div>
 </template>
-
 <script setup lang="ts">
-interface Props {
-  icon?: string;
-  title: string;
-  description?: string;
-  actionText?: string;
-  actionType?: 'primary' | 'success' | 'warning' | 'danger' | 'info';
-}
-
-withDefaults(defineProps<Props>(), {
-  icon: '📭',
-  description: '',
-  actionText: '',
-  actionType: 'primary'
-});
-
-defineEmits<{
-  action: [];
-}>();
+withDefaults(
+  defineProps<{
+    icon?: string;
+    title: string;
+    description?: string;
+    actionText?: string;
+    actionType?: 'primary' | 'success' | 'warning' | 'danger' | 'info';
+  }>(),
+  { icon: '📭', description: '', actionText: '', actionType: 'primary' }
+);
+defineEmits<{ action: [] }>();
 </script>
-
-<style scoped>
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 60px 20px;
-  text-align: center;
-}
-
-.empty-icon {
-  font-size: 64px;
-  margin-bottom: 16px;
-  opacity: 0.6;
-}
-
-.empty-title {
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--ink);
-  margin-bottom: 8px;
-}
-
-.empty-description {
-  font-size: 14px;
-  color: var(--muted);
-  margin-bottom: 24px;
-  max-width: 400px;
-  line-height: 1.6;
-}
-</style>
+<style src="../styles/components/empty-state.css" scoped></style>

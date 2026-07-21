@@ -7,53 +7,26 @@ import type {
 import client from '../http-client';
 import { cachedGet } from '../cache.service';
 
-// ==================== Package APIs ====================
+export type RecommendationsParams = {
+  role?: string;
+  areaId?: string;
+  merchantId?: string;
+  status?: 'selling';
+  category?: string;
+  inventoryMin?: number;
+  inventoryMax?: number;
+  inventoryFlag?: 'unsold';
+  page?: number;
+  pageSize?: number;
+};
 
-export async function getRecommendations(
-  params: {
-    role?: string;
-    areaId?: string;
-    merchantId?: string;
-    status?: 'selling';
-    category?: string;
-    inventoryMin?: number;
-    inventoryMax?: number;
-    inventoryFlag?: 'unsold';
-    page?: number;
-    pageSize?: number;
-  } = {}
-) {
-  return cachedGet<RecommendResponse>(
-    () => client.get('/content/packages/recommend', { params }).then((res) => res.data),
-    '/content/packages/recommend',
-    params,
-    60000
-  );
-}
-
-export async function getPackageAnalysis(packageId: string) {
-  return cachedGet<PackageAnalysisResponse>(
-    () => client.get(`/content/packages/${packageId}/analysis`).then((res) => res.data),
-    `/content/packages/${packageId}/analysis`,
-    undefined,
-    30000
-  );
-}
-
-export async function getPackageDetail(packageId: string): Promise<PackageDetailResponse> {
-  return cachedGet(
-    () => client.get(`/content/packages/${packageId}/detail`).then((res) => res.data),
-    `/content/packages/${packageId}/detail`,
-    undefined,
-    30000
-  );
-}
-
-export async function getCategories(params: { areaId?: string; role?: string } = {}) {
-  return cachedGet<CategoriesResponse>(
-    () => client.get('/content/packages/categories', { params }).then((res) => res.data),
-    '/content/packages/categories',
-    params,
-    60000
-  );
-}
+const get = <T>(url: string, params?: Record<string, unknown>, ttl = 60000) =>
+  cachedGet<T>(() => client.get(url, { params }).then((r) => r.data), url, params, ttl);
+export const getRecommendations = (params: RecommendationsParams = {}) =>
+  get<RecommendResponse>('/content/packages/recommend', params);
+export const getPackageAnalysis = (packageId: string) =>
+  get<PackageAnalysisResponse>(`/content/packages/${packageId}/analysis`, undefined, 30000);
+export const getPackageDetail = (packageId: string): Promise<PackageDetailResponse> =>
+  get(`/content/packages/${packageId}/detail`, undefined, 30000);
+export const getCategories = (params: { areaId?: string; role?: string } = {}) =>
+  get<CategoriesResponse>('/content/packages/categories', params);

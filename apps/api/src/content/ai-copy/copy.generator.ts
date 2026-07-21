@@ -1,6 +1,6 @@
 import type { ContentPackage, GenerateCopyRequest } from '@content/shared';
 import { currentPrice } from '@content/shared';
-import type { PackageDetail } from '../package-detail.service';
+import type { PackageDetail } from '../package-detail';
 import type { AICopyDraft } from './types';
 import { escapeRegExp } from '../../domain/utils';
 import { ResponseParser } from './response.parser';

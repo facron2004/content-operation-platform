@@ -16,68 +16,9 @@
     </div>
   </section>
 </template>
-
 <script setup lang="ts">
 import SectionHeader from '../../../components/SectionHeader.vue';
-
-defineProps<{
-  review?: { date: string; whatHappened: string[]; tomorrowSuggestions: string[] };
-}>();
-
-defineEmits<{
-  navigate: [path: string];
-}>();
+defineProps<{ review?: { date: string; whatHappened: string[]; tomorrowSuggestions: string[] } }>();
+defineEmits<{ navigate: [path: string] }>();
 </script>
-
-<style scoped>
-.panel-head h2 {
-  margin: 0;
-  color: var(--ink);
-  font-size: 15px;
-  font-weight: 800;
-}
-
-.panel-head p {
-  margin: 4px 0 0;
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.5;
-}
-
-.review-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-bottom: 18px;
-}
-
-.review-list p {
-  padding: 10px 14px;
-  border: 1px solid var(--line);
-  border-left: 3px solid var(--accent);
-  border-radius: var(--radius-sm);
-  background: var(--accent-soft);
-  color: var(--ink);
-  line-height: 1.55;
-}
-
-.suggestion-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.suggestion-list strong {
-  margin-bottom: 4px;
-  color: var(--ink);
-}
-
-.suggestion-list span {
-  padding: 8px 12px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background: var(--soft);
-  color: var(--ink);
-  line-height: 1.5;
-}
-</style>
+<style src="../../../styles/components/review-panel.css" scoped></style>

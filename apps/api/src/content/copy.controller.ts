@@ -1,4 +1,4 @@
-﻿import { Body, Controller, Get, Inject, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Inject, Param, Post, Query } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import type { AuditStatus, Channel } from '@content/shared';
 import { CopyService } from './copy.service';

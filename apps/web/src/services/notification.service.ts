@@ -13,66 +13,62 @@ export interface Notification {
 /** 添加新通知时客户端提供的字段,id/timestamp/read 由服务生成。 */
 export type NotificationDraft = Omit<Notification, 'id' | 'timestamp' | 'read'>;
 
-class NotificationService {
-  private notifications: Notification[] = [];
-  private listeners: Set<(notifications: Notification[]) => void> = new Set();
+type NotificationListener = (notifications: Notification[]) => void;
 
-  add(notification: NotificationDraft) {
-    const newNotification: Notification = {
-      ...notification,
+function notifyNotificationListeners(
+  listeners: Set<NotificationListener>,
+  notifications: Notification[]
+): void {
+  listeners.forEach((listener) => listener(notifications));
+}
+
+class NotificationStore {
+  private notifications: Notification[] = [];
+  private listeners = new Set<NotificationListener>();
+  add(n: NotificationDraft) {
+    this.notifications.unshift({
+      ...n,
       id: `${Date.now()}_${randomShortId()}`,
       timestamp: Date.now(),
       read: false
-    };
-
-    this.notifications.unshift(newNotification);
-    this.notifyListeners();
+    });
+    this.notify();
   }
-
   getAll(): Notification[] {
     return [...this.notifications];
   }
-
   getUnread(): Notification[] {
     return this.notifications.filter((n) => !n.read);
   }
-
   markAsRead(id: string) {
-    const notification = this.notifications.find((n) => n.id === id);
-    if (notification) {
-      notification.read = true;
-      this.notifyListeners();
-    }
+    const n = this.notifications.find((item) => item.id === id);
+    if (!n) return;
+    n.read = true;
+    this.notify();
   }
-
   markAllAsRead() {
     this.notifications.forEach((n) => (n.read = true));
-    this.notifyListeners();
+    this.notify();
   }
-
   remove(id: string) {
     this.notifications = this.notifications.filter((n) => n.id !== id);
-    this.notifyListeners();
+    this.notify();
   }
-
   clear() {
     this.notifications = [];
-    this.notifyListeners();
+    this.notify();
   }
-
-  subscribe(listener: (notifications: Notification[]) => void) {
+  subscribe(listener: NotificationListener) {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
   }
-
-  private notifyListeners() {
-    this.listeners.forEach((listener) => listener(this.notifications));
+  private notify() {
+    notifyNotificationListeners(this.listeners, this.notifications);
   }
 }
 
-export const notificationService = new NotificationService();
+export const notificationService = new NotificationStore();
 
-// Vue composable
 export function useNotifications() {
   return {
     add: (notification: NotificationDraft) => notificationService.add(notification),

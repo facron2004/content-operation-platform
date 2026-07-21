@@ -1,3 +1,5 @@
+/** Consolidated GMV module. */
+import { beijingDateKey } from '@content/shared';
 import {
   BadRequestException,
   Body,
@@ -10,16 +12,50 @@ import {
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
-import { beijingDateKey } from '@content/shared';
-import { GmvService } from './gmv.service';
+import { hasForceSignal } from '../common';
 import {
   GmvByMerchantQueryDto,
   GmvDistributionQueryDto,
+  GmvHourlyQueryDto,
+  GmvRefreshBodyDto,
   GmvTodayQueryDto,
   GmvTrendQueryDto
-} from './dto/gmv-query.dto';
-import { GmvRefreshBodyDto } from './dto/gmv-refresh.dto';
+} from './gmv.dto';
+import { GmvService } from './gmv.service';
 
+// --- gmv-controller-reads.ts ---
+export function gmvToday(service: GmvService, q: GmvTodayQueryDto, req: Request) {
+  return service.getKpis(q.date, hasForceSignal(req, q));
+}
+
+export function gmvTrend(service: GmvService, q: GmvTrendQueryDto, req: Request) {
+  return service.getTrend(q.days, q.endDate, hasForceSignal(req, q), q.granularity ?? 'day');
+}
+
+export function gmvHourly(service: GmvService, q: GmvHourlyQueryDto, req: Request) {
+  return service.getHourly(q.date, hasForceSignal(req, q));
+}
+
+export function gmvDistribution(service: GmvService, q: GmvDistributionQueryDto, req: Request) {
+  return service.getDistribution(q.dim, q.limit, hasForceSignal(req, q));
+}
+
+export function gmvByMerchant(service: GmvService, q: GmvByMerchantQueryDto, req: Request) {
+  return service.getTopMerchants(q.sortBy, q.page, q.pageSize, hasForceSignal(req, q));
+}
+
+// --- gmv-controller-refresh.ts ---
+export async function handleGmvRefresh(service: GmvService, body: GmvRefreshBodyDto) {
+  const today = beijingDateKey(new Date());
+  const endDate = body.endDate ?? today;
+  const startDate = body.startDate ?? endDate;
+  if (startDate > endDate) throw new BadRequestException('startDate 必须 ≤ endDate');
+  const result = await service.refreshFromJeesite(startDate, endDate);
+  const kpi = await service.getKpis(endDate, true);
+  return { ...result, kpi };
+}
+
+// --- gmv.controller.ts ---
 @ApiTags('gmv')
 @Controller('api/gmv')
 export class GmvController {
@@ -27,21 +63,26 @@ export class GmvController {
 
   @Get('today')
   @ApiOperation({
-    summary: '今日 GMV 看板 KPI',
-    description: 'GMV = paidAmountOnline + Wallet + Bonus;净 GMV = GMV − refundAmount'
+    summary: '今日 GMV KPI',
+    description: 'GMV=paidAmount+paidAmountWallet;净GMV=GMV−refund;含本月累计/客单价/环比'
   })
-  today(@Query() query: GmvTodayQueryDto, @Req() req: Request) {
-    return this.service.getKpis(query.date, hasForceSignal(req, query));
+  today(@Query() q: GmvTodayQueryDto, @Req() req: Request) {
+    return gmvToday(this.service, q, req);
   }
 
   @Get('trend')
-  @ApiOperation({ summary: '7/30 日 GMV 趋势' })
-  trend(@Query() query: GmvTrendQueryDto, @Req() req: Request) {
-    const force = hasForceSignal(req, query);
-    return this.service.getTrend(query.days, query.endDate, force);
+  @ApiOperation({ summary: 'GMV 趋势（按日/周/月）' })
+  trend(@Query() q: GmvTrendQueryDto, @Req() req: Request) {
+    return gmvTrend(this.service, q, req);
   }
 
-  @Get('cache/invalidate')
+  @Get('hourly')
+  @ApiOperation({ summary: '分时段成交趋势（按支付小时，北京时间）' })
+  hourly(@Query() q: GmvHourlyQueryDto, @Req() req: Request) {
+    return gmvHourly(this.service, q, req);
+  }
+
+  @Post('cache/invalidate')
   @ApiOperation({ summary: '清空 GMV 进程内缓存' })
   invalidateCache(@Query('prefix') prefix?: string) {
     this.service.invalidateCache(prefix);
@@ -49,48 +90,20 @@ export class GmvController {
   }
 
   @Post('refresh')
-  @ApiOperation({
-    summary: '从 JeSite 拉订单 + 清缓存 + 重算 GMV',
-    description: '刷新按钮用:默认拉今天,也可指定 startDate/endDate (YYYY-MM-DD)'
-  })
-  async refresh(@Body() body: GmvRefreshBodyDto) {
-    const today = beijingDateKey(new Date());
-    const endDate = body.endDate ?? today;
-    const startDate = body.startDate ?? endDate;
-    if (startDate > endDate) {
-      throw new BadRequestException('startDate 必须 ≤ endDate');
-    }
-    const result = await this.service.refreshFromJeesite(startDate, endDate);
-    // 刷新后立刻算一次末尾日 KPI(强制 force,绕过刚清的 cache)
-    const kpi = await this.service.getKpis(endDate, true);
-    return { ...result, kpi };
+  @ApiOperation({ summary: 'JeSite 拉单 + 清缓存 + 重算 GMV' })
+  refresh(@Body() body: GmvRefreshBodyDto) {
+    return handleGmvRefresh(this.service, body);
   }
 
   @Get('distribution')
-  @ApiOperation({ summary: '区域/品类/渠道维度 GMV 分布' })
-  distribution(@Query() query: GmvDistributionQueryDto, @Req() req: Request) {
-    const force = hasForceSignal(req, query);
-    return this.service.getDistribution(query.dim, query.limit, force);
+  @ApiOperation({ summary: '区域/品类/渠道 GMV 分布' })
+  distribution(@Query() q: GmvDistributionQueryDto, @Req() req: Request) {
+    return gmvDistribution(this.service, q, req);
   }
 
   @Get('by-merchant')
   @ApiOperation({ summary: '商家 GMV / 退款率 / 核销率排行' })
-  byMerchant(@Query() query: GmvByMerchantQueryDto, @Req() req: Request) {
-    const force = hasForceSignal(req, query);
-    return this.service.getTopMerchants(query.sortBy, query.page, query.pageSize, force);
+  byMerchant(@Query() q: GmvByMerchantQueryDto, @Req() req: Request) {
+    return gmvByMerchant(this.service, q, req);
   }
-}
-
-/** 识别"绕过缓存"信号: ?force=true/1/yes 或 ?_=ts / ?_t=ts / ?t=ts 任一存在都视为 force=true */
-function hasForceSignal(req: Request, query: { force?: boolean | string }): boolean {
-  const q = req.query as Record<string, unknown>;
-  if (
-    query.force === true ||
-    query.force === 'true' ||
-    query.force === '1' ||
-    query.force === 'yes'
-  )
-    return true;
-  if (q['_'] != null || q['_t'] != null || q['t'] != null) return true;
-  return false;
 }

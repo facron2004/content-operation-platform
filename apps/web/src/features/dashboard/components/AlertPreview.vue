@@ -19,37 +19,11 @@
     </el-table>
   </section>
 </template>
-
 <script setup lang="ts">
 import SectionHeader from '../../../components/SectionHeader.vue';
 import type { OperationAlert } from '@content/shared';
 import { alertTagType } from '../../../utils/labels';
-
-defineProps<{
-  alerts: OperationAlert[];
-}>();
-
-defineEmits<{
-  navigate: [path: string];
-}>();
+defineProps<{ alerts: OperationAlert[] }>();
+defineEmits<{ navigate: [path: string] }>();
 </script>
-
-<style scoped>
-.panel-head h2 {
-  margin: 0;
-  color: var(--ink);
-  font-size: 15px;
-  font-weight: 800;
-}
-
-.panel-head p {
-  margin: 4px 0 0;
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.5;
-}
-
-.preview-table {
-  margin-top: 4px;
-}
-</style>
+<style src="../../../styles/components/alert-preview.css" scoped></style>

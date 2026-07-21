@@ -1,6 +1,8 @@
 <template>
   <el-dropdown trigger="click" @command="handleCommand">
-    <el-button :icon="themeIcon" circle class="theme-trigger" />
+    <span class="theme-trigger-wrap">
+      <el-button :icon="themeIcon" circle class="theme-trigger" />
+    </span>
     <template #dropdown>
       <el-dropdown-menu>
         <el-dropdown-item command="light" :class="{ active: theme === 'light' }">
@@ -19,32 +21,17 @@
     </template>
   </el-dropdown>
 </template>
-
 <script setup lang="ts">
 import { computed } from 'vue';
 import { Sunny, Moon, Monitor } from '@element-plus/icons-vue';
 import { themeService } from '../services/theme.service';
-
 const theme = themeService.themeRef;
 const effectiveTheme = themeService.effectiveThemeRef;
-
-const themeIcon = computed(() => {
-  if (theme.value === 'auto') return Monitor;
-  return effectiveTheme.value === 'dark' ? Moon : Sunny;
-});
-
+const themeIcon = computed(() =>
+  theme.value === 'auto' ? Monitor : effectiveTheme.value === 'dark' ? Moon : Sunny
+);
 function handleCommand(command: 'light' | 'dark' | 'auto') {
   themeService.setTheme(command);
 }
 </script>
-
-<style scoped>
-.theme-trigger {
-  box-shadow: var(--shadow-soft);
-}
-
-.active {
-  color: var(--el-color-primary);
-  font-weight: 700;
-}
-</style>
+<style src="../styles/components/theme-switch.css" scoped></style>

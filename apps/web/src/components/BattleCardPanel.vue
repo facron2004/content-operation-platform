@@ -11,44 +11,8 @@
       </template>
     </SectionHeader>
     <div v-if="battleCard" class="battle-card-grid">
-      <div class="battle-card-summary">
-        <strong>{{ battleCard.packageName }}</strong>
-        <p>{{ battleCard.recommendationReason }}</p>
-        <div class="tag-cloud">
-          <el-tag v-for="channel in battleCard.suitableChannels" :key="channel" effect="plain">
-            {{ channelLabels[channel] }}
-          </el-tag>
-          <el-tag type="success">建议 {{ battleCard.recommendedPushTime }}</el-tag>
-        </div>
-      </div>
-      <div class="battle-card-block">
-        <span>适合人群</span>
-        <p>{{ battleCard.targetAudience.join('、') }}</p>
-      </div>
-      <div class="battle-card-block">
-        <span>主推卖点</span>
-        <p>{{ battleCard.mainSellingPoints.join('、') }}</p>
-      </div>
-      <div class="battle-copy">
-        <h3>社群文案</h3>
-        <p>{{ battleCard.communityCopy }}</p>
-      </div>
-      <div class="battle-copy">
-        <h3>朋友圈文案</h3>
-        <p>{{ battleCard.momentsCopy }}</p>
-      </div>
-      <div class="battle-copy">
-        <h3>商家转发文案</h3>
-        <p>{{ battleCard.merchantShareCopy }}</p>
-      </div>
-      <div class="battle-copy">
-        <h3>二次跟进</h3>
-        <p>{{ battleCard.followUpCopy }}</p>
-      </div>
-      <div class="battle-copy">
-        <h3>售罄承接</h3>
-        <p>{{ battleCard.soldOutFallbackCopy }}</p>
-      </div>
+      <BattleCardSummary :battle-card="battleCard" />
+      <BattleCardCopies :battle-card="battleCard" />
     </div>
     <EmptyState
       v-else
@@ -58,61 +22,17 @@
     />
   </section>
 </template>
-
 <script setup lang="ts">
 import type { BattleCard, RecommendPackageItem } from '@content/shared';
-import { channelLabels } from '../utils/labels';
 import EmptyState from './EmptyState.vue';
 import SectionHeader from './SectionHeader.vue';
-
+import BattleCardSummary from './BattleCardSummary.vue';
+import BattleCardCopies from './BattleCardCopies.vue';
 defineProps<{
   selectedPackage: RecommendPackageItem | undefined;
   battleCard: BattleCard | null;
   battleCardLoading: boolean;
 }>();
-
-defineEmits<{
-  generate: [];
-}>();
+defineEmits<{ generate: [] }>();
 </script>
-
-<style scoped>
-.battle-card-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.battle-card-summary,
-.battle-card-block,
-.battle-copy {
-  min-width: 0;
-  padding: 12px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background: var(--panel);
-}
-
-.battle-card-summary {
-  grid-column: span 3;
-}
-
-.battle-card-summary p,
-.battle-card-block p,
-.battle-copy p {
-  margin: 8px 0 0;
-  color: var(--muted);
-  line-height: 1.55;
-  white-space: pre-line;
-}
-
-.battle-card-block span {
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.battle-copy h3 {
-  margin: 0;
-  font-size: 15px;
-}
-</style>
+<style src="../styles/components/battle-card-panel.css" scoped></style>

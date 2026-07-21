@@ -7,57 +7,11 @@
     </div>
   </div>
 </template>
-
 <script setup lang="ts">
-interface Props {
-  rows?: number;
-  columns?: number;
-}
-
-const { rows, columns } = withDefaults(defineProps<Props>(), {
+const { rows, columns } = withDefaults(defineProps<{ rows?: number; columns?: number }>(), {
   rows: 5,
   columns: 6
 });
-
-const getWidth = (index: number) => {
-  const widths = ['60%', '80%', '70%', '90%', '75%', '85%'];
-  return widths[index % widths.length];
-};
+const getWidth = (index: number) => ['60%', '80%', '70%', '90%', '75%', '85%'][index % 6];
 </script>
-
-<style scoped>
-.table-skeleton {
-  padding: 16px;
-}
-
-.skeleton-row {
-  display: flex;
-  gap: 16px;
-  margin-bottom: 12px;
-  padding: 14px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background: linear-gradient(180deg, rgba(248, 250, 252, 0.95), rgba(255, 255, 255, 0.96));
-}
-
-.skeleton-cell {
-  flex: 1;
-}
-
-.skeleton-line {
-  height: 14px;
-  background: linear-gradient(90deg, #e2e8f0 25%, #f1f5f9 50%, #e2e8f0 75%);
-  background-size: 200% 100%;
-  animation: skeleton-loading 1.5s ease-in-out infinite;
-  border-radius: 999px;
-}
-
-@keyframes skeleton-loading {
-  0% {
-    background-position: 200% 0;
-  }
-  100% {
-    background-position: -200% 0;
-  }
-}
-</style>
+<style src="../styles/components/table-skeleton.css" scoped></style>

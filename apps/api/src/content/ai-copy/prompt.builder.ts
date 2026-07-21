@@ -1,6 +1,6 @@
 import type { ContentPackage, GenerateCopyRequest, PromotionScore } from '@content/shared';
 import { currentPrice, DEFAULT_SCENARIO } from '@content/shared';
-import type { PackageDetail } from '../package-detail.service';
+import type { PackageDetail } from '../package-detail';
 
 export class PromptBuilder {
   buildPrompt(

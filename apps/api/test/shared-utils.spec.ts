@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  beijingDateKey,
   clamp,
   clampNonNegative,
   describeError,
@@ -10,6 +11,7 @@ import {
   msToISO,
   nowISO,
   safeRatio,
+  shiftDateKey,
   sleep
 } from '@content/shared';
 
@@ -80,6 +82,24 @@ describe('safeRatio', () => {
 
   it('honours precision', () => {
     expect(safeRatio(1, 3, 2)).toBe(0.33);
+  });
+});
+
+describe('beijingDateKey / shiftDateKey', () => {
+  it('keeps UTC date when hour is before Beijing day boundary (UTC 16:00)', () => {
+    // 2026-07-16 15:59 UTC = 2026-07-16 23:59 Beijing
+    expect(beijingDateKey('2026-07-16T15:59:00.000Z')).toBe('2026-07-16');
+  });
+
+  it('rolls to next calendar day at UTC 16:00 (Beijing midnight)', () => {
+    // 2026-07-16 16:00 UTC = 2026-07-17 00:00 Beijing
+    expect(beijingDateKey('2026-07-16T16:00:00.000Z')).toBe('2026-07-17');
+  });
+
+  it('shifts YYYY-MM-DD by calendar days without timezone drift', () => {
+    expect(shiftDateKey('2026-07-16', -6)).toBe('2026-07-10');
+    expect(shiftDateKey('2026-07-16', 1)).toBe('2026-07-17');
+    expect(shiftDateKey('2026-01-01', -1)).toBe('2025-12-31');
   });
 });
 

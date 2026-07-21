@@ -1,6 +1,5 @@
-const DEFAULT_JWT_SECRET = 'content-ops-default-secret-change-in-production';
-const DEFAULT_ADMIN_PASSWORD = 'contentops2024';
-
+const DEFAULT_JWT_SECRET = 'content-ops-default-secret-change-in-production',
+  DEFAULT_ADMIN_PASSWORD = 'contentops2024';
 function assertNotDefault(
   envValue: string | undefined,
   defaultValue: string,
@@ -15,7 +14,6 @@ function assertNotDefault(
   }
   return value;
 }
-
 export const JWT_SECRET = assertNotDefault(
   process.env.JWT_SECRET,
   DEFAULT_JWT_SECRET,

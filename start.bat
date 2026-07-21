@@ -21,20 +21,14 @@ if errorlevel 1 (
 echo [OK] Node.js:
 node -v
 
-REM ---- Detect package manager ----
-set PM=npm.cmd
-where pnpm.cmd >nul 2>nul
-if not errorlevel 1 (
-    set PM=pnpm.cmd
-    echo [OK] Package manager: pnpm
-) else (
-    where npm.cmd >nul 2>nul
-    if errorlevel 1 (
-        echo [ERROR] No package manager found.
-        goto :fail
-    )
-    echo [OK] Package manager: npm
+REM ---- Check package manager ----
+where npm.cmd >nul 2>nul
+if errorlevel 1 (
+    echo [ERROR] npm not found.
+    goto :fail
 )
+set PM=npm.cmd
+echo [OK] Package manager: npm
 
 REM ---- Check/create .env ----
 if not exist ".env" (
@@ -65,7 +59,12 @@ echo.
 echo [INFO] Generating Prisma client...
 call npx.cmd prisma generate --schema prisma/schema.prisma
 if errorlevel 1 (
-    echo [WARN] Prisma generate failed, continuing...
+    echo [WARN] Prisma generate failed（可能是临时文件锁），2秒后重试...
+    timeout /t 2 /nobreak >nul
+    call npx.cmd prisma generate --schema prisma/schema.prisma
+)
+if errorlevel 1 (
+    echo [WARN] Prisma generate 两次均失败，继续启动...
 )
 
 REM ---- Setup database ----
@@ -88,18 +87,21 @@ echo   Frontend : http://localhost:3100
 echo   API      : http://localhost:3101/api
 echo   Swagger  : http://localhost:3101/api-docs
 echo.
+echo   会先等 API 健康检查通过，再启动前端并打开浏览器
 echo   Press Ctrl+C to stop all services
 echo ============================================
 echo.
 
-REM Open browser after services are up
-start http://localhost:3100
+set NODE_ENV=development
+set DEV_OPEN_BROWSER=1
+set DEV_PUBLIC_PORT=3100
+set DEV_API_PORT=3101
+set PORT=3101
+set HOST=127.0.0.1
 
 call %PM% run dev
-if errorlevel 1 goto :fail
-
 echo.
-echo [INFO] Services stopped.
+echo [INFO] Dev server stopped.
 goto :end
 
 :fail

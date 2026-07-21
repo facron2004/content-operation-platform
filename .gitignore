@@ -42,13 +42,35 @@ CODE-REVIEW-REPORT.html
 CODE-REVIEW-REPORT-ROUND2.html
 test-parser.ts
 
+# Local probes / dumps / review packs
+.eq5_dump.txt
+.start_test_output.txt
+.tmp/
+.tmp-*
+.tmp-*/
+.review-pack/
+code-review-package.tar.gz
+code-review-package.zip
+probe_sqlite.js
+adapter.js
+_eq4_analyze.py
+_eq4_inventory.py
+test_start.bat
+25
+29
+nul
+
+# Prefer npm (CI uses npm ci). Ignore accidental alternate lockfiles.
+pnpm-lock.yaml
+yarn.lock
+
 # OS files
 .DS_Store
 Thumbs.db
-nul
 
 # Agent / sidecar directories (local-only, never committed)
 .workbuddy/
+.claude/
 devspace/
 
 # Editor

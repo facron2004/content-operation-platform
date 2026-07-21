@@ -10,6 +10,7 @@ import {
   INVENTORY_SLOW_DAYS_THRESHOLD,
   sortByDateKey
 } from '../domain/utils';
+import type { InventoryRuleConfig } from '../domain/rules-defaults';
 
 export type { InventoryFlagInput, InventoryFlagResult };
 
@@ -41,12 +42,17 @@ export function normalizeInventoryTrend(trend: InventoryTrendPoint[]) {
   return Array.from(byDate.values()).sort(sortByDateKey((item) => item.date));
 }
 
-export function buildInventoryFlag(input: InventoryFlagInput): InventoryFlagResult {
+export function buildInventoryFlag(
+  input: InventoryFlagInput,
+  rules?: Partial<InventoryRuleConfig>
+): InventoryFlagResult {
   // 调用方必须传已 normalize 的 trend (InventoryFlagInput.normalizedTrend)
   // —— 批量路径上由 buildRecommendPackageItems 负责 normalize,避免每个套餐重复 sort
   const normalizedTrend = input.normalizedTrend;
   const currentStockLeft = Math.max(0, Math.round(input.currentStockLeft));
   const inventorySalesStatus = buildInventorySalesStatusFromNormalized(normalizedTrend);
+  const backlogDays = rules?.backlogDays ?? INVENTORY_BACKLOG_DAYS_THRESHOLD;
+  const slowDays = rules?.slowDays ?? INVENTORY_SLOW_DAYS_THRESHOLD;
 
   if (currentStockLeft <= 0 || input.saleStatus === 'recycle') {
     return normalResult(normalizedTrend);
@@ -59,10 +65,10 @@ export function buildInventoryFlag(input: InventoryFlagInput): InventoryFlagResu
     inventoryUnsoldDays += 1;
   }
 
-  if (inventoryUnsoldDays >= INVENTORY_BACKLOG_DAYS_THRESHOLD) {
+  if (inventoryUnsoldDays >= backlogDays) {
     return {
       inventoryFlag: 'unsold_3d_slow',
-      inventoryFlagLabel: '连续3天未售罄',
+      inventoryFlagLabel: `连续${backlogDays}天未售罄`,
       inventoryFlagLevel: 'danger',
       ...inventorySalesStatus,
       inventoryUnsoldDays,
@@ -71,10 +77,10 @@ export function buildInventoryFlag(input: InventoryFlagInput): InventoryFlagResu
     };
   }
 
-  if (inventoryUnsoldDays >= INVENTORY_SLOW_DAYS_THRESHOLD) {
+  if (inventoryUnsoldDays >= slowDays) {
     return {
       inventoryFlag: 'unsold_2d',
-      inventoryFlagLabel: '连续2天未售罄',
+      inventoryFlagLabel: `连续${slowDays}天未售罄`,
       inventoryFlagLevel: 'warning',
       ...inventorySalesStatus,
       inventoryUnsoldDays,

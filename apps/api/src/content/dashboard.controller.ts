@@ -1,4 +1,4 @@
-﻿import { Controller, Get, Inject, Query } from '@nestjs/common';
+import { Controller, Get, Inject, Query } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import type { UserRole } from '@content/shared';
 import { USER_ROLES } from '@content/shared';
