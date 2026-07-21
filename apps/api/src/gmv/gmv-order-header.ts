@@ -1,4 +1,4 @@
-/** Consolidated GMV module. */
+/** Consolidated GMV module — queries, compute, trend, distribution. */
 import { beijingDateKey, beijingDayRangeUtc, shiftDateKey } from '@content/shared';
 import { gmvFromParts, rateAgainstGmv, SQL_GMV_OH } from '../common';
 import { PrismaService } from '../prisma/prisma.service';
@@ -11,144 +11,14 @@ import {
   type GmvTodayPayload,
   type GmvTrendPoint
 } from './gmv.dto';
+import { EMPTY_ORDER_HEADER_GMV_ROW, type OrderHeaderGmvRow } from './gmv-order-header.types';
 
-// --- gmv-order-header-fields.ts ---
-export type OrderLike = {
-  orderId?: string | null;
-  memberId?: string | null;
-  packageId?: string | null;
-  merchantId?: string | null;
-  merchantName?: string | null;
-  areaId?: string | null;
-  areaName?: string | null;
-  orderTime: string | Date;
-  paidTime?: string | Date | null;
-  verifyTime?: string | Date | null;
-  refundTime?: string | Date | null;
-  orderAmount: number;
-  paidAmount: number;
-  paidAmountWallet: number;
-  paidAmountBonus: number;
-  refundAmount?: number | null;
-  verifyAmount?: number | null;
-  pointEarned?: number | null;
-  pointUsed?: number | null;
-  status: string;
-};
-/** Normalize any Date/string/number into UTC ISO text. Prisma+sqlite DateTime
- *  writes as integer epoch ms, which breaks our ISO-string day-range SQL
- *  (`paidTime >= '2026-07-17T16:00:00.000Z'`). Always store ISO text via raw SQL. */
-export function toIsoText(value: string | Date | number | null | undefined): string | null {
-  if (value == null || value === '') return null;
-  const d = value instanceof Date ? value : new Date(value);
-  return Number.isNaN(d.getTime()) ? null : d.toISOString();
-}
+export { type OrderLike } from './gmv-order-header.types';
+export { upsertOrderHeaderIso } from './gmv-order-header.upsert';
 
-export function toOrderHeaderSharedFields(o: OrderLike) {
-  return {
-    memberId: o.memberId || null,
-    packageId: o.packageId || null,
-    merchantId: o.merchantId || null,
-    merchantName: o.merchantName || null,
-    areaId: o.areaId || null,
-    areaName: o.areaName || null,
-    orderTime: toIsoText(o.orderTime)!,
-    paidTime: toIsoText(o.paidTime ?? null),
-    verifyTime: toIsoText(o.verifyTime ?? null),
-    refundTime: toIsoText(o.refundTime ?? null),
-    orderAmount: o.orderAmount,
-    paidAmount: o.paidAmount,
-    paidAmountWallet: o.paidAmountWallet,
-    paidAmountBonus: o.paidAmountBonus,
-    refundAmount: o.refundAmount ?? 0,
-    verifyAmount: o.verifyAmount ?? 0,
-    status: o.status
-  };
-}
-
-// --- gmv-order-header-payload.ts ---
-export function toOrderHeaderCreate(o: OrderLike) {
-  return {
-    orderId: o.orderId!,
-    ...toOrderHeaderSharedFields(o),
-    paidAmountCard: 0,
-    pointEarned: o.pointEarned ?? 0,
-    pointUsed: o.pointUsed ?? 0,
-    channel: 'jeesite'
-  };
-}
-export function toOrderHeaderUpdate(o: OrderLike) {
-  return toOrderHeaderSharedFields(o);
-}
-
-/**
- * Upsert OrderHeader with ISO-text DateTimes via raw SQL.
- * Avoids Prisma client DateTime → integer epoch storage that breaks ISO compares.
- */
-export async function upsertOrderHeaderIso(
-  prisma: Pick<PrismaService, '$executeRawUnsafe'>,
-  o: OrderLike
-): Promise<void> {
-  if (!o.orderId) throw new Error('upsertOrderHeaderIso: orderId required');
-  const fields = toOrderHeaderSharedFields(o);
-  const nowIso = new Date().toISOString();
-  await prisma.$executeRawUnsafe(
-    `INSERT INTO "OrderHeader" (
-        "orderId", "memberId", "packageId", "merchantId", "merchantName",
-        "areaId", "areaName", "orderTime", "paidTime", "verifyTime", "refundTime",
-        "orderAmount", "paidAmount", "paidAmountWallet", "paidAmountBonus", "paidAmountCard",
-        "refundAmount", "verifyAmount", "pointEarned", "pointUsed", "status", "channel",
-        "createdAt", "updatedAt"
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, 'jeesite', ?, ?)
-     ON CONFLICT("orderId") DO UPDATE SET
-        "memberId"=excluded."memberId",
-        "packageId"=excluded."packageId",
-        "merchantId"=excluded."merchantId",
-        "merchantName"=excluded."merchantName",
-        "areaId"=excluded."areaId",
-        "areaName"=excluded."areaName",
-        "orderTime"=excluded."orderTime",
-        "paidTime"=excluded."paidTime",
-        "verifyTime"=excluded."verifyTime",
-        "refundTime"=excluded."refundTime",
-        "orderAmount"=excluded."orderAmount",
-        "paidAmount"=excluded."paidAmount",
-        "paidAmountWallet"=excluded."paidAmountWallet",
-        "paidAmountBonus"=excluded."paidAmountBonus",
-        "refundAmount"=excluded."refundAmount",
-        "verifyAmount"=excluded."verifyAmount",
-        "pointEarned"=excluded."pointEarned",
-        "pointUsed"=excluded."pointUsed",
-        "status"=excluded."status",
-        "channel"=excluded."channel",
-        "updatedAt"=excluded."updatedAt"`,
-    o.orderId,
-    fields.memberId,
-    fields.packageId,
-    fields.merchantId,
-    fields.merchantName,
-    fields.areaId,
-    fields.areaName,
-    fields.orderTime,
-    fields.paidTime,
-    fields.verifyTime,
-    fields.refundTime,
-    fields.orderAmount,
-    fields.paidAmount,
-    fields.paidAmountWallet,
-    fields.paidAmountBonus,
-    fields.refundAmount,
-    fields.verifyAmount,
-    o.pointEarned ?? 0,
-    o.pointUsed ?? 0,
-    fields.status,
-    nowIso,
-    nowIso
-  );
-}
-
-// --- gmv-order-header-today-sql.ts ---
 type PrismaLike = Pick<PrismaService, '$queryRawUnsafe'>;
+
+// ── GMV queries ──────────────────────────────────────
 
 export async function queryOrderHeaderGmv(
   prisma: PrismaLike,
@@ -215,24 +85,7 @@ export async function queryOrderHeaderHourly(
   return base;
 }
 
-// --- gmv-order-header-today-payload.ts ---
-export type OrderHeaderGmvRow = {
-  paidAmount: number;
-  paidAmountWallet: number;
-  paidAmountBonus: number;
-  paidAmountCard: number;
-  verifyAmount: number;
-  orderCount: number;
-};
-
-export const EMPTY_ORDER_HEADER_GMV_ROW: OrderHeaderGmvRow = {
-  paidAmount: 0,
-  paidAmountWallet: 0,
-  paidAmountBonus: 0,
-  paidAmountCard: 0,
-  verifyAmount: 0,
-  orderCount: 0
-};
+// ── Today payload ────────────────────────────────────
 
 export function buildOrderHeaderTodayPayload(
   date: string,
@@ -309,8 +162,6 @@ function ratioDelta(current: number, previous: number): number | null {
   return (current - previous) / Math.abs(previous);
 }
 
-// --- gmv-order-header-today.ts ---
-
 export async function computeFromOrderHeader(
   prisma: PrismaLike,
   date: string
@@ -354,8 +205,9 @@ export async function computeHourlyFromOrderHeader(
   return queryOrderHeaderHourly(prisma, start.toISOString(), end.toISOString());
 }
 
-// --- gmv-order-header-trend-days.ts ---
-export function countInclusiveDays(startDate: string, endDate: string): number {
+// ── Trend ────────────────────────────────────────────
+
+function countInclusiveDays(startDate: string, endDate: string): number {
   let count = 0;
   let cursor = startDate;
   while (cursor < endDate) {
@@ -366,7 +218,6 @@ export function countInclusiveDays(startDate: string, endDate: string): number {
   return count + 1;
 }
 
-// --- gmv-order-header-trend-map.ts ---
 type TrendAggRow = {
   date: string;
   paidAmount: number;
@@ -376,6 +227,7 @@ type TrendAggRow = {
   verifyAmount: number;
   orderCount: number;
 };
+
 export function mapOrderHeaderTrendRows(
   rows: TrendAggRow[],
   startDate: string,
@@ -406,16 +258,6 @@ export function mapOrderHeaderTrendRows(
   return result;
 }
 
-// --- gmv-order-header-trend.ts ---
-type OhTrendRow = {
-  date: string;
-  paidAmount: number;
-  paidAmountWallet: number;
-  paidAmountBonus: number;
-  refundAmount: number;
-  verifyAmount: number;
-  orderCount: number;
-};
 export async function computeTrendFromOrderHeader(
   prisma: PrismaLike,
   startDate: string,
@@ -427,12 +269,11 @@ export async function computeTrendFromOrderHeader(
     `SELECT date(datetime("paidTime", '+8 hours')) AS "date", COALESCE(SUM("paidAmount"), 0) AS "paidAmount", COALESCE(SUM("paidAmountWallet"), 0) AS "paidAmountWallet", COALESCE(SUM("paidAmountBonus"), 0) AS "paidAmountBonus", COALESCE(SUM("refundAmount"), 0) AS "refundAmount", COALESCE(SUM("verifyAmount"), 0) AS "verifyAmount", COUNT(*) AS "orderCount" FROM "OrderHeader" WHERE "paidTime" >= ? AND "paidTime" < ? AND "paidTime" IS NOT NULL GROUP BY date(datetime("paidTime", '+8 hours')) ORDER BY "date" ASC`,
     dayStart.toISOString(),
     dayEnd.toISOString()
-  )) as OhTrendRow[];
+  )) as TrendAggRow[];
   return mapOrderHeaderTrendRows(rows, startDate, endDate);
 }
 
-// --- gmv-order-header-merchant-map.ts ---
-// --- gmv-order-header-area-sql.ts ---
+// ── Distribution ─────────────────────────────────────
 
 type DistSqlRow = {
   key: string;
@@ -442,10 +283,6 @@ type DistSqlRow = {
   gmvBonus: number;
 };
 
-/**
- * OrderHeader.areaName 目前同步为空；优先走订单自身 area，
- * 否则回落到 ContentPackage.areaName（通过 packageId 关联）。
- */
 export async function loadOrderHeaderAreaDistribution(
   prisma: PrismaLike,
   startIso: string,
@@ -482,7 +319,6 @@ export async function loadOrderHeaderAreaDistribution(
     limit
   )) as DistSqlRow[];
 
-  // 若区域几乎全是「未分区」，改用商家榜作为区域热力的可解释维度
   const meaningful = rows.filter((r) => r.key && r.key !== '未分区');
   if (meaningful.length === 0) {
     const merchantRows = (await prisma.$queryRawUnsafe(
@@ -506,12 +342,6 @@ export async function loadOrderHeaderAreaDistribution(
   return { totalGmv, rows, dimLabel: 'area' as const };
 }
 
-// --- gmv-order-header-category-sql.ts ---
-
-/**
- * OrderHeader 本身没有 category，通过 packageId 关联 ContentPackage 聚合。
- * 无 packageId / 无匹配套餐的订单归入「未分类」。
- */
 export async function loadOrderHeaderCategoryDistribution(
   prisma: PrismaLike,
   startIso: string,
@@ -546,8 +376,6 @@ export async function loadOrderHeaderCategoryDistribution(
 
   return { totalGmv, rows };
 }
-
-// --- gmv-order-header-breakdown.ts ---
 
 function weekWindowIso() {
   const todayStr = beijingDateKey(new Date());
