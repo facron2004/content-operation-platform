@@ -72,18 +72,17 @@ jobs:
         run: npm ci
 
       - name: Create test database
-        run: rm -f prisma/dev.db && npx prisma db push --schema prisma/schema.prisma
+        run: npx prisma db push --schema prisma/schema.prisma
         env:
-          DATABASE_URL: "file:./prisma/dev.db"
+          DATABASE_URL: "file:${{ github.workspace }}/prisma/dev.db"
 
       - name: Verify database
-        run: |
-          ls -la prisma/dev.db
-          echo "Checking for AppUser table..."
-          sqlite3 prisma/dev.db ".tables" | tr ' ' '\n' | grep AppUser || echo "AppUser NOT FOUND"
+        run: ls -la ${{ github.workspace }}/prisma/dev.db
 
       - name: Run tests
         run: npm run test -w @content/api
+        env:
+          DATABASE_URL: "file:${{ github.workspace }}/prisma/dev.db"
 
   # ── 构建验证 ────────────────────────────────────
   build:
