@@ -8,14 +8,64 @@ const openAiMocks = vi.hoisted(() => ({
   create: vi.fn()
 }));
 
-vi.mock('openai', () => ({
-  default: vi.fn().mockImplementation(() => ({
-    chat: {
-      completions: {
-        create: openAiMocks.create
-      }
-    }
-  }))
+vi.mock('../src/content/ai-copy/ai-client.manager', () => ({
+  AIClientManager: vi.fn().mockImplementation((config: any) => {
+    const resolvedBaseURL = config?.baseURL || 'https://api.deepseek.com';
+    const resolvedProvider =
+      config?.providerName ||
+      (resolvedBaseURL.includes('deepseek') ? 'DeepSeek' : 'OpenAI-compatible');
+    const initialState = {
+      enabled: !!(config?.apiKey || config?.apiKey === ''),
+      providerName: resolvedProvider,
+      baseURL: resolvedBaseURL,
+      model: config?.model || 'deepseek-chat',
+      missing: config?.apiKey ? [] : ['AI_API_KEY'],
+      maskedApiKey: config?.apiKey
+        ? config.apiKey.length <= 8
+          ? '****'
+          : `${config.apiKey.slice(0, 4)}**********${config.apiKey.slice(-4)}`
+        : null,
+      temperature: typeof config?.temperature === 'number' ? config.temperature : 0.7,
+      maxTokens: typeof config?.maxTokens === 'number' ? config.maxTokens : 900
+    };
+    const state = { ...initialState };
+    return {
+      getClient: () => {
+        if (!config?.apiKey) return null;
+        return {
+          chat: {
+            completions: {
+              create: openAiMocks.create
+            }
+          }
+        };
+      },
+      getStatus: () => ({ ...state }),
+      updateConfig: vi.fn().mockImplementation((update: any) => {
+        if (update.apiKey !== undefined) {
+          const key = update.apiKey;
+          state.maskedApiKey = !key
+            ? null
+            : key.length <= 8
+              ? '****'
+              : `${key.slice(0, 4)}**********${key.slice(-4)}`;
+        }
+        if (update.model !== undefined) state.model = update.model;
+        if (update.temperature !== undefined) state.temperature = update.temperature;
+        if (update.maxTokens !== undefined) state.maxTokens = update.maxTokens;
+        if (update.baseURL !== undefined) {
+          state.baseURL = update.baseURL;
+          state.providerName =
+            update.providerName ||
+            (update.baseURL.includes('deepseek') ? 'DeepSeek' : 'OpenAI-compatible');
+        }
+        if (update.providerName !== undefined) state.providerName = update.providerName;
+        state.missing = state.maskedApiKey ? [] : ['AI_API_KEY'];
+        state.enabled = !!state.maskedApiKey;
+        return { ...state };
+      })
+    };
+  })
 }));
 
 const pkg: ContentPackage = {
