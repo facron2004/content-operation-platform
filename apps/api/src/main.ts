@@ -5,7 +5,7 @@ import express from 'express';
 import { NestFactory } from '@nestjs/core';
 import { Logger } from '@nestjs/common';
 import { AppModule } from './app.module';
-import { securityHeaders } from './common';
+import { securityHeaders, RequestIdMiddleware } from './common';
 import { describeError } from '@content/shared';
 import { resolvePublicDir, mountStaticSpa } from './bootstrap-static';
 import { configureAppMiddleware } from './bootstrap-middleware';
@@ -14,6 +14,8 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.use(compression());
   app.use(securityHeaders);
+  const requestIdMiddleware = new RequestIdMiddleware();
+  app.use((req, res, next) => requestIdMiddleware.use(req, res, next));
   configureAppMiddleware(app);
   mountStaticSpa(app.getHttpAdapter().getInstance(), resolvePublicDir(), express, log);
   const port = Number(process.env.PORT ?? 3101),
