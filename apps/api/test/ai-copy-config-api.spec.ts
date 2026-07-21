@@ -1,7 +1,16 @@
 import { Test } from '@nestjs/testing';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { AppModule } from '../src/app.module';
 import { authedAgent } from './helpers/auth';
+
+// Mock DNS hostname validation to avoid DNS lookups in CI
+vi.mock('../src/content/jeesite-url', async () => {
+  const actual = (await vi.importActual('../src/content/jeesite-url')) as any;
+  return {
+    ...actual,
+    assertHostnameNotPrivateAsync: vi.fn().mockResolvedValue(undefined)
+  };
+});
 
 describe('AI copy config API', () => {
   it('updates runtime AI config from the frontend without returning the raw API key', async () => {
