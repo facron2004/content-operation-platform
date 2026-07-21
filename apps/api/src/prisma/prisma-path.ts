@@ -8,14 +8,26 @@ export { findRepoRootDbPath } from './prisma-db-path';
 export function getPrismaErrorCode(error: unknown): string | undefined {
   return error instanceof Prisma.PrismaClientKnownRequestError ? error.code : undefined;
 }
-/** Resolve the dev.db path, preferring an existing file or falling back to cwd */
+/** Resolve the dev.db path, preferring DATABASE_URL or an existing file */
 export function resolveDevDbPath() {
+  // Priority 1: DATABASE_URL env var (absolute file:// path)
+  const dbUrlPath = resolveDbUrlPath();
+  if (dbUrlPath && existsSync(dbUrlPath)) {
+    return {
+      exeDbPath: '',
+      cwdDbPath: '',
+      repoRootDbPath: null,
+      dbUrlPath,
+      finalDbPath: dbUrlPath,
+      exists: true
+    };
+  }
+
   const exeDir = dirname(process.execPath),
     exeDbPath = join(exeDir, 'prisma', 'dev.db'),
     cwdDbPath = join(process.cwd(), 'prisma', 'dev.db'),
     repoRootDbPath = findRepoRootDbPath(process.cwd()),
-    dbUrlPath = resolveDbUrlPath(),
-    candidates = [exeDbPath, cwdDbPath, repoRootDbPath, dbUrlPath].filter(Boolean) as string[];
+    candidates = [exeDbPath, cwdDbPath, repoRootDbPath].filter(Boolean) as string[];
   const existing = candidates.find((p) => existsSync(p));
   return {
     exeDbPath,

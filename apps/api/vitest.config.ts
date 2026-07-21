@@ -6,7 +6,7 @@ import { join } from 'path';
 // 这里把仓库根作为 DATABASE_URL 注入，让 PrismaService 在测试期间也能找到 dev.db。
 const repoRoot = join(__dirname, '..', '..');
 const devDbPath = join(repoRoot, 'prisma', 'dev.db').replace(/\\/g, '/');
-process.env.DATABASE_URL ??= `file:${devDbPath}`;
+process.env.DATABASE_URL = `file:${devDbPath}`;
 process.env.EXTERNAL_API_BASE_URL ??= 'https://zdm.zhsh1.cn/a';
 
 export default defineConfig({
