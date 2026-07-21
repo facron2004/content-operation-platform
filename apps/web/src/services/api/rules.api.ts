@@ -32,17 +32,17 @@ export async function getRule(id: string): Promise<RuleConfig> {
 }
 export async function createRule(payload: CreateRulePayload): Promise<RuleConfig> {
   const { data } = await client.post('/content/rules', payload);
-  clearCache();
+  clearCache('/content/rules');
   return data;
 }
 export async function activateRule(id: string): Promise<RuleConfig> {
   const { data } = await client.post(`/content/rules/${id}/activate`);
-  clearCache();
+  clearCache('/content/rules');
   return data;
 }
 export async function deleteRule(id: string): Promise<void> {
   await client.delete(`/content/rules/${id}`);
-  clearCache();
+  clearCache('/content/rules');
 }
 export async function getRuleDefaults(): Promise<Record<RuleType, unknown>> {
   const { data } = await client.get('/content/rules/defaults');

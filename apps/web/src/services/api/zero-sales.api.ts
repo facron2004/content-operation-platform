@@ -1,3 +1,5 @@
+import client from '../http-client';
+
 export type StaleBucket = 'normal' | 'stale_7d' | 'stale_15d' | 'stale_30d' | 'stale_60d';
 
 export const STALE_BUCKETS: readonly StaleBucket[] = [
@@ -78,7 +80,6 @@ export async function getZeroSalesMerchants(params: {
   page?: number;
   pageSize?: number;
 }) {
-  const { default: client } = await import('../http-client');
   return (
     await client.get<ZeroSalesListResponse<ZeroSalesMerchantRow>>('/zero-sales/merchants', {
       params
@@ -96,13 +97,11 @@ export async function getZeroSalesSkus(params: {
   page?: number;
   pageSize?: number;
 }) {
-  const { default: client } = await import('../http-client');
   return (await client.get<ZeroSalesListResponse<ZeroSalesSkuRow>>('/zero-sales/skus', { params }))
     .data;
 }
 
 export async function getZeroSalesTimeline(packageId: string, days = 30) {
-  const { default: client } = await import('../http-client');
   const res = await client.get<ZeroSalesTimelineResponse>(
     `/zero-sales/skus/${packageId}/timeline`,
     { params: { days } }

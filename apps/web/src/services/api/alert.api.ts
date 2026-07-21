@@ -20,11 +20,11 @@ export async function getAlerts(
 }
 export async function resolveAlert(alertId: string) {
   const { data } = await client.post(`/content/alerts/${encodeURIComponent(alertId)}/resolve`);
-  clearCache();
+  clearCache('/content/alerts');
   return data;
 }
 export async function resolveAlerts(alertIds: string[]) {
   const { data } = await client.post('/content/alerts/resolve-batch', { alertIds });
-  clearCache();
+  clearCache('/content/alerts');
   return data;
 }

@@ -41,7 +41,7 @@ export async function createCampaign(data: {
   merchantIds?: string[];
 }) {
   const res = await client.post('/campaigns', data);
-  clearCache();
+  clearCache('/campaigns');
   return res.data;
 }
 
@@ -60,37 +60,37 @@ export async function updateCampaign(
   }>
 ) {
   const res = await client.patch(`/campaigns/${encodeURIComponent(id)}`, data);
-  clearCache();
+  clearCache('/campaigns');
   return res.data;
 }
 
 export async function deleteCampaign(id: string) {
   const res = await client.delete(`/campaigns/${encodeURIComponent(id)}`);
-  clearCache();
+  clearCache('/campaigns');
   return res.data;
 }
 
 export async function startCampaign(id: string) {
   const res = await client.post(`/campaigns/${encodeURIComponent(id)}/start`);
-  clearCache();
+  clearCache('/campaigns');
   return res.data;
 }
 
 export async function pauseCampaign(id: string) {
   const res = await client.post(`/campaigns/${encodeURIComponent(id)}/pause`);
-  clearCache();
+  clearCache('/campaigns');
   return res.data;
 }
 
 export async function completeCampaign(id: string) {
   const res = await client.post(`/campaigns/${encodeURIComponent(id)}/complete`);
-  clearCache();
+  clearCache('/campaigns');
   return res.data;
 }
 
 export async function cancelCampaign(id: string) {
   const res = await client.post(`/campaigns/${encodeURIComponent(id)}/cancel`);
-  clearCache();
+  clearCache('/campaigns');
   return res.data;
 }
 

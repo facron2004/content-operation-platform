@@ -1,7 +1,8 @@
 import { computed, onMounted, ref } from 'vue';
-import { ElMessage, ElMessageBox } from 'element-plus';
+import { ElMessage } from 'element-plus';
 import type { CommunityGroupEntity } from '@content/shared';
 import { api } from '../../../services/api';
+import { confirmAndDelete } from '../../../composables/useConfirmDelete';
 
 export interface CommunityLibraryFilters {
   groupType: string;
@@ -82,41 +83,24 @@ export function useCommunityLibrary() {
   }
 
   async function deleteCommunity(community: CommunityGroupEntity): Promise<void> {
-    try {
-      await ElMessageBox.confirm(
-        `确认删除社群「${community.groupName}」？此操作不可恢复。`,
-        '删除确认',
-        { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' }
-      );
-    } catch {
-      return;
-    }
-    try {
-      await api.deleteCommunity(community.groupId);
-      ElMessage.success('社群已删除');
-      await reloadCurrentPage();
-    } catch (error) {
-      ElMessage.error(resolveErrorMessage(error, '删除社群失败'));
-    }
+    await confirmAndDelete(
+      { message: `确认删除社群「${community.groupName}」？此操作不可恢复。` },
+      () => api.deleteCommunity(community.groupId),
+      { successMsg: '社群已删除', errorMsg: '删除社群失败', onSuccess: reloadCurrentPage }
+    );
   }
 
   async function disableCommunity(community: CommunityGroupEntity): Promise<void> {
-    try {
-      await ElMessageBox.confirm(
-        `确认停用社群「${community.groupName}」？停用后将不再参与分发。`,
-        '停用确认',
-        { type: 'warning', confirmButtonText: '停用', cancelButtonText: '取消' }
-      );
-    } catch {
-      return;
-    }
-    try {
-      await api.disableCommunity(community.groupId);
-      ElMessage.success('社群已停用');
-      await loadCommunities();
-    } catch (error) {
-      ElMessage.error(resolveErrorMessage(error, '停用社群失败'));
-    }
+    await confirmAndDelete(
+      {
+        message: `确认停用社群「${community.groupName}」？停用后将不再参与分发。`,
+        title: '停用确认',
+        confirmButtonText: '停用',
+        cancelButtonText: '取消'
+      },
+      () => api.disableCommunity(community.groupId),
+      { successMsg: '社群已停用', errorMsg: '停用社群失败', onSuccess: loadCommunities }
+    );
   }
 
   onMounted(loadCommunities);

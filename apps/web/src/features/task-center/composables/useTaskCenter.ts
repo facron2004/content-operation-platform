@@ -1,8 +1,9 @@
 import { computed, onMounted, ref } from 'vue';
-import { ElMessage, ElMessageBox } from 'element-plus';
+import { ElMessage } from 'element-plus';
 import type { DistributionTask, TaskKpiResponse } from '@content/shared';
 import { api } from '../../../services/api';
 import { extractErrorMessage } from '../../../services/http-client';
+import { confirmAndDelete } from '../../../composables/useConfirmDelete';
 
 export interface TaskFilters {
   status: string;
@@ -109,27 +110,21 @@ export function useTaskCenter() {
   }
 
   async function deleteTask(task: DistributionTask) {
-    try {
-      await ElMessageBox.confirm(
-        `确定删除任务「${task.title || task.taskId}」吗?删除后不可恢复。`,
-        '确认删除',
-        {
-          confirmButtonText: '删除',
-          cancelButtonText: '取消',
-          type: 'warning'
+    await confirmAndDelete(
+      {
+        message: `确定删除任务「${task.title || task.taskId}」吗?删除后不可恢复。`,
+        title: '确认删除'
+      },
+      () => api.deleteTask(task.taskId),
+      {
+        successMsg: '任务已删除',
+        errorMsg: '删除任务失败',
+        onSuccess: async () => {
+          await loadTasks();
+          await loadKPIs();
         }
-      );
-    } catch {
-      return;
-    }
-    try {
-      await api.deleteTask(task.taskId);
-      ElMessage.success('任务已删除');
-      void loadTasks();
-      void loadKPIs();
-    } catch (err) {
-      ElMessage.error(extractErrorMessage(err, '删除任务失败'));
-    }
+      }
+    );
   }
 
   function handleSearch() {

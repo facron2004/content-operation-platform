@@ -1,16 +1,1 @@
-export * from './dashboard.api';
-export * from './package.api';
-export * from './config.api';
-export * from './copy.api';
-export * from './alert.api';
-export * from './community.api';
-export * from './performance.api';
-export * from './gmv.api';
-export * from './merchant-sales.api';
-export * from './movement.api';
-export * from './refund.api';
-export * from './campaign.api';
-export * from './task.api';
-export * from './community-library.api';
-export * from './user.api';
-export * from './audit-log.api';
+// This file intentionally left empty — use api-facade.ts instead

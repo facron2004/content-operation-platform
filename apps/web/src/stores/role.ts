@@ -8,12 +8,6 @@ export type ServerRoleInfo = {
   bindings: Array<{ userId: string; role: UserRole; scopeType?: string; scopeId?: string }>;
 };
 
-export interface RoleState {
-  currentRole: UserRole;
-  serverInfo: ServerRoleInfo | null;
-  sessionLoaded: boolean;
-}
-
 const roleLabels: Record<UserRole, string> = {
   platform_operator: '平台运营',
   area_operator: '区域运营',
@@ -22,8 +16,10 @@ const roleLabels: Record<UserRole, string> = {
   admin: '管理员',
   executor: '执行人员'
 };
-const STORAGE_KEY = 'ops_current_role',
-  validRoles: string[] = Object.keys(roleLabels);
+
+const STORAGE_KEY = 'ops_current_role';
+const validRoles: string[] = Object.keys(roleLabels);
+
 function loadPersistedRole(): UserRole {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
@@ -33,54 +29,71 @@ function loadPersistedRole(): UserRole {
   }
   return 'platform_operator';
 }
-export const useRoleStore = defineStore('role', {
-  state: (): RoleState => ({
-    currentRole: loadPersistedRole(),
-    serverInfo: null,
-    sessionLoaded: false
-  }),
-  getters: {
-    roleLabel: (state) => roleLabels[state.currentRole],
-    roleOptions: () => Object.entries(roleLabels).map(([value, label]) => ({ value, label })),
-    isAdmin: (state) => state.currentRole === 'admin',
-    isPlatformOperator: (state) => state.currentRole === 'platform_operator',
-    isAreaOperator: (state) => state.currentRole === 'area_operator',
-    isAuditor: (state) => state.currentRole === 'auditor',
-    hasServerSession: (state) => state.sessionLoaded && state.serverInfo !== null,
-    effectiveRoles: (state): UserRole[] =>
-      state.serverInfo?.roles ?? [state.currentRole as UserRole]
-  },
-  actions: {
-    setRole(role: UserRole) {
-      this.currentRole = role;
-      try {
-        localStorage.setItem(STORAGE_KEY, role);
-      } catch {
-        /* ignore */
-      }
-    },
-    initFromSession(info: ServerRoleInfo) {
-      this.serverInfo = info;
-      this.sessionLoaded = true;
-      // Derive primary role from server roles (prefer non-admin specific role)
-      const roleOrder: UserRole[] = [
-        'admin',
-        'platform_operator',
-        'area_operator',
-        'merchant_operator',
-        'auditor',
-        'executor'
-      ];
-      for (const r of roleOrder) {
-        if (info.roles.includes(r)) {
-          this.currentRole = r;
-          break;
-        }
-      }
-    },
-    clearSession() {
-      this.serverInfo = null;
-      this.sessionLoaded = false;
+
+export const useRoleStore = defineStore('role', () => {
+  const currentRole = ref<UserRole>(loadPersistedRole());
+  const serverInfo = ref<ServerRoleInfo | null>(null);
+  const sessionLoaded = ref(false);
+
+  const roleLabel = computed(() => roleLabels[currentRole.value]);
+  const roleOptions = computed(() =>
+    Object.entries(roleLabels).map(([value, label]) => ({ value, label }))
+  );
+  const isAdmin = computed(() => currentRole.value === 'admin');
+  const isPlatformOperator = computed(() => currentRole.value === 'platform_operator');
+  const isAreaOperator = computed(() => currentRole.value === 'area_operator');
+  const isAuditor = computed(() => currentRole.value === 'auditor');
+  const hasServerSession = computed(() => sessionLoaded.value && serverInfo.value !== null);
+  const effectiveRoles = computed<UserRole[]>(() => serverInfo.value?.roles ?? [currentRole.value]);
+
+  function setRole(role: UserRole) {
+    currentRole.value = role;
+    try {
+      localStorage.setItem(STORAGE_KEY, role);
+    } catch {
+      /* ignore */
     }
   }
+
+  function initFromSession(info: ServerRoleInfo) {
+    serverInfo.value = info;
+    sessionLoaded.value = true;
+    // Derive primary role from server roles (prefer non-admin specific role)
+    const roleOrder: UserRole[] = [
+      'admin',
+      'platform_operator',
+      'area_operator',
+      'merchant_operator',
+      'auditor',
+      'executor'
+    ];
+    for (const r of roleOrder) {
+      if (info.roles.includes(r)) {
+        currentRole.value = r;
+        break;
+      }
+    }
+  }
+
+  function clearSession() {
+    serverInfo.value = null;
+    sessionLoaded.value = false;
+  }
+
+  return {
+    currentRole,
+    serverInfo,
+    sessionLoaded,
+    roleLabel,
+    roleOptions,
+    isAdmin,
+    isPlatformOperator,
+    isAreaOperator,
+    isAuditor,
+    hasServerSession,
+    effectiveRoles,
+    setRole,
+    initFromSession,
+    clearSession
+  };
 });

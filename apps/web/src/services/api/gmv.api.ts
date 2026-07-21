@@ -1,4 +1,5 @@
 import { withForce } from './with-force';
+import client from '../http-client';
 
 export interface GmvCompareDelta {
   totalGmv?: number | null;
@@ -75,16 +76,9 @@ export interface GmvMerchantRow {
 
 export type GmvTrendGranularity = 'day' | 'week' | 'month';
 
-async function gmvClient() {
-  const { default: client } = await import('../http-client');
-  return client;
-}
-
 export async function refreshGmvFromJeesite(startDate?: string, endDate?: string) {
   return (
-    await (
-      await gmvClient()
-    ).post<{
+    await client.post<{
       startDate: string;
       endDate: string;
       fetched: number;
@@ -99,9 +93,7 @@ export async function refreshGmvFromJeesite(startDate?: string, endDate?: string
 
 export async function getGmvToday(date?: string, force = false) {
   return (
-    await (
-      await gmvClient()
-    ).get<GmvKpi>(withForce('/gmv/today', force), {
+    await client.get<GmvKpi>(withForce('/gmv/today', force), {
       params: date ? { date } : undefined
     })
   ).data;
@@ -114,9 +106,7 @@ export async function getGmvTrend(
   granularity: GmvTrendGranularity = 'day'
 ) {
   return (
-    await (
-      await gmvClient()
-    ).get<GmvTrendPoint[]>(withForce('/gmv/trend', force), {
+    await client.get<GmvTrendPoint[]>(withForce('/gmv/trend', force), {
       params: { days, granularity, ...(endDate ? { endDate } : {}) }
     })
   ).data;
@@ -124,9 +114,7 @@ export async function getGmvTrend(
 
 export async function getGmvHourly(date?: string, force = false) {
   return (
-    await (
-      await gmvClient()
-    ).get<GmvHourlyPoint[]>(withForce('/gmv/hourly', force), {
+    await client.get<GmvHourlyPoint[]>(withForce('/gmv/hourly', force), {
       params: date ? { date } : undefined
     })
   ).data;

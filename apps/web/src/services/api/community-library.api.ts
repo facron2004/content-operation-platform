@@ -44,7 +44,7 @@ export async function createCommunity(data: {
   source?: string;
 }) {
   const res = await client.post('/community-library', data);
-  clearCache();
+  clearCache('/community-library');
   return res.data;
 }
 
@@ -61,25 +61,25 @@ export async function updateCommunity(
   }>
 ) {
   const res = await client.put(`/community-library/${encodeURIComponent(id)}`, data);
-  clearCache();
+  clearCache('/community-library');
   return res.data;
 }
 
 export async function deleteCommunity(id: string) {
   const res = await client.delete(`/community-library/${encodeURIComponent(id)}`);
-  clearCache();
+  clearCache('/community-library');
   return res.data;
 }
 
 export async function importCommunities(data: { source: 'csv' | 'json'; rawData: string }) {
   const res = await client.post('/community-library/import', data);
-  clearCache();
+  clearCache('/community-library');
   return res.data;
 }
 
 export async function disableCommunity(id: string) {
   const res = await client.post(`/community-library/${encodeURIComponent(id)}/disable`);
-  clearCache();
+  clearCache('/community-library');
   return res.data;
 }
 

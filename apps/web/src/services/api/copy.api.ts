@@ -13,7 +13,7 @@ export async function generateCopies(
   payload: GenerateCopyRequest
 ): Promise<GenerateCopiesResponse> {
   const { data } = await client.post('/content/generate', payload);
-  clearCache();
+  clearCache('/content');
   return data;
 }
 export async function listCopies(params: { auditStatus?: AuditStatus; channel?: Channel } = {}) {
@@ -26,7 +26,7 @@ export async function listCopies(params: { auditStatus?: AuditStatus; channel?: 
 }
 export async function auditCopy(contentId: string, payload: AuditCopyRequest) {
   const { data } = await client.post(`/content/copies/${contentId}/audit`, payload);
-  clearCache();
+  clearCache('/content/copies');
   return data;
 }
 export async function generateBattleCard(packageId: string): Promise<BattleCard> {

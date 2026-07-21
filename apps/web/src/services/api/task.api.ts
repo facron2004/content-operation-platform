@@ -59,7 +59,7 @@ export async function createTask(data: {
   assigneeId?: string;
 }) {
   const res = await client.post('/tasks', data);
-  clearCache();
+  clearCache('/tasks');
   return res.data;
 }
 
@@ -77,7 +77,7 @@ export async function batchCreateTasks(data: {
   }>;
 }) {
   const res = await client.post('/tasks/batch', data);
-  clearCache();
+  clearCache('/tasks');
   return res.data;
 }
 
@@ -93,13 +93,13 @@ export async function updateTask(
   }>
 ) {
   const res = await client.put(`/tasks/${encodeURIComponent(id)}`, data);
-  clearCache();
+  clearCache('/tasks');
   return res.data;
 }
 
 export async function deleteTask(id: string) {
   const res = await client.delete(`/tasks/${encodeURIComponent(id)}`);
-  clearCache();
+  clearCache('/tasks');
   return res.data;
 }
 
@@ -111,7 +111,7 @@ export async function publishTask(
   }
 ) {
   const res = await client.post(`/tasks/${encodeURIComponent(id)}/publish`, data);
-  clearCache();
+  clearCache('/tasks');
   return res.data;
 }
 
@@ -124,7 +124,7 @@ export async function failTask(
   }
 ) {
   const res = await client.post(`/tasks/${encodeURIComponent(id)}/fail`, data);
-  clearCache();
+  clearCache('/tasks');
   return res.data;
 }
 
@@ -136,7 +136,7 @@ export async function cancelTask(
   }
 ) {
   const res = await client.post(`/tasks/${encodeURIComponent(id)}/cancel`, data);
-  clearCache();
+  clearCache('/tasks');
   return res.data;
 }
 
@@ -148,7 +148,7 @@ export async function reassignTask(
   }
 ) {
   const res = await client.post(`/tasks/${encodeURIComponent(id)}/reassign`, data);
-  clearCache();
+  clearCache('/tasks');
   return res.data;
 }
 

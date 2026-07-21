@@ -16,7 +16,7 @@ export async function getCookieStatus() {
 }
 export async function updateCookie(cookie: string): Promise<CookieUpdateResponse> {
   const { data } = await client.post('/content/cookie/update', { cookie });
-  clearCache();
+  clearCache('/content/cookie');
   return data;
 }
 export async function getAICopyStatus(): Promise<AICopyStatus> {

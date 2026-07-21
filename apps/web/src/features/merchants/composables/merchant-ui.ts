@@ -2,28 +2,14 @@ import { computed, onMounted, watch, type Ref } from 'vue';
 import type { RouteLocationNormalizedLoaded, Router } from 'vue-router';
 import type { MerchantTrendResponse } from '../../../services/api/merchant.api';
 import type { StaleBucket } from '../../../services/api/zero-sales.api';
+import { STALE_BUCKET_COLORS, STALE_BUCKET_LABELS } from '../../../services/api/zero-sales.api';
 import { formatGmv as formatGmvShared, formatPercent } from '../../../utils/format';
 import { type createMerchantState } from './merchant-core';
 
 type MerchantState = ReturnType<typeof createMerchantState>;
 
-const STALE_COLORS: Record<string, string> = {
-  normal: '#10b981',
-  stale_7d: '#fde68a',
-  stale_15d: '#fb923c',
-  stale_30d: '#ef4444',
-  stale_60d: '#7f1d1d'
-};
-const STALE_LABELS: Record<string, string> = {
-  normal: '正常',
-  stale_7d: '7d 未销',
-  stale_15d: '15d 未销',
-  stale_30d: '30d 未销',
-  stale_60d: '60d+ 未销'
-};
-
-const staleColor = (b: StaleBucket) => STALE_COLORS[b] ?? '#94a3b8';
-const staleLabel = (b: StaleBucket) => STALE_LABELS[b] ?? b;
+const staleColor = (b: StaleBucket) => STALE_BUCKET_COLORS[b] ?? '#94a3b8';
+const staleLabel = (b: StaleBucket) => STALE_BUCKET_LABELS[b] ?? b;
 
 function buildMerchantTrendSummary(trend: MerchantTrendResponse | null) {
   if (!trend) return { totalGmv: 0, conversionRate: 0 };

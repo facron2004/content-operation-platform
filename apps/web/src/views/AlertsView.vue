@@ -35,6 +35,7 @@
   </section>
 </template>
 <script setup lang="ts">
+import { useRouter } from 'vue-router';
 import { useAlertsPage } from '../features/alerts/composables/useAlertsPage';
 import AlertMetrics from '../features/alerts/components/AlertMetrics.vue';
 import FocusPackageGrid from '../features/alerts/components/FocusPackageGrid.vue';
@@ -42,7 +43,7 @@ import AlertListSection from '../features/alerts/components/AlertListSection.vue
 import AlertDetailDrawer from '../features/alerts/components/AlertDetailDrawer.vue';
 import AlertsHero from '../features/alerts/components/AlertsHero.vue';
 import ErrorAlert from '../components/ErrorAlert.vue';
-import { useRouter } from 'vue-router';
+const router = useRouter();
 const {
   loading,
   resolving,
@@ -65,9 +66,8 @@ const {
   goAnalysis,
   goBattleCard
 } = useAlertsPage();
-const _router = useRouter();
 function goCreateTask(packageId: string) {
-  _router.push({ name: 'tasks', query: { packageId } });
+  router.push({ name: 'tasks', query: { packageId } });
 }
 </script>
 <style src="../styles/views/alerts.css" scoped></style>

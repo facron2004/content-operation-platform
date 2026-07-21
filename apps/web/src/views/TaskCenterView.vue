@@ -150,21 +150,4 @@ function handleCancel(task: DistributionTask) {
 }
 </script>
 
-<style scoped>
-.task-center-page {
-  padding: 20px;
-}
-
-.page-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 20px;
-}
-
-.page-header h2 {
-  margin: 0;
-  font-size: 20px;
-  font-weight: 600;
-}
-</style>
+<style src="../styles/views/task-center.css" scoped></style>

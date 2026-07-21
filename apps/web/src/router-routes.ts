@@ -1,4 +1,5 @@
 import type { RouteRecordRaw } from 'vue-router';
+import type { UserRole } from '@content/shared';
 
 /** 侧栏/路由分组键（与原型导航树对齐） */
 export type NavGroup =
@@ -23,6 +24,7 @@ declare module 'vue-router' {
     icon?: string;
     group?: NavGroup;
     order?: number;
+    roles?: readonly UserRole[];
   }
 }
 
@@ -35,14 +37,18 @@ function route(
   group: NavGroup,
   order: number,
   view: () => Promise<unknown>,
-  props = false
+  props = false,
+  roles?: readonly UserRole[]
 ): RouteRecordRaw {
   return {
     path,
     name,
     component: view,
     props,
-    meta: icon ? { title, icon, group, order } : { title, group, order }
+    meta: {
+      ...(icon ? { title, icon, group, order } : { title, group, order }),
+      ...(roles ? { roles } : {})
+    }
   };
 }
 
@@ -102,43 +108,19 @@ const contentLegacyRoutes: RouteRecordRaw[] = [
     path: 'audit',
     name: 'audit',
     component: () => import('./views/AuditView.vue'),
-    meta: { title: '文案审核', icon: 'Checked', group: 'campaigns', order: 30 }
+    meta: {
+      title: '文案审核',
+      icon: 'Checked',
+      group: 'campaigns',
+      order: 30,
+      roles: ['admin', 'auditor', 'platform_operator']
+    }
   },
   {
     path: 'communities',
     name: 'communities',
     component: () => import('./views/CommunitiesView.vue'),
     meta: { title: '社群运营', icon: 'ChatLineRound', group: 'campaigns', order: 10 }
-  },
-  {
-    path: 'campaigns',
-    name: 'campaigns',
-    component: () => import('./views/CampaignsView.vue'),
-    meta: { title: '运营活动', icon: 'Present', group: 'campaigns', order: 5 }
-  },
-  {
-    path: 'campaigns/:campaignId',
-    name: 'campaign-detail',
-    component: () => import('./views/CampaignDetailView.vue'),
-    meta: { title: '活动详情', icon: 'Present', group: 'campaigns', order: 99 }
-  },
-  {
-    path: 'tasks',
-    name: 'tasks',
-    component: () => import('./views/TaskCenterView.vue'),
-    meta: { title: '任务中心', icon: 'List', group: 'campaigns', order: 25 }
-  },
-  {
-    path: 'tasks/:taskId',
-    name: 'task-detail',
-    component: () => import('./views/TaskDetailView.vue'),
-    meta: { title: '任务详情', icon: 'List', group: 'campaigns', order: 99 }
-  },
-  {
-    path: 'community-library',
-    name: 'community-library',
-    component: () => import('./views/CommunityLibraryView.vue'),
-    meta: { title: '社群库', icon: 'ChatLineRound', group: 'campaigns', order: 8 }
   }
 ];
 
@@ -210,7 +192,8 @@ const operationsDataRoutes: RouteRecordRaw[] = [
     'Setting',
     'settings',
     10,
-    () => import('./views/SettingsView.vue')
+    () => import('./views/SettingsView.vue'),
+    ['admin']
   ),
   route(
     'users',
@@ -219,7 +202,9 @@ const operationsDataRoutes: RouteRecordRaw[] = [
     'User',
     'settings',
     5,
-    () => import('./views/UserManagementView.vue')
+    () => import('./views/UserManagementView.vue'),
+    false,
+    ['admin']
   ),
   route(
     'audit-logs',
@@ -228,7 +213,9 @@ const operationsDataRoutes: RouteRecordRaw[] = [
     'Document',
     'settings',
     8,
-    () => import('./views/AuditLogView.vue')
+    () => import('./views/AuditLogView.vue'),
+    false,
+    ['admin', 'auditor']
   ),
   route(
     'performance',

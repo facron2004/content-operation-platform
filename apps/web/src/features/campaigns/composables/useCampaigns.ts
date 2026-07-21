@@ -1,8 +1,9 @@
 import { computed, onMounted, ref } from 'vue';
-import { ElMessage, ElMessageBox } from 'element-plus';
+import { ElMessage } from 'element-plus';
 import type { MarketingCampaign } from '@content/shared';
 import { api } from '../../../services/api';
 import { extractErrorMessage } from '../../../services/http-client';
+import { confirmAndDelete } from '../../../composables/useConfirmDelete';
 
 export interface CampaignFilters {
   status: string;
@@ -96,22 +97,11 @@ export function useCampaigns() {
   }
 
   async function handleDelete(campaign: MarketingCampaign): Promise<void> {
-    try {
-      await ElMessageBox.confirm(`确认删除活动「${campaign.name}」？此操作不可恢复。`, '删除确认', {
-        type: 'warning',
-        confirmButtonText: '删除',
-        cancelButtonText: '取消'
-      });
-    } catch {
-      return;
-    }
-    try {
-      await api.deleteCampaign(campaign.campaignId);
-      ElMessage.success('活动已删除');
-      await reloadCurrentPage();
-    } catch (error) {
-      ElMessage.error(extractErrorMessage(error, '删除活动失败'));
-    }
+    await confirmAndDelete(
+      { message: `确认删除活动「${campaign.name}」？此操作不可恢复。` },
+      () => api.deleteCampaign(campaign.campaignId),
+      { successMsg: '活动已删除', errorMsg: '删除活动失败', onSuccess: reloadCurrentPage }
+    );
   }
 
   onMounted(loadCampaigns);
