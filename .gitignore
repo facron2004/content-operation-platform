@@ -1,0 +1,88 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+apps/api/dist/
+apps/api/public/
+apps/web/dist/
+packages/shared/dist/
+packages/shared/src/*.js
+packages/shared/src/*.js.map
+.vite/
+
+# Test
+coverage/
+
+# Environment
+.env
+.env.local
+.env.*.local
+.cookie.cache
+
+# Database
+dev.db
+dev.db-journal
+prisma/dev.db
+
+# Logs
+*.log
+dev-*.log
+dev-*-current*.log
+dev-*-current-*.log
+
+# Temporary audit/diagnosis reports
+DIAGNOSIS-REPORT.md
+FINAL-SOLUTION.md
+LOGIN-ISSUE-SOLUTION.md
+README-LOGIN-ISSUE.md
+PACKAGE_DETAIL_IMPROVEMENTS.md
+get-cookie-instructions.md
+CODE-REVIEW-REPORT.html
+CODE-REVIEW-REPORT-ROUND2.html
+test-parser.ts
+
+# Local probes / dumps / review packs
+.eq5_dump.txt
+.start_test_output.txt
+.tmp/
+.tmp-*
+.tmp-*/
+.review-pack/
+code-review-package.tar.gz
+code-review-package.zip
+probe_sqlite.js
+adapter.js
+_eq4_analyze.py
+_eq4_inventory.py
+test_start.bat
+25
+29
+nul
+
+# Prefer npm (CI uses npm ci). Ignore accidental alternate lockfiles.
+pnpm-lock.yaml
+yarn.lock
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Agent / sidecar directories (local-only, never committed)
+.workbuddy/
+.claude/
+devspace/
+
+# Editor
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+
+# Build info
+*.tsbuildinfo
+
+# Misc
+.superpowers/

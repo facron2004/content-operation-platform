@@ -1,0 +1,53 @@
+import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
+import { DashboardController } from './dashboard.controller';
+import { AlertController } from './alert.controller';
+import { CopyController } from './copy.controller';
+import { PackageController } from './package.controller';
+import { SoldoutController } from './soldout.controller';
+import { ContentService } from './content.service';
+import { CopyService } from './copy.service';
+import { AlertService } from './alert.service';
+import { DashboardService } from './dashboard.service';
+import { DataSourceService } from './data-source.service';
+import { AutoLoginService } from './auto-login.service';
+import { PackageDetailService } from './package-detail';
+import { AICopyService } from './ai-copy';
+import { DailyInventoryCrawlerService } from './daily-inventory-crawler.service';
+import { SoldoutService } from './soldout.service';
+import { RuleConfigController } from './rule-config.controller';
+import { RuleConfigService } from './rule-config.service';
+
+@Module({
+  imports: [ConfigModule],
+  controllers: [
+    DashboardController,
+    AlertController,
+    CopyController,
+    PackageController,
+    SoldoutController,
+    RuleConfigController
+  ],
+  providers: [
+    ContentService,
+    CopyService,
+    AlertService,
+    DashboardService,
+    DataSourceService,
+    AutoLoginService,
+    PackageDetailService,
+    AICopyService,
+    DailyInventoryCrawlerService,
+    SoldoutService,
+    RuleConfigService
+  ],
+  exports: [
+    ContentService,
+    CopyService,
+    AlertService,
+    DashboardService,
+    SoldoutService,
+    AutoLoginService
+  ]
+})
+export class ContentModule {}

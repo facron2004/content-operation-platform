@@ -1,0 +1,103 @@
+.refund-view {
+  gap: 12px;
+}
+
+.rv-hero {
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background:
+    radial-gradient(circle at top right, rgba(239, 68, 68, 0.08), transparent 32%),
+    linear-gradient(180deg, #ffffff 0%, #fbfcfe 100%);
+  box-shadow: var(--shadow-soft);
+}
+
+.rv-hero h2 {
+  margin: 8px 0 0;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.hero-description {
+  max-width: 62ch;
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.kpi-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.chart-card,
+.top-offenders {
+  padding: 14px 16px;
+}
+
+.chart-card header,
+.top-offenders header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  gap: 12px;
+}
+
+.chart-card h3,
+.top-offenders h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.chart-card :deep(.chart-shell) {
+  min-height: 280px;
+}
+
+.rate-danger {
+  color: #ef4444;
+  font-weight: 700;
+}
+
+.rate-warning {
+  color: #f59e0b;
+  font-weight: 700;
+}
+
+.rate-ok {
+  color: var(--ink);
+}
+
+:deep(.is-danger) {
+  background: var(--danger-soft);
+}
+
+:deep(.is-warning) {
+  background: #fff7ed;
+}
+
+@media (max-width: 1280px) {
+  .kpi-row {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .kpi-row {
+    grid-template-columns: 1fr;
+  }
+  .rv-hero {
+    flex-direction: column;
+  }
+  .hero-meta {
+    align-self: flex-start;
+  }
+}

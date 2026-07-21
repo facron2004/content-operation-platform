@@ -1,0 +1,155 @@
+.zero-sales {
+  gap: 12px;
+}
+
+.zs-hero {
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background:
+    radial-gradient(circle at top right, rgba(239, 68, 68, 0.08), transparent 32%),
+    linear-gradient(180deg, var(--panel) 0%, var(--soft) 100%);
+  box-shadow: var(--shadow-soft);
+}
+
+.zs-hero h2 {
+  margin: 4px 0 0;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.hero-description {
+  max-width: 62ch;
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.kpi-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.chart-row {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 12px;
+}
+
+.chart-card {
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.chart-card header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.chart-card h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.chart-card :deep(.chart-shell) {
+  min-height: 240px;
+}
+
+.scope-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.cell-primary {
+  display: block;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.cell-secondary {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.hero-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.filters {
+  padding: 12px 16px;
+}
+
+.filters :deep(.el-form-item) {
+  margin-bottom: 0;
+}
+
+.zs-tabs {
+  background: transparent;
+}
+
+.zs-tabs :deep(.el-tabs__nav-wrap::after) {
+  height: 1px;
+}
+
+.pagination-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 12px 0 4px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.page-info {
+  min-width: 80px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.zs-tabs :deep(.is-danger) {
+  background: var(--danger-soft);
+}
+
+.zs-tabs :deep(.is-warning) {
+  background: #fff7ed;
+}
+
+@media (max-width: 1280px) {
+  .zs-hero {
+    flex-direction: column;
+  }
+  .hero-meta {
+    align-self: flex-start;
+  }
+  .kpi-row {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .chart-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .kpi-row {
+    grid-template-columns: 1fr;
+  }
+}

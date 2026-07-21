@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(tail -100 /tmp/api-server.log 2>/dev/null || echo \"No log file yet\")",
+      "Bash(netstat -ano)",
+      "Bash(awk '{print $5}')"
+    ]
+  }
+}

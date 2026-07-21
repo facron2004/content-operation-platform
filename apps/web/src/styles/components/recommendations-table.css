@@ -1,0 +1,7 @@
+.muted-cell {
+  color: var(--muted);
+}
+
+.table-tags {
+  gap: 5px;
+}

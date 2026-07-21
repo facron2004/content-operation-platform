@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Local Life Ops">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#3b82f6"/>
+      <stop offset="100%" stop-color="#1d4ed8"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.3" cy="0.3" r="0.7">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.22"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#bg)"/>
+  <rect width="512" height="512" fill="url(#glow)"/>
+  <g transform="translate(256 256)" fill="none" stroke="#ffffff" stroke-opacity="0.18" stroke-width="6">
+    <circle r="76"/>
+    <circle r="120"/>
+  </g>
+  <g transform="translate(256 256)" stroke="#ffffff" stroke-opacity="0.95" stroke-width="22" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <path d="M -132 50 L -86 50 L -64 -6 L -36 84 L -8 -50 L 24 50 L 132 50"/>
+  </g>
+  <g transform="translate(256 256)">
+    <circle r="66" fill="#ffffff"/>
+    <circle r="66" fill="none" stroke="#1d4ed8" stroke-width="10"/>
+    <circle r="18" fill="#1d4ed8"/>
+    <path d="M -40 -40 L 40 40 M 40 -40 L -40 40" stroke="#1d4ed8" stroke-width="10" stroke-linecap="round"/>
+  </g>
+</svg>

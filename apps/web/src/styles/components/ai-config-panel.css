@@ -1,0 +1,98 @@
+.ai-control-panel {
+  align-self: start;
+}
+
+.ai-status-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding: 12px;
+  border: 1px solid var(--accent-line);
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+}
+
+.ai-status-card.offline {
+  border-color: #fed7aa;
+  background: var(--warning-soft);
+}
+
+.ai-status-card strong,
+.ai-status-card span,
+.ai-status-card small {
+  display: block;
+}
+
+.ai-status-card span {
+  margin-top: 3px;
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.ai-status-card small {
+  max-width: 240px;
+  margin-top: 4px;
+  color: var(--muted);
+  word-break: break-all;
+}
+
+.ai-form {
+  margin-top: 16px;
+}
+
+.config-box {
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--soft, #f8fafc);
+}
+
+.config-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.config-head strong {
+  color: var(--ink);
+}
+
+.config-head span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.config-number-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.config-number-row :deep(.el-input-number) {
+  width: 100%;
+}
+
+.config-save-button {
+  width: 100%;
+}
+
+.generate-actions {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
+.generate-button {
+  width: 100%;
+}
+
+@media (max-width: 980px) {
+  .config-number-row {
+    grid-template-columns: 1fr;
+  }
+}

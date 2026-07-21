@@ -1,0 +1,44 @@
+.alert-table-panel {
+  overflow: hidden;
+}
+
+.page-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 4px 0 10px;
+}
+
+.page-summary span {
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--soft);
+  color: var(--ink-soft);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.alert-table {
+  margin-top: 4px;
+}
+
+.alert-pagination {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 14px;
+}
+
+:deep(.row-danger) td {
+  background: rgba(255, 241, 242, 0.68) !important;
+}
+
+:deep(.row-warning) td {
+  background: rgba(255, 251, 235, 0.58) !important;
+}
+
+@media (max-width: 960px) {
+  .alert-pagination {
+    justify-content: flex-start;
+  }
+}

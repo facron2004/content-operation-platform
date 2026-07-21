@@ -1,0 +1,212 @@
+.merchant-heatmap-view {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: calc(100vh - 130px);
+}
+
+/* ── Header ── */
+.heatmap-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: linear-gradient(180deg, #ffffff 0%, #fbfcfe 100%);
+  box-shadow: var(--shadow-soft);
+  flex-shrink: 0;
+}
+
+.heatmap-header-left h2 {
+  margin: 0 0 4px;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.heatmap-subtitle {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.heatmap-header-right {
+  display: flex;
+  gap: 12px;
+}
+
+.stat-badge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 6px 14px;
+  border-radius: var(--radius);
+  background: var(--bg-subtle);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.stat-badge strong {
+  font-size: 18px;
+  font-weight: 700;
+}
+.stat-badge.mapped strong {
+  color: #4575b4;
+}
+.stat-badge.unmapped strong {
+  color: #d73027;
+}
+
+/* ── Body ── */
+.heatmap-body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  border: 1px solid var(--line);
+}
+
+.heatmap-map {
+  width: 100%;
+  height: 100%;
+  min-height: 400px;
+}
+
+/* ── Controls overlay ── */
+.heatmap-controls {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 160px;
+  padding: 12px;
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  backdrop-filter: blur(4px);
+  z-index: 1000;
+}
+
+.control-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.control-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.control-group.legend .legend-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.legend-gradient {
+  flex: 1;
+  height: 10px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #313695, #4575b4, #fee090, #f46d43, #a50026);
+}
+
+.hint {
+  flex-direction: row;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  opacity: 0.6;
+}
+
+.hint-icon {
+  font-size: 12px;
+}
+
+.hint-text {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* ── Tooltip ── */
+.heatmap-tooltip {
+  position: absolute;
+  min-width: 160px;
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.97);
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.2);
+  font-size: 12px;
+  z-index: 1001;
+  pointer-events: none;
+}
+
+.heatmap-tooltip h4 {
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.tooltip-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  line-height: 1.6;
+}
+
+.tooltip-merchants {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--line);
+  line-height: 1.5;
+}
+
+.tooltip-label {
+  color: var(--muted);
+}
+
+.tooltip-names {
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
+
+/* ── Transitions ── */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.15s ease;
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+
+/* ── Loading / Empty ── */
+.heatmap-loading {
+  padding: 40px 20px;
+}
+
+.heatmap-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  min-height: 300px;
+  color: var(--muted);
+}
+
+/* ── Leaflet overrides ── */
+.heatmap-map .leaflet-container {
+  font-family: inherit;
+}
