@@ -1,0 +1,82 @@
+.community-toolbar,
+.community-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: var(--shadow-soft);
+}
+
+.community-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px;
+}
+
+.community-toolbar h2 {
+  margin: 0;
+  font-size: 24px;
+}
+
+.community-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+.community-card {
+  padding: 14px;
+}
+
+.community-head,
+.community-package {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.community-head strong,
+.community-package strong {
+  display: block;
+  color: var(--ink);
+  line-height: 1.4;
+}
+
+.community-head span,
+.community-package span,
+.community-metrics span {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.community-metrics {
+  display: grid;
+  grid-template-columns: 70px 92px minmax(0, 1fr);
+  gap: 8px;
+  margin: 14px 0;
+}
+
+.community-metrics div {
+  min-width: 0;
+  padding: 10px;
+  border-radius: 8px;
+  background: var(--soft, #f8fafc);
+}
+
+.community-metrics strong {
+  display: block;
+  margin-top: 4px;
+  word-break: break-word;
+}
+
+.community-packages h3 {
+  margin: 0 0 10px;
+  font-size: 15px;
+}
+
+.community-package {
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+}

@@ -1,0 +1,13 @@
+.theme-trigger {
+  box-shadow: var(--shadow-soft);
+}
+
+.active {
+  color: var(--el-color-primary);
+  font-weight: 700;
+}
+
+.theme-trigger-wrap {
+  display: inline-flex;
+  line-height: 1;
+}

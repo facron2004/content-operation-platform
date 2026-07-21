@@ -1,0 +1,121 @@
+.alerts-page {
+  gap: 12px;
+}
+
+.alerts-hero {
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background:
+    radial-gradient(circle at top right, rgba(220, 38, 38, 0.08), transparent 30%),
+    linear-gradient(180deg, #ffffff 0%, #fbfcfe 100%);
+  box-shadow: var(--shadow-soft);
+}
+
+.alerts-hero h2 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 800;
+}
+
+.alerts-hero p:not(.eyebrow) {
+  max-width: 60ch;
+  margin: 8px 0 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.hero-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.hero-chip {
+  display: grid;
+  gap: 4px;
+  min-width: 92px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  box-shadow: var(--shadow-soft);
+}
+
+.hero-chip span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.hero-chip strong {
+  color: var(--ink);
+  font-size: 18px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.danger-chip strong {
+  color: var(--danger);
+}
+
+.page-alert {
+  margin-bottom: 0;
+}
+
+.alert-detail h3 {
+  margin: 14px 0 6px;
+  color: var(--ink);
+}
+
+.alert-detail dl {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 18px 0;
+}
+
+.alert-detail dl div {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--soft, #f8fafc);
+}
+
+.alert-detail dt {
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.alert-detail dd {
+  margin: 0;
+  color: var(--ink);
+  line-height: 1.6;
+}
+
+.drawer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+@media (max-width: 960px) {
+  .alerts-hero,
+  .hero-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .hero-actions {
+    justify-content: flex-start;
+  }
+}

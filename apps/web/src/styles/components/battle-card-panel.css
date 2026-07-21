@@ -1,0 +1,38 @@
+.battle-card-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.battle-card-summary,
+.battle-card-block,
+.battle-copy {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+}
+
+.battle-card-summary {
+  grid-column: span 3;
+}
+
+.battle-card-summary p,
+.battle-card-block p,
+.battle-copy p {
+  margin: 8px 0 0;
+  color: var(--muted);
+  line-height: 1.55;
+  white-space: pre-line;
+}
+
+.battle-card-block span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.battle-copy h3 {
+  margin: 0;
+  font-size: 15px;
+}
