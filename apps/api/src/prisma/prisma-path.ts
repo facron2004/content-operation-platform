@@ -1,5 +1,5 @@
 import { Prisma } from '@prisma/client';
-import { join, dirname } from 'path';
+import { join, dirname, resolve } from 'path';
 import { existsSync } from 'fs';
 import { deepBigIntToNumber } from './prisma-bigint';
 import { findRepoRootDbPath } from './prisma-db-path';
@@ -48,8 +48,10 @@ function resolveDbUrlPath(): string | null {
   // Handle Windows absolute paths like /C:/...
   if (/^\/[a-zA-Z]:\//.test(filePath)) filePath = filePath.slice(1);
   if (!filePath) return null;
-  if (!existsSync(filePath)) return null;
-  return filePath;
+  // Resolve relative paths to absolute for libSQL compatibility (especially on Windows)
+  const resolved = resolve(filePath);
+  if (!existsSync(resolved)) return null;
+  return resolved;
 }
 export const prismaJsonReplacer = (_key: string, value: unknown): unknown =>
   deepBigIntToNumber(value);

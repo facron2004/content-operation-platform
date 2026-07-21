@@ -389,3 +389,34 @@ model RuleConfig {
   @@index([tenantId, merchantId, type])
   @@index([isActive])
 }
+
+model AppUser {
+  userId       String   @id
+  username     String   @unique
+  passwordHash String
+  displayName  String
+  email        String?
+  phone        String?
+  isActive     Int      @default(1)
+  lastLoginAt  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  bindings     UserRoleBinding[]
+
+  @@index([username])
+}
+
+model UserRoleBinding {
+  id        String   @id
+  userId    String
+  role      String
+  scopeType String?
+  scopeId   String?
+  createdAt DateTime @default(now())
+
+  user      AppUser  @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([role])
+}

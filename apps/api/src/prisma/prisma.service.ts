@@ -13,9 +13,18 @@ export class PrismaService extends PrismaClient implements OnModuleDestroy, OnMo
     // Priority 1: Use DATABASE_URL env var directly (e.g., CI sets absolute path)
     const envUrl = process.env.DATABASE_URL;
     if (envUrl) {
-      super({
-        adapter: new PrismaLibSQL({ url: envUrl })
-      });
+      // Resolve relative file:// URLs to absolute paths for libSQL compatibility (especially Windows)
+      const { finalDbPath, exists } = resolveDevDbPath();
+      if (exists) {
+        const n = finalDbPath.replace(/\\/g, '/');
+        super({
+          adapter: new PrismaLibSQL({ url: /^[a-zA-Z]:\//.test(n) ? `file:///${n}` : `file:${n}` })
+        });
+      } else {
+        super({
+          adapter: new PrismaLibSQL({ url: envUrl })
+        });
+      }
       return;
     }
 
