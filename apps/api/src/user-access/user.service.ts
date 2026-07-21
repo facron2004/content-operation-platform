@@ -1,26 +1,40 @@
 import { Inject, Injectable, Logger, NotFoundException, ConflictException } from '@nestjs/common';
 import { randomBytes, createHash } from 'crypto';
+import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
 import type { AppUser, UserRoleBinding } from '@content/shared';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto, UpdateUserRolesDto } from './dto/update-user.dto';
 
-function hashPassword(password: string): string {
-  const salt = randomBytes(16).toString('hex');
-  const hash = createHash('sha256')
-    .update(salt + password)
-    .digest('hex');
-  return salt + ':' + hash;
+const HEX_RE = /^[0-9a-f]+$/i;
+
+async function hashPassword(password: string): Promise<string> {
+  return bcrypt.hash(password, 10);
 }
 
-export function verifyPassword(password: string, stored: string): boolean {
-  const [salt, hash] = stored.split(':');
-  if (!salt || !hash) return false;
+/** Detect legacy sha256 salt:hash format (salt:sha256hex). */
+export function isLegacyHash(stored: string): boolean {
+  const idx = stored.indexOf(':');
+  if (idx <= 0) return false;
+  const salt = stored.slice(0, idx);
+  const hash = stored.slice(idx + 1);
+  return HEX_RE.test(salt) && HEX_RE.test(hash) && hash.length === 64;
+}
+
+/** Verify against legacy sha256(salt + password) format. */
+export function verifyLegacyPassword(password: string, stored: string): boolean {
+  const idx = stored.indexOf(':');
+  const salt = stored.slice(0, idx);
+  const hash = stored.slice(idx + 1);
   return (
     createHash('sha256')
       .update(salt + password)
       .digest('hex') === hash
   );
+}
+
+export async function verifyPassword(password: string, stored: string): Promise<boolean> {
+  return bcrypt.compare(password, stored);
 }
 
 interface UserRow {
@@ -79,7 +93,28 @@ export class UserService {
     const row = rows[0];
     if (!row) return null;
     if (row.isActive !== 1) return null;
-    if (!verifyPassword(password, row.passwordHash)) return null;
+
+    // Support transparent migration: legacy sha256 salt:hash → bcrypt
+    const isLegacy = isLegacyHash(row.passwordHash);
+    const passwordOk = isLegacy
+      ? verifyLegacyPassword(password, row.passwordHash)
+      : await verifyPassword(password, row.passwordHash);
+    if (!passwordOk) return null;
+
+    // Rehash legacy password on successful login (transparent migration)
+    if (isLegacy) {
+      const newHash = await hashPassword(password);
+      await this.prisma
+        .$executeRawUnsafe(
+          `UPDATE "AppUser" SET "passwordHash" = ? WHERE "userId" = ?`,
+          newHash,
+          row.userId
+        )
+        .catch(() => {});
+      this.logger.log(
+        `Upgraded password hash for user ${row.username} from legacy sha256 to bcrypt`
+      );
+    }
 
     const bindings = await this.fetchRoleBindings(row.userId);
 
@@ -123,12 +158,32 @@ export class UserService {
       offset
     );
 
-    const users = await Promise.all(
-      rows.map(async (row) => {
-        const bindings = await this.fetchRoleBindings(row.userId);
-        return this.mapUser(row, bindings);
-      })
-    );
+    // Batch fetch role bindings for all users (fix N+1)
+    const userIds = rows.map((r) => r.userId);
+    const allBindings =
+      userIds.length > 0
+        ? await this.prisma.$queryRawUnsafe<RoleBindingRow[]>(
+            `SELECT * FROM "UserRoleBinding" WHERE "userId" IN (${userIds.map(() => '?').join(',')}) ORDER BY "createdAt" ASC`,
+            ...userIds
+          )
+        : [];
+    const bindingsByUser = new Map<string, RoleBindingRow[]>();
+    for (const b of allBindings) {
+      if (!bindingsByUser.has(b.userId)) bindingsByUser.set(b.userId, []);
+      bindingsByUser.get(b.userId)!.push(b);
+    }
+
+    const users = rows.map((row) => {
+      const raw = bindingsByUser.get(row.userId) ?? [];
+      const bindings = raw.map((r) => ({
+        id: r.id,
+        userId: r.userId,
+        role: r.role as UserRoleBinding['role'],
+        scopeType: r.scopeType as 'area' | 'merchant' | undefined,
+        scopeId: r.scopeId ?? undefined
+      }));
+      return this.mapUser(row, bindings);
+    });
 
     return { data: users, total, page, pageSize };
   }
@@ -145,34 +200,36 @@ export class UserService {
     }
 
     const userId = this.generateId();
-    const passwordHash = hashPassword(dto.password);
+    const passwordHash = await hashPassword(dto.password);
 
-    await this.prisma.$executeRawUnsafe(
-      `INSERT INTO "AppUser" ("userId", "username", "passwordHash", "displayName", "email", "phone", "isActive", "createdAt", "updatedAt")
-       VALUES (?, ?, ?, ?, ?, ?, 1, datetime('now'), datetime('now'))`,
-      userId,
-      dto.username,
-      passwordHash,
-      dto.displayName ?? dto.username,
-      dto.email ?? null,
-      dto.phone ?? null
-    );
+    await this.prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe(
+        `INSERT INTO "AppUser" ("userId", "username", "passwordHash", "displayName", "email", "phone", "isActive", "createdAt", "updatedAt")
+         VALUES (?, ?, ?, ?, ?, ?, 1, datetime('now'), datetime('now'))`,
+        userId,
+        dto.username,
+        passwordHash,
+        dto.displayName ?? dto.username,
+        dto.email ?? null,
+        dto.phone ?? null
+      );
 
-    // Create role bindings if provided
-    if (dto.roles && dto.roles.length > 0) {
-      for (const r of dto.roles) {
-        const bindingId = this.generateId();
-        await this.prisma.$executeRawUnsafe(
-          `INSERT INTO "UserRoleBinding" ("id", "userId", "role", "scopeType", "scopeId", "createdAt")
-           VALUES (?, ?, ?, ?, ?, datetime('now'))`,
-          bindingId,
-          userId,
-          r.role,
-          r.scopeType ?? null,
-          r.scopeId ?? null
-        );
+      // Create role bindings if provided
+      if (dto.roles && dto.roles.length > 0) {
+        for (const r of dto.roles) {
+          const bindingId = this.generateId();
+          await tx.$executeRawUnsafe(
+            `INSERT INTO "UserRoleBinding" ("id", "userId", "role", "scopeType", "scopeId", "createdAt")
+             VALUES (?, ?, ?, ?, ?, datetime('now'))`,
+            bindingId,
+            userId,
+            r.role,
+            r.scopeType ?? null,
+            r.scopeId ?? null
+          );
+        }
       }
-    }
+    });
 
     const created = await this.findById(userId);
     if (!created) throw new Error('Failed to load created user');
@@ -201,7 +258,7 @@ export class UserService {
     }
     if (dto.password !== undefined) {
       sets.push(`"passwordHash" = ?`);
-      params.push(hashPassword(dto.password));
+      params.push(await hashPassword(dto.password));
     }
     if (dto.isActive !== undefined) {
       sets.push(`"isActive" = ?`);
@@ -242,22 +299,24 @@ export class UserService {
     const user = await this.findById(id);
     if (!user) throw new NotFoundException(`用户 ${id} 不存在`);
 
-    // Delete existing bindings
-    await this.prisma.$executeRawUnsafe(`DELETE FROM "UserRoleBinding" WHERE "userId" = ?`, id);
+    await this.prisma.$transaction(async (tx) => {
+      // Delete existing bindings
+      await tx.$executeRawUnsafe(`DELETE FROM "UserRoleBinding" WHERE "userId" = ?`, id);
 
-    // Insert new bindings
-    for (const r of dto.roles) {
-      const bindingId = this.generateId();
-      await this.prisma.$executeRawUnsafe(
-        `INSERT INTO "UserRoleBinding" ("id", "userId", "role", "scopeType", "scopeId", "createdAt")
-         VALUES (?, ?, ?, ?, ?, datetime('now'))`,
-        bindingId,
-        id,
-        r.role,
-        r.scopeType ?? null,
-        r.scopeId ?? null
-      );
-    }
+      // Insert new bindings
+      for (const r of dto.roles) {
+        const bindingId = this.generateId();
+        await tx.$executeRawUnsafe(
+          `INSERT INTO "UserRoleBinding" ("id", "userId", "role", "scopeType", "scopeId", "createdAt")
+           VALUES (?, ?, ?, ?, ?, datetime('now'))`,
+          bindingId,
+          id,
+          r.role,
+          r.scopeType ?? null,
+          r.scopeId ?? null
+        );
+      }
+    });
 
     const updated = await this.findById(id);
     if (!updated) throw new Error('Failed to load user after role update');
