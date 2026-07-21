@@ -83,7 +83,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import { ElMessage } from 'element-plus';
+import { ElMessage, ElForm } from 'element-plus';
 import { Plus } from '@element-plus/icons-vue';
 import { api } from '../services/api';
 
@@ -103,7 +103,7 @@ const page = ref(1);
 const pageSize = ref(20);
 const showCreate = ref(false);
 const submitting = ref(false);
-const formRef = ref<unknown>();
+const formRef = ref<InstanceType<typeof ElForm>>();
 const form = ref({ username: '', password: '', displayName: '', email: '' });
 const rules = {
   username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
@@ -125,12 +125,12 @@ async function loadUsers() {
 }
 
 function handleEdit(row: Record<string, unknown>) {
-  ElMessage.info(`编辑用户 ${row.username} 功能待完善`);
+  ElMessage.info(`编辑用户 ${String(row.username)} 功能待完善`);
 }
 
 async function handleDeactivate(row: Record<string, unknown>) {
   try {
-    await api.deactivateUser(row.userId);
+    await api.deactivateUser(String(row.userId));
     ElMessage.success('用户已停用');
     await loadUsers();
   } catch {

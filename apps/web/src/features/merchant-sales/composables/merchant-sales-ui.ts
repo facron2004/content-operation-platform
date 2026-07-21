@@ -170,8 +170,8 @@ export function createMerchantSalesHandlers(args: {
 }
 
 export const merchantSalesFormatters = {
-  rowClass: ({ row }: { row: { refundRate: number; verifyRate: number; gmv: number } }) =>
-    merchantSalesRowClass(row),
+  rowClass: ({ row }: { row: Record<string, unknown> }) =>
+    merchantSalesRowClass(row as { refundRate: number; verifyRate: number; gmv: number }),
   rateClass,
   rateClassInv,
   formatGmv,

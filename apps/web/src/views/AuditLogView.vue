@@ -114,7 +114,7 @@ const filters = reactive({ userId: '', objectType: '', action: '' });
 const detailVisible = ref(false);
 const selectedLog = ref<Record<string, unknown> | null>(null);
 
-function objectTypeLabel(type: string): string {
+function objectTypeLabel(type: unknown): string {
   const map: Record<string, string> = {
     campaign: '活动',
     task: '任务',
@@ -122,15 +122,15 @@ function objectTypeLabel(type: string): string {
     community: '社群',
     user: '用户'
   };
-  return map[type] || type;
+  return map[String(type)] || String(type);
 }
 
-function formatTime(t: string): string {
+function formatTime(t: unknown): string {
   if (!t) return '-';
   try {
-    return new Date(t).toLocaleString('zh-CN', { hour12: false });
+    return new Date(String(t)).toLocaleString('zh-CN', { hour12: false });
   } catch {
-    return t;
+    return String(t);
   }
 }
 
