@@ -12,6 +12,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import type { Request } from 'express';
+import { clamp } from '@content/shared';
 import { UserService } from './user.service';
 import { Roles } from './role.decorator';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -30,7 +31,10 @@ export class UserController {
   listUsers(@Query('page') page?: string, @Query('pageSize') pageSize?: string) {
     const p = Number(page);
     const ps = Number(pageSize);
-    return this.userService.list(Number.isFinite(p) ? p : 1, Number.isFinite(ps) ? ps : 20);
+    return this.userService.list(
+      Number.isFinite(p) ? Math.max(1, p) : 1,
+      Number.isFinite(ps) ? clamp(ps, 1, 100) : 20
+    );
   }
 
   @Post()

@@ -29,17 +29,20 @@ export class PackageDetailService {
       if (cached) return cached;
     }
 
-    const html = await this.fetcher.fetchHtml(packageId);
-    if (!html) return null;
+    return this.cache.getOrLoad(packageId, async () => {
+      const html = await this.fetcher.fetchHtml(packageId);
+      if (!html) return null;
 
-    const detail = this.parser.parsePackageDetail(packageId, html, options?.saveRawHtml);
+      const detail = this.parser.parsePackageDetail(packageId, html, options?.saveRawHtml);
 
-    if (detail.sections.length === 0) {
-      this.logger.warn(`No sections parsed for package ${packageId}. Consider checking raw HTML.`);
-    }
+      if (detail.sections.length === 0) {
+        this.logger.warn(
+          `No sections parsed for package ${packageId}. Consider checking raw HTML.`
+        );
+      }
 
-    this.cache.set(packageId, detail);
-    return detail;
+      return detail;
+    });
   }
 
   clearCache(packageId?: string): void {

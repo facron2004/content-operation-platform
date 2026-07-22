@@ -208,14 +208,10 @@ export async function computeHourlyFromOrderHeader(
 // ── Trend ────────────────────────────────────────────
 
 function countInclusiveDays(startDate: string, endDate: string): number {
-  let count = 0;
-  let cursor = startDate;
-  while (cursor < endDate) {
-    cursor = shiftDateKey(cursor, 1);
-    count++;
-    if (count > 366) return 366;
-  }
-  return count + 1;
+  const start = new Date(startDate + 'T00:00:00+08:00').getTime();
+  const end = new Date(endDate + 'T00:00:00+08:00').getTime();
+  if (start > end) return 0;
+  return Math.round((end - start) / 86400000) + 1;
 }
 
 type TrendAggRow = {

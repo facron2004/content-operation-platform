@@ -52,9 +52,6 @@ export class HtmlParser {
       if (strongText && this.isSectionTitle(strongText)) {
         if (currentSection && currentSection.items.length > 0) {
           sections.push(currentSection);
-          this.logger.debug(
-            `Saved section: ${currentSection.title} with ${currentSection.items.length} items`
-          );
         }
 
         const selectionMatch = strongText.match(/(\d+选\d+)/);
@@ -65,9 +62,6 @@ export class HtmlParser {
           selectionRule,
           items: []
         };
-        this.logger.debug(
-          `Started new section: ${strongText}${selectionRule ? ` (${selectionRule})` : ''}`
-        );
         return;
       }
 
@@ -75,7 +69,6 @@ export class HtmlParser {
         const item = this.parseItem($el, $detail);
         if (item) {
           currentSection.items.push(item);
-          this.logger.debug(`Added item: ${item.name} - ${item.quantity}`);
         }
       }
     });
@@ -84,32 +77,43 @@ export class HtmlParser {
       const section = currentSection as PackageDetailSection;
       if (section.items.length > 0) {
         sections.push(section);
-        this.logger.debug(
-          `Saved final section: ${section.title} with ${section.items.length} items`
-        );
       }
     }
 
-    const streamDetail = this.parseTokenStreamDetail($detail);
-    const looseDetail = this.parseLooseTokenDetail($detail);
-    const parsedSections = this.pickBestSections(
-      sections,
-      streamDetail.sections,
-      looseDetail.sections
-    );
-    const parsedTitle = this.pickPackageTitle(
-      packageTitle,
-      streamDetail.packageTitle || looseDetail.packageTitle
-    );
-
+    // Only run fallback parsers when primary parsed nothing
+    const hasItems = sections.some((s) => s.items.length > 0);
+    if (!hasItems) {
+      const streamDetail = this.parseTokenStreamDetail($detail);
+      const looseDetail = this.parseLooseTokenDetail($detail);
+      const parsedSections = this.pickBestSections(
+        sections,
+        streamDetail.sections,
+        looseDetail.sections
+      );
+      const parsedTitle = this.pickPackageTitle(
+        packageTitle,
+        streamDetail.packageTitle || looseDetail.packageTitle
+      );
+      this.logger.log(
+        `Parsed package ${packageId}: fallback-route ${parsedSections.length} sections, ${parsedSections.reduce((sum, s) => sum + s.items.length, 0)} items`
+      );
+      return {
+        packageId,
+        packageTitle: parsedTitle,
+        sections: parsedSections,
+        merchantLat,
+        merchantLng,
+        rawHtml: saveRawHtml ? detailScript : undefined,
+        fetchedAt: new Date()
+      };
+    }
     this.logger.log(
-      `Parsed package ${packageId}: ${parsedSections.length} sections, ${parsedSections.reduce((sum, s) => sum + s.items.length, 0)} total items`
+      `Parsed package ${packageId}: primary-route ${sections.length} sections, ${sections.reduce((sum, s) => sum + s.items.length, 0)} items`
     );
-
     return {
       packageId,
-      packageTitle: parsedTitle,
-      sections: parsedSections,
+      packageTitle,
+      sections,
       merchantLat,
       merchantLng,
       rawHtml: saveRawHtml ? detailScript : undefined,

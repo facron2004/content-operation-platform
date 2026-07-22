@@ -1,11 +1,19 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
+import { createHash, randomBytes } from 'crypto';
 import { isLegacyHash, verifyLegacyPassword } from '../src/user-access/user.service';
+
+function makeLegacyHash(password: string): string {
+  const salt = randomBytes(16).toString('hex');
+  const hash = createHash('sha256')
+    .update(salt + password)
+    .digest('hex');
+  return `${salt}:${hash}`;
+}
 
 describe('isLegacyHash', () => {
   it('detects sha256 salt:hash format', () => {
-    expect(
-      isLegacyHash('aabbccdd1122:abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890')
-    ).toBe(true);
+    const legacy = makeLegacyHash('test123');
+    expect(isLegacyHash(legacy)).toBe(true);
   });
 
   it('rejects bcrypt hash', () => {
@@ -20,13 +28,12 @@ describe('isLegacyHash', () => {
 
 describe('verifyLegacyPassword', () => {
   it('matches correct sha256 salt:hash', () => {
-    // Manually computed: sha256("salt" + "mypassword")
-    const hash = '8e2f89eed1af0a3c22b34fce808476fb72e9dfb5a3aa8e1260c0e7a5847a1638';
-    expect(verifyLegacyPassword('mypassword', `73616c74:${hash}`)).toBe(true);
+    const legacy = makeLegacyHash('mypassword');
+    expect(verifyLegacyPassword('mypassword', legacy)).toBe(true);
   });
 
   it('rejects wrong password', () => {
-    const hash = '8e2f89eed1af0a3c22b34fce808476fb72e9dfb5a3aa8e1260c0e7a5847a1638';
-    expect(verifyLegacyPassword('wrong', `73616c74:${hash}`)).toBe(false);
+    const legacy = makeLegacyHash('correctPassword');
+    expect(verifyLegacyPassword('wrong', legacy)).toBe(false);
   });
 });
