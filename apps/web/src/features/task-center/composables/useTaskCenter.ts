@@ -1,9 +1,10 @@
-import { computed, onMounted, ref } from 'vue';
+import { onMounted, ref } from 'vue';
 import { ElMessage } from 'element-plus';
 import type { DistributionTask, TaskKpiResponse } from '@content/shared';
 import { api } from '../../../services/api';
 import { extractErrorMessage } from '../../../services/http-client';
 import { confirmAndDelete } from '../../../composables/useConfirmDelete';
+import { usePagedList, type PagedListReturn } from '../../../composables/usePagedList';
 
 export interface TaskFilters {
   status: string;
@@ -21,60 +22,33 @@ const EMPTY_FILTERS: TaskFilters = {
   keyword: ''
 };
 
-export function useTaskCenter() {
-  const loading = ref(false);
-  const tasks = ref<DistributionTask[]>([]);
-  const total = ref(0);
-  const page = ref(1);
-  const pageSize = ref(20);
+export function useTaskCenter(): PagedListReturn<DistributionTask, TaskFilters> & {
+  kpis: typeof kpis;
+  kpiLoading: typeof kpiLoading;
+  loadKPIs: typeof loadKPIs;
+  deleteTask: (task: DistributionTask) => Promise<void>;
+} {
+  const list = usePagedList<DistributionTask, TaskFilters>(
+    async ({ page, pageSize, filters }) => {
+      const data = await api.listTasks({
+        status: filters.status || undefined,
+        channel: filters.channel || undefined,
+        priority: filters.priority || undefined,
+        campaignId: filters.campaignId || undefined,
+        keyword: filters.keyword || undefined,
+        page,
+        pageSize
+      });
+      return { items: data.items ?? [], total: data.total ?? 0 };
+    },
+    { ...EMPTY_FILTERS },
+    {
+      onError: (msg) => ElMessage.error(extractErrorMessage(msg, '加载任务列表失败'))
+    }
+  );
+
   const kpis = ref<TaskKpiResponse | null>(null);
   const kpiLoading = ref(false);
-
-  const filters = ref<TaskFilters>({ ...EMPTY_FILTERS });
-
-  function filterProxy<K extends keyof TaskFilters>(key: K) {
-    return computed<TaskFilters[K]>({
-      get: () => filters.value[key],
-      set: (value) => {
-        filters.value = { ...filters.value, [key]: value };
-      }
-    });
-  }
-
-  const status = filterProxy('status');
-  const channel = filterProxy('channel');
-  const priority = filterProxy('priority');
-  const campaignId = filterProxy('campaignId');
-  const keyword = filterProxy('keyword');
-
-  const pagination = computed(() => ({
-    current: page.value,
-    pageSize: pageSize.value,
-    total: total.value
-  }));
-
-  async function loadTasks() {
-    loading.value = true;
-    try {
-      const data = await api.listTasks({
-        status: filters.value.status || undefined,
-        channel: filters.value.channel || undefined,
-        priority: filters.value.priority || undefined,
-        campaignId: filters.value.campaignId || undefined,
-        keyword: filters.value.keyword || undefined,
-        page: page.value,
-        pageSize: pageSize.value
-      });
-      tasks.value = data.items ?? [];
-      total.value = data.total ?? 0;
-    } catch (err) {
-      tasks.value = [];
-      total.value = 0;
-      ElMessage.error(extractErrorMessage(err, '加载任务列表失败'));
-    } finally {
-      loading.value = false;
-    }
-  }
 
   async function loadKPIs() {
     kpiLoading.value = true;
@@ -88,27 +62,6 @@ export function useTaskCenter() {
     }
   }
 
-  function setPage(value: number) {
-    page.value = value;
-    void loadTasks();
-  }
-
-  function setPageSize(value: number) {
-    pageSize.value = value;
-    page.value = 1;
-    void loadTasks();
-  }
-
-  function search() {
-    page.value = 1;
-    void loadTasks();
-  }
-
-  async function refresh() {
-    page.value = 1;
-    await Promise.all([loadTasks(), loadKPIs()]);
-  }
-
   async function deleteTask(task: DistributionTask) {
     await confirmAndDelete(
       {
@@ -120,45 +73,17 @@ export function useTaskCenter() {
         successMsg: '任务已删除',
         errorMsg: '删除任务失败',
         onSuccess: async () => {
-          await loadTasks();
+          await list.load();
           await loadKPIs();
         }
       }
     );
   }
 
-  function handleSearch() {
-    void refresh();
-  }
-
   onMounted(() => {
-    void loadTasks();
-    void loadKPIs();
+    list.load();
+    loadKPIs();
   });
 
-  return {
-    loading,
-    tasks,
-    total,
-    page,
-    pageSize,
-    pagination,
-    kpis,
-    kpiLoading,
-    filters,
-    status,
-    channel,
-    priority,
-    campaignId,
-    keyword,
-    setPage,
-    setPageSize,
-    search,
-    refresh,
-    deleteTask,
-    handleDelete: deleteTask,
-    handleSearch,
-    loadTasks,
-    loadKPIs
-  };
+  return { ...list, kpis, kpiLoading, loadKPIs, deleteTask };
 }

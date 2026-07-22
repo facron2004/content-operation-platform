@@ -1,9 +1,10 @@
-import { computed, onMounted, ref } from 'vue';
+import { onMounted } from 'vue';
 import { ElMessage } from 'element-plus';
 import type { MarketingCampaign } from '@content/shared';
 import { api } from '../../../services/api';
 import { extractErrorMessage } from '../../../services/http-client';
 import { confirmAndDelete } from '../../../composables/useConfirmDelete';
+import { usePagedList, type PagedListReturn } from '../../../composables/usePagedList';
 
 export interface CampaignFilters {
   status: string;
@@ -28,99 +29,34 @@ export const CAMPAIGN_STATUS_LABELS: Record<MarketingCampaign['status'], string>
   cancelled: '已取消'
 };
 
-function createDefaultFilters(): CampaignFilters {
-  return { status: '', campaignType: '', keyword: '' };
-}
-
-export function useCampaigns() {
-  const loading = ref(false);
-  const campaigns = ref<MarketingCampaign[]>([]);
-  const total = ref(0);
-  const page = ref(1);
-  const pageSize = ref(20);
-  const filters = ref<CampaignFilters>(createDefaultFilters());
-
-  const pagination = computed(() => ({
-    current: page.value,
-    pageSize: pageSize.value,
-    total: total.value
-  }));
-
-  async function loadCampaigns(): Promise<void> {
-    loading.value = true;
-    try {
-      const params: Record<string, unknown> = { page: page.value, pageSize: pageSize.value };
-      if (filters.value.status) params.status = filters.value.status;
-      if (filters.value.campaignType) params.campaignType = filters.value.campaignType;
-      const keyword = filters.value.keyword.trim();
+export function useCampaigns(): PagedListReturn<MarketingCampaign, CampaignFilters> & {
+  handleDelete: (campaign: MarketingCampaign) => Promise<void>;
+} {
+  const list = usePagedList<MarketingCampaign, CampaignFilters>(
+    async ({ page, pageSize, filters, force }) => {
+      const params: Record<string, unknown> = { page, pageSize };
+      if (filters.status) params.status = filters.status;
+      if (filters.campaignType) params.campaignType = filters.campaignType;
+      const keyword = filters.keyword.trim();
       if (keyword) params.keyword = keyword;
       const data = await api.listCampaigns(params);
-      campaigns.value = data.items ?? [];
-      total.value = data.total ?? 0;
-    } catch (error) {
-      campaigns.value = [];
-      total.value = 0;
-      ElMessage.error(extractErrorMessage(error, '加载活动列表失败'));
-    } finally {
-      loading.value = false;
+      return { items: data.items ?? [], total: data.total ?? 0 };
+    },
+    { status: '', campaignType: '', keyword: '' },
+    {
+      onError: (msg) => ElMessage.error(extractErrorMessage(msg, '加载活动列表失败'))
     }
-  }
-
-  function setPage(nextPage: number): void {
-    page.value = nextPage;
-    loadCampaigns();
-  }
-
-  function setPageSize(nextPageSize: number): void {
-    pageSize.value = nextPageSize;
-    page.value = 1;
-    loadCampaigns();
-  }
-
-  function refresh(): void {
-    page.value = 1;
-    loadCampaigns();
-  }
-
-  function updateFilter(patch: Partial<CampaignFilters>): void {
-    filters.value = { ...filters.value, ...patch };
-    page.value = 1;
-    loadCampaigns();
-  }
-
-  async function reloadCurrentPage(): Promise<void> {
-    await loadCampaigns();
-    if (!campaigns.value.length && page.value > 1) {
-      page.value -= 1;
-      await loadCampaigns();
-    }
-  }
+  );
 
   async function handleDelete(campaign: MarketingCampaign): Promise<void> {
     await confirmAndDelete(
       { message: `确认删除活动「${campaign.name}」？此操作不可恢复。` },
       () => api.deleteCampaign(campaign.campaignId),
-      { successMsg: '活动已删除', errorMsg: '删除活动失败', onSuccess: reloadCurrentPage }
+      { successMsg: '活动已删除', errorMsg: '删除活动失败', onSuccess: list.reloadCurrentPage }
     );
   }
 
-  onMounted(loadCampaigns);
+  onMounted(() => list.load());
 
-  return {
-    loading,
-    campaigns,
-    total,
-    page,
-    pageSize,
-    filters,
-    pagination,
-    loadCampaigns,
-    setPage,
-    setPageSize,
-    refresh,
-    updateFilter,
-    handleSearch: refresh,
-    handleDelete,
-    deleteCampaign: handleDelete
-  };
+  return { ...list, handleDelete };
 }
