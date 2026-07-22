@@ -24,8 +24,8 @@ export class SoldoutController {
 
   /**
    * 查询当前售罄套餐列表(JSON)
-   * GET /api/content/soldout-links?refresh=true
-   * 仅读路径,公开访问;数据来自 dataSourceService 5 分钟缓存,不会对外网造成放大压力。
+   * GET /api/content/soldout-links
+   * 仅读路径,公开访问;强制走缓存。force refresh 仅允许 POST collect（内部 token）。
    */
   @Public()
   @Get('soldout-links')
@@ -34,10 +34,11 @@ export class SoldoutController {
     name: 'refresh',
     required: false,
     type: String,
-    description: 'true=跳过缓存重新拉取'
+    description: '公开读忽略此参数；强制刷新请用 POST collect + x-internal-token'
   })
-  async getSoldoutLinks(@Query('refresh') refresh?: string) {
-    const result = await this.soldoutService.collectSoldoutLinks({ refresh: refresh === 'true' });
+  async getSoldoutLinks(@Query('refresh') _refresh?: string) {
+    // Public reads always hit cache — never force external fetch
+    const result = await this.soldoutService.collectSoldoutLinks({ refresh: false });
     return {
       collectedAt: result.collectedAt,
       date: result.date,
@@ -75,14 +76,14 @@ export class SoldoutController {
 
   /**
    * 直接下载售罄 markdown 文件(浏览器或脚本 curl 用)
-   * GET /api/content/soldout-links/markdown?refresh=true
-   * 只读路径,公开访问;返回磁盘中已存在的 markdown。
+   * GET /api/content/soldout-links/markdown
+   * 只读路径,公开访问;始终走缓存,不强制外网刷新。
    */
   @Public()
   @Get('soldout-links/markdown')
   @ApiOperation({ summary: '下载售罄套餐 markdown 报告' })
-  async downloadMarkdown(@Query('refresh') refresh?: string, @Res() res?: Response) {
-    const result = await this.soldoutService.collectSoldoutLinks({ refresh: refresh === 'true' });
+  async downloadMarkdown(@Query('refresh') _refresh?: string, @Res() res?: Response) {
+    const result = await this.soldoutService.collectSoldoutLinks({ refresh: false });
     if (res) {
       res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
       res.setHeader('Content-Disposition', `attachment; filename="soldout-${result.date}.md"`);

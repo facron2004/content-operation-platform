@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TtlCache } from '../src/common/ttl-cache';
 
 describe('TtlCache', () => {
@@ -30,5 +30,82 @@ describe('TtlCache', () => {
     const value = await cache.getOrLoad('k', true, async () => 'new');
     expect(value).toBe('new');
     expect(cache.get('k')).toBe('new');
+  });
+
+  describe('TTL expiry', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('returns null and deletes the entry once expiresAt is past', () => {
+      const cache = new TtlCache(5 * 60 * 1000);
+      cache.set('k', 'v');
+      expect(cache.get('k')).toBe('v');
+
+      vi.advanceTimersByTime(5 * 60 * 1000);
+      // expiresAt is Date.now()+ttl; advance exactly ttl keeps equality off the < check
+      expect(cache.get('k')).toBe('v');
+
+      vi.advanceTimersByTime(1);
+      expect(cache.get('k')).toBeNull();
+      // Second get must still miss (entry was deleted on expiry)
+      expect(cache.get('k')).toBeNull();
+    });
+  });
+
+  describe('prefix-scoped clear', () => {
+    it('deletes only matching store keys and matching inFlight entries', async () => {
+      const cache = new TtlCache(60_000);
+      cache.set('gmv:day:2026-07-01', 1);
+      cache.set('gmv:day:2026-07-02', 2);
+      cache.set('refund:day:2026-07-01', 3);
+
+      // Seed inFlight with a slow load under the gmv: prefix and a sibling under refund:
+      let release!: () => void;
+      const gate = new Promise<void>((r) => {
+        release = r;
+      });
+      const gmvLoad = cache.getOrLoad('gmv:day:pending', false, async () => {
+        await gate;
+        return 99;
+      });
+      const refundLoad = cache.getOrLoad('refund:day:pending', false, async () => {
+        await gate;
+        return 88;
+      });
+      // Give the loaders a tick so they park in inFlight
+      await Promise.resolve();
+
+      cache.clear('gmv:');
+
+      expect(cache.get('gmv:day:2026-07-01')).toBeNull();
+      expect(cache.get('gmv:day:2026-07-02')).toBeNull();
+      expect(cache.get('refund:day:2026-07-01')).toBe(3);
+
+      // Matching inFlight was dropped; a fresh getOrLoad must start a new load
+      const reloader = vi.fn(async () => 100);
+      const reloaded = await cache.getOrLoad('gmv:day:pending', false, reloader);
+      expect(reloader).toHaveBeenCalledTimes(1);
+      expect(reloaded).toBe(100);
+
+      // Non-matching inFlight still resolves its original loader
+      release();
+      await expect(refundLoad).resolves.toBe(88);
+      // The orphaned gmv load must not crash; it may still resolve to 99 after clear
+      await expect(gmvLoad).resolves.toBe(99);
+    });
+
+    it('clears the entire store and inFlight when no prefix is given', () => {
+      const cache = new TtlCache(60_000);
+      cache.set('a', 1);
+      cache.set('b', 2);
+      cache.clear();
+      expect(cache.get('a')).toBeNull();
+      expect(cache.get('b')).toBeNull();
+    });
   });
 });

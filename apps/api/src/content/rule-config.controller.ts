@@ -3,6 +3,7 @@ import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import type { RuleConfig, RuleType } from '@content/shared';
 import { RuleConfigService } from './rule-config.service';
 import { CreateRuleDto, ListRulesQueryDto } from './rule-config.dto';
+import { Roles } from '../user-access/role.decorator';
 
 @ApiTags('rule-config')
 @Controller('api/content/rules')
@@ -30,6 +31,7 @@ export class RuleConfigController {
     return this.svc.getRule(id);
   }
 
+  @Roles('admin')
   @Post()
   @ApiOperation({
     summary: '新建规则配置',
@@ -46,12 +48,14 @@ export class RuleConfigController {
     });
   }
 
+  @Roles('admin')
   @Post(':id/activate')
   @ApiOperation({ summary: '激活规则配置', description: '设为生效版本,并停用同范围其它生效版本' })
   activateRule(@Param('id') id: string): Promise<RuleConfig> {
     return this.svc.activateRule(id);
   }
 
+  @Roles('admin')
   @Delete(':id')
   @ApiOperation({ summary: '删除规则配置' })
   async deleteRule(@Param('id') id: string): Promise<{ success: true }> {

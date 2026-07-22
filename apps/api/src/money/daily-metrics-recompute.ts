@@ -1,4 +1,5 @@
 import { shiftDateKey } from '@content/shared';
+import { SQL_GMV_OH } from '../common';
 
 export type DailyMetricsRecomputePrisma = {
   $executeRawUnsafe: (query: string, ...values: unknown[]) => Promise<unknown>;
@@ -35,7 +36,7 @@ export async function recomputeDailyMetricsRange(
       )
       SELECT
         date(datetime(oh."paidTime", '+8 hours')) AS "date",
-        COALESCE(SUM(oh."paidAmount" + oh."paidAmountWallet"), 0) AS "totalGmv",
+        COALESCE(SUM(${SQL_GMV_OH}), 0) AS "totalGmv",
         COALESCE(SUM(oh."paidAmount"), 0) AS "gmvOnline",
         COALESCE(SUM(oh."paidAmountWallet"), 0) AS "gmvWallet",
         COALESCE(SUM(oh."paidAmountBonus"), 0) AS "gmvBonus",
@@ -48,13 +49,13 @@ export async function recomputeDailyMetricsRange(
         SUM(CASE WHEN oh."refundAmount" > 0 THEN 1 ELSE 0 END) AS "refundCount",
         COUNT(DISTINCT oh."merchantId") AS "activeMerchants",
         CASE
-          WHEN COALESCE(SUM(oh."paidAmount" + oh."paidAmountWallet"), 0) > 0
-          THEN COALESCE(SUM(oh."refundAmount"), 0) * 1.0 / SUM(oh."paidAmount" + oh."paidAmountWallet")
+          WHEN COALESCE(SUM(${SQL_GMV_OH}), 0) > 0
+          THEN COALESCE(SUM(oh."refundAmount"), 0) * 1.0 / SUM(${SQL_GMV_OH})
           ELSE 0
         END AS "refundRate",
         CASE
-          WHEN COALESCE(SUM(oh."paidAmount" + oh."paidAmountWallet"), 0) > 0
-          THEN COALESCE(SUM(oh."verifyAmount"), 0) * 1.0 / SUM(oh."paidAmount" + oh."paidAmountWallet")
+          WHEN COALESCE(SUM(${SQL_GMV_OH}), 0) > 0
+          THEN COALESCE(SUM(oh."verifyAmount"), 0) * 1.0 / SUM(${SQL_GMV_OH})
           ELSE 0
         END AS "verifyRate",
         CURRENT_TIMESTAMP AS "updatedAt"

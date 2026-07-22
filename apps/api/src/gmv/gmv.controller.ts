@@ -13,6 +13,7 @@ import {
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { hasForceSignal } from '../common';
+import { Roles } from '../user-access/role.decorator';
 import {
   GmvByMerchantQueryDto,
   GmvDistributionQueryDto,
@@ -82,6 +83,7 @@ export class GmvController {
     return gmvHourly(this.service, q, req);
   }
 
+  @Roles('admin', 'platform_operator')
   @Post('cache/invalidate')
   @ApiOperation({ summary: '清空 GMV 进程内缓存' })
   invalidateCache(@Query('prefix') prefix?: string) {
@@ -89,6 +91,7 @@ export class GmvController {
     return { ok: true, prefix: prefix ?? '(all)' };
   }
 
+  @Roles('admin', 'platform_operator')
   @Post('refresh')
   @ApiOperation({ summary: 'JeSite 拉单 + 清缓存 + 重算 GMV' })
   refresh(@Body() body: GmvRefreshBodyDto) {

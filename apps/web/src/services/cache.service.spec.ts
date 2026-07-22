@@ -65,4 +65,25 @@ describe('clearCache', () => {
     expect(fa).toHaveBeenCalled(); // evicted
     expect(fb).not.toHaveBeenCalled(); // still cached
   });
+
+  it('drops matching pending so in-flight resolve does not repopulate', async () => {
+    let resolveFetch!: (value: string) => void;
+    const fetcher = vi.fn(
+      () =>
+        new Promise<string>((resolve) => {
+          resolveFetch = resolve;
+        })
+    );
+
+    const pending = cachedGet(fetcher, '/api/stale');
+    clearCache('/api/stale');
+    resolveFetch('stale-data');
+    await expect(pending).resolves.toBe('stale-data');
+
+    // After clear + late resolve, next call must re-fetch (no stale write-back)
+    const nextFetcher = vi.fn().mockResolvedValue('fresh-data');
+    const result = await cachedGet(nextFetcher, '/api/stale');
+    expect(result).toBe('fresh-data');
+    expect(nextFetcher).toHaveBeenCalledTimes(1);
+  });
 });

@@ -109,7 +109,17 @@ export async function upsertOrderHeaders(
   orders: OrderLike[],
   logger: Logger
 ): Promise<{ upserted: number; skipped: number; errors: number }> {
-  return batchUpsertOrderHeaders(prisma, orders, 40);
+  const result = await batchUpsertOrderHeaders(prisma, orders, 40);
+  if (result.errors > 0) {
+    logger.warn(
+      `OrderHeader upsert partial failures: errors=${result.errors} samples=${result.errorSamples.join(',') || '(none)'}`
+    );
+  }
+  return {
+    upserted: result.upserted,
+    skipped: result.skipped,
+    errors: result.errors
+  };
 }
 
 // --- gmv-refresh-page.ts ---

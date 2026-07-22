@@ -4,6 +4,7 @@ import { CampaignService } from './campaign.service';
 import { CreateCampaignDto } from './dto/create-campaign.dto';
 import { UpdateCampaignDto } from './dto/update-campaign.dto';
 import { CampaignQueryDto } from './dto/campaign-query.dto';
+import { Roles } from '../user-access/role.decorator';
 
 @ApiTags('campaigns')
 @Controller('api/campaigns')
@@ -19,6 +20,7 @@ export class CampaignController {
     return this.svc.list(query);
   }
 
+  @Roles('admin', 'platform_operator')
   @Post()
   @ApiOperation({ summary: 'Create campaign' })
   create(@Body() body: CreateCampaignDto) {
@@ -31,12 +33,14 @@ export class CampaignController {
     return this.svc.getById(id);
   }
 
+  @Roles('admin', 'platform_operator')
   @Patch(':id')
   @ApiOperation({ summary: 'Update campaign' })
   update(@Param('id') id: string, @Body() body: UpdateCampaignDto) {
     return this.svc.update(id, body);
   }
 
+  @Roles('admin', 'platform_operator')
   @Delete(':id')
   @ApiOperation({
     summary: 'Delete campaign',
@@ -46,6 +50,7 @@ export class CampaignController {
     return this.svc.delete(id);
   }
 
+  @Roles('admin', 'platform_operator')
   @Post(':id/start')
   @ApiOperation({
     summary: 'Start campaign',
@@ -55,6 +60,7 @@ export class CampaignController {
     return this.svc.transitionStatus(id, 'active');
   }
 
+  @Roles('admin', 'platform_operator')
   @Post(':id/pause')
   @ApiOperation({
     summary: 'Pause campaign',
@@ -64,6 +70,7 @@ export class CampaignController {
     return this.svc.transitionStatus(id, 'paused');
   }
 
+  @Roles('admin', 'platform_operator')
   @Post(':id/complete')
   @ApiOperation({
     summary: 'Complete campaign',
@@ -73,6 +80,7 @@ export class CampaignController {
     return this.svc.transitionStatus(id, 'completed');
   }
 
+  @Roles('admin', 'platform_operator')
   @Post(':id/cancel')
   @ApiOperation({ summary: 'Cancel campaign' })
   cancel(@Param('id') id: string) {

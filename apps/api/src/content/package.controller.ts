@@ -117,6 +117,7 @@ export class PackageController {
     return { success: true, data: detail };
   }
 
+  @Roles('admin', 'platform_operator')
   @Post('packages/:packageId/detail/refresh')
   async refreshPackageDetail(@Param('packageId') packageId: string) {
     const detail = await this.packageDetailService.fetchPackageDetail(packageId, {
@@ -131,6 +132,7 @@ export class PackageController {
     return this.packageDetailService.getDetailedStats();
   }
 
+  @Roles('admin', 'platform_operator')
   @Post('packages/cache/clear')
   clearPackageCache(@Query('packageId') packageId?: string) {
     this.packageDetailService.clearCache(packageId);
@@ -146,6 +148,7 @@ export class PackageController {
     return this.autoLoginService.getCookieStatus();
   }
 
+  @Roles('admin')
   @Post('cookie/update')
   @ApiOperation({ summary: '更新 JeeSite Cookie' })
   updateCookie(@Body() body: UpdateCookieDto) {
@@ -157,11 +160,13 @@ export class PackageController {
     return this.contentService.getAICopyStatus();
   }
 
+  @Roles('admin')
   @Post('ai-copy/config')
   updateAICopyConfig(@Body() body: AICopyConfigDto) {
     return this.contentService.updateAICopyConfig(body);
   }
 
+  @Roles('admin', 'platform_operator')
   @Post('inventory/daily-crawl')
   crawlDailyInventory(@Query('date') date?: string) {
     return this.contentService.crawlDailyInventory(date);
@@ -212,6 +217,7 @@ export class PackageController {
     return this.contentService.getCommunityRecommendations(groupId, role);
   }
 
+  @Roles('admin', 'platform_operator')
   @Post('battle-cards/generate')
   generateBattleCard(@Body() body: BattleCardGenerateDto) {
     return this.contentService.generateBattleCard(body.packageId);

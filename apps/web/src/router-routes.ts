@@ -193,6 +193,7 @@ const operationsDataRoutes: RouteRecordRaw[] = [
     'settings',
     10,
     () => import('./views/SettingsView.vue'),
+    false,
     ['admin']
   ),
   route(

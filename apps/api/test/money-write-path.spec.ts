@@ -64,6 +64,20 @@ describe('package-sales-amount', () => {
     expect(String(execute.mock.calls[0][0])).toMatch(/PackageSalesDaily/);
     expect(String(execute.mock.calls[0][0])).toMatch(/salesAmount/);
   });
+
+  it('rejects inverted range', async () => {
+    const execute = vi.fn();
+    const query = vi.fn();
+    await expect(
+      recomputePackageSalesAmountRange(
+        { $executeRawUnsafe: execute, $queryRawUnsafe: query },
+        '2026-07-10',
+        '2026-07-01'
+      )
+    ).rejects.toThrow(/startDate/);
+    expect(execute).not.toHaveBeenCalled();
+    expect(query).not.toHaveBeenCalled();
+  });
 });
 
 describe('paidAmountCard', () => {
@@ -111,7 +125,7 @@ describe('paidAmountCard', () => {
       ],
       40
     );
-    expect(result).toEqual({ upserted: 1, skipped: 0, errors: 0 });
+    expect(result).toEqual({ upserted: 1, skipped: 0, errors: 0, errorSamples: [] });
     const sql = String(executeRaw.mock.calls[0][0]);
     expect(sql).toMatch(/"paidAmountCard"/);
     expect(sql).toMatch(/"paidAmountCard"=excluded\."paidAmountCard"/);
@@ -158,7 +172,7 @@ describe('paidAmountCard', () => {
       ] as any,
       40
     );
-    expect(result).toEqual({ upserted: 1, skipped: 2, errors: 0 });
+    expect(result).toEqual({ upserted: 1, skipped: 2, errors: 0, errorSamples: [] });
   });
 });
 

@@ -4,6 +4,7 @@ import { CommunityService } from './community.service';
 import { CreateCommunityDto } from './dto/create-community.dto';
 import { UpdateCommunityDto } from './dto/update-community.dto';
 import { CommunityQueryDto } from './dto/community-query.dto';
+import { Roles } from '../user-access/role.decorator';
 
 @ApiTags('communities')
 @Controller('api/communities')
@@ -19,6 +20,7 @@ export class CommunityController {
     return this.svc.list(query);
   }
 
+  @Roles('admin', 'platform_operator')
   @Post()
   @ApiOperation({ summary: 'Create community group' })
   create(@Body() body: CreateCommunityDto) {
@@ -31,18 +33,21 @@ export class CommunityController {
     return this.svc.getById(id);
   }
 
+  @Roles('admin', 'platform_operator')
   @Patch(':id')
   @ApiOperation({ summary: 'Update community group' })
   update(@Param('id') id: string, @Body() body: UpdateCommunityDto) {
     return this.svc.update(id, body);
   }
 
+  @Roles('admin', 'platform_operator')
   @Delete(':id')
   @ApiOperation({ summary: 'Delete community group' })
   delete(@Param('id') id: string) {
     return this.svc.delete(id);
   }
 
+  @Roles('admin', 'platform_operator')
   @Post('import')
   @ApiOperation({
     summary: 'Batch import community groups',
@@ -52,6 +57,7 @@ export class CommunityController {
     return this.svc.import(body);
   }
 
+  @Roles('admin', 'platform_operator')
   @Post(':id/disable')
   @ApiOperation({ summary: 'Soft-disable community group', description: 'Sets isActive=false' })
   disable(@Param('id') id: string) {

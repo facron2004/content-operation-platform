@@ -3,12 +3,14 @@ import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import type { AuditStatus, Channel } from '@content/shared';
 import { CopyService } from './copy.service';
 import { GenerateCopyDto, AuditCopyDto } from './content.dto';
+import { Roles } from '../user-access/role.decorator';
 
 @ApiTags('copy')
 @Controller('api/content')
 export class CopyController {
   constructor(@Inject(CopyService) private readonly copyService: CopyService) {}
 
+  @Roles('admin', 'platform_operator')
   @Post('generate')
   @ApiOperation({
     summary: '生成文稿',
@@ -41,6 +43,7 @@ export class CopyController {
     return this.copyService.listCopies({ auditStatus, channel }, safePage, safePageSize);
   }
 
+  @Roles('admin', 'platform_operator')
   @Post('copies/:contentId/audit')
   auditCopy(@Param('contentId') contentId: string, @Body() body: AuditCopyDto) {
     return this.copyService.auditCopy(contentId, body);

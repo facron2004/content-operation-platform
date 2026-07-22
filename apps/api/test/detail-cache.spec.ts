@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach } from 'vitest';
+import { describe, expect, it, beforeEach, vi } from 'vitest';
 import { DetailCache } from '../src/content/package-detail/detail-cache';
 import type { PackageDetail } from '../src/content/package-detail/types';
 
@@ -50,6 +50,56 @@ describe('DetailCache', () => {
     cache.set('pkg-1', makeDetail());
     cache.set('pkg-2', makeDetail());
     expect(cache.keys()).toEqual(['pkg-1', 'pkg-2']);
+  });
+
+  // --- getOrLoad in-flight dedupe (commit 88a12e5) ---
+  describe('getOrLoad in-flight dedupe', () => {
+    it('dedupes concurrent loads for the same packageId', async () => {
+      const detail = makeDetail({ packageId: 'pkg-1' });
+      const loader = vi.fn(
+        () =>
+          new Promise<PackageDetail>((resolve) => {
+            setTimeout(() => resolve(detail), 30);
+          })
+      );
+
+      const [a, b, c] = await Promise.all([
+        cache.getOrLoad('pkg-1', loader),
+        cache.getOrLoad('pkg-1', loader),
+        cache.getOrLoad('pkg-1', loader)
+      ]);
+
+      expect(loader).toHaveBeenCalledTimes(1);
+      expect(a).toBe(b);
+      expect(b).toBe(c);
+      expect(a).toEqual(detail);
+      // Successful load is written into the cache
+      expect(cache.get('pkg-1')).toEqual(detail);
+    });
+
+    it('clears inFlight after loader rejection so the next call can retry', async () => {
+      const fail = vi.fn(async () => {
+        throw new Error('fetch failed');
+      });
+      await expect(cache.getOrLoad('pkg-1', fail)).rejects.toThrow(/fetch failed/);
+      expect(fail).toHaveBeenCalledTimes(1);
+
+      const detail = makeDetail({ packageId: 'pkg-1' });
+      const succeed = vi.fn(async () => detail);
+      const result = await cache.getOrLoad('pkg-1', succeed);
+      expect(succeed).toHaveBeenCalledTimes(1);
+      expect(result).toEqual(detail);
+      expect(cache.get('pkg-1')).toEqual(detail);
+    });
+
+    it('returns cached value without invoking loader', async () => {
+      const detail = makeDetail({ packageId: 'pkg-1' });
+      cache.set('pkg-1', detail);
+      const loader = vi.fn(async () => makeDetail({ packageId: 'pkg-1', packageTitle: 'fresh' }));
+      const result = await cache.getOrLoad('pkg-1', loader);
+      expect(loader).not.toHaveBeenCalled();
+      expect(result).toEqual(detail);
+    });
   });
 
   // --- P2-9: rawHtml stripping ---

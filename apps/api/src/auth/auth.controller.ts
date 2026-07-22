@@ -20,7 +20,10 @@ export class AuthController {
   ) {
     return this.authService.login(body.username, body.password);
   }
-  @Public() @Post('local-session') localSession(@Req() req: Request) {
+  @Public()
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @Post('local-session')
+  localSession(@Req() req: Request) {
     assertLocalSessionAllowed(req, this.logger);
     return this.authService.localSession();
   }

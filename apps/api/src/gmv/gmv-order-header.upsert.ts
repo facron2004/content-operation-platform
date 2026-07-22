@@ -95,6 +95,16 @@ function makeRowParams(
   ];
 }
 
+const MAX_ERROR_SAMPLES = 5;
+
+export type BatchUpsertResult = {
+  upserted: number;
+  skipped: number;
+  errors: number;
+  /** Sample of failed orderIds (capped) for observability */
+  errorSamples: string[];
+};
+
 /**
  * Batch upsert multiple OrderHeader rows in a single SQL statement inside a transaction.
  * Max batch size: ~40 rows (SQLite default param limit 999 / ~24 cols per row).
@@ -103,13 +113,14 @@ export async function batchUpsertOrderHeaders(
   prisma: Pick<PrismaService, '$transaction' | '$executeRawUnsafe'>,
   orders: OrderLike[],
   batchSize = 40
-): Promise<{ upserted: number; skipped: number; errors: number }> {
+): Promise<BatchUpsertResult> {
   const valid = orders.filter((o) => o.orderId);
   const skipped = orders.length - valid.length;
   const nowIso = new Date().toISOString();
 
   let upserted = 0,
     errors = 0;
+  const errorSamples: string[] = [];
 
   for (let i = 0; i < valid.length; i += batchSize) {
     const batch = valid.slice(i, i + batchSize);
@@ -123,7 +134,7 @@ export async function batchUpsertOrderHeaders(
         await tx.$executeRawUnsafe(sql, ...rows.flat());
       });
       upserted += batch.length;
-    } catch (e: unknown) {
+    } catch {
       // Fall back to row-by-row for this batch on SQL error
       for (let j = 0; j < batch.length; j++) {
         try {
@@ -132,10 +143,12 @@ export async function batchUpsertOrderHeaders(
           upserted++;
         } catch {
           errors++;
+          const orderId = batch[j]?.orderId;
+          if (orderId && errorSamples.length < MAX_ERROR_SAMPLES) errorSamples.push(orderId);
         }
       }
     }
   }
 
-  return { upserted, skipped, errors };
+  return { upserted, skipped, errors, errorSamples };
 }

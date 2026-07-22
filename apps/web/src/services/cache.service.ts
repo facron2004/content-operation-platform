@@ -25,6 +25,8 @@ export function clearCache(pattern?: string) {
     return;
   }
   for (const key of cache.keys()) if (key.includes(pattern)) cache.delete(key);
+  // Also drop matching in-flight requests so a late resolve cannot repopulate stale data
+  for (const key of pendingRequests.keys()) if (key.includes(pattern)) pendingRequests.delete(key);
 }
 
 export function deleteCacheKey(url: string, params?: Record<string, unknown>) {
@@ -49,13 +51,17 @@ export async function cachedGet<T>(
   if (pending) return pending as Promise<T>;
   const request = fetcher()
     .then((data) => {
-      cache.set(cacheKey, { data, expiresAt: now + ttl });
-      evictIfNeeded(cache, MAX_CACHE_ENTRIES);
-      pendingRequests.delete(cacheKey);
+      // Only write back if this request is still the active pending entry
+      // (pattern clear may have dropped it to avoid stale repopulation)
+      if (pendingRequests.get(cacheKey) === request) {
+        cache.set(cacheKey, { data, expiresAt: now + ttl });
+        evictIfNeeded(cache, MAX_CACHE_ENTRIES);
+        pendingRequests.delete(cacheKey);
+      }
       return data;
     })
     .catch((error) => {
-      pendingRequests.delete(cacheKey);
+      if (pendingRequests.get(cacheKey) === request) pendingRequests.delete(cacheKey);
       throw error;
     });
   evictIfNeeded(pendingRequests, MAX_PENDING_ENTRIES);

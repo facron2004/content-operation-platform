@@ -4,6 +4,7 @@ import type { OperationAlert, OperationAlertType } from '@content/shared';
 import { AlertService } from './alert.service';
 import { ContentService } from './content.service';
 import { AlertResolveDto, AlertResolveBatchDto, AlertQueryDto } from './content.dto';
+import { Roles } from '../user-access/role.decorator';
 
 @ApiTags('alerts')
 @Controller('api/content')
@@ -29,11 +30,13 @@ export class AlertController {
     );
   }
 
+  @Roles('admin', 'platform_operator')
   @Post('alerts/:alertId/resolve')
   resolveAlert(@Param('alertId') alertId: string, @Body() body?: AlertResolveDto) {
     return this.alertService.resolveOperationAlert(alertId, body?.resolvedBy);
   }
 
+  @Roles('admin', 'platform_operator')
   @Post('alerts/resolve-batch')
   resolveAlerts(@Body() body: AlertResolveBatchDto) {
     return this.alertService.resolveOperationAlerts(body.alertIds ?? [], body.resolvedBy);
