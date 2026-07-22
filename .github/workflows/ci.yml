@@ -71,18 +71,20 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Create test database
-        run: npx prisma db push --schema prisma/schema.prisma
-        env:
-          DATABASE_URL: "file:${{ github.workspace }}/prisma/dev.db"
-
-      - name: Verify database
-        run: ls -la ${{ github.workspace }}/prisma/dev.db
-
-      - name: Run tests
+      - name: Run API tests
         run: npm run test -w @content/api
-        env:
-          DATABASE_URL: "file:${{ github.workspace }}/prisma/dev.db"
+
+      - name: Run web tests
+        run: npm run test -w @content/web
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report
+          path: |
+            apps/api/coverage/
+            apps/web/coverage/
 
   # ── 构建验证 ────────────────────────────────────
   build:
