@@ -123,29 +123,29 @@ model PromotionScore {
 }
 
 model GeneratedCopy {
-  contentId    String         @id
-  packageId    String
-  areaId       String
-  merchantId   String
-  channel      String
-  scenario     String
-  title        String
-  body         String
-  cta          String
-  copyVersion  String
-  strategyType String
-  riskLevel    String
-  riskTips     String
-  auditStatus  String
-  auditRemark  String?
-  createdBy    String
-  versionNo    Int            @default(1)
+  contentId       String            @id
+  packageId       String
+  areaId          String
+  merchantId      String
+  channel         String
+  scenario        String
+  title           String
+  body            String
+  cta             String
+  copyVersion     String
+  strategyType    String
+  riskLevel       String
+  riskTips        String
+  auditStatus     String
+  auditRemark     String?
+  createdBy       String
+  versionNo       Int               @default(1)
   sourceContentId String?
-  isReusable   Boolean        @default(false)
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
-  package      ContentPackage @relation(fields: [packageId], references: [packageId], onDelete: Cascade)
-  performances CopyPerformance[]
+  isReusable      Boolean           @default(false)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  package         ContentPackage    @relation(fields: [packageId], references: [packageId], onDelete: Cascade)
+  performances    CopyPerformance[]
 
   @@index([auditStatus])
   @@index([packageId])
@@ -187,7 +187,7 @@ model JeeSiteInventoryDailySnapshot {
   snapshotTime   DateTime
   packageName    String
   merchantName   String
-  areaName        String
+  areaName       String
   saleStatus     String?
   remainingStock Int
   soldOut        Boolean
@@ -210,31 +210,31 @@ model OperationAlertResolution {
 }
 
 model DailyMetrics {
-  date             String @id
-  totalGmv         Float  @default(0)
-  gmvOnline        Float  @default(0)
-  gmvWallet        Float  @default(0)
-  gmvBonus         Float  @default(0)
-  gmvCard          Float  @default(0)
-  totalRefund      Float  @default(0)
-  refundRate       Float  @default(0)
-  totalVerify      Float  @default(0)
-  verifyRate       Float  @default(0)
-  totalOrders      Int    @default(0)
-  paidOrderCount   Int    @default(0)
-  verifyCount      Int    @default(0)
-  refundCount      Int    @default(0)
-  activeMerchants  Int    @default(0)
-  activeMembers    Int    @default(0)
-  movingSkus       Int    @default(0)
-  stagnantSkus     Int    @default(0)
-  paidAmountBonus  Float  @default(0)
-  paidAmountWallet Float  @default(0)
+  date             String   @id
+  totalGmv         Float    @default(0)
+  gmvOnline        Float    @default(0)
+  gmvWallet        Float    @default(0)
+  gmvBonus         Float    @default(0)
+  gmvCard          Float    @default(0)
+  totalRefund      Float    @default(0)
+  refundRate       Float    @default(0)
+  totalVerify      Float    @default(0)
+  verifyRate       Float    @default(0)
+  totalOrders      Int      @default(0)
+  paidOrderCount   Int      @default(0)
+  verifyCount      Int      @default(0)
+  refundCount      Int      @default(0)
+  activeMerchants  Int      @default(0)
+  activeMembers    Int      @default(0)
+  movingSkus       Int      @default(0)
+  stagnantSkus     Int      @default(0)
+  paidAmountBonus  Float    @default(0)
+  paidAmountWallet Float    @default(0)
   updatedAt        DateTime @updatedAt
 }
 
 model OrderHeader {
-  orderId          String   @id
+  orderId          String    @id
   memberId         String?
   packageId        String?
   merchantId       String?
@@ -246,18 +246,18 @@ model OrderHeader {
   verifyTime       DateTime?
   refundTime       DateTime?
   orderAmount      Float
-  paidAmount       Float    @default(0)
-  paidAmountWallet Float    @default(0)
-  paidAmountBonus  Float    @default(0)
-  paidAmountCard   Float    @default(0)
-  refundAmount     Float    @default(0)
-  verifyAmount     Float    @default(0)
-  pointEarned      Int      @default(0)
-  pointUsed        Int      @default(0)
+  paidAmount       Float     @default(0)
+  paidAmountWallet Float     @default(0)
+  paidAmountBonus  Float     @default(0)
+  paidAmountCard   Float     @default(0)
+  refundAmount     Float     @default(0)
+  verifyAmount     Float     @default(0)
+  pointEarned      Int       @default(0)
+  pointUsed        Int       @default(0)
   status           String
   channel          String?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   @@index([memberId, orderTime])
   @@index([packageId])
@@ -270,19 +270,19 @@ model OrderHeader {
 }
 
 model Member {
-  memberId      String @id
+  memberId      String    @id
   nickname      String?
   phone         String?
   level         String?
-  pointsBalance Int    @default(0)
-  walletBalance Float  @default(0)
+  pointsBalance Int       @default(0)
+  walletBalance Float     @default(0)
   firstOrderAt  DateTime?
   lastOrderAt   DateTime?
-  totalGmv      Float  @default(0)
-  totalOrders   Int    @default(0)
+  totalGmv      Float     @default(0)
+  totalOrders   Int       @default(0)
   tags          String?
-  firstSeenAt   DateTime @default(now())
-  lastSeenAt    DateTime @updatedAt
+  firstSeenAt   DateTime  @default(now())
+  lastSeenAt    DateTime  @updatedAt
 
   pointLedgers MemberPointLedger[]
   orderPoints  OrderPoint[]
@@ -303,7 +303,7 @@ model MemberPointLedger {
   occurredAt DateTime
   createdAt  DateTime @default(now())
 
-  member     Member   @relation(fields: [memberId], references: [memberId], onDelete: Cascade, onUpdate: NoAction)
+  member Member @relation(fields: [memberId], references: [memberId], onDelete: Cascade, onUpdate: NoAction)
 
   @@index([memberId, occurredAt])
   @@index([reason])
@@ -311,26 +311,26 @@ model MemberPointLedger {
 }
 
 model OrderPoint {
-  id       String @id @default(cuid())
-  orderId  String
-  memberId String
-  delta    Int
-  type     String
+  id        String   @id @default(cuid())
+  orderId   String
+  memberId  String
+  delta     Int
+  type      String
   createdAt DateTime @default(now())
 
-  member   Member @relation(fields: [memberId], references: [memberId], onDelete: Cascade, onUpdate: NoAction)
+  member Member @relation(fields: [memberId], references: [memberId], onDelete: Cascade, onUpdate: NoAction)
 
   @@unique([orderId, type])
   @@index([memberId])
 }
 
 model RepurchaseCohort {
-  cohortMonth    String @id
-  totalMembers   Int    @default(0)
-  repeat30Count  Int    @default(0)
-  repeat60Count  Int    @default(0)
-  repeat90Count  Int    @default(0)
-  updatedAt      DateTime @updatedAt
+  cohortMonth   String   @id
+  totalMembers  Int      @default(0)
+  repeat30Count Int      @default(0)
+  repeat60Count Int      @default(0)
+  repeat90Count Int      @default(0)
+  updatedAt     DateTime @updatedAt
 }
 
 model MerchantDailyMetrics {
@@ -402,7 +402,8 @@ model AppUser {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  bindings     UserRoleBinding[]
+  bindings  UserRoleBinding[]
+  auditLogs OperationAuditLog[]
 
   @@index([username])
 }
@@ -415,8 +416,196 @@ model UserRoleBinding {
   scopeId   String?
   createdAt DateTime @default(now())
 
-  user      AppUser  @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  user AppUser @relation(fields: [userId], references: [userId], onDelete: Cascade)
 
   @@index([userId])
   @@index([role])
+}
+
+// ── Campaign / Distribution (V0.2.0) ─────────────────────────────────
+
+model MarketingCampaign {
+  campaignId   String   @id
+  name         String
+  description  String?
+  campaignType String   @default("daily")
+  status       String   @default("draft")
+  startDate    DateTime
+  endDate      DateTime
+  areaIds      String?
+  merchantIds  String?
+  budget       Float    @default(0)
+  targetGmv    Float    @default(0)
+  targetOrders Int      @default(0)
+  kpiJson      String?
+  ownerId      String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tasks DistributionTask[]
+
+  @@index([status])
+  @@index([startDate, endDate])
+}
+
+model CommunityGroup {
+  groupId             String    @id
+  groupName           String
+  groupType           String    @default("wechat_group")
+  areaId              String
+  areaName            String?
+  ownerId             String?
+  ownerName           String?
+  ownerPhone          String?
+  memberCount         Int       @default(0)
+  activityLevel       String    @default("medium")
+  tags                String?
+  preferredCategories String?
+  preferredTimeSlots  String?
+  isActive            Int       @default(1)
+  source              String?
+  lastActiveAt        DateTime?
+  note                String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  tasks DistributionTask[]
+
+  @@index([areaId])
+  @@index([isActive])
+}
+
+model DistributionTask {
+  taskId            String    @id
+  campaignId        String?
+  contentId         String?
+  groupId           String?
+  packageId         String
+  channel           String    @default("wechat_group")
+  title             String?
+  body              String?
+  cta               String?
+  trackingCode      String?
+  status            String    @default("draft")
+  priority          String    @default("normal")
+  plannedAt         DateTime?
+  publishedAt       DateTime?
+  completedAt       DateTime?
+  cancelReason      String?
+  assigneeId        String?
+  assigneeName      String?
+  riskLevel         String    @default("low")
+  fallbackPackageId String?
+  idempotencyKey    String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  campaign MarketingCampaign? @relation(fields: [campaignId], references: [campaignId], onDelete: SetNull)
+  group    CommunityGroup?    @relation(fields: [groupId], references: [groupId], onDelete: SetNull)
+
+  executions   DistributionExecution[]
+  visits       TrackingVisit[]
+  attributions OrderAttribution[]
+  performance  TaskPerformanceDaily[]
+
+  @@index([status])
+  @@index([plannedAt])
+  @@index([campaignId])
+  @@index([groupId])
+  @@index([assigneeId])
+}
+
+model DistributionExecution {
+  executionId  String   @id
+  taskId       String
+  action       String
+  operatorId   String?
+  operatorName String?
+  evidenceUrl  String?
+  failReason   String?
+  failCategory String?
+  note         String?
+  snapshotJson String?
+  createdAt    DateTime @default(now())
+
+  task DistributionTask @relation(fields: [taskId], references: [taskId], onDelete: Cascade)
+
+  @@index([taskId])
+}
+
+model TrackingVisit {
+  visitId      String   @id
+  taskId       String
+  trackingCode String
+  visitorId    String?
+  referrer     String?
+  ip           String?
+  userAgent    String?
+  visitTime    DateTime @default(now())
+
+  task DistributionTask @relation(fields: [taskId], references: [taskId], onDelete: Cascade)
+
+  @@index([taskId])
+  @@index([trackingCode])
+}
+
+model OrderAttribution {
+  attributionId String   @id
+  taskId        String
+  orderId       String
+  trackingCode  String?
+  method        String   @default("time_window")
+  confidence    String   @default("medium")
+  attributedAt  DateTime @default(now())
+  isManual      Int      @default(0)
+  manualReason  String?
+  correctedBy   String?
+  createdAt     DateTime @default(now())
+
+  task DistributionTask @relation(fields: [taskId], references: [taskId], onDelete: Cascade)
+
+  @@unique([taskId, orderId])
+  @@index([orderId])
+}
+
+model TaskPerformanceDaily {
+  id             String   @id @default(cuid())
+  taskId         String
+  date           String
+  visitCount     Int      @default(0)
+  uniqueVisitors Int      @default(0)
+  orderCount     Int      @default(0)
+  verifyCount    Int      @default(0)
+  refundCount    Int      @default(0)
+  gmv            Float    @default(0)
+  verifyAmount   Float    @default(0)
+  refundAmount   Float    @default(0)
+  conversionRate Float    @default(0)
+  computedAt     DateTime @default(now())
+
+  task DistributionTask @relation(fields: [taskId], references: [taskId], onDelete: Cascade)
+
+  @@unique([taskId, date])
+}
+
+model OperationAuditLog {
+  logId      String   @id
+  userId     String?
+  username   String?
+  action     String
+  objectType String
+  objectId   String?
+  before     String?
+  after      String?
+  result     String?
+  failReason String?
+  ip         String?
+  createdAt  DateTime @default(now())
+
+  user AppUser? @relation(fields: [userId], references: [userId], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+  @@index([objectType, objectId])
 }
