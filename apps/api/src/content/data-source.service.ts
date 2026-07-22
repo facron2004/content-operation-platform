@@ -14,6 +14,7 @@ import {
   RETRY_MAX_DELAY_MS
 } from '../domain/utils';
 import { mapJeesiteBargainListToDataset, normalizeJeesiteBaseUrl } from './jeesite-bargain-adapter';
+import { assertHostnameNotPrivateAsync } from './jeesite-url';
 import { AutoLoginService } from './auto-login.service';
 
 export interface ContentDataset {
@@ -266,7 +267,25 @@ export class DataSourceService {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      return await fetch(input, { ...init, signal: controller.signal });
+      const response = await fetch(input, {
+        ...init,
+        signal: controller.signal,
+        redirect: 'manual'
+      });
+      // SSRF guard: validate redirect targets
+      if (response.status >= 300 && response.status < 400) {
+        const location = response.headers.get('location');
+        if (location) {
+          const redirectUrl = new URL(location, input);
+          await assertHostnameNotPrivateAsync(redirectUrl.hostname);
+          return fetch(redirectUrl.toString(), {
+            ...init,
+            signal: controller.signal,
+            redirect: 'manual'
+          });
+        }
+      }
+      return response;
     } finally {
       clearTimeout(timer);
     }

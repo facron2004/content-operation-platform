@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { describeError } from '@content/shared';
 import { AutoLoginService } from '../auto-login.service';
 import { normalizeJeesiteBaseUrl } from '../jeesite-bargain-adapter';
-import { DEFAULT_USER_AGENT } from '../jeesite-url';
+import { assertHostnameNotPrivateAsync, DEFAULT_USER_AGENT } from '../jeesite-url';
 import { containsLoginPageMarker } from '../../common/login-markers';
 
 @Injectable()
@@ -42,6 +42,11 @@ export class HtmlFetcher {
       const url = path.startsWith('http')
         ? path
         : `${baseUrl}${path.startsWith('/') ? '' : '/'}${path}`;
+      // Ensure arbitrary http paths also go through SSRF guard
+      if (path.startsWith('http')) {
+        const parsed = new URL(url);
+        await assertHostnameNotPrivateAsync(parsed.hostname);
+      }
       return this.fetchUrl(url, autoRetryLogin);
     } catch (error: unknown) {
       this.logger.error(`Failed to fetch ${path}:`, describeError(error));
@@ -70,10 +75,22 @@ export class HtmlFetcher {
       try {
         response = await fetch(url, {
           headers,
+          redirect: 'manual',
           signal: controller.signal
         });
       } finally {
         clearTimeout(timeoutId);
+      }
+
+      // SSRF guard: validate any redirect target before following
+      if (response.status >= 300 && response.status < 400) {
+        const location = response.headers.get('location');
+        if (location) {
+          const redirectUrl = new URL(location, url);
+          await assertHostnameNotPrivateAsync(redirectUrl.hostname);
+          this.logger.log(`Following safe redirect to ${redirectUrl.toString()}`);
+          return this.fetchUrl(redirectUrl.toString(), autoRetryLogin);
+        }
       }
 
       const html = await response.text();

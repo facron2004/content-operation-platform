@@ -34,14 +34,20 @@ export class AuthService {
     return this.signAdminToken(ADMIN_USERNAME);
   }
 
-  refresh(payload: { sub: string; username: string; roles?: string[] }) {
+  async refresh(payload: { sub: string; username: string; roles?: string[] }) {
+    // Re-validate user from DB to catch deactivated / down-rolled users
+    const user = await this.userService.findById(payload.sub).catch(() => null);
+    if (!user || !user.isActive) {
+      throw new UnauthorizedException('用户已停用或不存在，刷新被拒绝');
+    }
+    const roles = user.roles?.map((r) => r.role) ?? [];
     return {
       access_token: this.jwtService.sign({
-        sub: payload.sub,
-        username: payload.username,
-        roles: payload.roles ?? []
+        sub: user.userId,
+        username: user.username,
+        roles
       }),
-      username: payload.username
+      username: user.username
     };
   }
 

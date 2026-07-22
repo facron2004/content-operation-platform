@@ -23,6 +23,7 @@ export function resolveExceptionPayload(
   }
   return { status, message, details };
 }
+
 export function buildExceptionBody(params: {
   status: number;
   message: string;
@@ -30,5 +31,10 @@ export function buildExceptionBody(params: {
   path?: string;
   isProduction: boolean;
 }) {
-  return buildExceptionBodyFields(params, nowISO());
+  // Mask internal error messages in production for 5xx responses
+  const safeMessage =
+    params.isProduction && params.status >= 500 && params.status < 600
+      ? 'Internal Server Error'
+      : params.message;
+  return buildExceptionBodyFields({ ...params, message: safeMessage }, nowISO());
 }

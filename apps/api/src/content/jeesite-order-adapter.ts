@@ -19,6 +19,7 @@ export interface MappedOrderRecord {
   paidAmount: number;
   paidAmountWallet: number;
   paidAmountBonus: number;
+  paidAmountCard: number;
   refundAmount: number;
   verifyAmount: number;
   pointEarned: number;
@@ -78,6 +79,7 @@ export function mapJeesiteOrderListToDataset(payload: unknown): {
       paidAmount: isRefunded ? 0 : paidAmount,
       paidAmountWallet: isRefunded ? 0 : paidAmountWallet,
       paidAmountBonus: isRefunded ? 0 : paidAmountBonus,
+      paidAmountCard: isRefunded ? 0 : Math.max(0, paidAmount - paidAmountWallet),
       refundAmount,
       verifyAmount: isVerified ? settledAmount : 0,
       pointEarned: 0,

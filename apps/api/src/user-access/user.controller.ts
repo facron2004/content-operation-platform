@@ -48,6 +48,7 @@ export class UserController {
   }
 
   @Get(':id')
+  @Roles('admin', 'platform_operator')
   @ApiOperation({ summary: 'User detail with role bindings' })
   getUser(@Param('id') id: string) {
     return this.userService.findById(id);

@@ -15,6 +15,7 @@ export type OrderLike = {
   paidAmount: number;
   paidAmountWallet: number;
   paidAmountBonus: number;
+  paidAmountCard: number;
   refundAmount?: number | null;
   verifyAmount?: number | null;
   pointEarned?: number | null;
@@ -65,6 +66,7 @@ export function toOrderHeaderSharedFields(o: OrderLike) {
     paidAmount: o.paidAmount,
     paidAmountWallet: o.paidAmountWallet,
     paidAmountBonus: o.paidAmountBonus,
+    paidAmountCard: o.paidAmountCard,
     refundAmount: o.refundAmount ?? 0,
     verifyAmount: o.verifyAmount ?? 0,
     status: o.status
@@ -75,7 +77,6 @@ export function toOrderHeaderCreate(o: OrderLike) {
   return {
     orderId: o.orderId!,
     ...toOrderHeaderSharedFields(o),
-    paidAmountCard: 0,
     pointEarned: o.pointEarned ?? 0,
     pointUsed: o.pointUsed ?? 0,
     channel: 'jeesite'

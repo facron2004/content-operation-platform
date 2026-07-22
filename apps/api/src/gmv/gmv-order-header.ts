@@ -14,7 +14,7 @@ import {
 import { EMPTY_ORDER_HEADER_GMV_ROW, type OrderHeaderGmvRow } from './gmv-order-header.types';
 
 export { type OrderLike } from './gmv-order-header.types';
-export { upsertOrderHeaderIso } from './gmv-order-header.upsert';
+export { upsertOrderHeaderIso, batchUpsertOrderHeaders } from './gmv-order-header.upsert';
 
 type PrismaLike = Pick<PrismaService, '$queryRawUnsafe'>;
 

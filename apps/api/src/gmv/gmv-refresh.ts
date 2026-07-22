@@ -5,7 +5,7 @@ import { AutoLoginService } from '../content/auto-login.service';
 import { recomputeDailyMetricsRange, recomputePackageSalesAmountRange } from '../money';
 import { MerchantSalesService } from '../merchant-sales/merchant-sales.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { type OrderLike, upsertOrderHeaderIso } from './gmv-order-header';
+import { type OrderLike, batchUpsertOrderHeaders } from './gmv-order-header';
 
 // --- gmv-refresh-order-page.ts ---
 export async function fetchOrderPage(url: URL, cookie: string): Promise<unknown | null> {
@@ -109,25 +109,7 @@ export async function upsertOrderHeaders(
   orders: OrderLike[],
   logger: Logger
 ): Promise<{ upserted: number; skipped: number; errors: number }> {
-  let upserted = 0,
-    skipped = 0,
-    errors = 0;
-  for (const o of orders) {
-    if (!o.orderId) {
-      skipped++;
-      continue;
-    }
-    try {
-      // Raw ISO upsert — Prisma DateTime lands as integer epoch and breaks
-      // ISO-string paidTime day-range queries used by GMV KPI/DailyMetrics.
-      await upsertOrderHeaderIso(prisma, o);
-      upserted++;
-    } catch (e) {
-      errors++;
-      logger.warn(`upsert ${o.orderId} 失败: ${(e as Error).message}`);
-    }
-  }
-  return { upserted, skipped, errors };
+  return batchUpsertOrderHeaders(prisma, orders, 40);
 }
 
 // --- gmv-refresh-page.ts ---
@@ -219,6 +201,7 @@ export interface GmvRefreshResult {
   skipped: number;
   errors: number;
   pagesFetched: number;
+  recomputeWarnings: string[];
 }
 export async function refreshGmvFromJeesite(params: {
   prisma: PrismaService;
@@ -231,11 +214,14 @@ export async function refreshGmvFromJeesite(params: {
   const { prisma, autoLogin, getMerchantSalesService, invalidateCache, startDate, endDate } =
     params;
   const pull = await pullJeesiteOrders({ prisma, autoLogin, startDate, endDate, logger });
+  const recomputeWarnings: string[] = [];
 
   try {
     await recomputeDailyMetricsRange(prisma, startDate, endDate);
   } catch (e) {
-    logger.warn(`DailyMetrics recompute failed: ${(e as Error).message}`);
+    const msg = `DailyMetrics recompute failed: ${(e as Error).message}`;
+    logger.warn(msg);
+    recomputeWarnings.push(msg);
   }
   try {
     const psd = await recomputePackageSalesAmountRange(prisma, startDate, endDate);
@@ -243,7 +229,9 @@ export async function refreshGmvFromJeesite(params: {
       `PSD salesAmount recompute [${startDate}→${endDate}] rows=${psd.rowsUpserted} coverage=${(psd.coverageRatio * 100).toFixed(1)}%`
     );
   } catch (e) {
-    logger.warn(`PackageSalesDaily salesAmount recompute failed: ${(e as Error).message}`);
+    const msg = `PackageSalesDaily salesAmount recompute failed: ${(e as Error).message}`;
+    logger.warn(msg);
+    recomputeWarnings.push(msg);
   }
 
   invalidateCache();
@@ -251,10 +239,12 @@ export async function refreshGmvFromJeesite(params: {
     const ms = await getMerchantSalesService();
     if (ms) await ms.recomputeRange(startDate, endDate);
   } catch (e) {
-    logger.warn(`merchant-sales recomputeRange failed: ${(e as Error).message}`);
+    const msg = `merchant-sales recomputeRange failed: ${(e as Error).message}`;
+    logger.warn(msg);
+    recomputeWarnings.push(msg);
   }
   logger.log(
-    `JeSite refresh [${startDate} → ${endDate}] pages=${pull.pagesFetched} fetched=${pull.fetched} upserted=${pull.upserted} errors=${pull.errors}`
+    `JeSite refresh [${startDate} → ${endDate}] pages=${pull.pagesFetched} fetched=${pull.fetched} upserted=${pull.upserted} errors=${pull.errors}${recomputeWarnings.length ? ` recomputeWarnings=${recomputeWarnings.join('; ')}` : ''}`
   );
-  return { startDate, endDate, ...pull };
+  return { startDate, endDate, ...pull, recomputeWarnings };
 }

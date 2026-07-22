@@ -14,6 +14,7 @@ import {
   RecommendationsQueryDto
 } from './content.dto';
 import { Public } from '../auth';
+import { Roles } from '../user-access/role.decorator';
 import { nowISO } from '../common/format';
 import { PrismaService } from '../prisma/prisma.service';
 import { geocodeMerchantsFromPartnerShop } from '../merchant/merchant-geocoder';
@@ -166,35 +167,35 @@ export class PackageController {
     return this.contentService.crawlDailyInventory(date);
   }
 
-  @Public()
+  @Roles('admin')
   @Post('sync-merchants')
   @ApiOperation({ summary: '从 JeeSite 拉取套餐数据并同步商家地址到 Merchant 表' })
   syncMerchants() {
     return this.contentService.syncMerchantsFromJeeSite();
   }
 
-  @Public()
+  @Roles('admin')
   @Post('geocode-merchants')
   @ApiOperation({ summary: '从 JeeSite 合作商店铺表抓取 longitude/latitude 回填 Merchant 表' })
   geocodeMerchants() {
     return geocodeMerchantsFromPartnerShop(this.prisma, this.configService, this.autoLoginService);
   }
 
-  @Public()
+  @Roles('admin')
   @Post('geocode-from-partner-shop')
   @ApiOperation({ summary: '从 JeeSite 合作商店铺表抓取 longitude/latitude（别名）' })
   geocodeFromPartnerShop() {
     return geocodeMerchantsFromPartnerShop(this.prisma, this.configService, this.autoLoginService);
   }
 
-  @Public()
+  @Roles('admin')
   @Get('debug-raw/:packageId')
   @ApiOperation({ summary: '调试：返回套餐表单页的完整 HTML，检查坐标字段' })
   async debugRaw(@Param('packageId') packageId: string) {
     return this.packageDetailService.debugRawHtml(packageId);
   }
 
-  @Public()
+  @Roles('admin')
   @Get('debug-partner-shop/:merchantId')
   @ApiOperation({ summary: '调试：抓取合作商店铺表单页，检查坐标字段' })
   async debugPartnerShop(@Param('merchantId') merchantId: string) {
