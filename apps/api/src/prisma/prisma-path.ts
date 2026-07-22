@@ -8,21 +8,21 @@ export { findRepoRootDbPath } from './prisma-db-path';
 export function getPrismaErrorCode(error: unknown): string | undefined {
   return error instanceof Prisma.PrismaClientKnownRequestError ? error.code : undefined;
 }
-/** Resolve the dev.db path, preferring DATABASE_URL or an existing file */
+/** Resolve the dev.db path. If DATABASE_URL is set, use it directly (even if file doesn't exist yet). */
 export function resolveDevDbPath() {
-  // Priority 1: DATABASE_URL env var (absolute file:// path)
   const dbUrlPath = resolveDbUrlPath();
-  if (dbUrlPath && existsSync(dbUrlPath)) {
+  if (dbUrlPath) {
     return {
       exeDbPath: '',
       cwdDbPath: '',
       repoRootDbPath: null,
       dbUrlPath,
       finalDbPath: dbUrlPath,
-      exists: true
+      exists: existsSync(dbUrlPath)
     };
   }
 
+  // Fallback: scan filesystem (production / local dev without DATABASE_URL)
   const exeDir = dirname(process.execPath),
     exeDbPath = join(exeDir, 'prisma', 'dev.db'),
     cwdDbPath = join(process.cwd(), 'prisma', 'dev.db'),
@@ -49,9 +49,7 @@ function resolveDbUrlPath(): string | null {
   if (/^\/[a-zA-Z]:\//.test(filePath)) filePath = filePath.slice(1);
   if (!filePath) return null;
   // Resolve relative paths to absolute for libSQL compatibility (especially on Windows)
-  const resolved = resolve(filePath);
-  if (!existsSync(resolved)) return null;
-  return resolved;
+  return resolve(filePath);
 }
 export const prismaJsonReplacer = (_key: string, value: unknown): unknown =>
   deepBigIntToNumber(value);
