@@ -6,78 +6,14 @@ import { UpdateTaskDto } from './dto/update-task.dto';
 import { TaskQueryDto } from './dto/task-query.dto';
 import { PublishTaskDto } from './dto/publish-task.dto';
 import { FailTaskDto } from './dto/fail-task.dto';
-
-interface TaskRow {
-  taskId: string;
-  campaignId: string | null;
-  contentId: string | null;
-  groupId: string | null;
-  packageId: string;
-  channel: string;
-  title: string | null;
-  body: string | null;
-  cta: string | null;
-  trackingCode: string | null;
-  status: string;
-  priority: string;
-  plannedAt: string | null;
-  publishedAt: string | null;
-  completedAt: string | null;
-  cancelReason: string | null;
-  assigneeId: string | null;
-  assigneeName: string | null;
-  riskLevel: string | null;
-  fallbackPackageId: string | null;
-  idempotencyKey: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
-function parseTask(row: TaskRow) {
-  return {
-    ...row,
-    campaignId: row.campaignId ?? undefined,
-    contentId: row.contentId ?? undefined,
-    groupId: row.groupId ?? undefined,
-    title: row.title ?? undefined,
-    body: row.body ?? undefined,
-    cta: row.cta ?? undefined,
-    trackingCode: row.trackingCode ?? undefined,
-    plannedAt: row.plannedAt ?? undefined,
-    publishedAt: row.publishedAt ?? undefined,
-    completedAt: row.completedAt ?? undefined,
-    cancelReason: row.cancelReason ?? undefined,
-    assigneeId: row.assigneeId ?? undefined,
-    assigneeName: row.assigneeName ?? undefined,
-    riskLevel: row.riskLevel ?? undefined,
-    fallbackPackageId: row.fallbackPackageId ?? undefined,
-    idempotencyKey: row.idempotencyKey ?? undefined
-  };
-}
-
-/**
- * Allowed status transitions for DistributionTask.
- * draft -> waiting_audit (when bound to unapproved copy)
- * draft -> scheduled (when bound to approved copy with plannedAt)
- * waiting_audit -> scheduled (when copy approved)
- * waiting_audit -> blocked (when copy risk/rejected)
- * scheduled -> published (confirm publish)
- * scheduled -> overdue (>30min past plannedAt, manual mark)
- * scheduled -> failed (report failure)
- * published -> completed (attribution window ended, manual mark)
- * Any -> cancelled (with reason)
- */
-const VALID_TRANSITIONS: Record<string, string[]> = {
-  draft: ['waiting_audit', 'scheduled', 'cancelled'],
-  waiting_audit: ['scheduled', 'blocked', 'cancelled'],
-  scheduled: ['published', 'overdue', 'failed', 'cancelled'],
-  published: ['completed', 'cancelled'],
-  completed: [],
-  overdue: ['cancelled'],
-  failed: [],
-  cancelled: [],
-  blocked: ['scheduled', 'cancelled']
-};
+import {
+  findTaskRow,
+  getTaskKpi,
+  getTaskPerformance,
+  listTasks,
+  parseTask
+} from './distribution-task-query';
+import { canTransition } from './distribution-task-transitions';
 
 @Injectable()
 export class DistributionTaskService {
@@ -90,121 +26,19 @@ export class DistributionTaskService {
   ) {}
 
   async list(query: TaskQueryDto) {
-    const page = query.page ?? 1;
-    const pageSize = query.pageSize ?? 20;
-    const conditions: string[] = [];
-    const params: unknown[] = [];
-
-    if (query.status) {
-      conditions.push('t."status" = ?');
-      params.push(query.status);
-    }
-    if (query.campaignId) {
-      conditions.push('t."campaignId" = ?');
-      params.push(query.campaignId);
-    }
-    if (query.groupId) {
-      conditions.push('t."groupId" = ?');
-      params.push(query.groupId);
-    }
-    if (query.assigneeId) {
-      conditions.push('t."assigneeId" = ?');
-      params.push(query.assigneeId);
-    }
-    if (query.dateFrom) {
-      conditions.push('t."createdAt" >= ?');
-      params.push(query.dateFrom);
-    }
-    if (query.dateTo) {
-      conditions.push('t."createdAt" <= ?');
-      params.push(query.dateTo);
-    }
-    if (query.overdue !== undefined && query.overdue === 1) {
-      conditions.push(
-        't."status" = \'scheduled\' AND t."plannedAt" IS NOT NULL AND t."plannedAt" <= ?'
-      );
-      params.push(new Date().toISOString());
-    }
-    if (query.hasAttribution !== undefined && query.hasAttribution === 1) {
-      conditions.push(
-        `EXISTS (SELECT 1 FROM "OrderAttribution" oa WHERE oa."taskId" = t."taskId")`
-      );
-    }
-
-    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-
-    const countResult = await this.prisma.$queryRawUnsafe<[{ cnt: number }]>(
-      `SELECT COUNT(*) as cnt FROM "DistributionTask" t ${where}`,
-      ...params
-    );
-    const total = Number(countResult[0].cnt);
-
-    params.push(pageSize, (page - 1) * pageSize);
-    const rows = await this.prisma.$queryRawUnsafe<TaskRow[]>(
-      `SELECT t.* FROM "DistributionTask" t ${where} ORDER BY t."createdAt" DESC LIMIT ? OFFSET ?`,
-      ...params
-    );
-
-    return {
-      items: rows.map(parseTask),
-      total,
-      page,
-      pageSize
-    };
+    return listTasks(this.prisma, query);
   }
 
   async getKpi() {
-    const now = new Date().toISOString();
-    const today = now.substring(0, 10);
-
-    const results = await this.prisma.$queryRawUnsafe<
-      [
-        {
-          todayPending: number;
-          inProgress: number;
-          completed: number;
-          overdue: number;
-          failed: number;
-        }
-      ]
-    >(
-      `SELECT
-         COALESCE(SUM(CASE WHEN "status" = 'scheduled' THEN 1 ELSE 0 END), 0) as todayPending,
-         COALESCE(SUM(CASE WHEN "status" IN ('published') THEN 1 ELSE 0 END), 0) as inProgress,
-         COALESCE(SUM(CASE WHEN "status" = 'completed' THEN 1 ELSE 0 END), 0) as completed,
-         COALESCE(SUM(CASE WHEN "status" = 'overdue' THEN 1 ELSE 0 END), 0) as overdue,
-         COALESCE(SUM(CASE WHEN "status" = 'failed' THEN 1 ELSE 0 END), 0) as failed
-       FROM "DistributionTask"
-       WHERE DATE("createdAt") = ?`,
-      today
-    );
-
-    const gmvResult = await this.prisma.$queryRawUnsafe<[{ todayTaskGmv: number }]>(
-      `SELECT COALESCE(SUM("gmv"), 0) as todayTaskGmv
-       FROM "TaskPerformanceDaily"
-       WHERE "date" = ?`,
-      today
-    );
-
-    return {
-      todayPending: Number(results[0].todayPending),
-      inProgress: Number(results[0].inProgress),
-      completed: Number(results[0].completed),
-      overdue: Number(results[0].overdue),
-      failed: Number(results[0].failed),
-      todayTaskGmv: Number(gmvResult[0].todayTaskGmv)
-    };
+    return getTaskKpi(this.prisma);
   }
 
   async getById(id: string) {
-    const rows = await this.prisma.$queryRawUnsafe<TaskRow[]>(
-      `SELECT * FROM "DistributionTask" WHERE "taskId" = ?`,
-      id
-    );
-    if (rows.length === 0) throw new NotFoundException('Distribution task not found');
+    const row = await findTaskRow(this.prisma, id);
+    if (!row) throw new NotFoundException('Distribution task not found');
 
     const executions = await this.executionService.findByTaskId(id);
-    const task = parseTask(rows[0]);
+    const task = parseTask(row);
     return { ...task, executions };
   }
 
@@ -386,8 +220,7 @@ export class DistributionTaskService {
 
   async cancel(id: string, reason?: string) {
     const task = await this.getById(id);
-    const allowed = VALID_TRANSITIONS[task.status] ?? [];
-    if (!allowed.includes('cancelled')) {
+    if (!canTransition(task.status, 'cancelled')) {
       throw new BadRequestException(`Cannot cancel task with status '${task.status}'.`);
     }
 
@@ -423,46 +256,7 @@ export class DistributionTaskService {
 
   async getPerformance(id: string) {
     await this.getById(id);
-
-    const perfRows = await this.prisma.$queryRawUnsafe<
-      [
-        {
-          visitCount: number;
-          orderCount: number;
-          gmv: number;
-          verifyCount: number;
-          refundCount: number;
-          conversionRate: number;
-        }
-      ]
-    >(
-      `SELECT
-         COALESCE(SUM("visitCount"), 0) as visitCount,
-         COALESCE(SUM("orderCount"), 0) as orderCount,
-         COALESCE(SUM("gmv"), 0) as gmv,
-         COALESCE(SUM("verifyCount"), 0) as verifyCount,
-         COALESCE(SUM("refundCount"), 0) as refundCount,
-         COALESCE(AVG("conversionRate"), 0) as conversionRate
-       FROM "TaskPerformanceDaily"
-       WHERE "taskId" = ?`,
-      id
-    );
-
-    const r = perfRows[0];
-    const visits = Number(r.visitCount);
-    const orders = Number(r.orderCount);
-    const gmv = Number(r.gmv);
-    const verifyCount = Number(r.verifyCount);
-    const refundCount = Number(r.refundCount);
-
-    return {
-      visits,
-      orders,
-      gmv,
-      verifyRate: orders > 0 ? verifyCount / orders : 0,
-      refundRate: orders > 0 ? refundCount / orders : 0,
-      conversionRate: Number(r.conversionRate)
-    };
+    return getTaskPerformance(this.prisma, id);
   }
 
   private generateId(): string {

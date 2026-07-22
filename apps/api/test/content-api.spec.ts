@@ -1,7 +1,9 @@
 import { Test } from '@nestjs/testing';
 import type { ContentPackage, SalesSnapshot } from '@content/shared';
 import { describe, expect, it, vi } from 'vitest';
+import request from 'supertest';
 import { AppModule } from '../src/app.module';
+import { configureAppMiddleware } from '../src/bootstrap-middleware';
 import { DataSourceService } from '../src/content/data-source.service';
 import { authedAgent } from './helpers/auth';
 
@@ -113,5 +115,60 @@ describe('content API', () => {
     ).toBe(true);
 
     await app.close();
+  });
+
+  it('returns 401 for unauthenticated recommendations', async () => {
+    const moduleRef = await Test.createTestingModule({
+      imports: [AppModule]
+    })
+      .overrideProvider(DataSourceService)
+      .useValue({
+        loadDataset: vi
+          .fn()
+          .mockResolvedValue({ packages: [livePackage], snapshots: [liveSnapshot] })
+      })
+      .compile();
+
+    const app = moduleRef.createNestApplication();
+    configureAppMiddleware(app);
+    await app.init();
+
+    try {
+      await request(app.getHttpServer())
+        .get('/api/content/packages/recommend?role=platform_operator')
+        .expect(401);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('rejects invalid generate payload with 400', async () => {
+    const moduleRef = await Test.createTestingModule({
+      imports: [AppModule]
+    })
+      .overrideProvider(DataSourceService)
+      .useValue({
+        loadDataset: vi
+          .fn()
+          .mockResolvedValue({ packages: [livePackage], snapshots: [liveSnapshot] })
+      })
+      .compile();
+
+    const app = moduleRef.createNestApplication();
+    configureAppMiddleware(app);
+    await app.init();
+
+    try {
+      const api = await authedAgent(app);
+      await api
+        .post('/api/content/generate')
+        .send({
+          // missing packageId / channel
+          copyCount: -1
+        })
+        .expect(400);
+    } finally {
+      await app.close();
+    }
   });
 });

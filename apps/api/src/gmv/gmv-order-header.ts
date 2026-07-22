@@ -1,10 +1,9 @@
-/** Consolidated GMV module — queries, compute, trend, distribution. */
+/** Consolidated GMV module — compute, trend, distribution (queries in gmv-order-header.query). */
 import { beijingDateKey, beijingDayRangeUtc, shiftDateKey } from '@content/shared';
-import { gmvFromParts, rateAgainstGmv, SQL_GMV_OH } from '../common';
+import { gmvFromParts, rateAgainstGmv } from '../common';
 import { PrismaService } from '../prisma/prisma.service';
 import { mapDistributionRows } from './gmv-metrics';
 import {
-  emptyHourlyPoints,
   emptyTrendPoint,
   type GmvDistributionRow,
   type GmvHourlyPoint,
@@ -12,78 +11,27 @@ import {
   type GmvTrendPoint
 } from './gmv.dto';
 import { EMPTY_ORDER_HEADER_GMV_ROW, type OrderHeaderGmvRow } from './gmv-order-header.types';
+import {
+  loadOrderHeaderAreaDistribution,
+  loadOrderHeaderCategoryDistribution,
+  queryOrderHeaderGmv,
+  queryOrderHeaderHourly,
+  queryOrderHeaderRefund,
+  queryOrderHeaderTrendAgg,
+  type TrendAggRow
+} from './gmv-order-header.query';
 
 export { type OrderLike } from './gmv-order-header.types';
 export { upsertOrderHeaderIso, batchUpsertOrderHeaders } from './gmv-order-header.upsert';
+export {
+  queryOrderHeaderGmv,
+  queryOrderHeaderRefund,
+  queryOrderHeaderHourly,
+  loadOrderHeaderAreaDistribution,
+  loadOrderHeaderCategoryDistribution
+} from './gmv-order-header.query';
 
 type PrismaLike = Pick<PrismaService, '$queryRawUnsafe'>;
-
-// ── GMV queries ──────────────────────────────────────
-
-export async function queryOrderHeaderGmv(
-  prisma: PrismaLike,
-  startIso: string,
-  endIso: string
-): Promise<OrderHeaderGmvRow[]> {
-  return (await prisma.$queryRawUnsafe(
-    `SELECT COALESCE(SUM("paidAmount"), 0) AS "paidAmount",
-            COALESCE(SUM("paidAmountWallet"), 0) AS "paidAmountWallet",
-            COALESCE(SUM("paidAmountBonus"), 0) AS "paidAmountBonus",
-            COALESCE(SUM("paidAmountCard"), 0) AS "paidAmountCard",
-            COALESCE(SUM("verifyAmount"), 0) AS "verifyAmount",
-            COUNT(*) AS "orderCount"
-     FROM "OrderHeader"
-     WHERE "paidTime" >= ? AND "paidTime" < ?`,
-    startIso,
-    endIso
-  )) as OrderHeaderGmvRow[];
-}
-
-export async function queryOrderHeaderRefund(
-  prisma: PrismaLike,
-  startIso: string,
-  endIso: string
-): Promise<Array<{ totalRefund: number }>> {
-  return (await prisma.$queryRawUnsafe(
-    `SELECT COALESCE(SUM("refundAmount"), 0) AS "totalRefund"
-     FROM "OrderHeader"
-     WHERE "refundTime" >= ? AND "refundTime" < ? AND "refundAmount" > 0`,
-    startIso,
-    endIso
-  )) as Array<{ totalRefund: number }>;
-}
-
-export async function queryOrderHeaderHourly(
-  prisma: PrismaLike,
-  startIso: string,
-  endIso: string
-): Promise<GmvHourlyPoint[]> {
-  const rows = (await prisma.$queryRawUnsafe(
-    `SELECT CAST(strftime('%H', datetime("paidTime", '+8 hours')) AS INTEGER) AS "hour",
-            COALESCE(SUM(${SQL_GMV_OH}), 0) AS "totalGmv",
-            COUNT(*) AS "paidOrderCount"
-     FROM "OrderHeader"
-     WHERE "paidTime" >= ? AND "paidTime" < ?
-     GROUP BY strftime('%H', datetime("paidTime", '+8 hours'))
-     ORDER BY "hour" ASC`,
-    startIso,
-    endIso
-  )) as Array<{ hour: number; totalGmv: number; paidOrderCount: number }>;
-
-  const base = emptyHourlyPoints();
-  for (const row of rows) {
-    const hour = Number(row.hour);
-    if (hour >= 0 && hour <= 23) {
-      base[hour] = {
-        hour,
-        label: `${String(hour).padStart(2, '0')}:00`,
-        totalGmv: Number(row.totalGmv),
-        paidOrderCount: Number(row.paidOrderCount)
-      };
-    }
-  }
-  return base;
-}
 
 // ── Today payload ────────────────────────────────────
 
@@ -214,16 +162,6 @@ function countInclusiveDays(startDate: string, endDate: string): number {
   return Math.round((end - start) / 86400000) + 1;
 }
 
-type TrendAggRow = {
-  date: string;
-  paidAmount: number;
-  paidAmountWallet: number;
-  paidAmountBonus: number;
-  refundAmount: number;
-  verifyAmount: number;
-  orderCount: number;
-};
-
 export function mapOrderHeaderTrendRows(
   rows: TrendAggRow[],
   startDate: string,
@@ -261,117 +199,11 @@ export async function computeTrendFromOrderHeader(
 ): Promise<GmvTrendPoint[]> {
   const { start: dayStart } = beijingDayRangeUtc(startDate),
     { end: dayEnd } = beijingDayRangeUtc(endDate);
-  const rows = (await prisma.$queryRawUnsafe(
-    `SELECT date(datetime("paidTime", '+8 hours')) AS "date", COALESCE(SUM("paidAmount"), 0) AS "paidAmount", COALESCE(SUM("paidAmountWallet"), 0) AS "paidAmountWallet", COALESCE(SUM("paidAmountBonus"), 0) AS "paidAmountBonus", COALESCE(SUM("refundAmount"), 0) AS "refundAmount", COALESCE(SUM("verifyAmount"), 0) AS "verifyAmount", COUNT(*) AS "orderCount" FROM "OrderHeader" WHERE "paidTime" >= ? AND "paidTime" < ? AND "paidTime" IS NOT NULL GROUP BY date(datetime("paidTime", '+8 hours')) ORDER BY "date" ASC`,
-    dayStart.toISOString(),
-    dayEnd.toISOString()
-  )) as TrendAggRow[];
+  const rows = await queryOrderHeaderTrendAgg(prisma, dayStart.toISOString(), dayEnd.toISOString());
   return mapOrderHeaderTrendRows(rows, startDate, endDate);
 }
 
 // ── Distribution ─────────────────────────────────────
-
-type DistSqlRow = {
-  key: string;
-  gmv: number;
-  gmvOnline: number;
-  gmvWallet: number;
-  gmvBonus: number;
-};
-
-export async function loadOrderHeaderAreaDistribution(
-  prisma: PrismaLike,
-  startIso: string,
-  endIso: string,
-  limit: number
-) {
-  const totalRow = (await prisma.$queryRawUnsafe(
-    `SELECT COALESCE(SUM(${SQL_GMV_OH}), 0) AS "totalGmv"
-     FROM "OrderHeader"
-     WHERE "paidTime" >= ? AND "paidTime" < ?`,
-    startIso,
-    endIso
-  )) as Array<{ totalGmv: number }>;
-  const totalGmv = Number(totalRow[0]?.totalGmv ?? 0);
-
-  const rows = (await prisma.$queryRawUnsafe(
-    `SELECT COALESCE(
-              NULLIF(oh."areaName", ''),
-              NULLIF(cp."areaName", ''),
-              '未分区'
-            ) AS "key",
-            COALESCE(SUM(oh."paidAmount" + oh."paidAmountWallet"), 0) AS "gmv",
-            COALESCE(SUM(oh."paidAmount"), 0) AS "gmvOnline",
-            COALESCE(SUM(oh."paidAmountWallet"), 0) AS "gmvWallet",
-            COALESCE(SUM(oh."paidAmountBonus"), 0) AS "gmvBonus"
-     FROM "OrderHeader" oh
-     LEFT JOIN "ContentPackage" cp ON cp."packageId" = oh."packageId"
-     WHERE oh."paidTime" >= ? AND oh."paidTime" < ?
-     GROUP BY COALESCE(NULLIF(oh."areaName", ''), NULLIF(cp."areaName", ''), '未分区')
-     ORDER BY "gmv" DESC
-     LIMIT ?`,
-    startIso,
-    endIso,
-    limit
-  )) as DistSqlRow[];
-
-  const meaningful = rows.filter((r) => r.key && r.key !== '未分区');
-  if (meaningful.length === 0) {
-    const merchantRows = (await prisma.$queryRawUnsafe(
-      `SELECT COALESCE(NULLIF(oh."merchantName", ''), '未知商家') AS "key",
-              COALESCE(SUM(oh."paidAmount" + oh."paidAmountWallet"), 0) AS "gmv",
-              COALESCE(SUM(oh."paidAmount"), 0) AS "gmvOnline",
-              COALESCE(SUM(oh."paidAmountWallet"), 0) AS "gmvWallet",
-              COALESCE(SUM(oh."paidAmountBonus"), 0) AS "gmvBonus"
-       FROM "OrderHeader" oh
-       WHERE oh."paidTime" >= ? AND oh."paidTime" < ?
-       GROUP BY COALESCE(NULLIF(oh."merchantName", ''), '未知商家')
-       ORDER BY "gmv" DESC
-       LIMIT ?`,
-      startIso,
-      endIso,
-      limit
-    )) as DistSqlRow[];
-    return { totalGmv, rows: merchantRows, dimLabel: 'merchant' as const };
-  }
-
-  return { totalGmv, rows, dimLabel: 'area' as const };
-}
-
-export async function loadOrderHeaderCategoryDistribution(
-  prisma: PrismaLike,
-  startIso: string,
-  endIso: string,
-  limit: number
-) {
-  const totalRow = (await prisma.$queryRawUnsafe(
-    `SELECT COALESCE(SUM(${SQL_GMV_OH}), 0) AS "totalGmv"
-     FROM "OrderHeader"
-     WHERE "paidTime" >= ? AND "paidTime" < ?`,
-    startIso,
-    endIso
-  )) as Array<{ totalGmv: number }>;
-  const totalGmv = Number(totalRow[0]?.totalGmv ?? 0);
-
-  const rows = (await prisma.$queryRawUnsafe(
-    `SELECT COALESCE(NULLIF(cp."category", ''), '未分类') AS "key",
-            COALESCE(SUM(${SQL_GMV_OH}), 0) AS "gmv",
-            COALESCE(SUM(oh."paidAmount"), 0) AS "gmvOnline",
-            COALESCE(SUM(oh."paidAmountWallet"), 0) AS "gmvWallet",
-            COALESCE(SUM(oh."paidAmountBonus"), 0) AS "gmvBonus"
-     FROM "OrderHeader" oh
-     LEFT JOIN "ContentPackage" cp ON cp."packageId" = oh."packageId"
-     WHERE oh."paidTime" >= ? AND oh."paidTime" < ?
-     GROUP BY COALESCE(NULLIF(cp."category", ''), '未分类')
-     ORDER BY "gmv" DESC
-     LIMIT ?`,
-    startIso,
-    endIso,
-    limit
-  )) as DistSqlRow[];
-
-  return { totalGmv, rows };
-}
 
 function weekWindowIso() {
   const todayStr = beijingDateKey(new Date());

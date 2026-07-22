@@ -4,6 +4,33 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AICopyService } from '../src/content/ai-copy';
 import type { PackageDetail } from '../src/content/package-detail';
 
+const AI_ENV_KEYS = [
+  'AI_API_KEY',
+  'DEEPSEEK_API_KEY',
+  'AI_API_BASE_URL',
+  'AI_MODEL',
+  'AI_PROVIDER_NAME',
+  'AI_TEMPERATURE',
+  'AI_MAX_TOKENS'
+] as const;
+
+/** Nest ConfigService falls through to process.env; pin a clean AI env for unit isolation. */
+async function withCleanAiEnv<T>(run: () => T | Promise<T>): Promise<T> {
+  const saved = new Map<string, string | undefined>();
+  for (const key of AI_ENV_KEYS) {
+    saved.set(key, process.env[key]);
+    delete process.env[key];
+  }
+  try {
+    return await run();
+  } finally {
+    for (const [key, value] of saved) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+}
+
 const openAiMocks = vi.hoisted(() => ({
   create: vi.fn()
 }));
@@ -143,18 +170,20 @@ describe('AICopyService', () => {
     openAiMocks.create.mockReset();
   });
 
-  it('reports the compatible AI endpoint status without hiding missing config', () => {
-    const service = new AICopyService(new ConfigService({}));
+  it('reports the compatible AI endpoint status without hiding missing config', async () => {
+    await withCleanAiEnv(() => {
+      const service = new AICopyService(new ConfigService({}));
 
-    expect(service.getStatus()).toEqual({
-      enabled: false,
-      providerName: 'DeepSeek',
-      baseURL: 'https://api.deepseek.com',
-      model: 'deepseek-chat',
-      missing: ['AI_API_KEY'],
-      maskedApiKey: null,
-      temperature: 0.7,
-      maxTokens: 900
+      expect(service.getStatus()).toEqual({
+        enabled: false,
+        providerName: 'DeepSeek',
+        baseURL: 'https://api.deepseek.com',
+        model: 'deepseek-chat',
+        missing: ['AI_API_KEY'],
+        maskedApiKey: null,
+        temperature: 0.7,
+        maxTokens: 900
+      });
     });
   });
 
@@ -350,13 +379,15 @@ describe('AICopyService', () => {
   });
 
   it('rejects generation when AI is not configured', async () => {
-    const service = new AICopyService(new ConfigService({}));
-    await expect(service.generateCopies(pkg, promotion, request, detail)).rejects.toMatchObject({
-      response: expect.objectContaining({
-        message: expect.stringContaining('AI文案接口未配置')
-      })
+    await withCleanAiEnv(async () => {
+      const service = new AICopyService(new ConfigService({}));
+      await expect(service.generateCopies(pkg, promotion, request, detail)).rejects.toMatchObject({
+        response: expect.objectContaining({
+          message: expect.stringContaining('AI文案接口未配置')
+        })
+      });
+      expect(openAiMocks.create).not.toHaveBeenCalled();
     });
-    expect(openAiMocks.create).not.toHaveBeenCalled();
   });
 
   it('surfaces API failures after retryable 5xx attempts are exhausted', async () => {

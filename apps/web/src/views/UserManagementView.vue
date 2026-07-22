@@ -7,7 +7,7 @@
 
     <el-table
       v-loading="loading"
-      :data="users"
+      :data="items"
       stripe
       style="width: 100%"
       empty-text="暂无用户数据"
@@ -18,7 +18,7 @@
       <el-table-column label="角色" min-width="200">
         <template #default="{ row }">
           <el-tag v-for="r in row.roles" :key="r.role" size="small" style="margin-right: 4px">
-            {{ roleLabels[r.role as keyof typeof roleLabels] || r.role }}
+            {{ roleLabels[r.role] || r.role }}
           </el-tag>
         </template>
       </el-table-column>
@@ -48,13 +48,13 @@
       </el-table-column>
     </el-table>
 
-    <div v-if="total > pageSize" style="margin-top: 16px; text-align: right">
+    <div v-if="pagination.total > pagination.pageSize" style="margin-top: 16px; text-align: right">
       <el-pagination
-        v-model:current-page="page"
-        :page-size="pageSize"
-        :total="total"
+        :current-page="pagination.current"
+        :page-size="pagination.pageSize"
+        :total="pagination.total"
         layout="prev, pager, next"
-        @current-change="loadUsers"
+        @current-change="setPage"
       />
     </div>
 
@@ -86,6 +86,19 @@ import { ref, onMounted } from 'vue';
 import { ElMessage, ElForm } from 'element-plus';
 import { Plus } from '@element-plus/icons-vue';
 import { api } from '../services/api';
+import { extractErrorMessage } from '../services/http-client';
+import { usePagedList } from '../composables/usePagedList';
+
+type UserRoleBinding = { role: string; scopeType?: string; scopeId?: string };
+type UserRow = {
+  userId: string;
+  username: string;
+  displayName?: string;
+  email?: string;
+  roles?: UserRoleBinding[];
+  isActive?: boolean;
+  lastLoginAt?: string;
+};
 
 const roleLabels: Record<string, string> = {
   platform_operator: '平台运营',
@@ -96,11 +109,21 @@ const roleLabels: Record<string, string> = {
   admin: '管理员'
 };
 
-const loading = ref(false);
-const users = ref<Record<string, unknown>[]>([]);
-const total = ref(0);
-const page = ref(1);
-const pageSize = ref(20);
+const { items, loading, pagination, load, setPage, reloadCurrentPage } = usePagedList<
+  UserRow,
+  Record<string, string>
+>(
+  async ({ page, pageSize }) => {
+    const data = await api.listUsers({ page, pageSize });
+    return { items: (data.items ?? []) as UserRow[], total: data.total ?? 0 };
+  },
+  {},
+  {
+    filterDebounceMs: 0,
+    onError: (msg) => ElMessage.error(extractErrorMessage(msg, '加载用户列表失败'))
+  }
+);
+
 const showCreate = ref(false);
 const submitting = ref(false);
 const formRef = ref<InstanceType<typeof ElForm>>();
@@ -110,29 +133,15 @@ const rules = {
   password: [{ required: true, min: 6, message: '密码至少 6 位', trigger: 'blur' }]
 };
 
-async function loadUsers() {
-  loading.value = true;
-  try {
-    const data = await api.listUsers({ page: page.value, pageSize: pageSize.value });
-    users.value = data.items ?? [];
-    total.value = data.total ?? 0;
-  } catch {
-    users.value = [];
-    total.value = 0;
-  } finally {
-    loading.value = false;
-  }
+function handleEdit(row: UserRow) {
+  ElMessage.info(`编辑用户 ${row.username} 功能待完善`);
 }
 
-function handleEdit(row: Record<string, unknown>) {
-  ElMessage.info(`编辑用户 ${String(row.username)} 功能待完善`);
-}
-
-async function handleDeactivate(row: Record<string, unknown>) {
+async function handleDeactivate(row: UserRow) {
   try {
-    await api.deactivateUser(String(row.userId));
+    await api.deactivateUser(row.userId);
     ElMessage.success('用户已停用');
-    await loadUsers();
+    await reloadCurrentPage();
   } catch {
     ElMessage.error('停用失败');
   }
@@ -151,7 +160,7 @@ async function handleCreate() {
     ElMessage.success('用户已创建');
     showCreate.value = false;
     form.value = { username: '', password: '', displayName: '', email: '' };
-    await loadUsers();
+    await load(true);
   } catch {
     ElMessage.error('创建失败');
   } finally {
@@ -159,7 +168,7 @@ async function handleCreate() {
   }
 }
 
-onMounted(loadUsers);
+onMounted(() => load());
 </script>
 
 <style scoped>

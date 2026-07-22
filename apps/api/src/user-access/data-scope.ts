@@ -1,6 +1,10 @@
 import type { UserRoleBinding } from '@content/shared';
 
 /**
+ * NOT WIRED — no call sites as of 2026-07-22.
+ * Do not treat as active row-level security.
+ * Full wiring is a separate product+eng decision (area/merchant operator SQL filters).
+ *
  * Build Prisma-style data scope filter conditions based on user's role bindings.
  *
  * - admin / platform_operator: empty object (all data)

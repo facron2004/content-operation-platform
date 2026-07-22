@@ -1,5 +1,6 @@
 import { Controller, Get, Param, Query, Inject, Logger } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
+import { Roles } from '../user-access/role.decorator';
 import { AuditLogService } from './audit-log.service';
 
 @ApiTags('audit-logs')
@@ -9,6 +10,7 @@ export class AuditLogController {
 
   constructor(@Inject(AuditLogService) private readonly auditLogService: AuditLogService) {}
 
+  @Roles('admin', 'platform_operator', 'auditor')
   @Get()
   @ApiOperation({ summary: 'List audit logs with pagination and filters' })
   listLogs(
@@ -33,6 +35,7 @@ export class AuditLogController {
     });
   }
 
+  @Roles('admin', 'platform_operator', 'auditor')
   @Get(':id')
   @ApiOperation({ summary: 'Single audit log detail' })
   getLog(@Param('id') id: string) {

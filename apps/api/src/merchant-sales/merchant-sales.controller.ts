@@ -4,6 +4,7 @@ import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { beijingDateKey } from '@content/shared';
 import type { Request } from 'express';
 import { hasForceSignal } from '../common';
+import { Roles } from '../user-access/role.decorator';
 import { MerchantSalesQueryDto, MerchantSalesRefreshDto } from './merchant-sales.dto';
 import { MERCHANT_SALES_SERVICE, MerchantSalesService } from './merchant-sales.service';
 
@@ -81,6 +82,7 @@ export class MerchantSalesController {
   export(@Query() q: MerchantSalesQueryDto) {
     return this.service.getExport(q.window, q.date, q.endDate, q.sortBy);
   }
+  @Roles('admin', 'platform_operator')
   @Post('refresh')
   @ApiOperation({
     summary: '商家销售数据 — 手动触发区间重算',
@@ -89,6 +91,7 @@ export class MerchantSalesController {
   refresh(@Body() body: MerchantSalesRefreshDto = {}) {
     return refreshMerchantSales(this.service, body);
   }
+  @Roles('admin', 'platform_operator')
   @Post('cache/invalidate')
   @ApiOperation({ summary: '清空商家销售进程内缓存(POST 代替 GET)' })
   invalidateCache() {

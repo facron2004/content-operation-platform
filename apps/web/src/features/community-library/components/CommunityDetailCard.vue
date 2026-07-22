@@ -88,6 +88,7 @@
 
 <script setup lang="ts">
 import type { CommunityGroupEntity, TaskPerformanceResponse } from '@content/shared';
+import { formatMoney } from '../../../utils/labels';
 
 type TagType = 'success' | 'primary' | 'warning' | 'info' | 'danger';
 
@@ -122,10 +123,6 @@ function formatDateTime(value?: string): string {
   if (!value) return '-';
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? '-' : date.toLocaleString('zh-CN', { hour12: false });
-}
-
-function formatMoney(value: number): string {
-  return value.toLocaleString('zh-CN', { maximumFractionDigits: 2 });
 }
 
 function formatRate(value: number): string {

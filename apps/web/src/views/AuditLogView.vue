@@ -27,13 +27,19 @@
           />
         </el-form-item>
         <el-form-item>
-          <el-button type="primary" @click="loadLogs">查询</el-button>
+          <el-button type="primary" @click="load()">查询</el-button>
           <el-button @click="resetFilters">重置</el-button>
         </el-form-item>
       </el-form>
     </el-card>
 
-    <el-table v-loading="loading" :data="logs" stripe style="width: 100%" empty-text="暂无审计日志">
+    <el-table
+      v-loading="loading"
+      :data="items"
+      stripe
+      style="width: 100%"
+      empty-text="暂无审计日志"
+    >
       <el-table-column label="时间" width="160">
         <template #default="{ row }">{{ formatTime(row.createdAt) }}</template>
       </el-table-column>
@@ -61,13 +67,13 @@
       </el-table-column>
     </el-table>
 
-    <div v-if="total > pageSize" style="margin-top: 16px; text-align: right">
+    <div v-if="pagination.total > pagination.pageSize" style="margin-top: 16px; text-align: right">
       <el-pagination
-        v-model:current-page="page"
-        :page-size="pageSize"
-        :total="total"
+        :current-page="pagination.current"
+        :page-size="pagination.pageSize"
+        :total="pagination.total"
         layout="prev, pager, next"
-        @current-change="loadLogs"
+        @current-change="setPage"
       />
     </div>
 
@@ -102,17 +108,52 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue';
+import { ref, onMounted } from 'vue';
+import { ElMessage } from 'element-plus';
 import { api } from '../services/api';
+import { extractErrorMessage } from '../services/http-client';
+import { usePagedList } from '../composables/usePagedList';
 
-const loading = ref(false);
-const logs = ref<Record<string, unknown>[]>([]);
-const total = ref(0);
-const page = ref(1);
-const pageSize = ref(20);
-const filters = reactive({ userId: '', objectType: '', action: '' });
+type AuditLogRow = {
+  logId?: string;
+  username?: string;
+  userId?: string;
+  action?: string;
+  objectType?: string;
+  objectId?: string;
+  ip?: string;
+  createdAt?: string;
+  result?: string;
+  failReason?: string;
+};
+
+type AuditFilters = {
+  userId: string;
+  objectType: string;
+  action: string;
+};
+
+const { items, loading, pagination, filters, load, setPage, updateFilter } = usePagedList<
+  AuditLogRow,
+  AuditFilters
+>(
+  async ({ page, pageSize, filters: f }) => {
+    const params: Record<string, unknown> = { page, pageSize };
+    if (f.userId) params.userId = f.userId;
+    if (f.objectType) params.objectType = f.objectType;
+    if (f.action) params.action = f.action;
+    const data = await api.listAuditLogs(params);
+    return { items: (data.items ?? []) as AuditLogRow[], total: data.total ?? 0 };
+  },
+  { userId: '', objectType: '', action: '' },
+  {
+    filterDebounceMs: 0,
+    onError: (msg) => ElMessage.error(extractErrorMessage(msg, '加载审计日志失败'))
+  }
+);
+
 const detailVisible = ref(false);
-const selectedLog = ref<Record<string, unknown> | null>(null);
+const selectedLog = ref<AuditLogRow | null>(null);
 
 function objectTypeLabel(type: unknown): string {
   const map: Record<string, string> = {
@@ -134,38 +175,17 @@ function formatTime(t: unknown): string {
   }
 }
 
-async function loadLogs() {
-  loading.value = true;
-  try {
-    const params: Record<string, unknown> = { page: page.value, pageSize: pageSize.value };
-    if (filters.userId) params.userId = filters.userId;
-    if (filters.objectType) params.objectType = filters.objectType;
-    if (filters.action) params.action = filters.action;
-    const data = await api.listAuditLogs(params);
-    logs.value = data.items ?? [];
-    total.value = data.total ?? 0;
-  } catch {
-    logs.value = [];
-    total.value = 0;
-  } finally {
-    loading.value = false;
-  }
-}
-
 function resetFilters() {
-  filters.userId = '';
-  filters.objectType = '';
-  filters.action = '';
-  page.value = 1;
-  loadLogs();
+  updateFilter({ userId: '', objectType: '', action: '' });
+  load();
 }
 
-function showDetail(row: Record<string, unknown>) {
+function showDetail(row: AuditLogRow) {
   selectedLog.value = row;
   detailVisible.value = true;
 }
 
-onMounted(loadLogs);
+onMounted(() => load());
 </script>
 
 <style scoped>
