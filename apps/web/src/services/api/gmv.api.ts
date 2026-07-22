@@ -125,7 +125,6 @@ export async function getGmvDistribution(
   limit = 20,
   force = false
 ) {
-  const { default: client } = await import('../http-client');
   return (
     await client.get<GmvDistributionRow[]>(withForce('/gmv/distribution', force), {
       params: { dim, limit }
@@ -139,7 +138,6 @@ export async function getGmvByMerchant(
   pageSize = 20,
   force = false
 ) {
-  const { default: client } = await import('../http-client');
   return (
     await client.get<{ items: GmvMerchantRow[]; hasMore: boolean }>(
       withForce('/gmv/by-merchant', force),

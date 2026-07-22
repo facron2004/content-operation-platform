@@ -1,3 +1,4 @@
+import client from '../http-client';
 import { withForce } from './with-force';
 
 export type MerchantSalesWindow = 'day' | 'week' | 'month' | 'year';
@@ -77,7 +78,6 @@ export interface GetMerchantSalesTrendParams {
 const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? '/api';
 
 export async function getMerchantSalesSummary(params: GetMerchantSalesSummaryParams) {
-  const { default: client } = await import('../http-client');
   return (
     await client.get<MerchantSalesSummary>(withForce('/merchant-sales/summary', params.force), {
       params: {
@@ -90,7 +90,6 @@ export async function getMerchantSalesSummary(params: GetMerchantSalesSummaryPar
 }
 
 export async function getMerchantSalesRanking(params: GetMerchantSalesRankingParams) {
-  const { default: client } = await import('../http-client');
   return (
     await client.get<MerchantSalesRanking>(withForce('/merchant-sales/ranking', params.force), {
       params: {
@@ -106,7 +105,6 @@ export async function getMerchantSalesRanking(params: GetMerchantSalesRankingPar
 }
 
 export async function getMerchantSalesTrend(params: GetMerchantSalesTrendParams) {
-  const { default: client } = await import('../http-client');
   return (
     await client.get<{ items: MerchantSalesTrendPoint[]; window: MerchantSalesWindow }>(
       withForce('/merchant-sales/trend', params.force),
@@ -137,7 +135,6 @@ export function getMerchantSalesExportUrl(params: {
 }
 
 export async function postMerchantSalesRefresh(body?: { startDate?: string; endDate?: string }) {
-  const { default: client } = await import('../http-client');
   return (
     await client.post<MerchantSalesRefreshResult>(
       `/merchant-sales/refresh?_=${Date.now()}`,

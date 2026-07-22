@@ -1,4 +1,5 @@
 import type { StaleBucket } from './zero-sales.api';
+import client from '../http-client';
 
 export interface MerchantListItem {
   merchantId: string;
@@ -81,24 +82,20 @@ export async function listMerchants(params: {
   page?: number;
   pageSize?: number;
 }) {
-  const { default: client } = await import('../http-client');
   return (await client.get<MerchantListResponse>('/merchants', { params })).data;
 }
 
 export async function getMerchantProfile(merchantId: string) {
-  const { default: client } = await import('../http-client');
   return (await client.get<MerchantProfile>(`/merchants/${merchantId}/profile`)).data;
 }
 
 export async function getMerchantTrend(merchantId: string, days = 30) {
-  const { default: client } = await import('../http-client');
   return (
     await client.get<MerchantTrendResponse>(`/merchants/${merchantId}/trend`, { params: { days } })
   ).data;
 }
 
 export async function getMerchantSkus(merchantId: string, days = 30) {
-  const { default: client } = await import('../http-client');
   const res = await client.get<MerchantSkuListResponse>(`/merchants/${merchantId}/skus`, {
     params: { days }
   });
@@ -106,7 +103,6 @@ export async function getMerchantSkus(merchantId: string, days = 30) {
 }
 
 export async function getMerchantCompetitors(merchantId: string) {
-  const { default: client } = await import('../http-client');
   const res = await client.get<MerchantCompetitorsResponse>(`/merchants/${merchantId}/competitors`);
   return res.data;
 }
@@ -132,6 +128,5 @@ export interface MerchantHeatmapResponse {
 }
 
 export async function getMerchantHeatmap() {
-  const { default: client } = await import('../http-client');
   return (await client.get<MerchantHeatmapResponse>('/merchants/heatmap')).data;
 }

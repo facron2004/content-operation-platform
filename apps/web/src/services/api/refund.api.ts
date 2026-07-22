@@ -1,3 +1,5 @@
+import client from '../http-client';
+
 export interface TopMerchantRow {
   merchantId: string;
   merchantName: string;
@@ -44,20 +46,23 @@ export interface VerifyTrendPoint {
   paidOrderCount: number;
 }
 
-async function getData<T>(path: string, params?: Record<string, unknown>) {
-  const { default: client } = await import('../http-client');
-  return (await client.get<T>(path, { params })).data;
-}
 export const getRefundToday = (date?: string) =>
-  getData<RefundTodayPayload>('/refund/today', { date });
+  client.get<RefundTodayPayload>('/refund/today', { params: { date } }).then((r) => r.data);
 export const getRefundTrend = (days: 7 | 30, endDate?: string) =>
-  getData<RefundTrendPoint[]>('/refund/trend', { days, endDate });
+  client
+    .get<RefundTrendPoint[]>('/refund/trend', { params: { days, endDate } })
+    .then((r) => r.data);
 export const getVerifyToday = (date?: string) =>
-  getData<VerifyTodayPayload>('/verify/today', { date });
+  client.get<VerifyTodayPayload>('/verify/today', { params: { date } }).then((r) => r.data);
 export const getVerifyTrend = (days: 7 | 30, endDate?: string) =>
-  getData<VerifyTrendPoint[]>('/verify/trend', { days, endDate });
+  client
+    .get<VerifyTrendPoint[]>('/verify/trend', { params: { days, endDate } })
+    .then((r) => r.data);
 export const getRefundTopMerchants = (params: {
   sortBy: 'refundDesc' | 'verifyDesc';
   page: number;
   pageSize: number;
-}) => getData<{ items: TopMerchantRow[]; hasMore: boolean }>('/refund/top-merchants', params);
+}) =>
+  client
+    .get<{ items: TopMerchantRow[]; hasMore: boolean }>('/refund/top-merchants', { params })
+    .then((r) => r.data);

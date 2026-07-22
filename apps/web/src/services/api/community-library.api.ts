@@ -26,7 +26,7 @@ export async function listCommunities(
 }
 
 export async function getCommunity(id: string) {
-  return cachedGet<unknown>(
+  return cachedGet<CommunityListResponse['items'][number]>(
     () => client.get(`/community-library/${encodeURIComponent(id)}`).then((res) => res.data),
     `/community-library/${encodeURIComponent(id)}`,
     undefined,

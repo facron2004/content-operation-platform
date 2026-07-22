@@ -20,7 +20,7 @@ export async function listCampaigns(
 }
 
 export async function getCampaign(id: string) {
-  return cachedGet<unknown>(
+  return cachedGet<CampaignListResponse['items'][number]>(
     () => client.get(`/campaigns/${encodeURIComponent(id)}`).then((res) => res.data),
     `/campaigns/${encodeURIComponent(id)}`,
     undefined,

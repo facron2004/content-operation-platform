@@ -13,7 +13,7 @@ export async function generateCopies(
   payload: GenerateCopyRequest
 ): Promise<GenerateCopiesResponse> {
   const { data } = await client.post('/content/generate', payload);
-  clearCache('/content');
+  clearCache('/content/copies');
   return data;
 }
 export async function listCopies(params: { auditStatus?: AuditStatus; channel?: Channel } = {}) {

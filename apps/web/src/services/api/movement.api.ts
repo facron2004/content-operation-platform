@@ -1,3 +1,5 @@
+import client from '../http-client';
+
 export type StaleBucket = 'normal' | 'stale_7d' | 'stale_15d' | 'stale_30d' | 'stale_60d';
 
 export const STALE_BUCKETS: readonly StaleBucket[] = [
@@ -62,24 +64,15 @@ export type MovementTimelineResponse = {
   timeline: Array<{ date: string; stockLeft: number; salesQty: number; deltaSource: string }>;
 };
 
-async function movementClient() {
-  const { default: client } = await import('../http-client');
-  return client;
-}
-
 export async function getMovementToday(date?: string) {
-  return (
-    await (
-      await movementClient()
-    ).get<MovementTodayPayload>('/movement/today', { params: { date } })
-  ).data;
+  return (await client.get<MovementTodayPayload>('/movement/today', { params: { date } })).data;
 }
 
 export async function getMovementTimeline(packageId: string, days = 30) {
   return (
-    await (
-      await movementClient()
-    ).get<MovementTimelineResponse>(`/movement/skus/${packageId}/timeline`, { params: { days } })
+    await client.get<MovementTimelineResponse>(`/movement/skus/${packageId}/timeline`, {
+      params: { days }
+    })
   ).data;
 }
 
@@ -93,9 +86,7 @@ export async function getMovementStagnant(params: {
   page?: number;
   pageSize?: number;
 }) {
-  return (
-    await (await movementClient()).get<MovementListResponse>('/movement/skus/stagnant', { params })
-  ).data;
+  return (await client.get<MovementListResponse>('/movement/skus/stagnant', { params })).data;
 }
 
 export async function getMovementMoving(params: {
@@ -107,9 +98,7 @@ export async function getMovementMoving(params: {
   page?: number;
   pageSize?: number;
 }) {
-  return (
-    await (await movementClient()).get<MovementListResponse>('/movement/skus/moving', { params })
-  ).data;
+  return (await client.get<MovementListResponse>('/movement/skus/moving', { params })).data;
 }
 
 export function getStagnantExportUrl(params: Record<string, string | number | undefined>) {
