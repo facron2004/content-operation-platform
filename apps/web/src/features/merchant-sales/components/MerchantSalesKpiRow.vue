@@ -1,6 +1,6 @@
 <template>
   <div class="kpi-row">
-    <MetricTile :label="gmvLabel" :value="formatGmv(summary?.totalGmv)" info />
+    <MetricTile :label="gmvLabel" :value="displayMoney(summary, 'totalGmv')" info />
     <MetricTile
       label="退款率"
       :value="formatPercent(summary?.refundRate)"
@@ -16,7 +16,7 @@
 </template>
 <script setup lang="ts">
 import MetricTile from '../../../components/MetricTile.vue';
-import { formatGmv, formatPercent } from '../../../utils/format';
+import { displayMoney, formatPercent } from '../../../utils/format';
 defineProps<{
   gmvLabel: string;
   summary: {

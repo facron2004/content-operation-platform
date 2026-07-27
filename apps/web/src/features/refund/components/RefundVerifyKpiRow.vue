@@ -3,11 +3,13 @@
     <MetricTile
       :label="activeTab === 'refund' ? '今日退款金额' : '今日核销金额'"
       :value="
-        formatGmv(activeTab === 'refund' ? refundToday?.totalRefund : verifyToday?.totalVerify)
+        activeTab === 'refund'
+          ? displayMoney(refundToday, 'totalRefund')
+          : displayMoney(verifyToday, 'totalVerify')
       "
       info
     />
-    <MetricTile label="今日 GMV" :value="formatGmv(currentGmv ?? 0)" />
+    <MetricTile label="今日 GMV" :value="displayMoney({ totalGmv: currentGmv ?? 0 }, 'totalGmv')" />
     <MetricTile
       :label="activeTab === 'refund' ? '退款率' : '核销率'"
       :value="formatPercent(currentRate ?? 0)"
@@ -29,7 +31,7 @@
 </template>
 <script setup lang="ts">
 import MetricTile from '../../../components/MetricTile.vue';
-import { formatGmv, formatPercent } from '../../../utils/format';
+import { displayMoney, formatPercent } from '../../../utils/format';
 import type { RefundVerifyTab } from '../composables/refund-verify-core';
 defineProps<{
   activeTab: RefundVerifyTab;

@@ -22,12 +22,12 @@
     <div class="merchant-list-meta">
       <span>{{ merchant.areaName || '—' }}</span>
       <span>{{ merchant.totalSku }} SKU</span>
-      <span>30 天 ¥ {{ formatGmv(merchant.totalGmv30d) }}</span>
+      <span>30 天 {{ displayMoney(merchant, 'totalGmv30d') }}</span>
     </div>
   </li>
 </template>
 <script setup lang="ts">
-import { formatGmv } from '../../../utils/format';
+import { displayMoney } from '../../../utils/format';
 defineProps<{
   merchant: {
     merchantId: string;

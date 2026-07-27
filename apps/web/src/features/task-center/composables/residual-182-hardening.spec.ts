@@ -57,8 +57,8 @@ describe('residual #182 task detail performance surface', () => {
     expect(src).not.toMatch(/任务总数/);
     expect(src).not.toMatch(/已完成/);
     expect(src).not.toMatch(/已失败/);
-    // Format helpers for money + rates.
-    expect(src).toMatch(/formatGmv/);
+    // Format helpers for money + rates (VNext §7.4.5: migrated to displayMoney).
+    expect(src).toMatch(/(formatGmv|displayMoney)/);
     expect(src).toMatch(/formatPercent/);
   });
 

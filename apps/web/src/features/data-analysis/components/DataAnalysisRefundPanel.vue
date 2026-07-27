@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { DataAnalysisRefundRow } from '../../../services/api/data-analysis.api';
-import { formatGmv, formatNumber, formatPercent, rateClassInv } from '../../../utils/format';
+import { displayMoney, formatNumber, formatPercent, rateClassInv } from '../../../utils/format';
 
 defineProps<{
   merchantRefunds: DataAnalysisRefundRow[];
@@ -28,7 +28,7 @@ defineProps<{
           <template #default="{ row }">{{ formatNumber(row.orderCount, 0) }}</template>
         </el-table-column>
         <el-table-column label="退款金额" min-width="110" align="right">
-          <template #default="{ row }">{{ formatGmv(row.refundAmount) }}</template>
+          <template #default="{ row }">{{ displayMoney(row, 'refundAmount') }}</template>
         </el-table-column>
         <el-table-column label="核销率" min-width="90" align="right">
           <template #default="{ row }">
@@ -55,7 +55,7 @@ defineProps<{
           <template #default="{ row }">{{ formatNumber(row.orderCount, 0) }}</template>
         </el-table-column>
         <el-table-column label="退款金额" min-width="110" align="right">
-          <template #default="{ row }">{{ formatGmv(row.refundAmount) }}</template>
+          <template #default="{ row }">{{ displayMoney(row, 'refundAmount') }}</template>
         </el-table-column>
         <el-table-column label="核销率" min-width="90" align="right">
           <template #default="{ row }">

@@ -50,7 +50,7 @@
         />
       </el-col>
       <el-col :span="4">
-        <MetricTile label="任务 GMV" :value="'¥' + (kpis.todayTaskGmv / 100).toFixed(2)" />
+        <MetricTile label="任务 GMV" :value="formatFenYuan(kpis.todayTaskGmv)" />
       </el-col>
     </el-row>
   </el-card>
@@ -60,6 +60,7 @@
 import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { api } from '../../../services/api';
+import { formatFenYuan } from '../../../utils/format';
 import MetricTile from '../../../components/MetricTile.vue';
 
 const router = useRouter();

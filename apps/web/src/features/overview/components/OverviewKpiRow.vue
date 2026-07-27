@@ -18,13 +18,13 @@
       :hint="kpi ? `零动销 SKU ${formatCount(kpi.zeroSalesSkuCount)}` : undefined"
       @activate="$emit('go-zero-sales')"
     />
-    <MetricTile label="今日 GMV" :value="formatGmv(kpi?.todayGmv)" info />
+    <MetricTile label="今日 GMV" :value="displayMoney(kpi, 'todayGmv')" info />
     <MetricTile label="今日成单数" :value="kpi?.todayOrderCount ?? '-'" />
   </div>
 </template>
 <script setup lang="ts">
 import MetricTile from '../../../components/MetricTile.vue';
-import { formatCount, formatGmv, formatPercent } from '../../../utils/format';
+import { displayMoney, formatCount, formatPercent } from '../../../utils/format';
 type Kpi = {
   totalMerchants?: number;
   totalSkus?: number;

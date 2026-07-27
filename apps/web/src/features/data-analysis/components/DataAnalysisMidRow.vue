@@ -5,7 +5,7 @@ import type {
   DataAnalysisDeltas,
   DataAnalysisOverview
 } from '../../../services/api/data-analysis.api';
-import { formatGmv, formatNumber, formatPercent } from '../../../utils/format';
+import { displayMoney, formatNumber, formatPercent } from '../../../utils/format';
 import { formatDelta } from '../composables/useDataAnalysisPage';
 
 const ChartPanel = defineAsyncComponent(() => import('../../../components/ChartPanel.vue'));
@@ -35,7 +35,7 @@ const keyMetrics: Array<{
   {
     key: 'avgOrderValue',
     label: '客单价',
-    value: (o) => formatGmv(o?.avgOrderValue),
+    value: (o) => displayMoney(o, 'avgOrderValue'),
     icon: 'aov',
     tone: 'indigo'
   },
@@ -87,7 +87,7 @@ const channelPalette = ['#2563eb', '#14b8a6', '#f59e0b', '#ec4899', '#94a3b8'];
           </div>
           <div v-if="channels.length" class="da-channel-center">
             <span>总销售额</span>
-            <strong>{{ formatGmv(overview?.salesAmount) }}</strong>
+            <strong>{{ displayMoney(overview, 'salesAmount') }}</strong>
           </div>
         </div>
         <ul v-if="channels.length" class="da-channel-legend">
@@ -95,7 +95,7 @@ const channelPalette = ['#2563eb', '#14b8a6', '#f59e0b', '#ec4899', '#94a3b8'];
             <span class="dot" :style="{ background: channelPalette[i % channelPalette.length] }" />
             <span class="name">{{ c.label }}</span>
             <span class="share">{{ formatPercent(c.share) }}</span>
-            <span class="amt">{{ formatGmv(c.salesAmount) }}</span>
+            <span class="amt">{{ displayMoney(c, 'salesAmount') }}</span>
           </li>
         </ul>
       </div>

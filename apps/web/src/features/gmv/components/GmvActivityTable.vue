@@ -21,7 +21,7 @@
         <li v-for="row in rows" :key="row.name" class="gmv-activity-row">
           <span class="gmv-activity-name">{{ row.name }}</span>
           <span class="gmv-activity-date">{{ row.dateRange }}</span>
-          <span class="align-right gmv-activity-value">¥ {{ formatNumber(row.gmv) }}</span>
+          <span class="align-right gmv-activity-value">{{ displayMoney(row, 'gmv') }}</span>
           <span class="align-right" :class="roiClass(row.roi)">{{ row.roi.toFixed(2) }}</span>
           <span class="align-right" :class="verifyClass(row.verifyRate)">
             {{ formatPercentRaw(row.verifyRate * 100) }}
@@ -33,7 +33,7 @@
 </template>
 
 <script setup lang="ts">
-import { formatNumber, formatPercentRaw } from '../../../utils/format';
+import { displayMoney, formatPercentRaw } from '../../../utils/format';
 import EmptyState from '../../../components/EmptyState.vue';
 
 type ActivityRow = {

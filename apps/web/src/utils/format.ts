@@ -28,3 +28,6 @@ export function rateClassInv(rate: number, warn: number, danger: number): string
       ? 'rate-warning'
       : 'rate-ok';
 }
+
+// VNext 金额精度治理（PRD §7.4.4/§7.4.5）：前端消费后端 *Fen/*Display，禁止浮点金额运算。
+export { displayMoney, formatFenYuan, sumMoney, sumMoneyFen, readFen } from './money';

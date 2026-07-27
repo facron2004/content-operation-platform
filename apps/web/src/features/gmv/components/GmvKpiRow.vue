@@ -9,7 +9,7 @@ import {
   Warning,
   Money
 } from '@element-plus/icons-vue';
-import { formatCount, formatGmv, formatNumber, formatPercent } from '../../../utils/format';
+import { displayMoney, formatCount, formatNumber, formatPercent } from '../../../utils/format';
 
 defineProps<{
   kpi: GmvKpi | null;
@@ -62,7 +62,7 @@ const cards: Array<{
     label: '今日GMV',
     tone: 'blue',
     icon: Coin,
-    value: (k) => formatGmv(k?.totalGmv),
+    value: (k) => displayMoney(k, 'totalGmv'),
     delta: (k) => deltaMeta(k?.compare?.totalGmv),
     breakdown: (k) => buildBreakdown(k, k?.totalGmv, k?.gmvOnline, k?.gmvWallet)
   },
@@ -71,7 +71,7 @@ const cards: Array<{
     label: '本月GMV',
     tone: 'cyan',
     icon: Calendar,
-    value: (k) => formatGmv(k?.monthGmv),
+    value: (k) => displayMoney(k, 'monthGmv'),
     delta: (k) => deltaMeta(k?.compare?.monthGmv ?? null),
     breakdown: (k) => buildBreakdown(k, k?.monthGmv, k?.monthGmvOnline, k?.monthGmvWallet)
   },
@@ -88,7 +88,7 @@ const cards: Array<{
     label: '客单价',
     tone: 'purple',
     icon: Wallet,
-    value: (k) => formatGmv(k?.avgOrderValue),
+    value: (k) => displayMoney(k, 'avgOrderValue'),
     delta: (k) => deltaMeta(k?.compare?.avgOrderValue)
   },
   {
@@ -112,7 +112,7 @@ const cards: Array<{
     label: '平台佣金收入',
     tone: 'sky',
     icon: Money,
-    value: (k) => formatGmv(k?.platformCommission ?? 0),
+    value: (k) => displayMoney(k, 'platformCommission'),
     delta: () => ({ text: '暂无环比', tone: 'flat' as const })
   }
 ];

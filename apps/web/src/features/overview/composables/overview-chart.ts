@@ -1,6 +1,7 @@
 import type { OverviewTrendPoint } from '../../../services/api/overview.api';
 import { buildCategoryBar, buildDualAxisLine } from '../../../utils/chart-options';
 import { CHART_COLORS } from '../../../utils/chart-theme';
+import { readFen } from '../../../utils/format';
 
 const STALE_LABELS: Record<string, string> = {
   normal: '正常',
@@ -36,7 +37,7 @@ export function buildOverviewTrendOption(trend: OverviewTrendPoint[]) {
     series: [
       {
         name: 'GMV',
-        data: trend.map((p) => Number(p.gmv.toFixed(2))),
+        data: trend.map((p) => Number(readFen(p, 'gmv') ?? 0) / 100),
         yAxisIndex: 0,
         color: CHART_COLORS.primary,
         area: true

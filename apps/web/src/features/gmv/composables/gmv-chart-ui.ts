@@ -5,14 +5,14 @@ import type {
 } from '../../../services/api/gmv.api';
 import { buildCategoryBar, buildDualAxisLine, buildMultiLine } from '../../../utils/chart-options';
 import { CHART_COLORS, CHART_GRID, CHART_TOOLTIP } from '../../../utils/chart-theme';
-import { formatNumber, formatPercentRaw } from '../../../utils/format';
+import { formatNumber, formatPercentRaw, readFen } from '../../../utils/format';
 
 export function buildGmvDistributionOption(distribution: GmvDistributionRow[]) {
   if (distribution.length === 0) return {};
   return buildCategoryBar({
     items: distribution.map((r) => ({
       label: r.key,
-      value: Number(r.totalGmv.toFixed(2)),
+      value: Number(readFen(r, 'totalGmv') ?? 0) / 100,
       color: CHART_COLORS.primary,
       key: r.key,
       extra: {
@@ -66,13 +66,13 @@ export function buildGmvTrendOption(
       series: [
         {
           name: '在线现金',
-          data: trend.map((p) => Number(p.gmvOnline.toFixed(2))),
+          data: trend.map((p) => Number(readFen(p, 'gmvOnline') ?? 0) / 100),
           color: CHART_COLORS.primary,
           area: true
         },
         {
           name: '余额支付',
-          data: trend.map((p) => Number(p.gmvWallet.toFixed(2))),
+          data: trend.map((p) => Number(readFen(p, 'gmvWallet') ?? 0) / 100),
           color: CHART_COLORS.secondary
         }
       ]
@@ -129,7 +129,7 @@ export function buildGmvTrendOption(
             ]
           }
         },
-        data: trend.map((p) => Number(p.totalGmv.toFixed(2)))
+        data: trend.map((p) => Number(readFen(p, 'totalGmv') ?? 0) / 100)
       }
     ]
   };
@@ -166,7 +166,7 @@ export function buildGmvHourlyOption(hourly: GmvHourlyPoint[]) {
       {
         name: 'GMV（元）',
         type: 'bar',
-        data: hourly.map((p) => Number(p.totalGmv.toFixed(2))),
+        data: hourly.map((p) => Number(readFen(p, 'totalGmv') ?? 0) / 100),
         itemStyle: {
           color: '#2e90fa',
           borderRadius: [4, 4, 0, 0]

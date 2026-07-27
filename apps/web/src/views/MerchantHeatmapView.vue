@@ -84,7 +84,7 @@
           </div>
           <div class="tooltip-row">
             <span>30d GMV</span>
-            <strong>¥{{ formatGmv(hoveredArea.totalGmv) }}</strong>
+            <strong>{{ displayMoney(hoveredArea, 'totalGmv') }}</strong>
           </div>
           <div v-if="hoveredArea.merchants.length" class="tooltip-merchants">
             <span class="tooltip-label">商家：</span>
@@ -113,6 +113,7 @@ import ErrorAlert from '../components/ErrorAlert.vue';
 import AppleButton from '../components/AppleButton.vue';
 import { useMerchantHeatmap } from '../features/merchant-heatmap/composables/useMerchantHeatmap';
 import type { MerchantHeatmapPoint } from '../services/api/merchant.api';
+import { displayMoney } from '../utils/format';
 
 const {
   loading,
@@ -142,12 +143,6 @@ const tooltipStyle = ref({ top: '0px', left: '0px' });
 
 let map: L.Map | null = null;
 let markers: L.CircleMarker[] = [];
-
-function formatGmv(val: number): string {
-  if (val >= 10000) return (val / 10000).toFixed(1) + '万';
-  if (val >= 1000) return (val / 1000).toFixed(1) + 'k';
-  return val.toLocaleString();
-}
 
 function initMap() {
   if (!mapContainer.value) return;

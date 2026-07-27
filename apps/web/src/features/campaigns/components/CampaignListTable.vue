@@ -37,10 +37,10 @@
         </template>
       </el-table-column>
       <el-table-column label="预算" width="120" align="right">
-        <template #default="{ row }">{{ formatGmv(row.budget) }}</template>
+        <template #default="{ row }">{{ displayMoney(row, 'budget') }}</template>
       </el-table-column>
       <el-table-column label="目标GMV" width="120" align="right">
-        <template #default="{ row }">{{ formatGmv(row.targetGmv) }}</template>
+        <template #default="{ row }">{{ displayMoney(row, 'targetGmv') }}</template>
       </el-table-column>
       <el-table-column label="目标订单" width="100" align="right">
         <template #default="{ row }">{{ formatCount(row.targetOrders) }}</template>
@@ -124,7 +124,7 @@ import type { MarketingCampaign } from '@content/shared';
 import AppleButton from '../../../components/AppleButton.vue';
 import { CAMPAIGN_TYPE_LABELS } from '../composables/useCampaigns';
 import CampaignStatusTag from './CampaignStatusTag.vue';
-import { formatCount, formatGmv } from '../../../utils/format';
+import { displayMoney, formatCount } from '../../../utils/format';
 
 type TagType = 'primary' | 'success' | 'info' | 'warning' | 'danger';
 

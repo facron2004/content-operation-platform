@@ -17,7 +17,7 @@
 import { computed } from 'vue';
 import type { CSSProperties } from 'vue';
 import type { CampaignPerformanceResponse } from '@content/shared';
-import { formatGmv } from '../../../utils/format';
+import { displayMoney } from '../../../utils/format';
 
 interface SummaryMetric {
   label: string;
@@ -53,7 +53,7 @@ const metrics = computed<SummaryMetric[]>(() => {
       style: p && p.failedTasks > 0 ? { color: 'var(--el-color-danger)' } : undefined
     },
     { label: '订单数', value: p?.totalOrders ?? 0 },
-    { label: '累计 GMV', value: formatGmv(p?.totalGmv ?? 0) }
+    { label: '累计 GMV', value: displayMoney(p, 'totalGmv') }
   ];
 });
 </script>

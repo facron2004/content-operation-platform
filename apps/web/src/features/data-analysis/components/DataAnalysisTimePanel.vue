@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { defineAsyncComponent } from 'vue';
 import type { DataAnalysisTimeSlotRow } from '../../../services/api/data-analysis.api';
-import { formatGmv, formatNumber, formatPercent } from '../../../utils/format';
+import { displayMoney, formatNumber, formatPercent } from '../../../utils/format';
 
 defineProps<{
   timeSlots: DataAnalysisTimeSlotRow[];
@@ -35,7 +35,7 @@ const ChartPanel = defineAsyncComponent(() => import('../../../components/ChartP
           <template #default="{ row }">{{ formatNumber(row.orderCount, 0) }}</template>
         </el-table-column>
         <el-table-column label="销售额" min-width="100" align="right">
-          <template #default="{ row }">{{ formatGmv(row.salesAmount) }}</template>
+          <template #default="{ row }">{{ displayMoney(row, 'salesAmount') }}</template>
         </el-table-column>
         <el-table-column label="核销数" min-width="80" align="right">
           <template #default="{ row }">{{ formatNumber(row.verifiedCount, 0) }}</template>

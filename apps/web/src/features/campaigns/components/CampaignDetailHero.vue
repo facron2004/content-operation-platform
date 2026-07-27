@@ -80,10 +80,10 @@
       </div>
       <el-row :gutter="16" class="hero-metrics">
         <el-col :xs="12" :sm="8">
-          <el-statistic title="活动预算" :value="formatGmv(campaign.budget)" />
+          <el-statistic title="活动预算" :value="displayMoney(campaign, 'budget')" />
         </el-col>
         <el-col :xs="12" :sm="8">
-          <el-statistic title="目标 GMV" :value="formatGmv(campaign.targetGmv)" />
+          <el-statistic title="目标 GMV" :value="displayMoney(campaign, 'targetGmv')" />
         </el-col>
         <el-col :xs="12" :sm="8">
           <el-statistic title="目标订单" :value="formatCount(campaign.targetOrders)" />
@@ -100,7 +100,7 @@ import type { MarketingCampaign } from '@content/shared';
 import AppleButton from '../../../components/AppleButton.vue';
 import { CAMPAIGN_TYPE_LABELS } from '../composables/useCampaigns';
 import CampaignStatusTag from './CampaignStatusTag.vue';
-import { formatCount, formatGmv } from '../../../utils/format';
+import { displayMoney, formatCount } from '../../../utils/format';
 
 const props = withDefaults(
   defineProps<{

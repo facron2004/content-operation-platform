@@ -6,7 +6,7 @@ import type {
   OverviewTrendPoint
 } from '../../../services/api/overview.api';
 import { beijingDateKey } from '@content/shared';
-import { formatGmv, formatPercent } from '../../../utils/format';
+import { displayMoney, formatPercent } from '../../../utils/format';
 import { createOverviewActions } from './overview-core';
 import { buildOverviewDistributionOption, buildOverviewTrendOption } from './overview-chart';
 
@@ -77,7 +77,7 @@ export function useOverview() {
     offendersEmptyText: computed(() =>
       topOffenders.value.length === 0 && !offendersLoading.value ? '暂无零动销商家' : '加载中…'
     ),
-    formatGmv,
+    displayMoney,
     formatPercent,
     ...actions
   };

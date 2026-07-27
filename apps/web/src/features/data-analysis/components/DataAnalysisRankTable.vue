@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { DataAnalysisRankRow } from '../../../services/api/data-analysis.api';
-import { formatGmv, formatNumber, formatPercent, rateClassInv } from '../../../utils/format';
+import { displayMoney, formatNumber, formatPercent, rateClassInv } from '../../../utils/format';
 
 defineProps<{
   title: string;
@@ -29,13 +29,13 @@ defineProps<{
         <template #default="{ row }">{{ formatNumber(row.orderCount, 0) }}</template>
       </el-table-column>
       <el-table-column label="销售额" min-width="110" align="right">
-        <template #default="{ row }">{{ formatGmv(row.salesAmount) }}</template>
+        <template #default="{ row }">{{ displayMoney(row, 'salesAmount') }}</template>
       </el-table-column>
       <el-table-column label="余额抵扣" min-width="100" align="right">
-        <template #default="{ row }">{{ formatGmv(row.walletAmount) }}</template>
+        <template #default="{ row }">{{ displayMoney(row, 'walletAmount') }}</template>
       </el-table-column>
       <el-table-column label="退款" min-width="90" align="right">
-        <template #default="{ row }">{{ formatGmv(row.refundAmount) }}</template>
+        <template #default="{ row }">{{ displayMoney(row, 'refundAmount') }}</template>
       </el-table-column>
       <el-table-column label="核销率" min-width="90" align="right">
         <template #default="{ row }">
@@ -45,7 +45,7 @@ defineProps<{
         </template>
       </el-table-column>
       <el-table-column label="客单价" min-width="90" align="right">
-        <template #default="{ row }">{{ formatGmv(row.avgOrderValue) }}</template>
+        <template #default="{ row }">{{ displayMoney(row, 'avgOrderValue') }}</template>
       </el-table-column>
     </el-table>
     <p v-if="!rows.length && emptyHint" class="empty-hint">{{ emptyHint }}</p>

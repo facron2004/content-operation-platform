@@ -1,6 +1,7 @@
 import type { Ref } from 'vue';
 import type { GmvDistributionRow, GmvKpi } from '../../../services/api/gmv.api';
 import { getGmvDistribution } from '../../../services/api/gmv.api';
+import { readFen, sumMoneyFen } from '../../../utils/format';
 import type {
   GmvActivityRow,
   GmvAlertItem,
@@ -29,6 +30,8 @@ function colorAt(idx: number) {
  * 品类：走 /gmv/distribution?dim=category。
  * Residual #289: keep synthetic 「其他」 long-tail so donut shares stay platform-total based;
  * only drop empty / 「未分类」 noise. Prefer server `share` (denom = platform totalGmv).
+ *
+ * VNext §7.4.5：品类金额求和改用整数分（sumMoneyFen），占比用 fen 比值，消除浮点累积误差。
  */
 export function mapCategoryRows(rows: GmvDistributionRow[]): GmvCategoryRow[] {
   const usable = rows.filter((r) => r.totalGmv > 0 && r.key && r.key !== '未分类');
@@ -37,11 +40,15 @@ export function mapCategoryRows(rows: GmvDistributionRow[]): GmvCategoryRow[] {
   const hasServerShare = usable.every(
     (r) => typeof r.share === 'number' && Number.isFinite(r.share)
   );
-  const total = usable.reduce((s, r) => s + r.totalGmv, 0);
+  const totalFen = sumMoneyFen(usable, 'totalGmv');
   return usable.map((r, idx) => ({
     name: r.key,
-    value: r.totalGmv,
-    share: hasServerShare ? r.share : total > 0 ? r.totalGmv / total : 0,
+    value: Number(readFen(r, 'totalGmv') ?? 0) / 100,
+    share: hasServerShare
+      ? r.share
+      : totalFen > 0n
+        ? Number(sumMoneyFen([r], 'totalGmv')) / Number(totalFen)
+        : 0,
     color: colorAt(idx)
   }));
 }
@@ -53,9 +60,9 @@ export function mapCategoryRows(rows: GmvDistributionRow[]): GmvCategoryRow[] {
 export function mapPaymentChannelRows(kpi: GmvKpi | null): GmvChannelRow[] {
   if (!kpi) return [];
   const parts = [
-    { name: '现金支付', value: Number(kpi.gmvOnline ?? 0), color: '#2e90fa' },
-    { name: '余额支付', value: Number(kpi.gmvWallet ?? 0), color: '#16b79e' },
-    { name: '积分抵现', value: Number(kpi.gmvBonus ?? 0), color: '#9e77ed' }
+    { name: '现金支付', value: Number(readFen(kpi, 'gmvOnline') ?? 0) / 100, color: '#2e90fa' },
+    { name: '余额支付', value: Number(readFen(kpi, 'gmvWallet') ?? 0) / 100, color: '#16b79e' },
+    { name: '积分抵现', value: Number(readFen(kpi, 'gmvBonus') ?? 0) / 100, color: '#9e77ed' }
   ].filter((p) => p.value > 0);
   const total = parts.reduce((s, p) => s + p.value, 0);
   if (total <= 0) return [];
@@ -68,9 +75,9 @@ export function mapPaymentChannelRows(kpi: GmvKpi | null): GmvChannelRow[] {
  */
 export function mapFunnelFromKpi(kpi: GmvKpi | null): GmvFunnelStage[] {
   if (!kpi || kpi.totalGmv <= 0) return [];
-  const paid = Number(kpi.totalGmv);
-  const verified = Number(kpi.totalVerify ?? 0);
-  const refunded = Number(kpi.totalRefund ?? 0);
+  const paid = Number(readFen(kpi, 'totalGmv') ?? 0) / 100;
+  const verified = Number(readFen(kpi, 'totalVerify') ?? 0) / 100;
+  const refunded = Number(readFen(kpi, 'totalRefund') ?? 0) / 100;
   return [
     { label: '支付', value: paid, rate: 1, color: '#2e90fa' },
     {
@@ -94,10 +101,10 @@ export function mapHeatFromAreas(rows: GmvDistributionRow[]): GmvHeatPoint[] {
     (r) => r.key && r.key !== '其他' && r.key !== '未分区' && r.totalGmv > 0
   );
   if (usable.length === 0) return [];
-  const max = Math.max(...usable.map((r) => r.totalGmv));
+  const max = Math.max(...usable.map((r) => Number(readFen(r, 'totalGmv') ?? 0) / 100));
   const cols = Math.min(5, Math.max(3, Math.ceil(Math.sqrt(usable.length))));
   return usable.map((r, idx) => {
-    const intensity = max > 0 ? r.totalGmv / max : 0;
+    const intensity = max > 0 ? (Number(readFen(r, 'totalGmv') ?? 0) / 100) / max : 0;
     return {
       name: r.key,
       value: [idx % cols, Math.floor(idx / cols), intensity] as [number, number, number]

@@ -1,5 +1,5 @@
 import type { TopMerchantRow } from '../../../services/api/refund.api';
-import { rateClass, rateClassInv } from '../../../utils/format';
+import { rateClass, rateClassInv, readFen } from '../../../utils/format';
 import type { RefundVerifyTab, RefundVerifyTrendPoint } from './refund-verify-core';
 
 export function refundVerifyRowClass(row: TopMerchantRow, activeTab: RefundVerifyTab): string {
@@ -40,7 +40,7 @@ export function buildRefundVerifyTrendOption(
         type: 'line',
         smooth: true,
         yAxisIndex: 0,
-        data: trend.map((p) => Number(p.amount.toFixed(2))),
+        data: trend.map((p) => Number(readFen(p, 'amount') ?? 0) / 100),
         itemStyle: { color: amountColor },
         areaStyle: { color: areaColor }
       },

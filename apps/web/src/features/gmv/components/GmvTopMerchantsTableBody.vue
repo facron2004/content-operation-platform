@@ -5,16 +5,16 @@
       <template #default="{ row }">{{ row.areaName || '—' }}</template>
     </el-table-column>
     <el-table-column prop="gmv" label="GMV" min-width="110" align="right">
-      <template #default="{ row }">¥ {{ formatNumber(row.gmv) }}</template>
+      <template #default="{ row }">{{ displayMoney(row, 'gmv') }}</template>
     </el-table-column>
     <el-table-column prop="gmvRefund" label="退款金额" min-width="100" align="right">
-      <template #default="{ row }">¥ {{ formatNumber(row.gmvRefund) }}</template>
+      <template #default="{ row }">{{ displayMoney(row, 'gmvRefund') }}</template>
     </el-table-column>
     <el-table-column label="退款率" min-width="80" align="right">
       <template #default="{ row }">{{ formatPercent(row.refundRate) }}</template>
     </el-table-column>
     <el-table-column prop="gmvVerify" label="核销金额" min-width="100" align="right">
-      <template #default="{ row }">¥ {{ formatNumber(row.gmvVerify) }}</template>
+      <template #default="{ row }">{{ displayMoney(row, 'gmvVerify') }}</template>
     </el-table-column>
     <el-table-column label="核销率" min-width="80" align="right">
       <template #default="{ row }">{{ formatPercent(row.verifyRate) }}</template>
@@ -23,7 +23,7 @@
   </el-table>
 </template>
 <script setup lang="ts">
-import { formatNumber, formatPercent } from '../../../utils/format';
+import { displayMoney, formatPercent } from '../../../utils/format';
 defineProps<{
   topMerchants: Array<{
     merchantName: string;

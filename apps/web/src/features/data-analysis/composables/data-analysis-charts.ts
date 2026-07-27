@@ -4,13 +4,14 @@ import type {
   DataAnalysisHourlyRow,
   DataAnalysisTimeSlotRow
 } from '../../../services/api/data-analysis.api';
+import { readFen } from '../../../utils/format';
 
 /** Dual-line daily sales trend: net sales + trade amount. */
 export function buildDailyTrendOption(points: DataAnalysisDailyPoint[]) {
   if (!points.length) return {};
   const dates = points.map((p) => p.date.slice(5)); // MM-DD
-  const net = points.map((p) => Number(p.netSales.toFixed(2)));
-  const trade = points.map((p) => Number(p.tradeAmount.toFixed(2)));
+  const net = points.map((p) => Number(readFen(p, 'netSales') ?? 0) / 100);
+  const trade = points.map((p) => Number(readFen(p, 'tradeAmount') ?? 0) / 100);
   return {
     color: ['#2563eb', '#10b981'],
     tooltip: {
@@ -107,7 +108,7 @@ export function buildChannelDonutOption(channels: DataAnalysisChannelSlice[], to
         labelLine: { show: false },
         data: channels.map((c) => ({
           name: c.label,
-          value: Number(c.salesAmount.toFixed(2))
+          value: Number(readFen(c, 'salesAmount') ?? 0) / 100
         })),
         // Center annotation via graphic is handled by the parent card.
         emphasis: {
@@ -151,7 +152,7 @@ export function buildTimeSlotOption(slots: DataAnalysisTimeSlotRow[]) {
         type: 'line',
         yAxisIndex: 1,
         smooth: true,
-        data: slots.map((s) => Number(s.salesAmount.toFixed(2))),
+        data: slots.map((s) => Number(readFen(s, 'salesAmount') ?? 0) / 100),
         itemStyle: { color: '#f97316' },
         lineStyle: { width: 2 }
       }
@@ -165,7 +166,7 @@ export function buildHourlyOption(hourly: DataAnalysisHourlyRow[]) {
   const byHour = new Map(hourly.map((h) => [h.hour, h]));
   const hours = Array.from({ length: 24 }, (_, h) => h);
   const orders = hours.map((h) => byHour.get(h)?.orderCount ?? 0);
-  const sales = hours.map((h) => Number((byHour.get(h)?.salesAmount ?? 0).toFixed(2)));
+  const sales = hours.map((h) => Number(readFen(byHour.get(h), 'salesAmount') ?? 0) / 100);
   if (!hourly.length) return {};
   return {
     tooltip: { trigger: 'axis' },

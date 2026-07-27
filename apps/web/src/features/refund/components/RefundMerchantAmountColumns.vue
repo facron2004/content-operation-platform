@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { TopMerchantRow } from '../../../services/api/refund.api';
 import type { RefundVerifyTab } from '../composables/refund-verify-core';
+import { displayMoney } from '../../../utils/format';
 defineProps<{
   activeTab: RefundVerifyTab;
   rateClass: (row: TopMerchantRow, tab: RefundVerifyTab) => string;

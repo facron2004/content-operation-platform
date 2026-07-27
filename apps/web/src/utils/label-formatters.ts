@@ -1,11 +1,9 @@
 import { formatRatePercent } from '@content/shared';
-export function displayPrice(row: {
-  temporarySalePrice?: number | null;
-  salePrice?: number;
-}): string {
-  const price = row.temporarySalePrice ?? row.salePrice;
-  return price == null ? '-' : `${price}`;
-}
+import { displayMoney, formatFenYuan, sumMoney, sumMoneyFen, readFen } from './money';
+
+// VNext 金额精度治理（PRD §7.4.4/§7.4.5）：消费后端 *Fen/*Display。
+export { displayMoney, formatFenYuan, sumMoney, sumMoneyFen, readFen };
+
 export function formatMoney(value?: number, decimals = 0): string {
   if (value == null || Number.isNaN(value)) return '-';
   return `${value.toLocaleString('zh-CN', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}`;
@@ -26,4 +24,14 @@ export function scoreTooltip(
     .slice(0, 4)
     .map((item) => `${item.label} ${Math.round(item.score)}`)
     .join(' / ');
+}
+
+// VNext §7.4.5：优先读临时售价 → 售价的 *Fen/*Display，统一格式化为 ¥ x.xx。
+export function displayPrice(row: {
+  temporarySalePrice?: number | null;
+  salePrice?: number | null;
+}): string {
+  if (row.temporarySalePrice == null && row.salePrice == null) return '-';
+  const field = row.temporarySalePrice != null ? 'temporarySalePrice' : 'salePrice';
+  return displayMoney(row, field);
 }

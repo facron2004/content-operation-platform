@@ -3,7 +3,7 @@ import type { RouteLocationNormalizedLoaded, Router } from 'vue-router';
 import type { MerchantTrendResponse } from '../../../services/api/merchant.api';
 import type { StaleBucket } from '../../../services/api/zero-sales.api';
 import { STALE_BUCKET_COLORS, STALE_BUCKET_LABELS } from '../../../services/api/zero-sales.api';
-import { formatGmv as formatGmvShared, formatPercent } from '../../../utils/format';
+import { formatGmv as formatGmvShared, formatPercent, readFen, sumMoneyFen } from '../../../utils/format';
 import { type createMerchantState } from './merchant-core';
 
 type MerchantState = ReturnType<typeof createMerchantState>;
@@ -13,7 +13,8 @@ const staleLabel = (b: StaleBucket) => STALE_BUCKET_LABELS[b] ?? b;
 
 function buildMerchantTrendSummary(trend: MerchantTrendResponse | null) {
   if (!trend) return { totalGmv: 0, conversionRate: 0 };
-  const totalGmv = trend.trend.reduce((sum, p) => sum + p.gmv, 0);
+  // VNext §7.4.5：用整数分求和（替代浮点 reduce 累加）
+  const totalGmv = Number(sumMoneyFen(trend.trend, 'gmv')) / 100;
   const totalExposure = trend.trend.reduce((sum, p) => sum + p.exposureCount, 0);
   const totalOrder = trend.trend.reduce((sum, p) => sum + p.orderCount, 0);
   return { totalGmv, conversionRate: totalExposure > 0 ? totalOrder / totalExposure : 0 };
@@ -35,7 +36,7 @@ function buildMerchantTrendOption(trend: MerchantTrendResponse | null) {
         type: 'line',
         smooth: true,
         yAxisIndex: 0,
-        data: trend.trend.map((p) => Number(p.gmv.toFixed(2))),
+        data: trend.trend.map((p) => Number(readFen(p, 'gmv') ?? 0) / 100),
         itemStyle: { color: '#2563eb' },
         areaStyle: { color: 'rgba(37, 99, 235, 0.08)' }
       },

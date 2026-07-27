@@ -3,7 +3,7 @@ import type {
   DataAnalysisDeltas,
   DataAnalysisOverview
 } from '../../../services/api/data-analysis.api';
-import { formatGmv, formatPercent } from '../../../utils/format';
+import { displayMoney, formatPercent } from '../../../utils/format';
 import { formatDelta } from '../composables/useDataAnalysisPage';
 
 const props = defineProps<{
@@ -24,28 +24,28 @@ const cards: Array<{
     key: 'salesAmount',
     label: '总销售额（实付）',
     tone: 'blue',
-    value: (o) => formatGmv(o?.salesAmount),
+    value: (o) => displayMoney(o, 'salesAmount'),
     icon: 'bag'
   },
   {
     key: 'tradeAmount',
     label: '交易额（含余额）',
     tone: 'cyan',
-    value: (o) => formatGmv(o?.tradeAmount),
+    value: (o) => displayMoney(o, 'tradeAmount'),
     icon: 'card'
   },
   {
     key: 'netSales',
     label: '净销售额',
     tone: 'indigo',
-    value: (o) => formatGmv(o?.netSales),
+    value: (o) => displayMoney(o, 'netSales'),
     icon: 'yen'
   },
   {
     key: 'refundAmount',
     label: '退款金额',
     tone: 'orange',
-    value: (o) => formatGmv(o?.refundAmount),
+    value: (o) => displayMoney(o, 'refundAmount'),
     icon: 'refund'
   },
   {

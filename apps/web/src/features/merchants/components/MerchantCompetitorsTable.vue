@@ -17,7 +17,12 @@
       <el-table-column label="SKU 数" width="90" align="right" prop="skuCount" />
       <el-table-column label="均价" width="100" align="right">
         <template #default="{ row }">
-          ¥ {{ row.skuCount > 0 ? (row.totalPrice / row.skuCount).toFixed(2) : '—' }}
+          ¥
+          {{
+            row.skuCount > 0
+              ? formatFenYuan((readFen(row, 'totalPrice') ?? 0n) / BigInt(row.skuCount))
+              : '—'
+          }}
         </template>
       </el-table-column>
     </el-table>
@@ -25,6 +30,7 @@
 </template>
 <script setup lang="ts">
 import { computed } from 'vue';
+import { formatFenYuan, readFen } from '../../../utils/format';
 const props = withDefaults(
   defineProps<{
     competitors: Array<{

@@ -72,7 +72,8 @@ describe('residual #178 campaign detail campaign-scoped performance', () => {
       'totalOrders',
       'totalGmv'
     ]) {
-      expect(src).toMatch(new RegExp(`p\\?\\.${field}`));
+      // VNext §7.4.5：允许迁移后的 displayMoney(p, '<field>') 形态。
+      expect(src).toMatch(new RegExp(`(p\\?\\.${field}|displayMoney\\(p, '${field}'\\))`));
     }
   });
 

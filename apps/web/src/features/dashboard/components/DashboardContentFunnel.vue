@@ -48,7 +48,7 @@
       <el-col :span="4">
         <MetricTile
           label="内容 GMV"
-          :value="'¥' + formatGmv(funnel.totalGmv)"
+          :value="displayMoney(funnel, 'totalGmv')"
           :hint="conversionHint"
         />
       </el-col>
@@ -61,6 +61,7 @@ import { computed } from 'vue';
 import { useRouter } from 'vue-router';
 import MetricTile from '../../../components/MetricTile.vue';
 import { useContentFunnel } from '../composables/useContentFunnel';
+import { displayMoney } from '../../../utils/format';
 
 const router = useRouter();
 const { loading, funnel } = useContentFunnel();
@@ -80,11 +81,6 @@ const conversionHint = computed(() => {
   const pct = (r: number) => `${(r * 100).toFixed(1)}%`;
   return `点击→下单 ${pct(c)} · 下单→核销 ${pct(v)}`;
 });
-
-function formatGmv(value: number): string {
-  // API totalGmv is yuan (toFixed(2) from SUM); show 2 decimals.
-  return Number(value || 0).toFixed(2);
-}
 
 /** Drill into audit queue with optional status filter. */
 function goAudit(status?: string) {

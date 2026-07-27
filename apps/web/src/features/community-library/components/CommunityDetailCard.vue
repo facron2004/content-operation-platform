@@ -99,7 +99,7 @@
             <span class="metric-label">已失败</span>
           </div>
           <div class="metric-item">
-            <span class="metric-value">{{ formatMoney(performance.totalGmv) }}</span>
+            <span class="metric-value">{{ displayMoney(performance, 'totalGmv') }}</span>
             <span class="metric-label">累计 GMV</span>
           </div>
         </div>
@@ -183,7 +183,7 @@ import type {
   CommunityPerformanceResponse,
   DistributionTask
 } from '@content/shared';
-import { formatMoney } from '../../../utils/labels';
+import { displayMoney } from '../../../utils/format';
 import AppleButton from '../../../components/AppleButton.vue';
 import TaskStatusTag from '../../task-center/components/TaskStatusTag.vue';
 import CommunityPackageList from '../../communities/components/CommunityPackageList.vue';

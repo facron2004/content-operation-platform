@@ -7,11 +7,12 @@ import type {
   MerchantSalesWindow
 } from '../../../services/api/merchant-sales.api';
 import {
-  formatGmv,
+  displayMoney,
   formatNumber,
   formatPercent,
   rateClass,
-  rateClassInv
+  rateClassInv,
+  readFen
 } from '../../../utils/format';
 import {
   type createMerchantSalesState,
@@ -42,7 +43,7 @@ function buildMerchantSalesTrendSeries(points: MerchantSalesTrendPoint[]) {
       type: 'line',
       smooth: true,
       yAxisIndex: 0,
-      data: points.map((p) => Number(p.totalGmv.toFixed(2))),
+      data: points.map((p) => Number(readFen(p, 'totalGmv') ?? 0) / 100),
       itemStyle: { color: '#2563eb' },
       areaStyle: { color: 'rgba(37, 99, 235, 0.08)' }
     },
@@ -51,7 +52,7 @@ function buildMerchantSalesTrendSeries(points: MerchantSalesTrendPoint[]) {
       type: 'line',
       smooth: true,
       yAxisIndex: 0,
-      data: points.map((p) => Number(p.totalRefund.toFixed(2))),
+      data: points.map((p) => Number(readFen(p, 'totalRefund') ?? 0) / 100),
       itemStyle: { color: '#ef4444' }
     },
     {
@@ -59,7 +60,7 @@ function buildMerchantSalesTrendSeries(points: MerchantSalesTrendPoint[]) {
       type: 'line',
       smooth: true,
       yAxisIndex: 0,
-      data: points.map((p) => Number(p.totalVerify.toFixed(2))),
+      data: points.map((p) => Number(readFen(p, 'totalVerify') ?? 0) / 100),
       itemStyle: { color: '#10b981' }
     },
     {
@@ -191,7 +192,7 @@ export const merchantSalesFormatters = {
     merchantSalesRowClass(row as { refundRate: number; verifyRate: number; gmv: number }),
   rateClass,
   rateClassInv,
-  formatGmv,
+  displayMoney,
   formatNumber,
   formatPercent
 };

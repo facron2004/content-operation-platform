@@ -32,7 +32,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import type { TaskKpiResponse } from '@content/shared';
-import { formatCount, formatGmv } from '../../../utils/format';
+import { displayMoney, formatCount } from '../../../utils/format';
 
 /** Residual #206: keys that map to list filters (matches getTaskKpi CASE arms). */
 export type TaskKpiFilterKey = 'todayPending' | 'inProgress' | 'completed' | 'overdue' | 'failed';
@@ -96,7 +96,7 @@ const kpiItems = computed(() => [
   {
     key: 'todayTaskGmv' as const,
     label: '今日任务 GMV',
-    value: formatGmv(props.kpis?.todayTaskGmv),
+    value: displayMoney(props.kpis, 'todayTaskGmv'),
     color: 'success',
     clickable: false
   }

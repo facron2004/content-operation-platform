@@ -1,11 +1,11 @@
 import type { ContentPackage } from '@content/shared';
 import {
-  formatMoney,
   inventoryTagType,
   operationTagType,
   salesTagType,
   statusLabels
 } from '../../utils/labels';
+import { displayMoney } from '../../utils/format';
 
 export type PackageAnalysisHeroData = {
   status: string;
@@ -28,8 +28,11 @@ export const operationFlagTagType = (level: string) => operationTagType(level as
 export function buildPackagePriceDisplay(target: ContentPackage | undefined) {
   if (!target) return { original: '-', current: '-', welfare: '-' };
   return {
-    original: formatMoney(target.originalPrice),
-    current: formatMoney(target.temporarySalePrice ?? target.salePrice),
-    welfare: formatMoney(target.welfarePrice ?? undefined)
+    original: displayMoney(target, 'originalPrice'),
+    current: displayMoney(
+      target,
+      target.temporarySalePrice != null ? 'temporarySalePrice' : 'salePrice'
+    ),
+    welfare: displayMoney(target, 'welfarePrice')
   };
 }

@@ -5,7 +5,7 @@ import type {
   DataAnalysisPackageRankRow,
   DataAnalysisWindowSnapshot
 } from '../../../services/api/data-analysis.api';
-import { formatGmv, formatNumber, formatPercent } from '../../../utils/format';
+import { displayMoney, formatNumber, formatPercent } from '../../../utils/format';
 import { formatDelta } from '../composables/useDataAnalysisPage';
 
 const props = defineProps<{
@@ -59,7 +59,7 @@ const cols = computed(() => {
 function cell(snap: DataAnalysisWindowSnapshot | undefined, key: MetricKey, kind: string) {
   if (!snap) return '—';
   const v = snap.overview[key] as number | undefined;
-  if (kind === 'money') return formatGmv(v);
+  if (kind === 'money') return displayMoney(snap.overview, key);
   if (kind === 'rate') return formatPercent(v);
   return formatNumber(v, 0);
 }
@@ -127,7 +127,7 @@ function displayPackageName(row: DataAnalysisPackageRankRow): string {
           <template #default="{ row }">{{ displayPackageName(row) }}</template>
         </el-table-column>
         <el-table-column label="销售额" min-width="110" align="right">
-          <template #default="{ row }">{{ formatGmv(row.salesAmount) }}</template>
+          <template #default="{ row }">{{ displayMoney(row, 'salesAmount') }}</template>
         </el-table-column>
         <el-table-column label="订单数" min-width="80" align="right">
           <template #default="{ row }">{{ formatNumber(row.orderCount, 0) }}</template>

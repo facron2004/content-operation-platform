@@ -2,7 +2,7 @@
   <el-table-column prop="packageName" label="套餐" min-width="160" />
   <el-table-column prop="category" label="品类" width="100" />
   <el-table-column label="售价" width="90" align="right">
-    <template #default="{ row }">¥ {{ row.salePrice.toFixed(2) }}</template>
+    <template #default="{ row }">{{ displayMoney(row, 'salePrice') }}</template>
   </el-table-column>
   <el-table-column label="库存" width="80" align="right" prop="stockLeft" />
   <el-table-column label="距上次销售" width="100" align="right">
@@ -35,6 +35,7 @@
 </template>
 <script setup lang="ts">
 import AppleButton from '../../../components/AppleButton.vue';
+import { displayMoney } from '../../../utils/format';
 defineProps<{ staleColor: (bucket: string) => string; staleLabel: (bucket: string) => string }>();
 defineEmits<{ (e: 'go-analysis', packageId: string): void }>();
 </script>

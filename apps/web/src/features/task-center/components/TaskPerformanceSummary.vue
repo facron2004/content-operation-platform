@@ -17,7 +17,7 @@
 import { computed } from 'vue';
 import type { CSSProperties } from 'vue';
 import type { TaskPerformanceResponse } from '@content/shared';
-import { formatGmv, formatPercent } from '../../../utils/format';
+import { displayMoney, formatPercent } from '../../../utils/format';
 
 interface SummaryMetric {
   label: string;
@@ -47,7 +47,7 @@ const metrics = computed<SummaryMetric[]>(() => {
   return [
     { label: '访问量', value: p?.visits ?? 0 },
     { label: '订单数', value: p?.orders ?? 0 },
-    { label: '累计 GMV', value: formatGmv(p?.gmv ?? 0) },
+    { label: '累计 GMV', value: displayMoney(p, 'gmv') },
     { label: '转化率', value: formatPercent(p?.conversionRate ?? 0) },
     {
       label: '核销率',
