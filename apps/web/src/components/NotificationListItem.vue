@@ -17,15 +17,17 @@
       <div class="notification-message">{{ notification.message }}</div>
       <div class="notification-time">{{ formatNotificationTime(notification.timestamp) }}</div>
     </div>
-    <el-button
-      size="small"
-      circle
-      text
+    <AppleButton
+      size="sm"
+      icon-only
+      variant="quiet"
       class="remove-button"
       @click.stop="$emit('remove', notification.id)"
     >
-      <el-icon><Close /></el-icon>
-    </el-button>
+      <template #icon>
+        <el-icon><Close /></el-icon>
+      </template>
+    </AppleButton>
   </div>
 </template>
 <script setup lang="ts">
@@ -38,6 +40,7 @@ import {
 } from '@element-plus/icons-vue';
 import type { Notification } from '../services/notification.service';
 import { formatNotificationTime } from './notification-helpers';
+import AppleButton from './AppleButton.vue';
 defineProps<{ notification: Notification }>();
 defineEmits<{ click: [notification: Notification]; remove: [id: string] }>();
 </script>

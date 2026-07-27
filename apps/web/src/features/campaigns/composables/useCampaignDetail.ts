@@ -1,29 +1,103 @@
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import type { MarketingCampaign, TaskKpiResponse } from '@content/shared';
+import type {
+  CampaignPerformanceResponse,
+  DistributionTask,
+  MarketingCampaign
+} from '@content/shared';
 import { api } from '../../../services/api';
 import { extractErrorMessage } from '../../../services/http-client';
+
+const NESTED_TASKS_PAGE_SIZE = 10;
 
 export function useCampaignDetail(campaignId: string) {
   const loading = ref(false);
   const actionLoading = ref(false);
   const campaign = ref<MarketingCampaign | null>(null);
-  const kpis = ref<TaskKpiResponse | null>(null);
+  // Residual #178: campaign-scoped performance (not platform getTaskKPIs).
+  const performance = ref<CampaignPerformanceResponse | null>(null);
+  // Residual #187/#239: nested campaign tasks with pagination (was first page only).
+  const tasks = ref<DistributionTask[]>([]);
+  const tasksTotal = ref(0);
+  const tasksPage = ref(1);
+  const tasksPageSize = ref(NESTED_TASKS_PAGE_SIZE);
+  const tasksLoading = ref(false);
+  // Residual #271: listTasks INTERACTIVE_LIST_MAX_DAYS window honesty.
+  const tasksDateFrom = ref<string | undefined>();
+  const tasksDateTo = ref<string | undefined>();
+  const tasksWindowLabel = computed(() => {
+    if (tasksDateFrom.value && tasksDateTo.value) {
+      return `${tasksDateFrom.value} ~ ${tasksDateTo.value}`;
+    }
+    return '近 90 天';
+  });
+  let tasksRequestId = 0;
+
+  async function loadTasks(page = tasksPage.value): Promise<void> {
+    if (!campaignId) return;
+    const requestId = ++tasksRequestId;
+    tasksLoading.value = true;
+    try {
+      const taskPage = await api.listTasks({
+        campaignId,
+        page,
+        pageSize: tasksPageSize.value
+      });
+      if (requestId !== tasksRequestId) return;
+      tasks.value = (taskPage.items ?? []) as DistributionTask[];
+      tasksTotal.value = Number(taskPage.total ?? 0);
+      tasksPage.value = page;
+      tasksDateFrom.value = taskPage.dateFrom;
+      tasksDateTo.value = taskPage.dateTo;
+    } catch {
+      if (requestId !== tasksRequestId) return;
+      if (tasks.value.length === 0) {
+        tasksTotal.value = 0;
+      }
+    } finally {
+      if (requestId === tasksRequestId) tasksLoading.value = false;
+    }
+  }
+
+  async function setTasksPage(page: number): Promise<void> {
+    const next = Math.max(1, Math.floor(Number(page) || 1));
+    if (next === tasksPage.value && tasks.value.length > 0) return;
+    await loadTasks(next);
+  }
 
   async function loadDetail(): Promise<void> {
     if (loading.value) return;
     loading.value = true;
+    tasksLoading.value = true;
+    const openTasksRequestId = ++tasksRequestId;
     try {
-      const [campaignData, kpiData] = await Promise.all([
+      const [campaignData, perfData, taskPage] = await Promise.all([
         api.getCampaign(campaignId),
-        api.getTaskKPIs()
+        api.getCampaignPerformance(campaignId),
+        api.listTasks({ campaignId, page: 1, pageSize: NESTED_TASKS_PAGE_SIZE }).catch(() => null)
       ]);
       campaign.value = campaignData as MarketingCampaign;
-      kpis.value = kpiData;
+      performance.value = perfData;
+      if (openTasksRequestId === tasksRequestId) {
+        if (taskPage) {
+          tasks.value = (taskPage.items ?? []) as DistributionTask[];
+          tasksTotal.value = Number(taskPage.total ?? 0);
+          tasksPage.value = 1;
+          tasksDateFrom.value = taskPage.dateFrom;
+          tasksDateTo.value = taskPage.dateTo;
+        } else {
+          tasks.value = [];
+          tasksTotal.value = 0;
+          tasksPage.value = 1;
+          tasksDateFrom.value = undefined;
+          tasksDateTo.value = undefined;
+        }
+      }
     } catch (error) {
       ElMessage.error(extractErrorMessage(error, '加载活动详情失败'));
     } finally {
       loading.value = false;
+      if (openTasksRequestId === tasksRequestId) tasksLoading.value = false;
     }
   }
 
@@ -35,9 +109,15 @@ export function useCampaignDetail(campaignId: string) {
     if (actionLoading.value) return;
     actionLoading.value = true;
     try {
-      await action();
+      // Residual #124: transition endpoints return the full campaign row.
+      // Apply it directly — do not pay a second getCampaign + performance round-trip.
+      // Performance is a trailing 90d aggregate and does not change on status transition;
+      // loadDetail remains available for explicit refresh.
+      const result = await action();
+      if (result && typeof result === 'object' && result !== null && 'campaignId' in result) {
+        campaign.value = result as MarketingCampaign;
+      }
       ElMessage.success(successText);
-      await loadDetail();
     } catch (error) {
       ElMessage.error(extractErrorMessage(error, failText));
     } finally {
@@ -76,8 +156,19 @@ export function useCampaignDetail(campaignId: string) {
     loading,
     actionLoading,
     campaign,
-    kpis,
+    performance,
+    tasks,
+    tasksTotal,
+    tasksPage,
+    tasksPageSize,
+    tasksLoading,
+    // Residual #271
+    tasksDateFrom,
+    tasksDateTo,
+    tasksWindowLabel,
     loadDetail,
+    setTasksPage,
+    loadTasks,
     startCampaign,
     pauseCampaign,
     completeCampaign,

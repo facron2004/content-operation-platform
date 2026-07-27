@@ -14,7 +14,10 @@ export interface MerchantListItem {
 
 export interface MerchantListResponse {
   items: MerchantListItem[];
-  pagination: { page: number; pageSize: number; hasMore: boolean };
+  pagination: { page: number; pageSize: number; hasMore: boolean; total?: number };
+  // Residual #266: MERCHANT_LIST_CACHE_CAP honesty.
+  limit?: number;
+  truncated?: boolean;
 }
 
 export interface MerchantProfile {
@@ -59,6 +62,11 @@ export interface MerchantSkuListResponse {
   merchantId: string;
   count: number;
   items: MerchantSkuItem[];
+  // Residual #246: echo of the sales-join window used server-side.
+  days?: number;
+  // Residual #250: SQL LIMIT honesty — SPA warns when list is truncated.
+  limit?: number;
+  truncated?: boolean;
 }
 
 export interface MerchantCompetitor {
@@ -73,6 +81,14 @@ export interface MerchantCompetitor {
 export interface MerchantCompetitorsResponse {
   merchantId: string;
   competitors: MerchantCompetitor[];
+  /** Residual #285: MERCHANT_COMPETITORS_LIMIT Top-N head. */
+  limit?: number;
+  /**
+   * Residual #285: matched before head clip.
+   * When truncated, at-least limit+1 (LIMIT+1 probe), not full COUNT.
+   */
+  matched?: number;
+  truncated?: boolean;
 }
 
 export async function listMerchants(params: {
@@ -125,6 +141,9 @@ export interface MerchantHeatmapResponse {
   mappedMerchants: number;
   unmappedMerchants: number;
   center: { lat: number; lng: number };
+  // Residual #269: PLATFORM_SCAN_LIMIT honesty.
+  limit?: number;
+  truncated?: boolean;
 }
 
 export async function getMerchantHeatmap() {

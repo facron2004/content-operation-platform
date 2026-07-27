@@ -2,12 +2,67 @@ import type { InventoryRuleConfig } from './rules-defaults';
 import { MS_PER_DAY } from './utils';
 
 export type StaleBucket = 'normal' | 'stale_7d' | 'stale_15d' | 'stale_30d' | 'stale_60d';
+
+/** Strict business-day key (YYYY-MM-DD). Shared with DTO Matches. */
+export const DATE_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+export function isDateKey(value: string | null | undefined): value is string {
+  return typeof value === 'string' && DATE_KEY_RE.test(value);
+}
+
 export function daysBetween(a: string, b: string): number {
-  if (!a || !b || !/^\d{4}-\d{2}-\d{2}$/.test(a) || !/^\d{4}-\d{2}-\d{2}$/.test(b)) return 0;
+  if (!isDateKey(a) || !isDateKey(b)) return 0;
   const ta = Date.parse(a + 'T00:00:00Z'),
     tb = Date.parse(b + 'T00:00:00Z');
   if (!Number.isFinite(ta) || !Number.isFinite(tb)) return 0;
   return Math.max(0, Math.floor((tb - ta) / MS_PER_DAY));
+}
+
+/**
+ * Validate an inclusive refresh/recompute window.
+ * Rejects non-YYYY-MM-DD keys (so IsDateString ISO datetimes cannot bypass
+ * the day-span cap via daysBetween returning 0) and spans longer than maxDays.
+ * Returns the validated keys for callers that already defaulted missing ends.
+ */
+export function assertInclusiveDaySpan(
+  startDate: string,
+  endDate: string,
+  maxDays: number
+): { startDate: string; endDate: string; span: number } {
+  if (!isDateKey(startDate) || !isDateKey(endDate)) {
+    throw Object.assign(new Error('DATE_KEY'), { code: 'DATE_KEY' as const });
+  }
+  if (startDate > endDate) {
+    throw Object.assign(new Error('START_AFTER_END'), { code: 'START_AFTER_END' as const });
+  }
+  const span = daysBetween(startDate, endDate);
+  // Defense-in-depth: if keys look valid but span collapses while start≠end,
+  // refuse rather than treating a multi-year ISO window as "0 days".
+  if (span === 0 && startDate !== endDate) {
+    throw Object.assign(new Error('DATE_KEY'), { code: 'DATE_KEY' as const });
+  }
+  if (span > maxDays) {
+    throw Object.assign(new Error('SPAN_TOO_LONG'), {
+      code: 'SPAN_TOO_LONG' as const,
+      span
+    });
+  }
+  return { startDate, endDate, span };
+}
+
+export type DaySpanErrorCode = 'DATE_KEY' | 'START_AFTER_END' | 'SPAN_TOO_LONG';
+export function daySpanErrorCode(err: unknown): DaySpanErrorCode | null {
+  if (!err || typeof err !== 'object') return null;
+  const code = (err as { code?: unknown }).code;
+  if (code === 'DATE_KEY' || code === 'START_AFTER_END' || code === 'SPAN_TOO_LONG') {
+    return code;
+  }
+  return null;
+}
+export function daySpanErrorSpan(err: unknown): number | undefined {
+  if (!err || typeof err !== 'object') return undefined;
+  const span = (err as { span?: unknown }).span;
+  return typeof span === 'number' ? span : undefined;
 }
 export interface ComputeStaleFlagInput {
   lastSalesDate: string | null;

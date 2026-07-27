@@ -1,6 +1,7 @@
 <script setup lang="ts">
 // Parent passes a reactive form object; child writes fields in place.
 /* eslint-disable vue/no-mutating-props */
+import AppleButton from '../../../components/AppleButton.vue';
 defineProps<{
   form: { type: string; name: string; merchantId: string; comment: string; payloadText: string };
   ruleTypeLabels: Record<string, string>;
@@ -23,9 +24,9 @@ defineEmits<{ 'type-change': []; 'load-default': [] }>();
     <el-form-item label="备注"><el-input v-model="form.comment" placeholder="选填" /></el-form-item>
     <el-form-item label="规则 payload（JSON）">
       <div class="payload-toolbar">
-        <el-button size="small" text type="primary" @click="$emit('load-default')">
+        <AppleButton size="sm" variant="ghost" @click="$emit('load-default')">
           载入{{ ruleTypeLabels[form.type] }}默认
-        </el-button>
+        </AppleButton>
         <span class="payload-hint">仅填写需覆盖的字段，其余回落默认</span>
       </div>
       <el-input

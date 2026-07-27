@@ -4,7 +4,11 @@
       <h3>异常预警</h3>
       <a class="gmv-alerts-more" href="javascript:void(0)">更多 ›</a>
     </header>
-    <div v-if="alerts.length === 0" class="gmv-alerts-empty">暂无异常预警</div>
+    <EmptyState
+      v-if="alerts.length === 0"
+      title="暂无异常预警"
+      description="一切正常，有异常指标时将自动显示预警"
+    />
     <ul v-else class="gmv-alerts-list">
       <li
         v-for="alert in alerts"
@@ -27,6 +31,7 @@
 
 <script setup lang="ts">
 import { TrendCharts, Warning, CircleClose } from '@element-plus/icons-vue';
+import EmptyState from '../../../components/EmptyState.vue';
 
 type AlertTone = 'danger' | 'warning' | 'info';
 
@@ -82,17 +87,6 @@ function iconFor(tone: AlertTone) {
 }
 .gmv-alerts-more:hover {
   color: #2e90fa;
-}
-
-.gmv-alerts-empty {
-  flex: 1;
-  min-height: 140px;
-  display: grid;
-  place-items: center;
-  color: #98a2b3;
-  font-size: 13px;
-  background: #f9fafb;
-  border-radius: 10px;
 }
 
 .gmv-alerts-list {

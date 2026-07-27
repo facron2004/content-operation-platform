@@ -1,6 +1,7 @@
 /** Consolidated refund module — OH primary, DM secondary, never SalesSnapshot. */
 import { beijingDateKey, shiftDateKey } from '@content/shared';
-import { TtlCache } from '../common';
+import { ConflictException } from '@nestjs/common';
+import { TtlCache, withHeavyAggregateGate } from '../common';
 import { isBeijingToday } from '../money';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -16,7 +17,7 @@ import {
   topRefundMerchants,
   topVerifyMerchants
 } from './refund-order-header';
-import { queryTopMerchantsWindow } from './refund-top-merchants';
+import { pageTopMerchants, queryAllTopMerchants } from './refund-top-merchants';
 import {
   type RefundTodayPayload,
   RefundTopMerchantsQueryDto,
@@ -33,30 +34,37 @@ export async function resolveWithCacheFallback<T>(o: {
   acceptPrimary?: (v: T) => boolean;
   acceptSecondary?: (v: T) => boolean;
 }): Promise<T> {
-  const cached = o.cache.get<T>(o.cacheKey);
-  if (cached) return cached;
+  // Single-flight via getOrLoad — concurrent cold hits must not re-run OH/DM SQL.
+  // Cold path also shares the process-wide heavy aggregate pool (parity GMV).
+  try {
+    return await o.cache.getOrLoad(o.cacheKey, false, () =>
+      withHeavyAggregateGate(async () => {
+        const primary = await o.primary();
+        if (primary != null && (o.acceptPrimary?.(primary) ?? true)) {
+          return primary;
+        }
 
-  const primary = await o.primary();
-  if (primary != null && (o.acceptPrimary?.(primary) ?? true)) {
-    o.cache.set(o.cacheKey, primary);
-    return primary;
-  }
+        if (o.secondary) {
+          const secondary = await o.secondary();
+          if (secondary != null && (o.acceptSecondary?.(secondary) ?? true)) {
+            return secondary;
+          }
+        }
 
-  if (o.secondary) {
-    const secondary = await o.secondary();
-    if (secondary != null && (o.acceptSecondary?.(secondary) ?? true)) {
-      o.cache.set(o.cacheKey, secondary);
-      return secondary;
+        // No SalesSnapshot fallback: return primary even if "empty" (truthful zeros).
+        if (primary != null) {
+          return primary;
+        }
+
+        throw new Error(`Money resolve produced no payload for cache key ${o.cacheKey}`);
+      })
+    );
+  } catch (err) {
+    if (err instanceof Error && err.name === 'HeavyAggregateQueueFullError') {
+      throw new ConflictException('退款核销计算繁忙，请稍后再试');
     }
+    throw err;
   }
-
-  // No SalesSnapshot fallback: return primary even if "empty" (truthful zeros).
-  if (primary != null) {
-    o.cache.set(o.cacheKey, primary);
-    return primary;
-  }
-
-  throw new Error(`Money resolve produced no payload for cache key ${o.cacheKey}`);
 }
 
 export type RefundPrisma = PrismaService;
@@ -155,14 +163,15 @@ export function createRefundServiceSurface(prisma: PrismaService, cache: TtlCach
     getVerifyToday: (date?: string) => loadVerifyToday(prisma, cache, date),
     getVerifyTrend: (days: 7 | 30, endDate?: string) =>
       loadVerifyTrend(prisma, cache, days, endDate),
-    getTopMerchants: (q: RefundTopMerchantsQueryDto) => {
-      const load = () => queryTopMerchantsWindow(prisma, q.sortBy, q.page, q.pageSize);
-      return resolveWithCacheFallback({
+    getTopMerchants: async (q: RefundTopMerchantsQueryDto) => {
+      // Page-less aggregate key — page flips share one sorted list (parity GMV / merchant-sales).
+      const all = await resolveWithCacheFallback({
         cache,
-        cacheKey: `refundTopMerchants:${q.sortBy}:${q.page}:${q.pageSize}`,
-        primary: load,
+        cacheKey: `refundTopMerchants:${q.sortBy}`,
+        primary: () => queryAllTopMerchants(prisma, q.sortBy),
         acceptPrimary: () => true
       });
+      return pageTopMerchants(all, q.page, q.pageSize);
     }
   };
 }

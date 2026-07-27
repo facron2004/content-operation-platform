@@ -6,8 +6,9 @@
         <strong>{{ pkg.packageName }}</strong>
         <span>{{ pkg.reason }}</span>
       </div>
-      <el-button
-        size="small"
+      <AppleButton
+        variant="secondary"
+        size="sm"
         @click="
           $router.push({
             path: '/generate',
@@ -16,11 +17,12 @@
         "
       >
         作战卡
-      </el-button>
+      </AppleButton>
     </div>
   </div>
 </template>
 <script setup lang="ts">
 import type { CommunityGroup } from '@content/shared';
+import AppleButton from '../../../components/AppleButton.vue';
 defineProps<{ packages: CommunityGroup['todayRecommendedPackages'] }>();
 </script>

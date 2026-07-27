@@ -5,7 +5,13 @@
         <OverviewTrendControls :trend-days="trendDays" @change="onTrendChange" />
       </template>
     </OverviewChartCard>
-    <OverviewChartCard title="零动销阶梯分布" :option="distributionOption">
+    <OverviewChartCard
+      title="零动销阶梯分布"
+      :option="distributionOption"
+      :truncated="distributionTruncated"
+      :limit="distributionLimit"
+      :matched="distributionMatched"
+    >
       <template #controls>
         <OverviewStaleControls :stale-dim="staleDim" @change="onStaleChange" />
       </template>
@@ -17,12 +23,23 @@ import type { EChartsOption } from 'echarts';
 import OverviewChartCard from './OverviewChartCard.vue';
 import OverviewTrendControls from './OverviewTrendControls.vue';
 import OverviewStaleControls from './OverviewStaleControls.vue';
-const props = defineProps<{
-  trendDays: 7 | 30;
-  staleDim: string;
-  trendOption: EChartsOption | Record<string, unknown>;
-  distributionOption: EChartsOption | Record<string, unknown>;
-}>();
+const props = withDefaults(
+  defineProps<{
+    trendDays: 7 | 30;
+    staleDim: string;
+    trendOption: EChartsOption | Record<string, unknown>;
+    distributionOption: EChartsOption | Record<string, unknown>;
+    // Residual #288: distribution Top-N honesty.
+    distributionTruncated?: boolean;
+    distributionLimit?: number | null;
+    distributionMatched?: number | null;
+  }>(),
+  {
+    distributionTruncated: false,
+    distributionLimit: null,
+    distributionMatched: null
+  }
+);
 const emit = defineEmits<{
   'update:trendDays': [value: 7 | 30];
   'update:staleDim': [value: string];

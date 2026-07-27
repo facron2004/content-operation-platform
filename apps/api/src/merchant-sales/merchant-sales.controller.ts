@@ -1,12 +1,30 @@
 /** Consolidated merchant-sales module. */
-import { Body, Controller, Get, Header, Inject, Post, Query, Req } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Inject,
+  Post,
+  Query,
+  Req,
+  Res
+} from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { beijingDateKey } from '@content/shared';
-import type { Request } from 'express';
+import type { Request, Response } from 'express';
 import { hasForceSignal } from '../common';
+import { createDtoPipe } from '../common/dto-pipe';
+import { CSV_EXPORT_MAX_ROWS } from '../common/sql-chunk';
+import { assertInclusiveDaySpan, daySpanErrorCode, daySpanErrorSpan } from '../domain/sales-daily';
 import { Roles } from '../user-access/role.decorator';
+import { assertUnrestrictedAnalytics } from '../user-access/scope-guards';
 import { MerchantSalesQueryDto, MerchantSalesRefreshDto } from './merchant-sales.dto';
 import { MERCHANT_SALES_SERVICE, MerchantSalesService } from './merchant-sales.service';
+
+/** Max inclusive day span for interactive merchant-sales recompute. */
+export const MERCHANT_SALES_REFRESH_MAX_DAYS = 90;
 
 // --- merchant-sales-controller-ops.ts ---
 export function getMerchantSalesSummary(
@@ -49,7 +67,24 @@ export function refreshMerchantSales(
   body: MerchantSalesRefreshDto = {}
 ) {
   const today = beijingDateKey(new Date());
-  return service.recomputeRange(body.startDate ?? today, body.endDate ?? today);
+  const endDate = body.endDate ?? today;
+  const startDate = body.startDate ?? endDate;
+  try {
+    assertInclusiveDaySpan(startDate, endDate, MERCHANT_SALES_REFRESH_MAX_DAYS);
+  } catch (err) {
+    const code = daySpanErrorCode(err);
+    if (code === 'START_AFTER_END') {
+      throw new BadRequestException('startDate 必须 ≤ endDate');
+    }
+    if (code === 'SPAN_TOO_LONG') {
+      const span = daySpanErrorSpan(err) ?? MERCHANT_SALES_REFRESH_MAX_DAYS + 1;
+      throw new BadRequestException(
+        `重算区间不能超过 ${MERCHANT_SALES_REFRESH_MAX_DAYS} 天（当前 ${span} 天）`
+      );
+    }
+    throw new BadRequestException('startDate/endDate 必须为 YYYY-MM-DD 格式');
+  }
+  return service.recomputeRange(startDate, endDate);
 }
 
 // --- merchant-sales.controller.ts ---
@@ -57,41 +92,68 @@ export function refreshMerchantSales(
 @Controller('api/merchant-sales')
 export class MerchantSalesController {
   constructor(@Inject(MERCHANT_SALES_SERVICE) private readonly service: MerchantSalesService) {}
-  @Get('summary') @ApiOperation({ summary: '商家销售数据 — 汇总 KPI(日/周/月/年)' }) summary(
-    @Query() q: MerchantSalesQueryDto,
+  @Get('summary')
+  @Throttle({ long: { limit: 20, ttl: 60000 } })
+  @ApiOperation({ summary: '商家销售数据 — 汇总 KPI(日/周/月/年)' })
+  summary(
+    @Query(createDtoPipe(MerchantSalesQueryDto)) q: MerchantSalesQueryDto,
     @Req() req: Request
   ) {
+    assertUnrestrictedAnalytics(req);
     return getMerchantSalesSummary(this.service, q, req);
   }
-  @Get('ranking') @ApiOperation({ summary: '商家销售数据 — 商家排行(分页)' }) ranking(
-    @Query() q: MerchantSalesQueryDto,
+  @Get('ranking')
+  @Throttle({ long: { limit: 20, ttl: 60000 } })
+  @ApiOperation({ summary: '商家销售数据 — 商家排行(分页)' })
+  ranking(
+    @Query(createDtoPipe(MerchantSalesQueryDto)) q: MerchantSalesQueryDto,
     @Req() req: Request
   ) {
+    assertUnrestrictedAnalytics(req);
     return getMerchantSalesRanking(this.service, q, req);
   }
-  @Get('trend') @ApiOperation({ summary: '商家销售数据 — 时序(周/月/年)' }) trend(
-    @Query() q: MerchantSalesQueryDto,
+  @Get('trend')
+  @Throttle({ long: { limit: 20, ttl: 60000 } })
+  @ApiOperation({ summary: '商家销售数据 — 时序(周/月/年)' })
+  trend(
+    @Query(createDtoPipe(MerchantSalesQueryDto)) q: MerchantSalesQueryDto,
     @Req() req: Request
   ) {
+    assertUnrestrictedAnalytics(req);
     return getMerchantSalesTrend(this.service, q, req);
   }
   @Get('export')
+  @Throttle({ long: { limit: 3, ttl: 60000 } })
   @ApiOperation({ summary: '商家销售数据 — CSV 导出' })
-  @Header('Content-Type', 'text/csv; charset=utf-8')
-  @Header('Content-Disposition', 'attachment; filename="merchant-sales.csv"')
-  export(@Query() q: MerchantSalesQueryDto) {
-    return this.service.getExport(q.window, q.date, q.endDate, q.sortBy);
+  async export(
+    @Query(createDtoPipe(MerchantSalesQueryDto)) q: MerchantSalesQueryDto,
+    @Req() req: Request,
+    @Res() res: Response
+  ) {
+    assertUnrestrictedAnalytics(req);
+    // Residual #263: #262 parity — X-Export-* when CSV_EXPORT_MAX_ROWS clips.
+    const result = await this.service.getExport(q.window, q.date, q.endDate, q.sortBy);
+    if (result.truncated) {
+      res.setHeader('X-Export-Truncated', '1');
+      res.setHeader('X-Export-Limit', String(result.limit ?? CSV_EXPORT_MAX_ROWS));
+      res.setHeader('X-Export-Total', String(result.total));
+    }
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="merchant-sales.csv"');
+    res.send(result.csv);
   }
   @Roles('admin', 'platform_operator')
+  @Throttle({ long: { limit: 2, ttl: 60000 } })
   @Post('refresh')
   @ApiOperation({
     summary: '商家销售数据 — 手动触发区间重算',
     description: '默认重算今天;可指定 startDate/endDate (YYYY-MM-DD)'
   })
-  refresh(@Body() body: MerchantSalesRefreshDto = {}) {
-    return refreshMerchantSales(this.service, body);
+  refresh(@Body(createDtoPipe(MerchantSalesRefreshDto)) body: MerchantSalesRefreshDto) {
+    return refreshMerchantSales(this.service, body ?? {});
   }
   @Roles('admin', 'platform_operator')
+  @Throttle({ long: { limit: 10, ttl: 60000 } })
   @Post('cache/invalidate')
   @ApiOperation({ summary: '清空商家销售进程内缓存(POST 代替 GET)' })
   invalidateCache() {

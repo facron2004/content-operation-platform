@@ -4,7 +4,11 @@
       <h3>支付→核销漏斗</h3>
       <span class="gmv-funnel-meta">核销率 {{ formatPercentRaw(topRate * 100) }}</span>
     </header>
-    <div v-if="stages.length === 0" class="gmv-funnel-empty">暂无转化数据</div>
+    <EmptyState
+      v-if="stages.length === 0"
+      title="暂无转化数据"
+      description="订单支付和核销数据同步后自动计算转化漏斗"
+    />
     <ul v-else class="gmv-funnel-list">
       <li v-for="(stage, idx) in stages" :key="stage.label" class="gmv-funnel-row">
         <div class="gmv-funnel-meta-cell">
@@ -32,6 +36,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { formatNumber, formatPercentRaw } from '../../../utils/format';
+import EmptyState from '../../../components/EmptyState.vue';
 
 type FunnelStage = {
   label: string;
@@ -83,17 +88,6 @@ function widthFor(stage: FunnelStage) {
   color: #667085;
   font-size: 12px;
   font-weight: 600;
-}
-
-.gmv-funnel-empty {
-  flex: 1;
-  min-height: 140px;
-  display: grid;
-  place-items: center;
-  color: #98a2b3;
-  font-size: 13px;
-  background: #f9fafb;
-  border-radius: 10px;
 }
 
 .gmv-funnel-list {

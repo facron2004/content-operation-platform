@@ -1,6 +1,3 @@
-warn The configuration property `package.json#prisma` is deprecated and will be removed in Prisma 7. Please migrate to a Prisma config file (e.g., `prisma.config.ts`).
-For more information, see: https://pris.ly/prisma-config
-
 -- CreateTable
 CREATE TABLE "ContentPackage" (
     "packageId" TEXT NOT NULL PRIMARY KEY,
@@ -203,12 +200,16 @@ CREATE TABLE "DailyMetrics" (
 -- CreateTable
 CREATE TABLE "OrderHeader" (
     "orderId" TEXT NOT NULL PRIMARY KEY,
+    "orderCode" TEXT,
     "memberId" TEXT,
     "packageId" TEXT,
     "merchantId" TEXT,
     "merchantName" TEXT,
     "areaId" TEXT,
     "areaName" TEXT,
+    "salesman" TEXT,
+    "parentSalesman" TEXT,
+    "coupon" TEXT,
     "orderTime" DATETIME NOT NULL,
     "paidTime" DATETIME,
     "verifyTime" DATETIME,
@@ -337,6 +338,7 @@ CREATE TABLE "AppUser" (
     "email" TEXT,
     "phone" TEXT,
     "isActive" INTEGER NOT NULL DEFAULT 1,
+    "tokenVersion" INTEGER NOT NULL DEFAULT 0,
     "lastLoginAt" TEXT,
     "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" DATETIME NOT NULL
@@ -521,6 +523,15 @@ CREATE INDEX "ContentPackage_category_idx" ON "ContentPackage"("category");
 CREATE INDEX "ContentPackage_areaId_saleStatus_idx" ON "ContentPackage"("areaId", "saleStatus");
 
 -- CreateIndex
+CREATE INDEX "ContentPackage_stockLeft_idx" ON "ContentPackage"("stockLeft");
+
+-- CreateIndex
+CREATE INDEX "ContentPackage_stockLeft_merchantId_idx" ON "ContentPackage"("stockLeft", "merchantId");
+
+-- CreateIndex
+CREATE INDEX "ContentPackage_areaId_stockLeft_idx" ON "ContentPackage"("areaId", "stockLeft");
+
+-- CreateIndex
 CREATE INDEX "Merchant_areaId_idx" ON "Merchant"("areaId");
 
 -- CreateIndex
@@ -557,6 +568,9 @@ CREATE INDEX "GeneratedCopy_areaId_idx" ON "GeneratedCopy"("areaId");
 CREATE INDEX "GeneratedCopy_auditStatus_channel_idx" ON "GeneratedCopy"("auditStatus", "channel");
 
 -- CreateIndex
+CREATE INDEX "GeneratedCopy_auditStatus_channel_createdAt_idx" ON "GeneratedCopy"("auditStatus", "channel", "createdAt");
+
+-- CreateIndex
 CREATE INDEX "GeneratedCopy_createdAt_idx" ON "GeneratedCopy"("createdAt");
 
 -- CreateIndex
@@ -572,6 +586,12 @@ CREATE INDEX "CopyPerformance_channel_idx" ON "CopyPerformance"("channel");
 CREATE INDEX "CopyPerformance_groupId_idx" ON "CopyPerformance"("groupId");
 
 -- CreateIndex
+CREATE INDEX "CopyPerformance_createdAt_idx" ON "CopyPerformance"("createdAt");
+
+-- CreateIndex
+CREATE INDEX "CopyPerformance_packageId_createdAt_idx" ON "CopyPerformance"("packageId", "createdAt");
+
+-- CreateIndex
 CREATE INDEX "JeeSiteInventoryDailySnapshot_snapshotDate_idx" ON "JeeSiteInventoryDailySnapshot"("snapshotDate");
 
 -- CreateIndex
@@ -582,6 +602,9 @@ CREATE INDEX "OrderHeader_memberId_orderTime_idx" ON "OrderHeader"("memberId", "
 
 -- CreateIndex
 CREATE INDEX "OrderHeader_packageId_idx" ON "OrderHeader"("packageId");
+
+-- CreateIndex
+CREATE INDEX "OrderHeader_packageId_orderTime_idx" ON "OrderHeader"("packageId", "orderTime");
 
 -- CreateIndex
 CREATE INDEX "OrderHeader_orderTime_idx" ON "OrderHeader"("orderTime");
@@ -596,10 +619,25 @@ CREATE INDEX "OrderHeader_merchantName_idx" ON "OrderHeader"("merchantName");
 CREATE INDEX "OrderHeader_merchantName_orderTime_idx" ON "OrderHeader"("merchantName", "orderTime");
 
 -- CreateIndex
+CREATE INDEX "OrderHeader_orderCode_idx" ON "OrderHeader"("orderCode");
+
+-- CreateIndex
+CREATE INDEX "OrderHeader_salesman_idx" ON "OrderHeader"("salesman");
+
+-- CreateIndex
 CREATE INDEX "OrderHeader_status_idx" ON "OrderHeader"("status");
 
 -- CreateIndex
 CREATE INDEX "OrderHeader_paidTime_idx" ON "OrderHeader"("paidTime");
+
+-- CreateIndex
+CREATE INDEX "OrderHeader_refundTime_idx" ON "OrderHeader"("refundTime");
+
+-- CreateIndex
+CREATE INDEX "OrderHeader_verifyTime_idx" ON "OrderHeader"("verifyTime");
+
+-- CreateIndex
+CREATE INDEX "OrderHeader_memberId_packageId_orderTime_idx" ON "OrderHeader"("memberId", "packageId", "orderTime");
 
 -- CreateIndex
 CREATE INDEX "Member_phone_idx" ON "Member"("phone");
@@ -641,6 +679,12 @@ CREATE INDEX "PackageSalesDaily_date_idx" ON "PackageSalesDaily"("date");
 CREATE INDEX "PackageSalesDaily_packageId_date_idx" ON "PackageSalesDaily"("packageId", "date");
 
 -- CreateIndex
+CREATE INDEX "PackageSalesDaily_date_salesQty_idx" ON "PackageSalesDaily"("date", "salesQty");
+
+-- CreateIndex
+CREATE INDEX "PackageSalesDaily_packageId_salesQty_date_idx" ON "PackageSalesDaily"("packageId", "salesQty", "date");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "PackageSalesDaily_packageId_date_key" ON "PackageSalesDaily"("packageId", "date");
 
 -- CreateIndex
@@ -650,10 +694,16 @@ CREATE INDEX "RuleConfig_tenantId_merchantId_type_idx" ON "RuleConfig"("tenantId
 CREATE INDEX "RuleConfig_isActive_idx" ON "RuleConfig"("isActive");
 
 -- CreateIndex
+CREATE INDEX "RuleConfig_merchantId_type_isActive_version_idx" ON "RuleConfig"("merchantId", "type", "isActive", "version");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "AppUser_username_key" ON "AppUser"("username");
 
 -- CreateIndex
 CREATE INDEX "AppUser_username_idx" ON "AppUser"("username");
+
+-- CreateIndex
+CREATE INDEX "AppUser_createdAt_idx" ON "AppUser"("createdAt");
 
 -- CreateIndex
 CREATE INDEX "UserRoleBinding_userId_idx" ON "UserRoleBinding"("userId");
@@ -668,10 +718,19 @@ CREATE INDEX "MarketingCampaign_status_idx" ON "MarketingCampaign"("status");
 CREATE INDEX "MarketingCampaign_startDate_endDate_idx" ON "MarketingCampaign"("startDate", "endDate");
 
 -- CreateIndex
+CREATE INDEX "MarketingCampaign_createdAt_idx" ON "MarketingCampaign"("createdAt");
+
+-- CreateIndex
 CREATE INDEX "CommunityGroup_areaId_idx" ON "CommunityGroup"("areaId");
 
 -- CreateIndex
 CREATE INDEX "CommunityGroup_isActive_idx" ON "CommunityGroup"("isActive");
+
+-- CreateIndex
+CREATE INDEX "CommunityGroup_createdAt_idx" ON "CommunityGroup"("createdAt");
+
+-- CreateIndex
+CREATE INDEX "CommunityGroup_areaId_createdAt_idx" ON "CommunityGroup"("areaId", "createdAt");
 
 -- CreateIndex
 CREATE INDEX "DistributionTask_status_idx" ON "DistributionTask"("status");
@@ -689,19 +748,58 @@ CREATE INDEX "DistributionTask_groupId_idx" ON "DistributionTask"("groupId");
 CREATE INDEX "DistributionTask_assigneeId_idx" ON "DistributionTask"("assigneeId");
 
 -- CreateIndex
+CREATE INDEX "DistributionTask_packageId_idx" ON "DistributionTask"("packageId");
+
+-- CreateIndex
+CREATE INDEX "DistributionTask_createdAt_idx" ON "DistributionTask"("createdAt");
+
+-- CreateIndex
+CREATE INDEX "DistributionTask_updatedAt_idx" ON "DistributionTask"("updatedAt");
+
+-- CreateIndex
+CREATE INDEX "DistributionTask_status_updatedAt_idx" ON "DistributionTask"("status", "updatedAt");
+
+-- CreateIndex
+CREATE INDEX "DistributionTask_status_plannedAt_idx" ON "DistributionTask"("status", "plannedAt");
+
+-- CreateIndex
+CREATE INDEX "DistributionTask_groupId_createdAt_idx" ON "DistributionTask"("groupId", "createdAt");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "DistributionTask_idempotencyKey_key" ON "DistributionTask"("idempotencyKey");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "DistributionTask_trackingCode_key" ON "DistributionTask"("trackingCode");
+
+-- CreateIndex
 CREATE INDEX "DistributionExecution_taskId_idx" ON "DistributionExecution"("taskId");
+
+-- CreateIndex
+CREATE INDEX "DistributionExecution_createdAt_idx" ON "DistributionExecution"("createdAt");
 
 -- CreateIndex
 CREATE INDEX "TrackingVisit_taskId_idx" ON "TrackingVisit"("taskId");
 
 -- CreateIndex
-CREATE INDEX "TrackingVisit_trackingCode_idx" ON "TrackingVisit"("trackingCode");
+CREATE INDEX "TrackingVisit_trackingCode_visitTime_idx" ON "TrackingVisit"("trackingCode", "visitTime");
+
+-- CreateIndex
+CREATE INDEX "TrackingVisit_visitTime_idx" ON "TrackingVisit"("visitTime");
 
 -- CreateIndex
 CREATE INDEX "OrderAttribution_orderId_idx" ON "OrderAttribution"("orderId");
 
 -- CreateIndex
+CREATE INDEX "OrderAttribution_taskId_attributedAt_idx" ON "OrderAttribution"("taskId", "attributedAt");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "OrderAttribution_taskId_orderId_key" ON "OrderAttribution"("taskId", "orderId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "OrderAttribution_orderId_key" ON "OrderAttribution"("orderId");
+
+-- CreateIndex
+CREATE INDEX "TaskPerformanceDaily_date_idx" ON "TaskPerformanceDaily"("date");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "TaskPerformanceDaily_taskId_date_key" ON "TaskPerformanceDaily"("taskId", "date");
@@ -717,4 +815,10 @@ CREATE INDEX "OperationAuditLog_createdAt_idx" ON "OperationAuditLog"("createdAt
 
 -- CreateIndex
 CREATE INDEX "OperationAuditLog_objectType_objectId_idx" ON "OperationAuditLog"("objectType", "objectId");
+
+-- CreateIndex
+CREATE INDEX "OperationAuditLog_userId_createdAt_idx" ON "OperationAuditLog"("userId", "createdAt");
+
+-- CreateIndex
+CREATE INDEX "OperationAuditLog_objectType_createdAt_idx" ON "OperationAuditLog"("objectType", "createdAt");
 

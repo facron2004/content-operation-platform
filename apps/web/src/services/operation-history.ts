@@ -1,5 +1,4 @@
 import { describeError, randomShortId } from '@content/shared';
-import client from './http-client';
 
 export interface OperationRecord {
   id: string;
@@ -35,10 +34,27 @@ const OPERATION_TYPE_LABELS: Record<OperationRecord['type'], string> = {
 const OPERATION_HISTORY_STORAGE_KEY = 'operation_history';
 const OPERATION_HISTORY_MAX_RECORDS = 100;
 
+function isOperationRecord(value: unknown): value is OperationRecord {
+  if (!value || typeof value !== 'object') return false;
+  const r = value as Record<string, unknown>;
+  return (
+    typeof r.id === 'string' &&
+    typeof r.timestamp === 'number' &&
+    typeof r.type === 'string' &&
+    typeof r.action === 'string' &&
+    (r.result === 'success' || r.result === 'error')
+  );
+}
+
 function loadOperationHistory(): OperationRecord[] {
   try {
     const stored = localStorage.getItem(OPERATION_HISTORY_STORAGE_KEY);
-    if (stored) return JSON.parse(stored) as OperationRecord[];
+    if (!stored) return [];
+    // Cap stored blob so a multi-MB localStorage poison cannot freeze the SPA.
+    if (stored.length > 200_000) return [];
+    const parsed = JSON.parse(stored) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(isOperationRecord).slice(0, OPERATION_HISTORY_MAX_RECORDS);
   } catch (error) {
     console.error('Failed to load operation history:', describeError(error));
   }
@@ -57,6 +73,13 @@ function getOperationTypeLabel(type: OperationRecord['type']): string {
   return OPERATION_TYPE_LABELS[type] || type;
 }
 
+/** Quote a CSV cell; neutralize Excel formula injection on leading = + - @ / tab / CR. */
+function csvQuote(value: string): string {
+  let cell = String(value ?? '').replace(/"/g, '""');
+  if (/^[=+\-@\t\r]/.test(cell)) cell = `'${cell}`;
+  return `"${cell}"`;
+}
+
 function exportOperationHistoryCsv(records: OperationRecord[]): string {
   const headers = ['时间', '类型', '操作', '结果', '详情'];
   const rows = records.map((r) => [
@@ -66,7 +89,7 @@ function exportOperationHistoryCsv(records: OperationRecord[]): string {
     r.result === 'success' ? '成功' : '失败',
     JSON.stringify(r.details)
   ]);
-  return [headers.join(','), ...rows.map((row) => row.map((cell) => `"${cell}"`).join(','))].join(
+  return [headers.map(csvQuote).join(','), ...rows.map((row) => row.map(csvQuote).join(','))].join(
     '\n'
   );
 }
@@ -96,25 +119,9 @@ export class OperationHistoryService {
     if (this.records.length > OPERATION_HISTORY_MAX_RECORDS)
       this.records = this.records.slice(0, OPERATION_HISTORY_MAX_RECORDS);
     saveOperationHistory(this.records);
-
-    // Also record to server audit API (non-blocking, silent fail)
-    this.recordToServer(entry).catch(() => {
-      /* server audit unavailable */
-    });
-  }
-
-  private async recordToServer(record: OperationRecord): Promise<void> {
-    try {
-      await client.post('/api/audit-logs', {
-        action: record.action,
-        objectType: record.type,
-        details: JSON.stringify(record.details),
-        result: record.result,
-        failReason: record.error
-      });
-    } catch {
-      // Server audit API may not be available yet — silently ignore
-    }
+    // Server audit is written by AuditLogInterceptor on real API mutations.
+    // Do not POST to /audit-logs — that route is GET-only and the dead call
+    // only produced silent 404 noise / extra auth traffic.
   }
   getAll() {
     return queryOperationRecords(this.records).getAll();

@@ -10,6 +10,7 @@ describe('mapJeesiteOrderListToDataset', () => {
       list: [
         {
           id: 'order-1',
+          orderCode: 'K202607150001',
           centerMemberId: 'member-1',
           bargainCommodityId: 'package-1',
           corePartnerId: 'merchant-1',
@@ -20,7 +21,10 @@ describe('mapJeesiteOrderListToDataset', () => {
           deductionBalance: 20,
           balanceIntegral: 500,
           totalPrice: 105,
-          orderStatus: 30
+          orderStatus: 30,
+          salesUserName: '詹昌立',
+          parentSalesUserName: '李健华',
+          couponName: '满80-10元券'
         }
       ]
     });
@@ -28,16 +32,72 @@ describe('mapJeesiteOrderListToDataset', () => {
     expect(orders).toHaveLength(1);
     expect(orders[0]).toMatchObject({
       orderId: 'order-1',
+      orderCode: 'K202607150001',
       memberId: 'member-1',
       packageId: 'package-1',
       merchantId: 'merchant-1',
       merchantName: 'Merchant One',
+      salesman: '詹昌立',
+      parentSalesman: '李健华',
+      coupon: '满80-10元券',
       paidAmount: 80,
       paidAmountWallet: 20,
       paidAmountBonus: 5,
       verifyAmount: 100,
       status: 'verified'
     });
+  });
+
+  it('maps bargainOrder/listData businessUserName as salesman, not merchant', () => {
+    // 线上 listData 实测：业务员=businessUserName，商家=corePartner.name，
+    // 优惠券=centerMemberTicketTitle，上级=businessUserParentName。
+    const { orders } = mapJeesiteOrderListToDataset({
+      list: [
+        {
+          id: 'order-biz',
+          orderCode: 'K20260723162824494656',
+          businessUserName: '莫文怡',
+          businessUserParentName: '李健华',
+          centerMemberTicketTitle: 'ZH五折券-新',
+          corePartner: { name: '深圳市秦喜肉夹馍餐饮管理有限责任公司' },
+          corePartnerId: '2038866201350164480',
+          payPrice: 18.14,
+          orderStatus: 20,
+          createDate: '2026-07-23 16:28:00',
+          payDate: '2026-07-23 16:28:24',
+          bargainCommoditySys: {
+            businessUserName: '莫文怡',
+            businessParentUserName: '李健华'
+          }
+        }
+      ]
+    });
+    expect(orders[0]).toMatchObject({
+      orderId: 'order-biz',
+      orderCode: 'K20260723162824494656',
+      merchantName: '深圳市秦喜肉夹馍餐饮管理有限责任公司',
+      merchantId: '2038866201350164480',
+      salesman: '莫文怡',
+      parentSalesman: '李健华',
+      coupon: 'ZH五折券-新'
+    });
+  });
+
+  it('does not fall businessUserName back to merchantName when corePartner missing', () => {
+    // 无 corePartner 时商家应空，业务员仍取 businessUserName。
+    const { orders } = mapJeesiteOrderListToDataset({
+      list: [
+        {
+          id: 'order-no-partner',
+          businessUserName: '詹昌立',
+          payPrice: 10,
+          orderStatus: 20,
+          createDate: '2026-07-15 10:00:00'
+        }
+      ]
+    });
+    expect(orders[0].merchantName).toBe('');
+    expect(orders[0].salesman).toBe('詹昌立');
   });
 
   it('keeps completed (40) and post-pay refund (-20) as paid-side orders with paidTime', () => {

@@ -120,7 +120,9 @@ export function createMerchantSalesLoaders(state: MerchantSalesState) {
       pageSize: state.pageSize.current,
       ranking: state.ranking,
       listLoading: state.listLoading,
-      loadError: state.loadError
+      loadError: state.loadError,
+      // Residual #228: forward as-of day on page flips too.
+      date: state.kpiDate.value || undefined
     });
   }
   async function reload() {
@@ -134,7 +136,8 @@ export function createMerchantSalesLoaders(state: MerchantSalesState) {
       summary: state.summary,
       trend: state.trend,
       ranking: state.ranking,
-      listLoading: state.listLoading
+      listLoading: state.listLoading,
+      kpiDate: state.kpiDate
     });
   }
   return { loadRanking, reload };
@@ -147,6 +150,8 @@ export function createMerchantSalesHandlers(args: {
   sortBy: Ref<MerchantSalesSort>;
   exporting: Ref<boolean>;
   loadError: Ref<string | null>;
+  // Residual #228: as-of anchor day for export/force-refresh.
+  kpiDate: Ref<string>;
   reload: () => Promise<void>;
   loadRanking: () => Promise<void>;
 }) {
@@ -164,8 +169,20 @@ export function createMerchantSalesHandlers(args: {
       args.page.value = 1;
       void args.loadRanking();
     },
-    onExport: () => exportMerchantSales(args.exporting, args.windowSel.value, args.sortBy.value),
-    onForceRefresh: () => forceRefreshAndReload(args.exporting, args.loadError, args.reload)
+    onExport: () =>
+      exportMerchantSales(
+        args.exporting,
+        args.windowSel.value,
+        args.sortBy.value,
+        args.kpiDate.value || undefined
+      ),
+    onForceRefresh: () =>
+      forceRefreshAndReload(
+        args.exporting,
+        args.loadError,
+        args.reload,
+        args.kpiDate.value || undefined
+      )
   };
 }
 

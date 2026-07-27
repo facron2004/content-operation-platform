@@ -14,23 +14,26 @@
       <span>警告 {{ item.warningCount }}</span>
     </div>
     <div class="focus-actions">
-      <el-button size="small" @click.stop="$emit('navigate', item.packageId)">查看套餐</el-button>
-      <el-button size="small" type="primary" @click.stop="$emit('create-task', item.packageId)">
+      <AppleButton size="sm" variant="secondary" @click.stop="$emit('navigate', item.packageId)">
+        查看套餐
+      </AppleButton>
+      <AppleButton size="sm" variant="primary" @click.stop="$emit('create-task', item.packageId)">
         创建任务
-      </el-button>
-      <el-button
-        size="small"
-        type="success"
+      </AppleButton>
+      <AppleButton
+        size="sm"
+        variant="success"
         :disabled="!item.alertIds?.length"
         :loading="resolving"
         @click.stop="$emit('resolve-batch', item.alertIds, '该套餐预警已处理')"
       >
         处理该套餐
-      </el-button>
+      </AppleButton>
     </div>
   </article>
 </template>
 <script setup lang="ts">
+import AppleButton from '../../../components/AppleButton.vue';
 import type { AlertPackageFocus } from '../composables/useAlerts';
 defineProps<{ item: AlertPackageFocus; resolving: boolean }>();
 defineEmits<{

@@ -59,6 +59,7 @@ export const PAGE_TITLES: Record<string, string> = {
   'merchant-sales': '商家销售数据',
   'merchant-heatmap': '商家热点图',
   overview: '总览 KPI',
+  'data-analysis': '数据分析',
   movement: '动销 / 不动销',
   'refund-verify': '退款 / 核销',
   merchants: '商家分析',
@@ -178,6 +179,7 @@ export const PROTO_NAV: NavNode[] = [
     icon: 'DataBoard',
     children: [
       { path: '/overview', title: '总览 KPI', icon: 'DataAnalysis' },
+      { path: '/data-analysis', title: '数据分析', icon: 'DataBoard' },
       { path: '/alerts', title: '异常预警', icon: 'Bell' }
     ]
   },

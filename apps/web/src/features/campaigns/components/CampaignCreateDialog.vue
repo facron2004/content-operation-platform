@@ -1,4 +1,7 @@
 <template>
+  <!-- Parent passes a reactive form object; child writes fields in place. -->
+  <!-- Residual #195: was cloning a dialog-local form + emit payload that parents ignored. -->
+  <!-- eslint-disable vue/no-mutating-props -->
   <el-dialog
     v-model="dialogVisible"
     :title="isEdit ? '编辑活动' : '新建活动'"
@@ -6,21 +9,12 @@
     :close-on-click-modal="false"
     @closed="handleClosed"
   >
-    <el-form ref="formRef" :model="localForm" :rules="rules" label-width="100px">
+    <el-form ref="formRef" :model="form" :rules="rules" label-width="100px">
       <el-form-item label="活动名称" prop="name">
-        <el-input
-          v-model="localForm.name"
-          placeholder="请输入活动名称"
-          maxlength="50"
-          show-word-limit
-        />
+        <el-input v-model="form.name" placeholder="请输入活动名称" maxlength="50" show-word-limit />
       </el-form-item>
       <el-form-item label="活动类型" prop="campaignType">
-        <el-select
-          v-model="localForm.campaignType"
-          placeholder="请选择活动类型"
-          style="width: 100%"
-        >
+        <el-select v-model="form.campaignType" placeholder="请选择活动类型" style="width: 100%">
           <el-option
             v-for="opt in typeOptions"
             :key="opt.value"
@@ -31,7 +25,7 @@
       </el-form-item>
       <el-form-item label="活动描述" prop="description">
         <el-input
-          v-model="localForm.description"
+          v-model="form.description"
           type="textarea"
           :rows="3"
           placeholder="选填"
@@ -52,7 +46,7 @@
       </el-form-item>
       <el-form-item label="覆盖区域" prop="areaIds">
         <el-select
-          v-model="localForm.areaIds"
+          v-model="form.areaIds"
           multiple
           filterable
           allow-create
@@ -72,7 +66,7 @@
       </el-form-item>
       <el-form-item label="关联商家" prop="merchantIds">
         <el-select
-          v-model="localForm.merchantIds"
+          v-model="form.merchantIds"
           multiple
           filterable
           allow-create
@@ -92,7 +86,7 @@
       </el-form-item>
       <el-form-item label="活动预算" prop="budget">
         <el-input-number
-          v-model="localForm.budget"
+          v-model="form.budget"
           :min="0"
           :precision="2"
           :step="1000"
@@ -102,7 +96,7 @@
       </el-form-item>
       <el-form-item label="目标 GMV" prop="targetGmv">
         <el-input-number
-          v-model="localForm.targetGmv"
+          v-model="form.targetGmv"
           :min="0"
           :precision="2"
           :step="1000"
@@ -112,7 +106,7 @@
       </el-form-item>
       <el-form-item label="目标订单" prop="targetOrders">
         <el-input-number
-          v-model="localForm.targetOrders"
+          v-model="form.targetOrders"
           :min="0"
           :precision="0"
           :step="10"
@@ -122,17 +116,18 @@
       </el-form-item>
     </el-form>
     <template #footer>
-      <el-button @click="dialogVisible = false">取消</el-button>
-      <el-button type="primary" :loading="submitting" @click="handleConfirm">
+      <AppleButton variant="secondary" @click="dialogVisible = false">取消</AppleButton>
+      <AppleButton variant="primary" :loading="submitting" @click="handleConfirm">
         {{ isEdit ? '保存' : '创建' }}
-      </el-button>
+      </AppleButton>
     </template>
   </el-dialog>
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref, watchEffect } from 'vue';
+import { computed, ref } from 'vue';
 import type { FormInstance } from 'element-plus';
+import AppleButton from '../../../components/AppleButton.vue';
 import { buildCampaignFormRules, type CampaignFormModel } from '../composables/useCampaignForm';
 import { CAMPAIGN_TYPE_LABELS } from '../composables/useCampaigns';
 
@@ -160,14 +155,13 @@ const props = withDefaults(
 );
 
 const emit = defineEmits<{
-  submit: [form: CampaignFormModel];
-  'update:form': [form: CampaignFormModel];
+  submit: [];
 }>();
 
 const formRef = ref<FormInstance>();
-const localForm = reactive({ ...props.form });
-watchEffect(() => Object.assign(localForm, props.form));
-const rules = buildCampaignFormRules(localForm);
+// Residual #195: bind directly to parent reactive form (community dialog pattern).
+const form = props.form;
+const rules = buildCampaignFormRules(form);
 
 const typeOptions = Object.entries(CAMPAIGN_TYPE_LABELS).map(([value, label]) => ({
   value,
@@ -175,22 +169,21 @@ const typeOptions = Object.entries(CAMPAIGN_TYPE_LABELS).map(([value, label]) =>
 }));
 
 const dateRange = computed({
-  get: () =>
-    localForm.startDate && localForm.endDate ? [localForm.startDate, localForm.endDate] : null,
+  get: () => (form.startDate && form.endDate ? [form.startDate, form.endDate] : null),
   set: (value: [string, string] | null) => {
-    localForm.startDate = value?.[0] ?? '';
-    localForm.endDate = value?.[1] ?? '';
+    form.startDate = value?.[0] ?? '';
+    form.endDate = value?.[1] ?? '';
   }
 });
 
 async function handleConfirm(): Promise<void> {
   if (!formRef.value) {
-    emit('submit', localForm);
+    emit('submit');
     return;
   }
   try {
     await formRef.value.validate();
-    emit('submit', localForm);
+    emit('submit');
   } catch {
     // validation errors are displayed inline by el-form
   }

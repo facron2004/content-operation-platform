@@ -13,8 +13,17 @@ export type MoneyDayTotals = {
 export type MoneyPrisma = {
   $queryRawUnsafe: (query: string, ...values: unknown[]) => Promise<unknown>;
   dailyMetrics: {
-    findUnique: (args: { where: { date: string } }) => Promise<{
-      date: string;
+    findUnique: (args: {
+      where: { date: string };
+      select?: {
+        totalGmv?: boolean;
+        paidOrderCount?: boolean;
+        date?: boolean;
+        gmvOnline?: boolean;
+        gmvWallet?: boolean;
+      };
+    }) => Promise<{
+      date?: string;
       totalGmv: number;
       paidOrderCount: number;
       gmvOnline?: number;

@@ -1,4 +1,5 @@
 import { computed, onMounted, ref } from 'vue';
+import { useRouter } from 'vue-router';
 import type { OperationAlert } from '@content/shared';
 import { useRoleStore } from '../../../stores/role';
 import { usePackageNavigation } from '../../../utils/navigation';

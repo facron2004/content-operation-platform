@@ -1,5 +1,5 @@
-import { beijingDateKey, beijingDayRangeUtc } from '@content/shared';
-import { SQL_GMV_OH } from '../common';
+import { beijingDateKey } from '@content/shared';
+import { beijingDayRangeSqlite, SQL_GMV_OH, sqlDatetimeExclusiveRange } from '../common';
 import type { MoneyDayTotals, MoneyPrisma } from './money.types';
 
 /** True when `date` is the current Beijing calendar day. */
@@ -12,14 +12,14 @@ export async function loadDayGmvFromOrderHeader(
   prisma: Pick<MoneyPrisma, '$queryRawUnsafe'>,
   date: string
 ): Promise<MoneyDayTotals> {
-  const { start, end } = beijingDayRangeUtc(date);
+  const { start, end } = beijingDayRangeSqlite(date);
   const [row] = (await prisma.$queryRawUnsafe(
     `SELECT COALESCE(SUM(${SQL_GMV_OH}), 0) AS "totalGmv",
             COUNT(*) AS "paidOrderCount"
      FROM "OrderHeader"
-     WHERE "paidTime" >= ? AND "paidTime" < ?`,
-    start.toISOString(),
-    end.toISOString()
+     WHERE ${sqlDatetimeExclusiveRange('"paidTime"')}`,
+    start,
+    end
   )) as Array<{ totalGmv: number; paidOrderCount: number }>;
 
   return {
@@ -35,7 +35,10 @@ export async function loadDayGmvFromDailyMetrics(
   prisma: Pick<MoneyPrisma, 'dailyMetrics'>,
   date: string
 ): Promise<MoneyDayTotals | null> {
-  const dm = await prisma.dailyMetrics.findUnique({ where: { date } });
+  const dm = await prisma.dailyMetrics.findUnique({
+    where: { date },
+    select: { totalGmv: true, paidOrderCount: true }
+  });
   if (!dm) return null;
   return {
     date,

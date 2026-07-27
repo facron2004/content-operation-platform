@@ -42,8 +42,18 @@ describe('RuleConfigService', () => {
         update: vi.fn(),
         updateMany: vi.fn().mockResolvedValue({ count: 0 }),
         delete: vi.fn().mockResolvedValue(undefined),
+        deleteMany: vi.fn().mockResolvedValue({ count: 1 }),
         findUnique: vi.fn()
       },
+      // Merchant existence check on createRule with merchantId.
+      $queryRawUnsafe: vi.fn(async (sql: string, ...params: unknown[]) => {
+        if (sql.includes('FROM "Merchant"')) {
+          const id = String(params[0] ?? '');
+          // Tests use M1 as a known merchant; empty/null scope skips this path.
+          return id ? [{ merchantId: id }] : [];
+        }
+        return [];
+      }),
       // Interactive transaction shim: pass the same mocked client as `tx`.
       $transaction: vi.fn(async (fn: (tx: typeof prisma) => unknown) => fn(prisma))
     };
@@ -132,6 +142,19 @@ describe('RuleConfigService', () => {
       expect(createArg.data.isActive).toBe(false);
     });
 
+    it('rejects createRule when merchantId does not exist', async () => {
+      prisma.$queryRawUnsafe.mockResolvedValueOnce([]);
+      await expect(
+        service.createRule({
+          merchantId: 'ghost-m',
+          type: 'copy',
+          name: '幽灵商家规则',
+          payload: {}
+        })
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(prisma.ruleConfig.create).not.toHaveBeenCalled();
+    });
+
     it('treats empty merchantId as platform default (null)', async () => {
       prisma.ruleConfig.findMany.mockResolvedValue([]);
       prisma.ruleConfig.create.mockImplementation(async (args: { data: Partial<RuleConfigRow> }) =>
@@ -173,10 +196,15 @@ describe('RuleConfigService', () => {
           data: { isActive: false }
         })
       );
-      expect(prisma.ruleConfig.update).toHaveBeenCalledWith({
-        where: { id: 'T1' },
-        data: { isActive: true }
-      });
+      expect(prisma.ruleConfig.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'T1' },
+          data: { isActive: true },
+          select: expect.objectContaining({ id: true, isActive: true, version: true })
+        })
+      );
+      // Residual #150: list projection — no payload on activate response.
+      expect(prisma.ruleConfig.update.mock.calls[0][0].select.payload).toBeUndefined();
     });
 
     it('throws NotFoundException when target missing', async () => {
@@ -186,13 +214,22 @@ describe('RuleConfigService', () => {
   });
 
   describe('deleteRule', () => {
-    it('deletes the target config', async () => {
-      const row = makeRow({ id: 'D1', merchantId: 'M1', type: 'copy' });
+    it('deletes inactive target via isActive-pinned deleteMany', async () => {
+      const row = makeRow({ id: 'D1', merchantId: 'M1', type: 'copy', isActive: false });
       prisma.ruleConfig.findUnique.mockResolvedValue(row);
-      prisma.ruleConfig.delete.mockResolvedValue(undefined);
+      prisma.ruleConfig.deleteMany.mockResolvedValue({ count: 1 });
 
       await service.deleteRule('D1');
-      expect(prisma.ruleConfig.delete).toHaveBeenCalledWith({ where: { id: 'D1' } });
+      expect(prisma.ruleConfig.deleteMany).toHaveBeenCalledWith({
+        where: { id: 'D1', isActive: false }
+      });
+    });
+
+    it('rejects deleting the currently active rule', async () => {
+      const row = makeRow({ id: 'D2', merchantId: 'M1', type: 'copy', isActive: true });
+      prisma.ruleConfig.findUnique.mockResolvedValue(row);
+      await expect(service.deleteRule('D2')).rejects.toBeInstanceOf(BadRequestException);
+      expect(prisma.ruleConfig.deleteMany).not.toHaveBeenCalled();
     });
 
     it('throws NotFoundException when target missing', async () => {

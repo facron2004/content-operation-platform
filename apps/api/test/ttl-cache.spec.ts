@@ -32,6 +32,29 @@ describe('TtlCache', () => {
     expect(cache.get('k')).toBe('new');
   });
 
+  it('force still coalesces concurrent loaders for the same key', async () => {
+    const cache = new TtlCache(60_000);
+    cache.set('k', 'stale');
+    let loads = 0;
+    const loader = vi.fn(async () => {
+      loads += 1;
+      await new Promise((r) => setTimeout(r, 30));
+      return `fresh-${loads}`;
+    });
+
+    const [a, b, c] = await Promise.all([
+      cache.getOrLoad('k', true, loader),
+      cache.getOrLoad('k', true, loader),
+      cache.getOrLoad('k', true, loader)
+    ]);
+
+    expect(loader).toHaveBeenCalledTimes(1);
+    expect(a).toBe('fresh-1');
+    expect(b).toBe('fresh-1');
+    expect(c).toBe('fresh-1');
+    expect(cache.get('k')).toBe('fresh-1');
+  });
+
   describe('TTL expiry', () => {
     beforeEach(() => {
       vi.useFakeTimers();
@@ -54,6 +77,35 @@ describe('TtlCache', () => {
       expect(cache.get('k')).toBeNull();
       // Second get must still miss (entry was deleted on expiry)
       expect(cache.get('k')).toBeNull();
+    });
+  });
+
+  describe('max-size LRU eviction', () => {
+    it('evicts least-recently-used keys when maxSize is exceeded', () => {
+      const cache = new TtlCache(60_000, 2);
+      cache.set('a', 1);
+      cache.set('b', 2);
+      // Touch 'a' so 'b' becomes the LRU victim.
+      expect(cache.get('a')).toBe(1);
+      cache.set('c', 3);
+      expect(cache.get('b')).toBeNull();
+      expect(cache.get('a')).toBe(1);
+      expect(cache.get('c')).toBe(3);
+      expect(cache.size).toBe(2);
+    });
+
+    it('drops expired entries before LRU eviction', () => {
+      vi.useFakeTimers();
+      const cache = new TtlCache(1_000, 2);
+      cache.set('old', 1);
+      vi.advanceTimersByTime(1_001);
+      cache.set('fresh1', 2);
+      cache.set('fresh2', 3);
+      // 'old' expired and was purged; both fresh keys fit.
+      expect(cache.get('old')).toBeNull();
+      expect(cache.get('fresh1')).toBe(2);
+      expect(cache.get('fresh2')).toBe(3);
+      vi.useRealTimers();
     });
   });
 

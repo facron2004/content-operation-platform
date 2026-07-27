@@ -6,13 +6,14 @@
       <p v-if="description">{{ description }}</p>
     </div>
     <slot name="actions">
-      <el-button type="primary" :loading="loading" @click="$emit('refresh')">
+      <AppleButton variant="primary" :loading="loading" @click="$emit('refresh')">
         {{ actionText }}
-      </el-button>
+      </AppleButton>
     </slot>
   </section>
 </template>
 <script setup lang="ts">
+import AppleButton from './AppleButton.vue';
 defineProps<{
   eyebrow: string;
   title: string;

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 // Parent passes a reactive filters object; child writes fields in place.
 /* eslint-disable vue/no-mutating-props */
+import AppleButton from '../../../components/AppleButton.vue';
 defineProps<{
   filters: { merchantId: string; type: string; isActive: string | boolean };
   typeOptions: Array<{ label: string; value: string }>;
@@ -34,7 +35,7 @@ defineEmits<{ load: [] }>();
       </el-select>
     </el-form-item>
     <el-form-item>
-      <el-button type="primary" plain @click="$emit('load')">查询</el-button>
+      <AppleButton variant="tinted" @click="$emit('load')">查询</AppleButton>
     </el-form-item>
   </el-form>
 </template>

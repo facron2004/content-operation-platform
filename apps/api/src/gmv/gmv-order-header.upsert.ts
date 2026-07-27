@@ -1,14 +1,19 @@
+import { toSqliteDateTime } from '../common/sqlite-datetime';
 import type { PrismaService } from '../prisma/prisma.service';
 import { toOrderHeaderSharedFields, type OrderLike } from './gmv-order-header.types';
 
 const ALL_COLS = [
   'orderId',
+  'orderCode',
   'memberId',
   'packageId',
   'merchantId',
   'merchantName',
   'areaId',
   'areaName',
+  'salesman',
+  'parentSalesman',
+  'coupon',
   'orderTime',
   'paidTime',
   'verifyTime',
@@ -45,8 +50,9 @@ function buildUpsertSql(numRows: number) {
 }
 
 /**
- * Upsert an OrderHeader row with ISO-text DateTimes via raw SQL.
- * Prevents Prisma DateTime → epoch integer storage that breaks ISO compares.
+ * Upsert an OrderHeader row with UTC space-form DateTimes via raw SQL.
+ * Prevents Prisma DateTime → epoch integer storage that breaks day-range SQL.
+ * Business times are normalized in toOrderHeaderSharedFields (space form).
  */
 export async function upsertOrderHeaderIso(
   prisma: Pick<PrismaService, '$executeRawUnsafe'>,
@@ -54,7 +60,7 @@ export async function upsertOrderHeaderIso(
 ): Promise<void> {
   if (!o.orderId) throw new Error('upsertOrderHeaderIso: orderId required');
   const fields = toOrderHeaderSharedFields(o);
-  const nowIso = new Date().toISOString();
+  const nowIso = toSqliteDateTime();
   const params = makeRowParams(o.orderId, fields, o.pointEarned ?? 0, o.pointUsed ?? 0, nowIso);
   await prisma.$executeRawUnsafe(buildUpsertSql(1), ...params);
 }
@@ -69,12 +75,16 @@ function makeRowParams(
 ): unknown[] {
   return [
     orderId,
+    fields.orderCode,
     fields.memberId,
     fields.packageId,
     fields.merchantId,
     fields.merchantName,
     fields.areaId,
     fields.areaName,
+    fields.salesman,
+    fields.parentSalesman,
+    fields.coupon,
     fields.orderTime,
     fields.paidTime,
     fields.verifyTime,
@@ -107,20 +117,48 @@ export type BatchUpsertResult = {
 
 /**
  * Batch upsert multiple OrderHeader rows in a single SQL statement inside a transaction.
- * Max batch size: ~40 rows (SQLite default param limit 999 / ~24 cols per row).
+ * Max batch size: ~35 rows (SQLite default param limit 999 / ~28 cols per row).
+ *
+ * Residual #98: failure path binary-splits the batch (not N serial single-row
+ * upserts) so a one-bad-row batch still finishes in O(log n) multi-row writes.
  */
 export async function batchUpsertOrderHeaders(
   prisma: Pick<PrismaService, '$transaction' | '$executeRawUnsafe'>,
   orders: OrderLike[],
-  batchSize = 40
+  batchSize = 35
 ): Promise<BatchUpsertResult> {
   const valid = orders.filter((o) => o.orderId);
   const skipped = orders.length - valid.length;
-  const nowIso = new Date().toISOString();
+  const nowIso = toSqliteDateTime();
 
   let upserted = 0,
     errors = 0;
   const errorSamples: string[] = [];
+
+  /**
+   * Attempt multi-row upsert; on failure binary-split until size-1, then record error.
+   * Avoids N serial single-row writes when only one row in a batch is bad.
+   */
+  async function upsertRows(batch: OrderLike[], rows: unknown[][]): Promise<void> {
+    if (!batch.length) return;
+    try {
+      await prisma.$transaction(async (tx) => {
+        await tx.$executeRawUnsafe(buildUpsertSql(batch.length), ...rows.flat());
+      });
+      upserted += batch.length;
+    } catch {
+      if (batch.length <= 1) {
+        errors++;
+        const orderId = batch[0]?.orderId;
+        if (orderId && errorSamples.length < MAX_ERROR_SAMPLES) errorSamples.push(orderId);
+        return;
+      }
+      // Residual #98: binary-split (parity with attribution UNIQUE fallback #96).
+      const mid = Math.ceil(batch.length / 2);
+      await upsertRows(batch.slice(0, mid), rows.slice(0, mid));
+      await upsertRows(batch.slice(mid), rows.slice(mid));
+    }
+  }
 
   for (let i = 0; i < valid.length; i += batchSize) {
     const batch = valid.slice(i, i + batchSize);
@@ -128,26 +166,7 @@ export async function batchUpsertOrderHeaders(
       const fields = toOrderHeaderSharedFields(o);
       return makeRowParams(o.orderId!, fields, o.pointEarned ?? 0, o.pointUsed ?? 0, nowIso);
     });
-    try {
-      await prisma.$transaction(async (tx) => {
-        const sql = buildUpsertSql(batch.length);
-        await tx.$executeRawUnsafe(sql, ...rows.flat());
-      });
-      upserted += batch.length;
-    } catch {
-      // Fall back to row-by-row for this batch on SQL error
-      for (let j = 0; j < batch.length; j++) {
-        try {
-          const sql = buildUpsertSql(1);
-          await prisma.$executeRawUnsafe(sql, ...rows[j]);
-          upserted++;
-        } catch {
-          errors++;
-          const orderId = batch[j]?.orderId;
-          if (orderId && errorSamples.length < MAX_ERROR_SAMPLES) errorSamples.push(orderId);
-        }
-      }
-    }
+    await upsertRows(batch, rows);
   }
 
   return { upserted, skipped, errors, errorSamples };

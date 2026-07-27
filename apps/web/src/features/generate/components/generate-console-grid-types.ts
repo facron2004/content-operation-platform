@@ -16,5 +16,9 @@ export type GenerateConsoleGridProps = {
   feedFacts: Array<{ label: string; value: string }>;
   feedChecks: Array<{ label: string; ok: boolean; text: string }>;
   formatDetailItems: (items: PackageDetailItem[]) => string;
+  // Residual #268: generate package picker first-200 / RECOMMEND_CACHE_CAP honesty.
+  truncated?: boolean;
+  limit?: number | null;
+  matchedCount?: number | null;
 };
 export type { AIConfigForm, GenerateForm };

@@ -35,8 +35,38 @@ export interface OperationConsoleData {
   hotOpportunities: OperationCard[];
   slowMovingPackages: OperationCard[];
   communityTasks: CommunityTask[];
-  yesterdayReview: { date: string; whatHappened: string[]; tomorrowSuggestions: string[] };
+  yesterdayReview: {
+    date: string;
+    whatHappened: string[];
+    tomorrowSuggestions: string[];
+    // Residual #282: daily-review Top-N list-head honesty.
+    reviewListLimit?: number;
+    goodMatched?: number;
+    goodTruncated?: boolean;
+    weakMatched?: number;
+    weakTruncated?: boolean;
+    copyMatched?: number;
+    copyTruncated?: boolean;
+  };
   alerts: OperationAlert[];
+  // Residual #275: RECOMMEND_CACHE_CAP source-cap honesty.
+  sourceMatchedCount?: number;
+  sourceLimit?: number;
+  sourceTruncated?: boolean;
+  // Residual #274 projection: resolution-day clip honesty on ops console.
+  resolvedIdsLimit?: number;
+  resolvedIdsLoaded?: number;
+  resolvedIdsTruncated?: boolean;
+  // Residual #280: focus-panel / alert-preview cap honesty.
+  panelLimit?: number;
+  panelTruncated?: boolean;
+  alertsLimit?: number;
+  alertsTruncated?: boolean;
+  // Residual #290: GeneratedCopy title-join honesty on ops console.
+  titleJoinLimit?: number;
+  titleJoinLoaded?: number;
+  titleJoinTruncated?: boolean;
+  titleJoinMissed?: number;
 }
 
 export const emptyConsoleData: OperationConsoleData = {
@@ -95,6 +125,24 @@ export function mapConsoleResponse(raw: ConsoleResponse): OperationConsoleData {
     slowMovingPackages: raw.slowMovingPackages ?? [],
     communityTasks: (raw.communityTasks ?? []) as CommunityTask[],
     yesterdayReview: raw.yesterdayReview ?? emptyConsoleData.yesterdayReview,
-    alerts: (raw.alerts ?? []) as OperationAlert[]
+    alerts: (raw.alerts ?? []) as OperationAlert[],
+    // Residual #275: forward RECOMMEND_CACHE_CAP source honesty.
+    sourceMatchedCount: raw.sourceMatchedCount,
+    sourceLimit: raw.sourceLimit,
+    sourceTruncated: raw.sourceTruncated === true,
+    // Residual #274 projection on ops console.
+    resolvedIdsLimit: raw.resolvedIdsLimit,
+    resolvedIdsLoaded: raw.resolvedIdsLoaded,
+    resolvedIdsTruncated: raw.resolvedIdsTruncated === true,
+    // Residual #280: focus-panel / alert-preview cap honesty.
+    panelLimit: raw.panelLimit,
+    panelTruncated: raw.panelTruncated === true,
+    alertsLimit: raw.alertsLimit,
+    alertsTruncated: raw.alertsTruncated === true,
+    // Residual #290: GeneratedCopy title-join honesty.
+    titleJoinLimit: raw.titleJoinLimit,
+    titleJoinLoaded: raw.titleJoinLoaded,
+    titleJoinTruncated: raw.titleJoinTruncated === true,
+    titleJoinMissed: raw.titleJoinMissed
   };
 }

@@ -8,7 +8,8 @@ export function buildZeroSalesSkuCsvLines(items: ZeroSalesSkuCsvItem[]): string[
   for (const r of items) {
     lines.push(
       [
-        r.packageId,
+        // packageId is free-form and can start with =/+/-/@ — always formula-escape.
+        csvEscape(r.packageId),
         csvEscape(r.packageName),
         csvEscape(r.merchantName),
         csvEscape(r.areaName),
@@ -18,7 +19,7 @@ export function buildZeroSalesSkuCsvLines(items: ZeroSalesSkuCsvItem[]): string[
         r.stockTotal,
         r.lastSalesDate ?? '',
         r.daysSinceLastSale,
-        r.staleBucket,
+        csvEscape(r.staleBucket),
         r.staleGmv30d,
         r.staleSalesQty30d
       ].join(',')

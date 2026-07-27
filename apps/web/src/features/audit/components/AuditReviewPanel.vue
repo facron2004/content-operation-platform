@@ -28,16 +28,42 @@
         <span>渠道风格</span>
       </div>
       <div class="button-row">
-        <el-button type="success" @click="emit('audit', 'approved')">通过</el-button>
-        <el-button type="warning" @click="emit('audit', 'risk')">标记风险</el-button>
-        <el-button type="danger" @click="emit('audit', 'rejected')">驳回</el-button>
+        <AppleButton variant="success" @click="emit('audit', 'approved')">通过</AppleButton>
+        <AppleButton variant="warning" @click="emit('audit', 'risk')">标记风险</AppleButton>
+        <AppleButton variant="danger" @click="emit('audit', 'rejected')">驳回</AppleButton>
       </div>
     </template>
   </section>
 </template>
 <script setup lang="ts">
 // Parent owns a mutable draft object and passes it by reference for in-place edits.
+import AppleButton from '../../../components/AppleButton.vue';
 
 defineProps<{ selected: unknown; draft: { title: string; body: string; auditRemark: string } }>();
 const emit = defineEmits<{ audit: [status: 'approved' | 'risk' | 'rejected'] }>();
 </script>
+<style scoped>
+.button-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.check-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 4px 0 12px;
+}
+
+.check-list span {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--soft, rgba(120, 120, 128, 0.1));
+  color: var(--ink-soft, #3a3a3c);
+  font-size: 12px;
+  font-weight: 600;
+}
+</style>

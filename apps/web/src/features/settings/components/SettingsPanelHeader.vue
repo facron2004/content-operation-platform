@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AppleButton from '../../../components/AppleButton.vue';
 defineProps<{ defaultsVisible: boolean }>();
 defineEmits<{ 'toggle-defaults': []; create: [] }>();
 </script>
@@ -13,10 +14,10 @@ defineEmits<{ 'toggle-defaults': []; create: [] }>();
       </p>
     </div>
     <div class="panel-actions">
-      <el-button text type="primary" @click="$emit('toggle-defaults')">
+      <AppleButton variant="ghost" @click="$emit('toggle-defaults')">
         {{ defaultsVisible ? '隐藏默认基线' : '查看平台默认基线' }}
-      </el-button>
-      <el-button type="primary" @click="$emit('create')">新建规则</el-button>
+      </AppleButton>
+      <AppleButton variant="primary" @click="$emit('create')">新建规则</AppleButton>
     </div>
   </div>
 </template>

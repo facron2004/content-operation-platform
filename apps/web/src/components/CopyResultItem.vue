@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { GeneratedCopy } from '@content/shared';
 import { channelLabels } from '../utils/labels';
+import AppleButton from './AppleButton.vue';
 defineProps<{ copy: GeneratedCopy; riskTagType: (level: GeneratedCopy['riskLevel']) => string }>();
 defineEmits<{ copy: [copy: GeneratedCopy] }>();
 </script>
@@ -18,8 +19,10 @@ defineEmits<{ copy: [copy: GeneratedCopy] }>();
       </el-tag>
     </div>
     <div class="copy-actions">
-      <el-button size="small" @click="$emit('copy', copy)">复制</el-button>
-      <el-button size="small" type="primary" @click="$router.push('/audit')">提交审核</el-button>
+      <AppleButton size="sm" variant="secondary" @click="$emit('copy', copy)">复制</AppleButton>
+      <AppleButton size="sm" variant="primary" @click="$router.push('/audit')">
+        提交审核
+      </AppleButton>
     </div>
   </article>
 </template>

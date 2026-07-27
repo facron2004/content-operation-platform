@@ -23,13 +23,14 @@
         <strong>{{ activeFocusLabel }}</strong>
         <small>切换焦点后，列表会自动聚焦到对应任务</small>
       </div>
-      <el-button type="primary" size="small" :loading="loading" @click="$emit('reload')">
+      <AppleButton variant="primary" size="sm" :loading="loading" @click="$emit('reload')">
         刷新数据
-      </el-button>
+      </AppleButton>
     </div>
   </section>
 </template>
 <script setup lang="ts">
+import AppleButton from '../../../components/AppleButton.vue';
 defineProps<{
   dateLabel: string;
   dataSource: string;

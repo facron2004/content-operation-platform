@@ -1,4 +1,4 @@
-import type { CampaignListResponse, TaskPerformanceResponse } from '@content/shared';
+import type { CampaignListResponse, CampaignPerformanceResponse } from '@content/shared';
 import client from '../http-client';
 import { cachedGet, clearCache } from '../cache.service';
 
@@ -7,6 +7,9 @@ export async function listCampaigns(
     status?: string;
     campaignType?: string;
     keyword?: string;
+    // Residual #202: API CampaignQueryDto already applies startDate span.
+    startDateFrom?: string;
+    startDateTo?: string;
     page?: number;
     pageSize?: number;
   } = {}
@@ -49,6 +52,8 @@ export async function updateCampaign(
   id: string,
   data: Partial<{
     name: string;
+    // Residual #195: match UpdateCampaignDto + form dialog type select.
+    campaignType: string;
     description: string;
     startDate: string;
     endDate: string;
@@ -95,7 +100,8 @@ export async function cancelCampaign(id: string) {
 }
 
 export async function getCampaignPerformance(id: string) {
-  return cachedGet<TaskPerformanceResponse>(
+  // Residual #178: typed to campaign-scoped aggregate (was wrongly the visit/order rate shape).
+  return cachedGet<CampaignPerformanceResponse>(
     () => client.get(`/campaigns/${encodeURIComponent(id)}/performance`).then((res) => res.data),
     `/campaigns/${encodeURIComponent(id)}/performance`,
     undefined,

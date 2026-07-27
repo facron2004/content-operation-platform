@@ -15,10 +15,10 @@ import CookieManualUpdate from './CookieManualUpdate.vue';
 defineProps<{
   cookieStatus: {
     isValid?: boolean;
+    hasCookie?: boolean;
     username?: string | null;
     cooldownMinutes?: number;
     lastLoginTime?: number | string | null;
-    maskedCookie?: string | null;
   } | null;
   newCookieString: string;
   formatTime: (value: string) => string;

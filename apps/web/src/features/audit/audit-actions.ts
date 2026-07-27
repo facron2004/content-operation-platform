@@ -1,19 +1,54 @@
 import { ElMessage } from 'element-plus';
-import type { AuditStatus, GeneratedCopy } from '@content/shared';
+import type { AuditStatus, Channel, GeneratedCopy } from '@content/shared';
 import { api } from '../../services/api';
-import { auditStatusLabels } from '../../utils/labels';
+import { auditStatusLabels, channelLabels } from '../../utils/labels';
 export type AuditDraft = { title: string; body: string; auditRemark: string };
 export const auditStatusOptions = (Object.entries(auditStatusLabels) as Array<[string, string]>)
   .filter(([value]) => value !== 'draft')
   .map(([value, label]) => ({ label, value }));
+// Residual #215: channel filter options (API ListCopiesQueryDto.channel already applied).
+export const auditChannelOptions: Array<{ label: string; value: '' | Channel }> = [
+  { label: '全部渠道', value: '' },
+  ...(Object.entries(channelLabels) as Array<[Channel, string]>).map(([value, label]) => ({
+    label,
+    value
+  }))
+];
 export async function loadAuditCopies(
   status: AuditStatus,
-  selectedId?: string
-): Promise<{ items: GeneratedCopy[]; keepSelected: boolean }> {
-  const data = await api.listCopies({ auditStatus: status });
+  selectedId?: string,
+  channel?: Channel | '',
+  // Residual #218: page through API pagination (default pageSize 20 server-side).
+  page = 1,
+  pageSize = 20
+): Promise<{
+  items: GeneratedCopy[];
+  keepSelected: boolean;
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+  // Residual #270: listCopies already projects INTERACTIVE_LIST_MAX_DAYS window.
+  dateFrom?: string;
+  dateTo?: string;
+}> {
+  const data = await api.listCopies({
+    auditStatus: status,
+    // Residual #215: forward channel when set (whitelist strip would drop undeclared keys).
+    channel: channel || undefined,
+    page,
+    pageSize
+  });
   return {
     items: data.items,
-    keepSelected: !!selectedId && data.items.some((copy) => copy.contentId === selectedId)
+    keepSelected: !!selectedId && data.items.some((copy) => copy.contentId === selectedId),
+    page: data.pagination.page,
+    pageSize: data.pagination.pageSize,
+    total: data.pagination.total,
+    totalPages: data.pagination.totalPages,
+    // Residual #270
+    dateFrom: data.pagination.dateFrom,
+    dateTo: data.pagination.dateTo
   };
 }
 export async function submitAuditCopy(

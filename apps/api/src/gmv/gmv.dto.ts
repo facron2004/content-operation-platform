@@ -1,18 +1,12 @@
 /** Consolidated GMV module. */
 import { Type } from 'class-transformer';
-import {
-  IsDateString,
-  IsIn,
-  IsInt,
-  IsOptional,
-  IsString,
-  Matches,
-  Max,
-  Min
-} from 'class-validator';
+import { IsIn, IsInt, IsOptional, IsString, Matches, Max, Min } from 'class-validator';
+import { optionalDateKey } from '../content/dto-decorators';
 
 // --- dto/gmv-query.types.ts ---
-export const TREND_WINDOW_OPTIONS = [7, 30, 90, 365] as const;
+// Interactive money reads share the 90d cap with merchant-sales / data-analysis.
+// days=365 used to force a full-year DailyMetrics (or OrderHeader fallback) scan.
+export const TREND_WINDOW_OPTIONS = [7, 30, 90] as const;
 export type TrendWindow = (typeof TREND_WINDOW_OPTIONS)[number];
 
 export const TREND_GRANULARITY_OPTIONS = ['day', 'week', 'month'] as const;
@@ -89,9 +83,14 @@ export class GmvByMerchantQueryDto {
 }
 
 // --- dto/gmv-refresh.dto.ts ---
-/** GMV 手动刷新请求体 — DateString 校验 (YYYY-MM-DD) *  防止前端传非日期字符串进 ETL 循环。 */ export class GmvRefreshBodyDto {
-  @IsOptional() @IsDateString({ strict: true }) startDate?: string;
-  @IsOptional() @IsDateString({ strict: true }) endDate?: string;
+/**
+ * GMV 手动刷新请求体 — 严格 YYYY-MM-DD（不是 IsDateString）。
+ * IsDateString 会放行 ISO datetime，而 daysBetween 只认 YYYY-MM-DD，
+ * 两者错位会把多年区间算成 span=0 从而绕过 90 天上限。
+ */
+export class GmvRefreshBodyDto {
+  @optionalDateKey() startDate?: string;
+  @optionalDateKey() endDate?: string;
 }
 
 // --- gmv.types.ts ---
@@ -160,6 +159,20 @@ export interface GmvDistributionRow {
   gmvWallet: number;
   gmvBonus: number;
   share: number;
+}
+
+/** Residual #289: Top-N named-bucket head + honesty for /gmv/distribution. */
+export interface GmvDistributionPayload {
+  items: GmvDistributionRow[];
+  /** Requested named-bucket head (GmvDistributionQueryDto.limit). */
+  limit: number;
+  /**
+   * Named buckets matched before head clip (excludes synthetic 「其他」).
+   * When truncated, this is at-least `limit + 1` (long-tail remainder exists).
+   */
+  matched: number;
+  /** true when head GMV < platform total (「其他」 long-tail present). */
+  truncated: boolean;
 }
 
 // --- gmv-empty.ts ---

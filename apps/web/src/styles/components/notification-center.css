@@ -1,9 +1,12 @@
 .notification-badge {
   display: inline-flex;
+  align-items: center;
+  line-height: 1;
 }
 
 .notification-trigger {
   box-shadow: var(--shadow-soft);
+  flex-shrink: 0;
 }
 
 .notification-header {

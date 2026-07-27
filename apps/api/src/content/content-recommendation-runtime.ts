@@ -1,7 +1,7 @@
 import type { RecommendPackageItem, RecommendQuery } from '@content/shared';
 
 export interface CachedRecommendations {
-  data: { date: string; areaId: string; packages: RecommendPackageItem[] };
+  data: RecommendationPayload;
   expiresAt: number;
 }
 
@@ -9,13 +9,29 @@ export type RecommendationPayload = {
   date: string;
   areaId: string;
   packages: RecommendPackageItem[];
+  /**
+   * Matched selling total before SCORE/CACHE caps. Prefer this over packages.length
+   * for KPI tiles — packages is intentionally truncated for payload size.
+   */
+  matchedCount: number;
 };
+
+function sortedCsv(ids: string[] | undefined): string | undefined {
+  if (!ids?.length) return undefined;
+  // Stable multi-scope key: order of JWT bindings must not collide distinct sets.
+  return [...new Set(ids.map(String).filter(Boolean))].sort().join(',');
+}
 
 export function recommendationCacheKey(query: RecommendQuery): string {
   const parts: Record<string, string> = {};
   if (query.date) parts.date = query.date;
   if (query.areaId) parts.areaId = query.areaId;
   if (query.merchantId) parts.merchantId = query.merchantId;
+  // Multi-scope operators must not share a single-scope (or empty-scope) cache entry.
+  const areaIds = sortedCsv(query.areaIds);
+  const merchantIds = sortedCsv(query.merchantIds);
+  if (areaIds) parts.areaIds = areaIds;
+  if (merchantIds) parts.merchantIds = merchantIds;
   if (query.role) parts.role = query.role;
   if (query.status) parts.status = query.status;
   if (query.category) parts.category = query.category;
@@ -107,7 +123,7 @@ export function createRecommendationRuntime(
   const cache = new Map<string, CachedRecommendations>();
   const inFlight = new Map<string, Promise<RecommendationPayload>>();
   const ttlMs = Number.parseInt(
-    process.env.CONTENT_RECOMMENDATION_CACHE_TTL_MS ?? process.env.CONTENT_CACHE_TTL_MS ?? '60000',
+    process.env.CONTENT_RECOMMENDATION_CACHE_TTL_MS ?? process.env.CONTENT_CACHE_TTL_MS ?? '300000',
     10
   );
   const maxSize = 50;

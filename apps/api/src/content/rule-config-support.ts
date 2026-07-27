@@ -2,6 +2,7 @@ import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { RuleConfig, RuleConfigPayload, RuleType } from '@content/shared';
 import { RULE_TYPES, isRecord } from '@content/shared';
+import { RULE_CONFIG_CACHE_MAX } from '../common/sql-chunk';
 import {
   DEFAULT_COPY_RULES,
   DEFAULT_INVENTORY_RULES,
@@ -18,7 +19,12 @@ export function ruleCacheKey(merchantId: string | null | undefined, type: RuleTy
 }
 export function getRuleCacheEntry<T>(cache: Map<string, CacheEntry>, key: string): T | undefined {
   const entry = cache.get(key);
-  if (entry && entry.expiresAt > Date.now()) return entry.data as T;
+  if (entry && entry.expiresAt > Date.now()) {
+    // Refresh insertion order so hot keys survive FIFO prune.
+    cache.delete(key);
+    cache.set(key, entry);
+    return entry.data as T;
+  }
   cache.delete(key);
   return undefined;
 }
@@ -28,7 +34,17 @@ export function setRuleCacheEntry(
   data: unknown,
   ttlMs: number
 ): void {
+  // Delete first so re-set moves the key to the Map's insertion tail (LRU-ish).
+  if (cache.has(key)) cache.delete(key);
   cache.set(key, { data, expiresAt: Date.now() + ttlMs });
+  // Bound high-cardinality merchant×type keys — unbounded Map grows with every
+  // unique merchant that hits recommendations / rule resolve.
+  const max = Math.max(1, RULE_CONFIG_CACHE_MAX);
+  while (cache.size > max) {
+    const oldest = cache.keys().next().value;
+    if (oldest === undefined) break;
+    cache.delete(oldest);
+  }
 }
 export function invalidateRuleCache(
   cache: Map<string, CacheEntry>,
@@ -50,6 +66,7 @@ export function invalidateRuleCache(
 export function rethrowMissingRule(err: unknown): never {
   const message = err instanceof Error ? err.message : String(err);
   if (message.startsWith('规则配置不存在:')) throw new NotFoundException(message);
+  if (message.startsWith('不能删除当前生效的规则配置')) throw new BadRequestException(message);
   throw err;
 }
 
@@ -162,6 +179,9 @@ export function validateCopyPayload(payload: RuleConfigPayload): void {
   }
 }
 
+/** Cap serialized rule payload so free-form JSON cannot fill the DB / response. */
+export const RULE_PAYLOAD_MAX_BYTES = 32_768;
+
 export function validatePayload(type: RuleType, payload: RuleConfigPayload): void {
   if (!isRecord(payload)) {
     throw new BadRequestException('payload 必须是 JSON 对象');
@@ -169,19 +189,69 @@ export function validatePayload(type: RuleType, payload: RuleConfigPayload): voi
   if (!RULE_TYPES.includes(type)) {
     throw new BadRequestException(`不支持的规则类型: ${type}`);
   }
+  let serialized: string;
+  try {
+    serialized = JSON.stringify(payload);
+  } catch {
+    throw new BadRequestException('payload 无法序列化');
+  }
+  if (serialized.length > RULE_PAYLOAD_MAX_BYTES) {
+    throw new BadRequestException(
+      `payload 过大（${serialized.length} 字节，上限 ${RULE_PAYLOAD_MAX_BYTES}）`
+    );
+  }
   if (type === 'promotion') validatePromotionPayload(payload);
   else if (type === 'inventory') validateInventoryPayload(payload);
   else if (type === 'copy') validateCopyPayload(payload);
 }
 
 export type RuleConfigRow = Prisma.RuleConfigGetPayload<object>;
-export function mapRuleConfig(row: RuleConfigRow): RuleConfig {
+
+/** Active-resolve projection: payload + version only (resolveEffectiveRules needs nothing else). */
+export const RULE_CONFIG_ACTIVE_SELECT = {
+  payload: true,
+  version: true
+} as const;
+
+/** List projection: omit large free-form payload JSON (detail via getRuleConfigById). */
+export const RULE_CONFIG_LIST_SELECT = {
+  id: true,
+  tenantId: true,
+  merchantId: true,
+  type: true,
+  name: true,
+  version: true,
+  isActive: true,
+  comment: true,
+  createdBy: true,
+  createdAt: true,
+  updatedAt: true
+} as const;
+
+type RuleConfigListRow = {
+  id: string;
+  tenantId: string | null;
+  merchantId: string | null;
+  type: string;
+  name: string;
+  version: number;
+  isActive: boolean;
+  payload?: string;
+  comment: string | null;
+  createdBy: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export function mapRuleConfig(row: RuleConfigRow | RuleConfigListRow): RuleConfig {
   let payload: RuleConfigPayload = {};
-  try {
-    const parsed = JSON.parse(row.payload);
-    if (isRecord(parsed)) payload = parsed;
-  } catch {
-    payload = {};
+  if (typeof row.payload === 'string' && row.payload.length > 0) {
+    try {
+      const parsed = JSON.parse(row.payload);
+      if (isRecord(parsed)) payload = parsed;
+    } catch {
+      payload = {};
+    }
   }
   return {
     id: row.id,

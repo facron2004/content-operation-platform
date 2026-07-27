@@ -72,7 +72,18 @@ export async function refundTodayFromDailyMetrics(
   prisma: PrismaService,
   target: string
 ): Promise<RefundTodayPayload | null> {
-  const dm = await prisma.dailyMetrics.findUnique({ where: { date: target } });
+  const dm = await prisma.dailyMetrics.findUnique({
+    where: { date: target },
+    select: {
+      date: true,
+      totalRefund: true,
+      totalGmv: true,
+      refundRate: true,
+      refundCount: true,
+      paidOrderCount: true,
+      updatedAt: true
+    }
+  });
   if (!dm) return null;
   return {
     date: dm.date,
@@ -93,7 +104,14 @@ export async function refundTrendFromDailyMetrics(
   const end = shiftDateKey(start, days - 1);
   const dm = (await prisma.dailyMetrics.findMany({
     where: { date: { gte: start, lte: end } },
-    orderBy: { date: 'asc' }
+    orderBy: { date: 'asc' },
+    select: {
+      date: true,
+      totalRefund: true,
+      refundRate: true,
+      refundCount: true,
+      paidOrderCount: true
+    }
   })) as RefundTrendRow[];
   return dm.length ? buildRefundTrendPoints(dm, start, days) : null;
 }
@@ -103,7 +121,18 @@ export async function verifyTodayFromDailyMetrics(
   prisma: PrismaService,
   target: string
 ): Promise<RefundVerifyTodayPayload | null> {
-  const dm = await prisma.dailyMetrics.findUnique({ where: { date: target } });
+  const dm = await prisma.dailyMetrics.findUnique({
+    where: { date: target },
+    select: {
+      date: true,
+      totalVerify: true,
+      totalGmv: true,
+      verifyRate: true,
+      verifyCount: true,
+      paidOrderCount: true,
+      updatedAt: true
+    }
+  });
   if (!dm) return null;
   return {
     date: dm.date,
@@ -124,7 +153,14 @@ export async function verifyTrendFromDailyMetrics(
   const end = shiftDateKey(start, days - 1);
   const dm = (await prisma.dailyMetrics.findMany({
     where: { date: { gte: start, lte: end } },
-    orderBy: { date: 'asc' }
+    orderBy: { date: 'asc' },
+    select: {
+      date: true,
+      totalVerify: true,
+      verifyRate: true,
+      verifyCount: true,
+      paidOrderCount: true
+    }
   })) as VerifyTrendRow[];
   return dm.length ? buildVerifyTrendPoints(dm, start, days) : null;
 }

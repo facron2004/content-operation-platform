@@ -1,4 +1,4 @@
-import { onMounted } from 'vue';
+import { onActivated, onMounted } from 'vue';
 import { createGmvCockpitState } from './gmv-cockpit-core';
 import { refreshGmvCockpit } from './gmv-cockpit-core';
 import {
@@ -30,12 +30,14 @@ export function useGmvCockpit() {
     });
   }
 
-  onMounted(reload);
+  // 页面加载/缓存切回只加载本地数据（快、不限流）；拉 JeeSite 由用户点击「刷新」或「历史回填」触发
+  onMounted(loadAll);
+  onActivated(loadAll);
 
   return {
     ...state,
     ...derived,
-    ...createGmvCockpitHandlers({ ...state, reload }),
+    ...createGmvCockpitHandlers({ ...state, reload, loadAll }),
     reload
   };
 }

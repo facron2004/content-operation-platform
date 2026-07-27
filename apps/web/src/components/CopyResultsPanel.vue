@@ -5,7 +5,7 @@
         <h2>生成结果</h2>
         <p>这里展示 AI 或规则兜底输出的文案，确认后可直接进入审核流。</p>
       </div>
-      <el-button text type="primary" @click="$router.push('/audit')">去审核</el-button>
+      <AppleButton variant="ghost" @click="$router.push('/audit')">去审核</AppleButton>
     </div>
     <div v-if="copies.length === 0" class="copy-list">
       <EmptyState
@@ -29,6 +29,7 @@
 import type { GeneratedCopy } from '@content/shared';
 import EmptyState from './EmptyState.vue';
 import CopyResultItem from './CopyResultItem.vue';
+import AppleButton from './AppleButton.vue';
 defineProps<{
   copies: GeneratedCopy[];
   riskTagType: (level: GeneratedCopy['riskLevel']) => string;

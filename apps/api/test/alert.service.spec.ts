@@ -30,7 +30,13 @@ const mockPrisma = {
     findMany: vi.fn().mockResolvedValue([]),
     upsert: vi.fn().mockResolvedValue({})
   },
-  $transaction: vi.fn().mockResolvedValue([]),
+  // Interactive $transaction(callback) for residual #97 bulk resolve; array form still works.
+  $transaction: vi.fn().mockImplementation(async (arg: unknown) => {
+    if (typeof arg === 'function') {
+      return (arg as (tx: typeof mockPrisma) => Promise<unknown>)(mockPrisma);
+    }
+    return Promise.all(arg as Promise<unknown>[]);
+  }),
   $executeRawUnsafe: vi.fn().mockResolvedValue(0),
   $queryRawUnsafe: vi.fn().mockResolvedValue([])
 };
@@ -42,7 +48,14 @@ describe('AlertService', () => {
     vi.clearAllMocks();
     mockPrisma.operationAlertResolution.findMany.mockResolvedValue([]);
     mockPrisma.operationAlertResolution.upsert.mockResolvedValue({});
-    mockPrisma.$transaction.mockResolvedValue([]);
+    // Interactive $transaction(callback) — residual #97 bulk resolve.
+    mockPrisma.$transaction.mockImplementation(async (arg: unknown) => {
+      if (typeof arg === 'function') {
+        return (arg as (tx: typeof mockPrisma) => Promise<unknown>)(mockPrisma);
+      }
+      return Promise.all(arg as Promise<unknown>[]);
+    });
+    mockPrisma.$executeRawUnsafe.mockResolvedValue(0);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [AlertService, { provide: PrismaService, useValue: mockPrisma }]
@@ -210,7 +223,7 @@ describe('AlertService', () => {
   // ---- buildAlertPackageFocus ----
 
   describe('buildAlertPackageFocus', () => {
-    it('groups alerts by packageId and returns top 8', () => {
+    it('groups alerts by packageId and returns top 8 with honesty', () => {
       const alerts: OperationAlert[] = [];
       for (let i = 0; i < 10; i++) {
         alerts.push(
@@ -224,7 +237,11 @@ describe('AlertService', () => {
       }
 
       const focus = service.buildAlertPackageFocus(alerts);
-      expect(focus.length).toBeLessThanOrEqual(8);
+      // Residual #283: object return with Top-8 head + matched/truncated honesty.
+      expect(focus.items.length).toBe(8);
+      expect(focus.limit).toBe(8);
+      expect(focus.matched).toBe(10);
+      expect(focus.truncated).toBe(true);
     });
 
     it('aggregates alert counts for the same package', () => {
@@ -241,12 +258,14 @@ describe('AlertService', () => {
 
       const focus = service.buildAlertPackageFocus(alerts);
 
-      const pkg1 = focus.find((f) => f.packageId === 'PKG-1');
+      const pkg1 = focus.items.find((f) => f.packageId === 'PKG-1');
       expect(pkg1).toBeDefined();
       expect(pkg1!.alertCount).toBe(2);
       expect(pkg1!.dangerCount).toBe(1);
       expect(pkg1!.warningCount).toBe(1);
       expect(pkg1!.types).toEqual(expect.arrayContaining(['high_refund', 'low_verify']));
+      expect(focus.matched).toBe(2);
+      expect(focus.truncated).toBe(false);
     });
   });
 
@@ -257,11 +276,17 @@ describe('AlertService', () => {
       await expect(service.resolveOperationAlert('', 'admin')).rejects.toThrow(BadRequestException);
     });
 
+    it('throws BadRequestException when alertId shape is invalid', async () => {
+      await expect(service.resolveOperationAlert('ALERT-001', 'admin')).rejects.toThrow(
+        BadRequestException
+      );
+    });
+
     it('upserts resolution record and returns success', async () => {
-      const result = await service.resolveOperationAlert('ALERT-001', 'admin');
+      const result = await service.resolveOperationAlert('PKG-1:high_refund', 'admin');
 
       expect(result.success).toBe(true);
-      expect(result.alertId).toBe('ALERT-001');
+      expect(result.alertId).toBe('PKG-1:high_refund');
       expect(result.message).toContain('已处理');
       expect(mockPrisma.operationAlertResolution.upsert).toHaveBeenCalled();
     });
@@ -277,19 +302,29 @@ describe('AlertService', () => {
     });
 
     it('deduplicates and trims alertIds', async () => {
-      const result = await service.resolveOperationAlerts(['A1', ' A1 ', 'A2', '', '  '], 'admin');
+      const result = await service.resolveOperationAlerts(
+        ['PKG-1:high_refund', ' PKG-1:high_refund ', 'PKG-2:low_verify', '', '  '],
+        'admin'
+      );
 
       expect(result.success).toBe(true);
       expect(result.resolvedCount).toBe(2);
-      expect(result.alertIds).toEqual(['A1', 'A2']);
+      expect(result.alertIds).toEqual(['PKG-1:high_refund', 'PKG-2:low_verify']);
     });
 
-    it('calls $transaction with upsert operations', async () => {
-      await service.resolveOperationAlerts(['A1', 'A2'], 'admin');
+    it('bulk-inserts via multi-row INSERT ON CONFLICT (not N serial upserts)', async () => {
+      await service.resolveOperationAlerts(['PKG-1:high_refund', 'PKG-2:low_verify'], 'admin');
 
       expect(mockPrisma.$transaction).toHaveBeenCalledTimes(1);
-      const txArg = mockPrisma.$transaction.mock.calls[0][0];
-      expect(txArg).toHaveLength(2);
+      // Interactive callback form (not Prisma-promise array of N upserts).
+      expect(typeof mockPrisma.$transaction.mock.calls[0][0]).toBe('function');
+      expect(mockPrisma.$executeRawUnsafe).toHaveBeenCalled();
+      const sql = String(mockPrisma.$executeRawUnsafe.mock.calls[0][0]);
+      expect(sql).toMatch(/INSERT INTO "OperationAlertResolution"/);
+      expect(sql).toMatch(/VALUES\s+\(\?,\s*\?,\s*\?,\s*\?\),\s*\(\?,\s*\?,\s*\?,\s*\?\)/);
+      expect(sql).toMatch(/ON CONFLICT\("alertId", "resolvedDate"\)/);
+      // Two alert rows → 2×4 params after SQL string.
+      expect(mockPrisma.$executeRawUnsafe.mock.calls[0].length - 1).toBe(8);
     });
   });
 
@@ -333,6 +368,34 @@ describe('AlertService', () => {
 
       expect(result.items.find((a: OperationAlert) => a.alertId === 'A1')).toBeUndefined();
     });
+
+    it('reuses ranked aggregate across page flips without re-calling recommend', async () => {
+      const alerts = Array.from({ length: 3 }, (_, i) =>
+        makeAlert({ alertId: `A${i + 1}`, level: 'warning', type: 'low_verify' })
+      );
+      const mockGetRecommendations = vi.fn().mockResolvedValue({
+        date: '2026-06-10',
+        packages: [{ operationAlerts: alerts }]
+      });
+
+      const page1 = await service.getOperationAlerts(
+        { page: 1, pageSize: 1 },
+        mockGetRecommendations,
+        { areaIds: ['a1'] }
+      );
+      const page2 = await service.getOperationAlerts(
+        { page: 2, pageSize: 1 },
+        mockGetRecommendations,
+        { areaIds: ['a1'] }
+      );
+
+      expect(mockGetRecommendations).toHaveBeenCalledTimes(1);
+      expect(page1.items).toHaveLength(1);
+      expect(page2.items).toHaveLength(1);
+      expect(page1.items[0].alertId).not.toBe(page2.items[0].alertId);
+      expect(page1.pagination.total).toBe(3);
+      expect(page2.pagination.total).toBe(3);
+    });
   });
 
   // ---- loadResolvedAlertIds ----
@@ -344,12 +407,16 @@ describe('AlertService', () => {
         { alertId: 'A2' }
       ]);
 
-      const ids = await service.loadResolvedAlertIds('2026-06-10');
+      const result = await service.loadResolvedAlertIds('2026-06-10');
 
-      expect(ids).toBeInstanceOf(Set);
-      expect(ids.size).toBe(2);
-      expect(ids.has('A1')).toBe(true);
-      expect(ids.has('A2')).toBe(true);
+      // Residual #274: returns { ids, truncated, limit, loaded }.
+      expect(result.ids).toBeInstanceOf(Set);
+      expect(result.ids.size).toBe(2);
+      expect(result.ids.has('A1')).toBe(true);
+      expect(result.ids.has('A2')).toBe(true);
+      expect(result.truncated).toBe(false);
+      expect(result.loaded).toBe(2);
+      expect(result.limit).toBeGreaterThan(0);
     });
   });
 });

@@ -1,7 +1,9 @@
 import { computed, ref } from 'vue';
+import { ElMessage } from 'element-plus';
 import type { RecommendPackageItem } from '@content/shared';
 import { currentPrice } from '@content/shared';
 import { api, type PackageDetailResponse } from '../services/api';
+import { extractErrorMessage } from '../services/http-client';
 import { formatMoney } from '../utils/labels';
 
 export type PackageDetailData = NonNullable<PackageDetailResponse['data']>;
@@ -107,9 +109,31 @@ export function usePackageDetail(
       (id) => api.getPackageDetail(id)
     );
   };
-  const refreshDetail = () => {
+  // Residual #232: 「刷新详情」 must force-refresh via POST, not re-GET the cache.
+  const refreshDetail = async () => {
     const packageId = getPackageId();
-    if (packageId) loadPackageDetail(packageId);
+    if (!packageId) return;
+    const requestId = ++packageDetailRequestId;
+    await loadPackageDetailData(
+      packageId,
+      requestId,
+      () => packageDetailRequestId,
+      { detailLoading, packageDetail },
+      async (id) => {
+        try {
+          const response = await api.refreshPackageDetail(id);
+          if (!response.success) {
+            ElMessage.error(response.message || '刷新套餐详情失败');
+          } else {
+            ElMessage.success(response.message || '套餐详情已刷新');
+          }
+          return response;
+        } catch (err) {
+          ElMessage.error(extractErrorMessage(err, '刷新套餐详情失败'));
+          throw err;
+        }
+      }
+    );
   };
   return {
     detailLoading,

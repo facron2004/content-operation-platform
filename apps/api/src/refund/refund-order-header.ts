@@ -1,18 +1,26 @@
 /** Consolidated refund module. */
-import { beijingDayRangeUtc, shiftDateKey } from '@content/shared';
-import { rateAgainstGmv, SQL_GMV_OH } from '../common';
+import { shiftDateKey } from '@content/shared';
+import {
+  beijingDayRangeSqlite,
+  rateAgainstGmv,
+  SQL_GMV_OH,
+  sqlBeijingDate,
+  sqlDatetimeExclusiveRange
+} from '../common';
 import { PrismaService } from '../prisma/prisma.service';
 import type { RefundTodayPayload, RefundTrendPoint, RefundVerifyTodayPayload } from './refund.dto';
 
 // --- refund-order-header-day-gmv.ts ---
+/** Exclusive half-open Beijing day bounds as SQLite space-form params. */
 export function dayIsoRange(date: string) {
-  const { start: dayStart, end: dayEnd } = beijingDayRangeUtc(date);
-  return { startIso: dayStart.toISOString(), endIso: dayEnd.toISOString() };
+  const { start, end } = beijingDayRangeSqlite(date);
+  // Keep property names for call-site compatibility; values are space form.
+  return { startIso: start, endIso: end };
 }
 export async function loadOrderHeaderDayGmv(prisma: PrismaService, date: string) {
   const { startIso, endIso } = dayIsoRange(date);
   const dayRows = (await prisma.$queryRawUnsafe(
-    `SELECT COALESCE(SUM(${SQL_GMV_OH}), 0) AS "totalGmv", COUNT(CASE WHEN "paidTime" IS NOT NULL THEN 1 END) AS "paidOrderCount" FROM "OrderHeader" WHERE "paidTime" >= ? AND "paidTime" < ?`,
+    `SELECT COALESCE(SUM(${SQL_GMV_OH}), 0) AS "totalGmv", COUNT(CASE WHEN "paidTime" IS NOT NULL THEN 1 END) AS "paidOrderCount" FROM "OrderHeader" WHERE ${sqlDatetimeExclusiveRange('"paidTime"')}`,
     startIso,
     endIso
   )) as Array<{ totalGmv: number; paidOrderCount: number }>;
@@ -26,7 +34,7 @@ export async function loadOrderHeaderDayGmv(prisma: PrismaService, date: string)
 export async function loadOrderHeaderRefundTotals(prisma: PrismaService, date: string) {
   const { startIso, endIso } = dayIsoRange(date);
   const refundRows = (await prisma.$queryRawUnsafe(
-    `SELECT COALESCE(SUM("refundAmount"), 0) AS "totalRefund", COUNT(*) AS "refundCount" FROM "OrderHeader" WHERE "refundTime" >= ? AND "refundTime" < ? AND "refundAmount" > 0`,
+    `SELECT COALESCE(SUM("refundAmount"), 0) AS "totalRefund", COUNT(*) AS "refundCount" FROM "OrderHeader" WHERE ${sqlDatetimeExclusiveRange('"refundTime"')} AND "refundAmount" > 0`,
     startIso,
     endIso
   )) as Array<{ totalRefund: number; refundCount: number }>;
@@ -36,7 +44,7 @@ export async function loadOrderHeaderRefundTotals(prisma: PrismaService, date: s
 export async function loadOrderHeaderVerifyTotals(prisma: PrismaService, date: string) {
   const { startIso, endIso } = dayIsoRange(date);
   const verifyRows = (await prisma.$queryRawUnsafe(
-    `SELECT COALESCE(SUM("verifyAmount"), 0) AS "totalVerify", COUNT(*) AS "verifyCount" FROM "OrderHeader" WHERE "verifyTime" >= ? AND "verifyTime" < ? AND "verifyAmount" > 0`,
+    `SELECT COALESCE(SUM("verifyAmount"), 0) AS "totalVerify", COUNT(*) AS "verifyCount" FROM "OrderHeader" WHERE ${sqlDatetimeExclusiveRange('"verifyTime"')} AND "verifyAmount" > 0`,
     startIso,
     endIso
   )) as Array<{ totalVerify: number; verifyCount: number }>;
@@ -62,11 +70,12 @@ export async function queryTopMerchantsByMetric(
     amountAlias: 'refund' | 'verify';
   }
 ): Promise<MerchantMetricRow[]> {
-  const { start: dayStart, end: dayEnd } = beijingDayRangeUtc(date);
+  const { start, end } = beijingDayRangeSqlite(date);
+  // timeColumn is a closed enum — safe to interpolate as an identifier.
   return (await prisma.$queryRawUnsafe(
-    `SELECT COALESCE(NULLIF(oh."merchantName", ''), oh."merchantId") AS "merchantName", oh."merchantId", COALESCE(SUM(${SQL_GMV_OH}), 0) AS "gmv", COALESCE(SUM(oh."${opts.amountColumn}"), 0) AS "${opts.amountAlias}" FROM "OrderHeader" oh WHERE oh."${opts.timeColumn}" >= ? AND oh."${opts.timeColumn}" < ? AND oh."${opts.amountColumn}" > 0 AND oh."merchantId" IS NOT NULL GROUP BY oh."merchantId" ORDER BY "${opts.amountAlias}" DESC LIMIT ?`,
-    dayStart.toISOString(),
-    dayEnd.toISOString(),
+    `SELECT COALESCE(NULLIF(oh."merchantName", ''), oh."merchantId") AS "merchantName", oh."merchantId", COALESCE(SUM(${SQL_GMV_OH}), 0) AS "gmv", COALESCE(SUM(oh."${opts.amountColumn}"), 0) AS "${opts.amountAlias}" FROM "OrderHeader" oh WHERE ${sqlDatetimeExclusiveRange(`oh."${opts.timeColumn}"`)} AND oh."${opts.amountColumn}" > 0 AND oh."merchantId" IS NOT NULL GROUP BY oh."merchantId" ORDER BY "${opts.amountAlias}" DESC LIMIT ?`,
+    start,
+    end,
     limit
   )) as MerchantMetricRow[];
 }
@@ -159,13 +168,13 @@ export async function computeVerifyFromOrderHeader(
 type TrendRow = { date: string; totalRefund: number; refundCount: number; paidOrderCount: number };
 export async function queryRefundTrendRows(
   prisma: PrismaService,
-  startIso: string,
-  endIso: string
+  startBound: string,
+  endBound: string
 ) {
   return (await prisma.$queryRawUnsafe(
-    `SELECT date("refundTime", '+8 hours') AS "date", COALESCE(SUM("refundAmount"), 0) AS "totalRefund", COUNT(*) AS "refundCount", COUNT(CASE WHEN "paidTime" IS NOT NULL THEN 1 END) AS "paidOrderCount" FROM "OrderHeader" WHERE "refundTime" >= ? AND "refundTime" < ? AND "refundAmount" > 0 GROUP BY date("refundTime", '+8 hours') ORDER BY "date" ASC`,
-    startIso,
-    endIso
+    `SELECT ${sqlBeijingDate('"refundTime"')} AS "date", COALESCE(SUM("refundAmount"), 0) AS "totalRefund", COUNT(*) AS "refundCount", COUNT(CASE WHEN "paidTime" IS NOT NULL THEN 1 END) AS "paidOrderCount" FROM "OrderHeader" WHERE ${sqlDatetimeExclusiveRange('"refundTime"')} AND "refundAmount" > 0 GROUP BY ${sqlBeijingDate('"refundTime"')} ORDER BY "date" ASC`,
+    startBound,
+    endBound
   )) as TrendRow[];
 }
 export function fillRefundTrendDays(
@@ -195,9 +204,9 @@ export async function computeRefundTrendFromOrderHeader(
   startDate: string,
   endDate: string
 ): Promise<RefundTrendPoint[]> {
-  const startIso = beijingDayRangeUtc(startDate).start.toISOString(),
-    endIso = beijingDayRangeUtc(endDate).end.toISOString();
-  const rows = await queryRefundTrendRows(prisma, startIso, endIso);
+  const startBound = beijingDayRangeSqlite(startDate).start;
+  const endBound = beijingDayRangeSqlite(endDate).end;
+  const rows = await queryRefundTrendRows(prisma, startBound, endBound);
   const days =
     Math.round(
       (Date.parse(endDate + 'T00:00:00Z') - Date.parse(startDate + 'T00:00:00Z')) / 86400000

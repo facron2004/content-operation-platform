@@ -1,14 +1,18 @@
 <script setup lang="ts">
 import type { ContentPackage } from '@content/shared';
+import AppleButton from '../../../components/AppleButton.vue';
 defineProps<{ pkg: ContentPackage; packageId: string }>();
 </script>
 <template>
   <section class="panel package-long-panel">
     <div class="panel-head">
       <h2>卖点与限制</h2>
-      <el-button type="primary" @click="$router.push({ path: '/generate', query: { packageId } })">
+      <AppleButton
+        variant="primary"
+        @click="$router.push({ path: '/generate', query: { packageId } })"
+      >
         生成文案
-      </el-button>
+      </AppleButton>
     </div>
     <div class="detail-columns">
       <div class="detail-block">

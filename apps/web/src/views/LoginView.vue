@@ -16,7 +16,6 @@
           :loading="loading"
           :error="error"
           @submit="handleLogin"
-          @fill-defaults="fillDefaults"
         />
       </div>
     </section>
@@ -26,6 +25,6 @@
 import LoginVisual from '../features/auth/components/LoginVisual.vue';
 import LoginForm from '../features/auth/components/LoginForm.vue';
 import { useLoginPage } from '../features/auth/composables/useLoginPage';
-const { form, loading, error, fillDefaults, handleLogin } = useLoginPage();
+const { form, loading, error, handleLogin } = useLoginPage();
 </script>
 <style src="../styles/views/login.css" scoped></style>

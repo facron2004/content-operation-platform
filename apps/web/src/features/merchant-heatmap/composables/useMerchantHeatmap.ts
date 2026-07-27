@@ -33,6 +33,9 @@ export function useMerchantHeatmap() {
   const mappedMerchants = computed(() => data.value?.mappedMerchants ?? 0);
   const unmappedMerchants = computed(() => data.value?.unmappedMerchants ?? 0);
   const center = computed(() => data.value?.center ?? { lat: 30.572, lng: 104.066 });
+  // Residual #269: PLATFORM_SCAN_LIMIT honesty.
+  const truncated = computed(() => Boolean(data.value?.truncated));
+  const limit = computed(() => data.value?.limit ?? null);
 
   async function load() {
     loading.value = true;
@@ -60,6 +63,9 @@ export function useMerchantHeatmap() {
     mappedMerchants,
     unmappedMerchants,
     center,
+    // Residual #269
+    truncated,
+    limit,
     intensityMode,
     load,
     toggleMode

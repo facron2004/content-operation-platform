@@ -1,8 +1,10 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { ContentPackage, InventoryTrendPoint, SalesSnapshot } from '@content/shared';
-import { latestSnapshotsByPackage, localDateKey } from '@content/shared';
+import { latestSnapshotsByPackage, beijingDateKey, shiftDateKey } from '@content/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { sortByDateKey } from '../domain/utils';
+import { queryInChunks } from '../common/sql-chunk';
+import { toSqliteDateTime } from '../common/sqlite-datetime';
 import { DataSourceService, type ContentDataset } from './data-source.service';
 
 interface DailyInventoryRow {
@@ -20,6 +22,8 @@ const toISOTimestamp = (value: Date | string): string =>
 export class DailyInventoryCrawlerService {
   private readonly logger = new Logger(DailyInventoryCrawlerService.name);
   private readonly autoRecordedDates = new Set<string>();
+  /** Single-flight across admin crawl + auto-record — both force-refresh Jeesite + bulk write. */
+  private running = false;
 
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
@@ -27,16 +31,49 @@ export class DailyInventoryCrawlerService {
   ) {}
 
   async crawlDailyInventory(date?: string) {
-    const dataset = await this.dataSource.loadDataset({ forceRefresh: true });
-    const targetDate = this.resolveDateKey(date);
-    const result = await this.recordDatasetInventory(dataset, targetDate);
-    return {
-      ...result,
-      source: 'jeesite.bargainCommodityDynamic.hasInventory'
-    };
+    if (this.running) {
+      this.logger.warn('Skipping daily inventory crawl — previous run still in flight');
+      return {
+        date: this.resolveDateKey(date),
+        crawledCount: 0,
+        soldOutCount: 0,
+        skipped: true as const,
+        source: 'jeesite.bargainCommodityDynamic.hasInventory'
+      };
+    }
+    this.running = true;
+    try {
+      const dataset = await this.dataSource.loadDataset({ forceRefresh: true });
+      const targetDate = this.resolveDateKey(date);
+      const result = await this.recordDatasetInventoryUnlocked(dataset, targetDate);
+      return {
+        ...result,
+        source: 'jeesite.bargainCommodityDynamic.hasInventory'
+      };
+    } finally {
+      this.running = false;
+    }
   }
 
   async recordDatasetInventory(dataset: ContentDataset, date?: string) {
+    if (this.running) {
+      this.logger.warn('Skipping recordDatasetInventory — crawl still in flight');
+      return {
+        date: this.resolveDateKey(date),
+        crawledCount: 0,
+        soldOutCount: 0,
+        skipped: true as const
+      };
+    }
+    this.running = true;
+    try {
+      return await this.recordDatasetInventoryUnlocked(dataset, date);
+    } finally {
+      this.running = false;
+    }
+  }
+
+  private async recordDatasetInventoryUnlocked(dataset: ContentDataset, date?: string) {
     const targetDate = this.resolveDateKey(date);
     const rows = this.collectInventoryRows(dataset, targetDate);
     await this.persistInventoryRows(rows);
@@ -54,6 +91,11 @@ export class DailyInventoryCrawlerService {
     const targetDate = this.resolveDateKey(date);
     if (this.autoRecordedDates.has(targetDate)) {
       return { date: targetDate, crawledCount: 0, soldOutCount: 0, skipped: true };
+    }
+    // Bound auto-recorded set growth over long uptime (keep last ~14 days worth of keys).
+    if (this.autoRecordedDates.size > 14) {
+      const oldest = [...this.autoRecordedDates].sort()[0];
+      if (oldest) this.autoRecordedDates.delete(oldest);
     }
 
     this.autoRecordedDates.add(targetDate);
@@ -111,10 +153,9 @@ export class DailyInventoryCrawlerService {
     const BATCH_SIZE = 50;
     for (let i = 0; i < rows.length; i += BATCH_SIZE) {
       const batch = rows.slice(i, i + BATCH_SIZE);
-      const valueClauses = batch
-        .map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)')
-        .join(', ');
+      const valueClauses = batch.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ');
       const batchDate = this.resolveDateKey();
+      const now = toSqliteDateTime();
       const params = batch.flatMap(({ pkg, snapshot, remainingStock }) => [
         pkg.packageId,
         batchDate,
@@ -125,7 +166,8 @@ export class DailyInventoryCrawlerService {
         pkg.saleStatus ?? null,
         remainingStock,
         remainingStock <= 0 ? 1 : 0,
-        'bargainCommodityDynamic.hasInventory'
+        'bargainCommodityDynamic.hasInventory',
+        now
       ]);
 
       await this.prisma.$executeRawUnsafe(
@@ -144,7 +186,7 @@ export class DailyInventoryCrawlerService {
             "remainingStock" = excluded."remainingStock",
             "soldOut" = excluded."soldOut",
             "sourceField" = excluded."sourceField",
-            "updatedAt" = CURRENT_TIMESTAMP
+            "updatedAt" = excluded."updatedAt"
         `,
         ...params
       );
@@ -153,33 +195,34 @@ export class DailyInventoryCrawlerService {
 
   private resolveDateKey(date?: string) {
     if (date && /^\d{4}-\d{2}-\d{2}$/.test(date)) return date;
-    return localDateKey(new Date());
+    return beijingDateKey(new Date());
   }
 
   private async loadInventoryRows(packageIds: string[], days: number, asOf: Date) {
-    const endDate = localDateKey(asOf);
-    const start = new Date(asOf);
-    start.setDate(start.getDate() - Math.max(1, days) + 1);
-    const startDate = localDateKey(start);
-    const placeholders = packageIds.map(() => '?').join(', ');
-
-    return (await this.prisma.$queryRawUnsafe(
-      `
-        SELECT
-          "packageId" AS "packageId",
-          "snapshotDate" AS "date",
-          "snapshotTime" AS "snapshotTime",
-          "remainingStock" AS "remainingStock"
-        FROM "JeeSiteInventoryDailySnapshot"
-        WHERE "packageId" IN (${placeholders})
-          AND "snapshotDate" >= ?
-          AND "snapshotDate" <= ?
-        ORDER BY "snapshotDate" ASC, "snapshotTime" ASC
-      `,
-      ...packageIds,
-      startDate,
-      endDate
-    )) as DailyInventoryRow[];
+    const endDate = beijingDateKey(asOf);
+    // Calendar-day range (Beijing), not wall-clock ms — avoids DST / partial-day skew.
+    const startDate = shiftDateKey(endDate, -(Math.max(1, days) - 1));
+    // Chunk IN lists — recommend/crawler can pass multi-thousand packageIds.
+    return queryInChunks(packageIds, async (chunk) => {
+      const placeholders = chunk.map(() => '?').join(', ');
+      return (await this.prisma.$queryRawUnsafe(
+        `
+          SELECT
+            "packageId" AS "packageId",
+            "snapshotDate" AS "date",
+            "snapshotTime" AS "snapshotTime",
+            "remainingStock" AS "remainingStock"
+          FROM "JeeSiteInventoryDailySnapshot"
+          WHERE "packageId" IN (${placeholders})
+            AND "snapshotDate" >= ?
+            AND "snapshotDate" <= ?
+          ORDER BY "snapshotDate" ASC, "snapshotTime" ASC
+        `,
+        ...chunk,
+        startDate,
+        endDate
+      )) as DailyInventoryRow[];
+    });
   }
 
   private pushTrendRow(result: Map<string, InventoryTrendPoint[]>, row: DailyInventoryRow) {
@@ -200,8 +243,8 @@ export class DailyInventoryCrawlerService {
     const points = result.get(snapshot.packageId) ?? [];
     const snapshotDate = new Date(snapshot.snapshotTime);
     const date = Number.isFinite(snapshotDate.getTime())
-      ? localDateKey(snapshotDate)
-      : localDateKey(asOf);
+      ? beijingDateKey(snapshotDate)
+      : beijingDateKey(asOf);
     const point = {
       date,
       snapshotTime: snapshot.snapshotTime,

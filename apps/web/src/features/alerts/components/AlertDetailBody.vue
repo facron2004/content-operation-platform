@@ -22,15 +22,22 @@
       </div>
     </dl>
     <div class="drawer-actions">
-      <el-button @click="$emit('close')">返回预警列表</el-button>
-      <el-button @click="$emit('go-analysis', alert.packageId)">查看套餐</el-button>
-      <el-button type="primary" @click="$emit('go-battle', alert.packageId)">生成作战卡</el-button>
-      <el-button type="success" @click="$emit('resolve', alert.alertId)">标记已处理</el-button>
+      <AppleButton variant="secondary" @click="$emit('close')">返回预警列表</AppleButton>
+      <AppleButton variant="secondary" @click="$emit('go-analysis', alert.packageId)">
+        查看套餐
+      </AppleButton>
+      <AppleButton variant="primary" @click="$emit('go-battle', alert.packageId)">
+        生成作战卡
+      </AppleButton>
+      <AppleButton variant="success" @click="$emit('resolve', alert.alertId)">
+        标记已处理
+      </AppleButton>
     </div>
   </div>
 </template>
 <script setup lang="ts">
 import type { OperationAlert } from '@content/shared';
+import AppleButton from '../../../components/AppleButton.vue';
 import { riskTagType, levelText } from '../../../utils/labels';
 defineProps<{ alert: (OperationAlert & { priorityScore?: number }) | null }>();
 defineEmits<{

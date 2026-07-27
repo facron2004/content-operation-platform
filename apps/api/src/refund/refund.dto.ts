@@ -1,17 +1,18 @@
 /** Consolidated refund module. */
 import { Type } from 'class-transformer';
-import { IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsIn, IsInt, IsOptional, Max, Min } from 'class-validator';
+import { optionalDateKey } from '../content/dto-decorators';
 
 // --- dto/refund-query.dto.ts ---
 export const REFUND_TREND_WINDOW = [7, 30] as const;
 export const VERIFY_TREND_WINDOW = [7, 30] as const;
 export type TrendWindow = 7 | 30;
 export class RefundTodayQueryDto {
-  @IsOptional() @IsString() date?: string;
+  @optionalDateKey() date?: string;
 }
 export class RefundTrendQueryDto {
   @IsOptional() @Type(() => Number) @IsInt() @IsIn([7, 30]) days: TrendWindow = 7;
-  @IsOptional() @IsString() endDate?: string;
+  @optionalDateKey() endDate?: string;
 }
 export class RefundTopMerchantsQueryDto {
   @IsOptional() @IsIn(['refundDesc', 'verifyDesc']) sortBy: 'refundDesc' | 'verifyDesc' =

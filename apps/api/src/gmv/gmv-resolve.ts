@@ -1,9 +1,15 @@
 /** Consolidated GMV module — money resolve: OH today, DM history, never SalesSnapshot. */
 import { beijingDateKey, shiftDateKey } from '@content/shared';
 import { rateAgainstGmv } from '../common';
+import { GMV_TOP_MERCHANTS_LIMIT } from '../common/sql-chunk';
 import { shouldPreferOrderHeaderForKpi } from '../money';
 import { PrismaService } from '../prisma/prisma.service';
-import { mapDailyMetricsToKpi, mapDailyMetricsTrend, sortAndPageMerchants } from './gmv-metrics';
+import {
+  mapDailyMetricsToKpi,
+  mapDailyMetricsTrend,
+  pageMerchants,
+  sortMerchants
+} from './gmv-metrics';
 import {
   computeDistributionFromOrderHeader,
   computeFromOrderHeader,
@@ -13,6 +19,7 @@ import {
 import {
   emptyHourlyPoints,
   type GmvDistributionDim,
+  type GmvDistributionPayload,
   type GmvDistributionRow,
   type GmvHourlyPoint,
   type GmvMerchantRow,
@@ -42,9 +49,26 @@ export async function resolveGmvKpis(prisma: PrismaLike, date?: string): Promise
 
   const prevDate = shiftDateKey(targetDate, -1);
   const monthStart = `${targetDate.slice(0, 7)}-01`;
+  // Explicit KPI columns only — DailyMetrics also holds stagnant/moving SKU counts.
+  const kpiSelect = {
+    date: true,
+    totalGmv: true,
+    gmvOnline: true,
+    gmvWallet: true,
+    gmvBonus: true,
+    gmvCard: true,
+    totalRefund: true,
+    refundRate: true,
+    totalVerify: true,
+    verifyRate: true,
+    paidOrderCount: true,
+    paidAmountBonus: true,
+    paidAmountWallet: true,
+    updatedAt: true
+  } as const;
   const [dmRow, prevDm, monthRows] = await Promise.all([
-    prisma.dailyMetrics.findUnique({ where: { date: targetDate } }),
-    prisma.dailyMetrics.findUnique({ where: { date: prevDate } }),
+    prisma.dailyMetrics.findUnique({ where: { date: targetDate }, select: kpiSelect }),
+    prisma.dailyMetrics.findUnique({ where: { date: prevDate }, select: kpiSelect }),
     prisma.dailyMetrics.findMany({
       where: { date: { gte: monthStart, lte: targetDate } },
       select: { totalGmv: true, gmvOnline: true, gmvWallet: true }
@@ -73,17 +97,29 @@ export async function resolveGmvTrend(
   granularity: TrendGranularity = 'day'
 ): Promise<GmvTrendPoint[]> {
   const end = endDate ?? beijingDateKey(new Date());
-  const dayCount =
-    granularity === 'day'
-      ? days
-      : granularity === 'week'
-        ? Math.max(days, 84)
-        : Math.max(days, 365);
+  // Cap interactive fan-out at 90d even when week/month floors push dayCount up.
+  // Month used to floor at 365 (full-year OH fallback when DailyMetrics empty).
+  const INTERACTIVE_TREND_MAX_DAYS = 90;
+  const rawDayCount =
+    granularity === 'day' ? days : granularity === 'week' ? Math.max(days, 84) : Math.max(days, 90);
+  const dayCount = Math.min(rawDayCount, INTERACTIVE_TREND_MAX_DAYS);
   const start = shiftDateKey(end, -(dayCount - 1));
 
+  // Explicit columns for mapDailyMetricsTrend — never SELECT * full DailyMetrics row.
   const dmRows = await prisma.dailyMetrics.findMany({
     where: { date: { gte: start, lte: end } },
-    orderBy: { date: 'asc' }
+    orderBy: { date: 'asc' },
+    select: {
+      date: true,
+      totalGmv: true,
+      gmvOnline: true,
+      gmvWallet: true,
+      gmvBonus: true,
+      totalRefund: true,
+      refundRate: true,
+      verifyRate: true,
+      paidOrderCount: true
+    }
   });
 
   let daily: GmvTrendPoint[];
@@ -164,7 +200,7 @@ export async function resolveGmvDistribution(
   prisma: PrismaLike,
   dim: GmvDistributionDim,
   limit: number
-): Promise<GmvDistributionRow[]> {
+): Promise<GmvDistributionPayload> {
   return computeDistributionFromOrderHeader(prisma, dim, limit);
 }
 
@@ -172,6 +208,9 @@ export async function resolveGmvDistribution(
 export async function computeMerchantsFromMdMetrics(prisma: PrismaLike): Promise<GmvMerchantRow[]> {
   const todayStr = beijingDateKey(new Date());
   const weekAgoStr = beijingDateKey(Date.now() - 6 * 86400000);
+  // Cap materialization — page DTO Max(100)×pageSize Max(100) never needs full set.
+  // Sort by gmv DESC in SQL so top-N is correct for the default sort; non-gmv sorts
+  // re-sort the capped set in memory (still bounded).
   const rows = (await prisma.$queryRawUnsafe(
     `SELECT "merchantName", MAX("areaName") AS "areaName",
      COALESCE(SUM("paidAmountOnline" + "paidAmountWallet"), 0) AS "gmv",
@@ -181,9 +220,11 @@ export async function computeMerchantsFromMdMetrics(prisma: PrismaLike): Promise
      FROM "MerchantDailyMetrics"
      WHERE "date" >= ? AND "date" <= ?
      GROUP BY "merchantName"
-     ORDER BY "gmv" DESC`,
+     ORDER BY "gmv" DESC
+     LIMIT ?`,
     weekAgoStr,
-    todayStr
+    todayStr,
+    GMV_TOP_MERCHANTS_LIMIT
   )) as Array<{
     merchantName: string;
     areaName: string | null;
@@ -205,12 +246,26 @@ export async function computeMerchantsFromMdMetrics(prisma: PrismaLike): Promise
   }));
 }
 
+/** Full sorted merchant aggregate (no page) — cache across page flips. */
+export async function computeGmvTopMerchants(
+  prisma: PrismaLike,
+  sortBy: GmvMerchantSort
+): Promise<GmvMerchantRow[]> {
+  const merchants = await computeMerchantsFromMdMetrics(prisma);
+  return sortMerchants(merchants, sortBy);
+}
+
 export async function resolveGmvTopMerchants(
   prisma: PrismaLike,
   sortBy: GmvMerchantSort,
   page: number,
   pageSize: number
-): Promise<{ items: GmvMerchantRow[]; hasMore: boolean }> {
-  const merchants = await computeMerchantsFromMdMetrics(prisma);
-  return sortAndPageMerchants(merchants, sortBy, page, pageSize);
+): Promise<{
+  items: GmvMerchantRow[];
+  hasMore: boolean;
+  limit: number;
+  truncated: boolean;
+}> {
+  const sorted = await computeGmvTopMerchants(prisma, sortBy);
+  return pageMerchants(sorted, page, pageSize);
 }

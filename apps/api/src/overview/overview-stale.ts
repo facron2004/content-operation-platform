@@ -1,57 +1,57 @@
 import type { InventoryRuleConfig } from '../domain/rules-defaults';
 import { DEFAULT_INVENTORY_RULES } from '../domain/rules-defaults';
-import { computeStaleFlag } from '../domain/sales-daily';
 import { beijingDateKey, shiftDateKey } from '@content/shared';
 import type { PrismaService } from '../prisma/prisma.service';
+import {
+  loadPlatformStaleBucketStats,
+  stale30SkuCountFromBuckets
+} from '../common/stale-bucket-stats';
 import type { OverviewTopOffender } from './overview.types';
 
+/**
+ * Stale-30 KPI inputs. SKU count comes from the shared platform histogram
+ * (same TTL as movement-today / overview distribution) so a cold home paint
+ * does not pay a third full-catalog scan for the same threshold.
+ * Merchant DISTINCT still needs a separate NOT EXISTS (histogram has no merchant dim).
+ */
 export async function aggregateStaleSkuStats(
   prisma: PrismaService,
   today: string,
   rules: InventoryRuleConfig
 ) {
   const threshold = shiftDateKey(today, -(rules.stale30Days - 1));
-  const [row] = (await prisma.$queryRawUnsafe(
-    `SELECT COUNT(*) AS "stale30SkuCount", COUNT(DISTINCT "merchantId") AS "distinctMerchants" FROM "ContentPackage" WHERE "stockLeft" > 0 AND NOT EXISTS ( SELECT 1 FROM "PackageSalesDaily" s WHERE s."packageId" = "ContentPackage"."packageId" AND s."salesQty" > 0 AND s."date" >= ?)`,
+  // Sequential: histogram is process-TTL cached (often hit); merchant DISTINCT is
+  // the cold full-catalog NOT EXISTS. Running both in parallel doubles SQLite
+  // load on cold miss under the same heavy-gate holder.
+  const buckets = await loadPlatformStaleBucketStats(prisma, today, rules);
+  const merchantRow = (await prisma.$queryRawUnsafe(
+    `SELECT COUNT(DISTINCT "merchantId") AS "distinctMerchants"
+     FROM "ContentPackage"
+     WHERE "stockLeft" > 0
+       AND "merchantId" IS NOT NULL AND "merchantId" <> ''
+       AND NOT EXISTS (
+         SELECT 1 FROM "PackageSalesDaily" s
+         WHERE s."packageId" = "ContentPackage"."packageId"
+           AND s."salesQty" > 0 AND s."date" >= ?
+       )`,
     threshold
-  )) as Array<{ stale30SkuCount: number; distinctMerchants: number }>;
+  )) as Array<{ distinctMerchants: number }>;
+  const [row] = merchantRow;
   return {
-    stale30SkuCount: Number(row?.stale30SkuCount ?? 0),
+    stale30SkuCount: stale30SkuCountFromBuckets(buckets),
     distinctMerchants: Number(row?.distinctMerchants ?? 0)
   };
 }
 
-export async function loadStalePackageRows(prisma: PrismaService, threshold: string) {
-  return (await prisma.$queryRawUnsafe(
-    `SELECT cp."packageId", cp."stockLeft", MAX(s."date") AS "lastSalesDate" FROM "ContentPackage" cp LEFT JOIN "PackageSalesDaily" s ON s."packageId" = cp."packageId" AND s."salesQty" > 0 AND s."date" >= ? WHERE cp."stockLeft" > 0 GROUP BY cp."packageId", cp."stockLeft"`,
-    threshold
-  )) as Array<{ packageId: string; stockLeft: number; lastSalesDate: string | null }>;
-}
-
+/**
+ * Bucket every in-stock package by days-since-last-sale.
+ * Shared process TTL with movement-today (see loadPlatformStaleBucketStats).
+ */
 export async function aggregateStaleBucketStats(
   prisma: PrismaService
 ): Promise<Record<string, number>> {
   const today = beijingDateKey(new Date());
-  const rules = DEFAULT_INVENTORY_RULES;
-  const threshold = shiftDateKey(today, -(rules.stale60Days - 1));
-  const rows = await loadStalePackageRows(prisma, threshold);
-  const stats: Record<string, number> = {
-    normal: 0,
-    stale_7d: 0,
-    stale_15d: 0,
-    stale_30d: 0,
-    stale_60d: 0
-  };
-  for (const r of rows) {
-    const bucket = computeStaleFlag({
-      lastSalesDate: r.lastSalesDate,
-      currentStockLeft: r.stockLeft,
-      todayKey: today,
-      rules
-    });
-    stats[bucket] += 1;
-  }
-  return stats;
+  return loadPlatformStaleBucketStats(prisma, today);
 }
 
 export type StaleMerchantOffenderRow = {
@@ -67,25 +67,73 @@ export async function queryStaleMerchantOffenders(
   threshold: string,
   limit: number
 ): Promise<StaleMerchantOffenderRow[]> {
+  // Pre-aggregate totalSku once (merchant_total CTE) — previous correlated
+  // (SELECT COUNT(*) FROM ContentPackage cp2 WHERE …) re-scanned the table per group.
+  // stockLeft > 0 keeps totalSku aligned with in-stock inventory (outer stale set).
   return (await prisma.$queryRawUnsafe(
-    `SELECT cp."merchantId", MIN(cp."merchantName") AS "merchantName", MIN(cp."areaName") AS "areaName", COUNT(DISTINCT cp."packageId") AS "stale30SkuCount", (SELECT COUNT(*) FROM "ContentPackage" cp2 WHERE cp2."merchantId" = cp."merchantId") AS "totalSku" FROM "ContentPackage" cp WHERE cp."stockLeft" > 0 AND NOT EXISTS (SELECT 1 FROM "PackageSalesDaily" s WHERE s."packageId" = cp."packageId" AND s."salesQty" > 0 AND s."date" >= ?) GROUP BY cp."merchantId" ORDER BY "stale30SkuCount" DESC LIMIT ?`,
+    `WITH merchant_total AS (
+       SELECT "merchantId", COUNT(*) AS "totalSku"
+       FROM "ContentPackage"
+       WHERE "merchantId" IS NOT NULL AND "merchantId" <> ''
+         AND "stockLeft" > 0
+       GROUP BY "merchantId"
+     )
+     SELECT
+       cp."merchantId",
+       MIN(cp."merchantName") AS "merchantName",
+       MIN(cp."areaName") AS "areaName",
+       COUNT(DISTINCT cp."packageId") AS "stale30SkuCount",
+       COALESCE(mt."totalSku", 0) AS "totalSku"
+     FROM "ContentPackage" cp
+     LEFT JOIN merchant_total mt ON mt."merchantId" = cp."merchantId"
+     WHERE cp."stockLeft" > 0
+       AND NOT EXISTS (
+         SELECT 1 FROM "PackageSalesDaily" s
+         WHERE s."packageId" = cp."packageId"
+           AND s."salesQty" > 0 AND s."date" >= ?
+       )
+     GROUP BY cp."merchantId", mt."totalSku"
+     ORDER BY "stale30SkuCount" DESC
+     LIMIT ?`,
     threshold,
     limit
   )) as StaleMerchantOffenderRow[];
 }
 
+export type OverviewTopOffendersPayload = {
+  items: OverviewTopOffender[];
+  /** Residual #287: requested Top-N head (OverviewTopOffendersQueryDto.limit). */
+  limit: number;
+  /**
+   * Residual #287: rows matched before head clip.
+   * When truncated, this is `limit + 1` (LIMIT+1 probe — at-least, not exact COUNT).
+   */
+  matched: number;
+  truncated: boolean;
+};
+
 export async function loadTopOffenders(
   prisma: PrismaService,
   limit: number
-): Promise<OverviewTopOffender[]> {
+): Promise<OverviewTopOffendersPayload> {
+  const safeLimit = Math.max(1, Math.floor(limit) || 10);
   const today = beijingDateKey(new Date());
   const threshold = shiftDateKey(today, -(DEFAULT_INVENTORY_RULES.stale30Days - 1));
-  const rows = await queryStaleMerchantOffenders(prisma, threshold, limit);
-  return rows.map((r) => ({
+  // Residual #287: LIMIT+1 probe — exact truncated without COUNT(*), head stays Top-N.
+  const rows = await queryStaleMerchantOffenders(prisma, threshold, safeLimit + 1);
+  const truncated = rows.length > safeLimit;
+  const head = rows.slice(0, safeLimit);
+  const items = head.map((r) => ({
     merchantId: r.merchantId,
     merchantName: r.merchantName,
     areaName: r.areaName,
     stale30SkuCount: Number(r.stale30SkuCount),
     totalSku: Number(r.totalSku ?? 0)
   }));
+  return {
+    items,
+    limit: safeLimit,
+    matched: truncated ? safeLimit + 1 : items.length,
+    truncated
+  };
 }

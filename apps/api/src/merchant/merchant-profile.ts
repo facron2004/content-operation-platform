@@ -17,8 +17,9 @@ export function emptyMerchantProfile(merchantId: string) {
 }
 
 export async function loadMerchantProfileBase(prisma: PrismaService, merchantId: string) {
+  // stockLeft > 0 — align totalSku with list/stale metrics (in-stock inventory only).
   const [m] = (await prisma.$queryRawUnsafe(
-    `SELECT "merchantId", MIN("merchantName") AS "merchantName", MIN("areaId") AS "areaId", MIN("areaName") AS "areaName", COUNT(*) AS "totalSku" FROM "ContentPackage" WHERE "merchantId" = ?`,
+    `SELECT "merchantId", MIN("merchantName") AS "merchantName", MIN("areaId") AS "areaId", MIN("areaName") AS "areaName", COUNT(*) AS "totalSku" FROM "ContentPackage" WHERE "merchantId" = ? AND "stockLeft" > 0`,
     merchantId
   )) as Array<{
     merchantId: string;

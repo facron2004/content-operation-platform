@@ -1,10 +1,19 @@
 /** Consolidated merchant-sales module. */
-import { TtlCache } from '../common';
+import { ConflictException } from '@nestjs/common';
+import { TtlCache, withHeavyAggregateGate } from '../common';
+import { clampListPage, clampListPageSize, GMV_TOP_MERCHANTS_LIMIT } from '../common/sql-chunk';
 import { PrismaService } from '../prisma/prisma.service';
 import { resolveWindow } from './merchant-sales-window';
-import { loadRankingPage, querySummary, queryTrendRows } from './merchant-sales-query';
+import {
+  countMerchants,
+  paginateRankingRows,
+  queryAllRankingRows,
+  querySummary,
+  queryTrendRows
+} from './merchant-sales-query';
 import type {
   MerchantSalesRanking,
+  MerchantSalesRankingRow,
   MerchantSalesSort,
   MerchantSalesSummary,
   MerchantSalesTrendPoint,
@@ -15,17 +24,26 @@ import type {
 export const merchantSalesCacheKeys = {
   summary: (window: MerchantSalesWindow, start: string, end: string) =>
     `summary:${window}:${start}:${end}`,
-  ranking: (
-    window: MerchantSalesWindow,
-    start: string,
-    end: string,
-    sortBy: MerchantSalesSort,
-    page: number,
-    pageSize: number
-  ) => `ranking:${window}:${start}:${end}:${sortBy}:${page}:${pageSize}`,
+  /** Page-less aggregate key — page flips share one sorted list. */
+  ranking: (window: MerchantSalesWindow, start: string, end: string, sortBy: MerchantSalesSort) =>
+    `ranking:${window}:${start}:${end}:${sortBy}`,
+  /** Residual #264: sort-independent DISTINCT merchant count for ranking honesty. */
+  rankingCount: (window: MerchantSalesWindow, start: string, end: string) =>
+    `ranking-count:${window}:${start}:${end}`,
   trend: (window: MerchantSalesWindow, start: string, end: string) =>
     `trend:${window}:${start}:${end}`
 };
+
+async function msHeavyLoad<T>(load: () => Promise<T>): Promise<T> {
+  try {
+    return await withHeavyAggregateGate(load);
+  } catch (err) {
+    if (err instanceof Error && err.name === 'HeavyAggregateQueueFullError') {
+      throw new ConflictException('商家销售计算繁忙，请稍后再试');
+    }
+    throw err;
+  }
+}
 
 // --- merchant-sales-cache.ts ---
 export async function getCachedOrLoad<T>(options: {
@@ -34,7 +52,9 @@ export async function getCachedOrLoad<T>(options: {
   force?: boolean;
   load: () => Promise<T>;
 }): Promise<T> {
-  return options.cache.getOrLoad(options.cacheKey, Boolean(options.force), options.load);
+  return options.cache.getOrLoad(options.cacheKey, Boolean(options.force), () =>
+    msHeavyLoad(options.load)
+  );
 }
 
 // --- merchant-sales-load-summary.ts ---
@@ -70,18 +90,28 @@ export async function loadMerchantSalesRanking(
   }
 ): Promise<MerchantSalesRanking> {
   const { start, end } = resolveWindow(args.window, args.date, args.endDate);
-  return getCachedOrLoad({
-    cache,
-    cacheKey: merchantSalesCacheKeys.ranking(
-      args.window,
-      start,
-      end,
-      args.sortBy,
-      args.page,
-      args.pageSize
-    ),
-    force: args.force,
-    load: () => loadRankingPage(prisma, args, start, end)
+  // Defense-in-depth: DTO Max may be bypassed; deep OFFSET was a SQLite pain point.
+  const page = clampListPage(args.page, 100);
+  const pageSize = clampListPageSize(args.pageSize, 100, 20);
+  // Residual #264: materialise capped ranking + real merchant COUNT in parallel
+  // (count key is sort-independent so page/sort flips reuse it).
+  const [all, totalMerchants] = await Promise.all([
+    getCachedOrLoad<MerchantSalesRankingRow[]>({
+      cache,
+      cacheKey: merchantSalesCacheKeys.ranking(args.window, start, end, args.sortBy),
+      force: args.force,
+      load: () => queryAllRankingRows(prisma, args.window, start, end, args.sortBy)
+    }),
+    getCachedOrLoad<number>({
+      cache,
+      cacheKey: merchantSalesCacheKeys.rankingCount(args.window, start, end),
+      force: args.force,
+      load: () => countMerchants(prisma, args.window, start, end)
+    })
+  ]);
+  return paginateRankingRows(all, page, pageSize, {
+    totalMerchants,
+    limit: GMV_TOP_MERCHANTS_LIMIT
   });
 }
 

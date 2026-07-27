@@ -17,7 +17,10 @@ export function resolveDevDbPath() {
       // 但 npm workspace（npm run -w）会将 CWD 切到子目录，
       // resolve("./prisma/dev.db") 走到错误路径。
       // 走目录扫描兜底 —— 向上遍历寻找 prisma/dev.db
-      const repoRootDbPath = findRepoRootDbPath(process.cwd());
+      const repoRootDbPath =
+        findRepoRootDbPath(process.cwd()) ||
+        findRepoRootDbPath(__dirname) ||
+        findRepoRootDbPath(dirname(process.execPath));
       if (repoRootDbPath) {
         return {
           exeDbPath: '',

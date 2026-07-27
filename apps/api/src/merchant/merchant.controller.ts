@@ -1,55 +1,201 @@
-import { Controller, Get, Inject, Param, Post, Query } from '@nestjs/common';
+import { createDtoPipe } from '../common/dto-pipe';
+import {
+  Controller,
+  ForbiddenException,
+  Get,
+  Inject,
+  NotFoundException,
+  Param,
+  Post,
+  Query,
+  Req
+} from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
+import type { Request } from 'express';
 import { MerchantService } from './merchant.service';
 import { MerchantTrendQueryDto, MerchantsListQueryDto } from './merchant.dto';
+import { safePathId } from '../common/path-id';
 import { Roles } from '../user-access/role.decorator';
+import { resolveScopedQuery } from '../user-access/data-scope';
+import { PrismaService } from '../prisma/prisma.service';
+
+type AuthUser = {
+  userId: string;
+  username: string;
+  roles?: string[];
+  bindings?: Array<{ role: string; scopeType?: string; scopeId?: string }>;
+};
 
 @ApiTags('merchants')
 @Controller('api/merchants')
 export class MerchantController {
-  constructor(@Inject(MerchantService) private readonly service: MerchantService) {}
+  constructor(
+    @Inject(MerchantService) private readonly service: MerchantService,
+    @Inject(PrismaService) private readonly prisma: PrismaService
+  ) {}
 
+  // Full aggregate (packages + sales chunks) is cached but still expensive on miss.
+  // Tighter long limit — heavy gate already bounds process concurrency.
+  @Throttle({ long: { limit: 10, ttl: 60000 } })
   @Get()
   @ApiOperation({ summary: '商家列表' })
-  list(@Query() query: MerchantsListQueryDto) {
-    return this.service.listMerchants(query);
+  list(
+    @Query(createDtoPipe(MerchantsListQueryDto)) query: MerchantsListQueryDto,
+    @Req() req: Request
+  ) {
+    const actor = req.user as AuthUser | undefined;
+    const scoped = resolveScopedQuery(actor ?? {}, { areaId: query.areaId });
+    if (scoped.emptyScope) {
+      return {
+        items: [],
+        pagination: { page: query.page, pageSize: query.pageSize, hasMore: false, total: 0 }
+      };
+    }
+    // Merchant operators only see their bound merchant(s) via post-filter in service.
+    return this.service.listMerchants(
+      { ...query, areaId: scoped.areaId ?? query.areaId },
+      {
+        merchantIds: scoped.merchantIds ?? (scoped.merchantId ? [scoped.merchantId] : undefined),
+        areaIds: scoped.areaIds
+      }
+    );
   }
 
   // Static paths before :merchantId/* so they are not captured as ids
+  // Multi-query catalog scan (packages + coords + GMV) — throttle concurrent fans.
+  @Throttle({ long: { limit: 10, ttl: 60000 } })
   @Get('heatmap')
   @ApiOperation({ summary: '商家热力图数据（按区域聚合 + 坐标 + GMV）' })
-  heatmap() {
-    return this.service.getHeatmap();
+  heatmap(@Req() req: Request) {
+    const actor = req.user as AuthUser | undefined;
+    const scoped = resolveScopedQuery(actor ?? {}, {});
+    if (scoped.emptyScope) {
+      return {
+        points: [],
+        totalMerchants: 0,
+        mappedMerchants: 0,
+        unmappedMerchants: 0,
+        center: { lat: 22.543, lng: 114.058 }
+      };
+    }
+    return this.service.getHeatmap({
+      areaIds: scoped.areaIds ?? (scoped.areaId ? [scoped.areaId] : undefined),
+      merchantIds: scoped.merchantIds ?? (scoped.merchantId ? [scoped.merchantId] : undefined)
+    });
   }
 
   @Post('refresh-addresses')
   @Roles('admin', 'platform_operator')
+  @Throttle({ long: { limit: 2, ttl: 60000 } })
   @ApiOperation({ summary: '从 ContentPackage 抽取商家地址刷新 Merchant 表' })
   refreshAddresses() {
     return this.service.refreshAddresses();
   }
 
   @Get(':merchantId/profile')
+  @Throttle({ long: { limit: 30, ttl: 60000 } })
   @ApiOperation({ summary: '商家画像' })
-  profile(@Param('merchantId') merchantId: string) {
-    return this.service.getProfile(merchantId);
+  async profile(@Param('merchantId') merchantId: string, @Req() req: Request) {
+    const id = safePathId(merchantId);
+    await this.assertMerchantAccess(id, req);
+    return this.service.getProfile(id);
   }
 
   @Get(':merchantId/trend')
+  @Throttle({ long: { limit: 30, ttl: 60000 } })
   @ApiOperation({ summary: '商家 30/60/90 日 GMV/退款/核销趋势' })
-  trend(@Param('merchantId') merchantId: string, @Query() query: MerchantTrendQueryDto) {
-    return this.service.getTrend(merchantId, query);
+  async trend(
+    @Param('merchantId') merchantId: string,
+    @Query(createDtoPipe(MerchantTrendQueryDto)) query: MerchantTrendQueryDto,
+    @Req() req: Request
+  ) {
+    const id = safePathId(merchantId);
+    await this.assertMerchantAccess(id, req);
+    return this.service.getTrend(id, query);
   }
 
   @Get(':merchantId/skus')
+  @Throttle({ long: { limit: 30, ttl: 60000 } })
   @ApiOperation({ summary: '商家 SKU 列表（含 stale flag）' })
-  skus(@Param('merchantId') merchantId: string, @Query() query: MerchantTrendQueryDto) {
-    return this.service.listSkus(merchantId, query);
+  async skus(
+    @Param('merchantId') merchantId: string,
+    @Query(createDtoPipe(MerchantTrendQueryDto)) query: MerchantTrendQueryDto,
+    @Req() req: Request
+  ) {
+    const id = safePathId(merchantId);
+    await this.assertMerchantAccess(id, req);
+    return this.service.listSkus(id, query);
   }
 
   @Get(':merchantId/competitors')
+  @Throttle({ long: { limit: 30, ttl: 60000 } })
   @ApiOperation({ summary: '同区域/品类竞品' })
-  competitors(@Param('merchantId') merchantId: string) {
-    return this.service.listCompetitors(merchantId);
+  async competitors(@Param('merchantId') merchantId: string, @Req() req: Request) {
+    const id = safePathId(merchantId);
+    await this.assertMerchantAccess(id, req);
+    return this.service.listCompetitors(id);
+  }
+
+  private async assertMerchantAccess(merchantId: string, req: Request): Promise<void> {
+    const id = safePathId(merchantId);
+    if (!id) throw new NotFoundException('商家不存在');
+    const actor = req.user as AuthUser | undefined;
+    const scoped = resolveScopedQuery(actor ?? {}, { merchantId: id });
+    if (scoped.emptyScope) {
+      throw new ForbiddenException('无权访问该商家');
+    }
+    // unrestricted → ok
+    if (
+      !scoped.areaId &&
+      !scoped.merchantId &&
+      !scoped.areaIds?.length &&
+      !scoped.merchantIds?.length
+    ) {
+      return;
+    }
+    // merchant-bound: direct id check
+    if (scoped.merchantId || scoped.merchantIds?.length) {
+      const allowed =
+        (scoped.merchantId && scoped.merchantId === id) ||
+        Boolean(scoped.merchantIds?.includes(id));
+      if (!allowed) throw new ForbiddenException('无权访问该商家');
+      return;
+    }
+    // area-bound: authorize via EXISTS any package in scoped areas (not LIMIT 1 sample —
+    // multi-area merchants would false-deny or false-allow on arbitrary first row).
+    const allowedAreas =
+      scoped.areaIds && scoped.areaIds.length
+        ? scoped.areaIds
+        : scoped.areaId
+          ? [scoped.areaId]
+          : [];
+    if (!allowedAreas.length) {
+      throw new ForbiddenException('无权访问该商家');
+    }
+    const placeholders = allowedAreas.map(() => '?').join(',');
+    const inScope = await this.prisma.$queryRawUnsafe<Array<{ ok: number }>>(
+      `SELECT 1 as ok FROM "ContentPackage"
+       WHERE "merchantId" = ? AND "areaId" IN (${placeholders})
+       LIMIT 1`,
+      id,
+      ...allowedAreas
+    );
+    if (inScope.length) return;
+
+    // Distinguish missing merchant vs out-of-scope for clearer client errors.
+    const anyPkg = await this.prisma.$queryRawUnsafe<Array<{ ok: number }>>(
+      `SELECT 1 as ok FROM "ContentPackage" WHERE "merchantId" = ? LIMIT 1`,
+      id
+    );
+    if (!anyPkg.length) {
+      // Also check Merchant table when packages are empty.
+      const merchant = await this.prisma.$queryRawUnsafe<Array<{ merchantId: string }>>(
+        `SELECT "merchantId" FROM "Merchant" WHERE "merchantId" = ? LIMIT 1`,
+        id
+      );
+      if (!merchant.length) throw new NotFoundException(`商家不存在: ${id}`);
+    }
+    throw new ForbiddenException('无权访问该商家');
   }
 }

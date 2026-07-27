@@ -21,6 +21,10 @@
     <ReviewPanel
       v-if="activeFocus === 'all' || activeFocus === 'review'"
       :review="consoleData.yesterdayReview"
+      :title-join-truncated="consoleData.titleJoinTruncated"
+      :title-join-limit="consoleData.titleJoinLimit"
+      :title-join-loaded="consoleData.titleJoinLoaded"
+      :title-join-missed="consoleData.titleJoinMissed"
       @navigate="$emit('navigate', $event)"
     />
   </div>

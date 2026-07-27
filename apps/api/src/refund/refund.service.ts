@@ -1,6 +1,7 @@
 /** Consolidated refund module. */
 import { Inject, Injectable } from '@nestjs/common';
 import { TtlCache } from '../common';
+import { HEAVY_LIST_CACHE_MAX_SIZE } from '../common/heavy-aggregate-gate';
 import { PrismaService } from '../prisma/prisma.service';
 import { createRefundServiceSurface } from './refund-load';
 import {
@@ -20,9 +21,12 @@ export type {
 } from './refund.dto';
 
 // --- refund.service.ts ---
+/** Refund/verify day aggregates — short TTL + size bound (parity GMV/overview). */
+const REFUND_CACHE_TTL_MS = 60_000;
+
 @Injectable()
 export class RefundService {
-  private readonly cache = new TtlCache();
+  private readonly cache = new TtlCache(REFUND_CACHE_TTL_MS, HEAVY_LIST_CACHE_MAX_SIZE);
   private readonly surface;
   constructor(@Inject(PrismaService) prisma: PrismaService) {
     this.surface = createRefundServiceSurface(prisma, this.cache);

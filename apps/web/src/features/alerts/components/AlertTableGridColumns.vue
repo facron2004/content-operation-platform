@@ -21,15 +21,22 @@
   <el-table-column prop="areaName" label="区域" width="68" />
   <el-table-column prop="reason" label="触发原因" min-width="150" show-overflow-tooltip />
   <el-table-column prop="action" label="下一步动作" min-width="150" show-overflow-tooltip />
-  <el-table-column label="操作" width="150" fixed="right">
+  <el-table-column label="操作" min-width="200" width="220" fixed="right">
     <template #default="{ row }">
-      <el-button size="small" type="primary" @click="$emit('open-detail', row)">处理卡</el-button>
-      <el-button size="small" @click="$emit('resolve', row.alertId)">标记处理</el-button>
+      <div class="action-cell">
+        <AppleButton size="sm" variant="primary" @click="$emit('open-detail', row)">
+          处理卡
+        </AppleButton>
+        <AppleButton size="sm" variant="secondary" @click="$emit('resolve', row.alertId)">
+          标记处理
+        </AppleButton>
+      </div>
     </template>
   </el-table-column>
 </template>
 <script setup lang="ts">
 import type { OperationAlert } from '@content/shared';
+import AppleButton from '../../../components/AppleButton.vue';
 import { alertTypeLabels, riskTagType, levelText } from '../../../utils/labels';
 defineEmits<{
   'open-detail': [alert: OperationAlert & { priorityScore?: number }];

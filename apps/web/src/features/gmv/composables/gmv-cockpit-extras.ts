@@ -25,17 +25,23 @@ function colorAt(idx: number) {
   return PALETTE[idx % PALETTE.length];
 }
 
-/** 品类：走 /gmv/distribution?dim=category；仅「未分类」时视为无有效数据 */
+/**
+ * 品类：走 /gmv/distribution?dim=category。
+ * Residual #289: keep synthetic 「其他」 long-tail so donut shares stay platform-total based;
+ * only drop empty / 「未分类」 noise. Prefer server `share` (denom = platform totalGmv).
+ */
 export function mapCategoryRows(rows: GmvDistributionRow[]): GmvCategoryRow[] {
-  const usable = rows.filter(
-    (r) => r.totalGmv > 0 && r.key && r.key !== '未分类' && r.key !== '其他'
-  );
+  const usable = rows.filter((r) => r.totalGmv > 0 && r.key && r.key !== '未分类');
   if (usable.length === 0) return [];
+  // Prefer server share (already / platform total). Fallback re-base only if missing.
+  const hasServerShare = usable.every(
+    (r) => typeof r.share === 'number' && Number.isFinite(r.share)
+  );
   const total = usable.reduce((s, r) => s + r.totalGmv, 0);
   return usable.map((r, idx) => ({
     name: r.key,
     value: r.totalGmv,
-    share: total > 0 ? r.totalGmv / total : r.share,
+    share: hasServerShare ? r.share : total > 0 ? r.totalGmv / total : 0,
     color: colorAt(idx)
   }));
 }
@@ -195,10 +201,14 @@ export async function loadGmvCockpitExtras(params: {
   const kpi = params.kpi.value;
 
   // 品类 + 区域并行；失败时各自降级为空，不阻断整页
-  const [categoryRows, areaRows] = await Promise.all([
-    getGmvDistribution('category', 8, true).catch(() => [] as GmvDistributionRow[]),
-    getGmvDistribution('area', 20, true).catch(() => [] as GmvDistributionRow[])
+  // Residual #289: distribution returns { items, limit, matched, truncated }.
+  const empty: GmvDistributionRow[] = [];
+  const [categoryPayload, areaPayload] = await Promise.all([
+    getGmvDistribution('category', 8, true).catch(() => null),
+    getGmvDistribution('area', 20, true).catch(() => null)
   ]);
+  const categoryRows = categoryPayload?.items ?? empty;
+  const areaRows = areaPayload?.items ?? empty;
 
   params.categories.value = mapCategoryRows(categoryRows);
   params.channels.value = mapPaymentChannelRows(kpi);

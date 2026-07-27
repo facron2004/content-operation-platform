@@ -1,5 +1,16 @@
-import { IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import {
+  ArrayMaxSize,
+  IsArray,
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsString,
+  Max,
+  MaxLength,
+  Min
+} from 'class-validator';
 import { Type } from 'class-transformer';
+import { optionalDateKey } from '../content/dto-decorators';
 
 export type StaleBucket = 'normal' | 'stale_7d' | 'stale_15d' | 'stale_30d' | 'stale_60d';
 
@@ -15,9 +26,66 @@ export const MOVEMENT_WINDOWS = [1, 7, 30] as const;
 export type MovementWindow = (typeof MOVEMENT_WINDOWS)[number];
 
 export class MovementTodayQueryDto {
+  @optionalDateKey()
+  date?: string;
+}
+
+/** Moving SKU list query (1/7/30 day windows). */
+export class MovementMovingQueryDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsIn(MOVEMENT_WINDOWS as unknown as number[])
+  days?: MovementWindow;
+
   @IsOptional()
   @IsString()
-  date?: string;
+  @MaxLength(64)
+  merchantId?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  category?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  areaId?: string;
+
+  /** Server-injected multi-area scope (not a client free-form filter). */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(100)
+  @IsString({ each: true })
+  @MaxLength(100, { each: true })
+  areaIds?: string[];
+
+  /** Server-injected multi-merchant scope (not a client free-form filter). */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(200)
+  @IsString({ each: true })
+  @MaxLength(64, { each: true })
+  merchantIds?: string[];
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  search?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  page: number = 1;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(200)
+  pageSize: number = 20;
 }
 
 export class MovementSkusQueryDto {
@@ -27,18 +95,38 @@ export class MovementSkusQueryDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(64)
   merchantId?: string;
 
   @IsOptional()
   @IsString()
+  @MaxLength(100)
   category?: string;
 
   @IsOptional()
   @IsString()
+  @MaxLength(100)
   areaId?: string;
+
+  /** Server-injected multi-area scope (not a client free-form filter). */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(100)
+  @IsString({ each: true })
+  @MaxLength(100, { each: true })
+  areaIds?: string[];
+
+  /** Server-injected multi-merchant scope (not a client free-form filter). */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(200)
+  @IsString({ each: true })
+  @MaxLength(64, { each: true })
+  merchantIds?: string[];
 
   @IsOptional()
   @IsString()
+  @MaxLength(100)
   search?: string;
 
   @IsOptional()
@@ -49,6 +137,7 @@ export class MovementSkusQueryDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
+  @Max(100)
   page: number = 1;
 
   @IsOptional()
@@ -64,6 +153,6 @@ export class MovementTimelineQueryDto {
   @Type(() => Number)
   @IsInt()
   @Min(7)
-  @Max(180)
+  @Max(90)
   days: number = 30;
 }

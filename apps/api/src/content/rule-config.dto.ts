@@ -19,7 +19,7 @@ export class CreateRuleDto {
   @requiredString(200) name!: string;
   @IsOptional() @IsObject() payload?: RuleConfigPayload;
   @optionalString(1000) comment?: string;
-  @optionalString(100) createdBy?: string;
+  // createdBy is stamped from JWT in the controller.
 }
 export class ListRulesQueryDto {
   @optionalString(100) merchantId?: string;
@@ -28,6 +28,6 @@ export class ListRulesQueryDto {
   @Transform(({ value }) => value === 'true' || value === true || value === 1 || value === '1')
   @IsBoolean()
   isActive?: boolean;
-  @IsOptional() @Type(() => Number) @IsNumber() @Min(1) page?: number;
+  @IsOptional() @Type(() => Number) @IsNumber() @Min(1) @Max(100) page?: number;
   @IsOptional() @Type(() => Number) @IsNumber() @Min(1) @Max(200) pageSize?: number;
 }

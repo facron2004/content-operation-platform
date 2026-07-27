@@ -1,7 +1,11 @@
 <template>
   <el-dropdown trigger="click" @command="handleCommand">
     <span class="theme-trigger-wrap">
-      <el-button :icon="themeIcon" circle class="theme-trigger" />
+      <AppleButton icon-only variant="secondary" class="theme-trigger">
+        <template #icon>
+          <el-icon><component :is="themeIcon" /></el-icon>
+        </template>
+      </AppleButton>
     </span>
     <template #dropdown>
       <el-dropdown-menu>
@@ -25,6 +29,7 @@
 import { computed } from 'vue';
 import { Sunny, Moon, Monitor } from '@element-plus/icons-vue';
 import { themeService } from '../services/theme.service';
+import AppleButton from './AppleButton.vue';
 const theme = themeService.themeRef;
 const effectiveTheme = themeService.effectiveThemeRef;
 const themeIcon = computed(() =>

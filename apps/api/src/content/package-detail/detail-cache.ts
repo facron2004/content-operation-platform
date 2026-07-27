@@ -68,10 +68,13 @@ export class DetailCache {
     }
   }
 
+  /**
+   * Drop the warm value only. Leave any in-flight loader intact so concurrent
+   * forceRefresh / cold-miss callers still share one outbound HTML fetch.
+   * Use clear() (or clearInFlight) when the process must abandon a pending load.
+   */
   remove(packageId: string): boolean {
-    const existed = this.cache.delete(packageId);
-    this.inFlight.delete(packageId);
-    return existed;
+    return this.cache.delete(packageId);
   }
 
   clear(): void {

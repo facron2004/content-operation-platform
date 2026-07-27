@@ -19,6 +19,11 @@
       </article>
       <article class="review-card review-card-highlight">
         <span class="review-card-label">高转化文案</span>
+        <!-- Residual #282: Top-N high-conversion copy head honesty. -->
+        <p v-if="review?.copyTruncated" class="list-cap-hint">
+          仅展示转化率前 {{ review?.reviewListLimit ?? 5 }} 条（共
+          {{ review?.copyMatched ?? 0 }} 条）
+        </p>
         <p v-for="item in review?.highConversionCopies ?? []" :key="item.contentId">
           <strong>{{ item.title }}</strong>
           <span>{{ formatPercent(item.conversionRate) }}</span>
@@ -32,3 +37,14 @@ import type { PerformanceResponse } from '@content/shared';
 import { percent as formatPercent } from '../../../utils/labels';
 defineProps<{ review: PerformanceResponse['review'] | null | undefined }>();
 </script>
+<style scoped>
+.list-cap-hint {
+  margin: 0 0 8px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(245, 158, 11, 0.12);
+  color: #b45309;
+  font-size: 12px;
+  line-height: 1.4;
+}
+</style>

@@ -1,5 +1,6 @@
 import type { RouteRecordRaw } from 'vue-router';
 import type { UserRole } from '@content/shared';
+import { withImportRetry } from './router-nav-reliability';
 
 /** 侧栏/路由分组键（与原型导航树对齐） */
 export type NavGroup =
@@ -28,6 +29,11 @@ declare module 'vue-router' {
   }
 }
 
+/** Lazy view loader with one soft retry on chunk/CSS preload failure. */
+function lazyView(loader: () => Promise<unknown>): () => Promise<unknown> {
+  return withImportRetry(loader, 1, 150);
+}
+
 // ── Helper ─────────────────────────────────────────
 function route(
   path: string,
@@ -43,7 +49,7 @@ function route(
   return {
     path,
     name,
-    component: view,
+    component: lazyView(view),
     props,
     meta: {
       ...(icon ? { title, icon, group, order } : { title, group, order }),
@@ -59,55 +65,55 @@ const contentLegacyRoutes: RouteRecordRaw[] = [
   {
     path: 'dashboard',
     name: 'dashboard',
-    component: () => import('./views/DashboardView.vue'),
+    component: lazyView(() => import('./views/DashboardView.vue')),
     meta: { title: '首页', icon: 'HomeFilled', group: 'home', order: 10 }
   },
   {
     path: 'campaigns',
     name: 'campaigns',
-    component: () => import('./views/CampaignsView.vue'),
+    component: lazyView(() => import('./views/CampaignsView.vue')),
     meta: { title: '运营活动', icon: 'Present', group: 'campaigns', order: 5 }
   },
   {
     path: 'campaigns/:campaignId',
     name: 'campaign-detail',
-    component: () => import('./views/CampaignDetailView.vue'),
+    component: lazyView(() => import('./views/CampaignDetailView.vue')),
     meta: { title: '活动详情', group: 'campaigns', order: 99 }
   },
   {
     path: 'tasks',
     name: 'tasks',
-    component: () => import('./views/TaskCenterView.vue'),
+    component: lazyView(() => import('./views/TaskCenterView.vue')),
     meta: { title: '任务中心', icon: 'List', group: 'campaigns', order: 25 }
   },
   {
     path: 'tasks/:taskId',
     name: 'task-detail',
-    component: () => import('./views/TaskDetailView.vue'),
+    component: lazyView(() => import('./views/TaskDetailView.vue')),
     meta: { title: '任务详情', group: 'campaigns', order: 99 }
   },
   {
     path: 'community-library',
     name: 'community-library',
-    component: () => import('./views/CommunityLibraryView.vue'),
+    component: lazyView(() => import('./views/CommunityLibraryView.vue')),
     meta: { title: '社群库', icon: 'ChatLineRound', group: 'campaigns', order: 8 }
   },
   {
     path: 'recommendations',
     name: 'recommendations',
-    component: () => import('./views/RecommendationsView.vue'),
+    component: lazyView(() => import('./views/RecommendationsView.vue')),
     meta: { title: '套餐推荐', icon: 'Goods', group: 'growth', order: 10 }
   },
   {
     path: 'generate',
     name: 'generate',
-    component: () => import('./views/GenerateView.vue'),
+    component: lazyView(() => import('./views/GenerateView.vue')),
     meta: { title: '文案生成', icon: 'EditPen', group: 'campaigns', order: 20 }
   },
   {
     path: 'audit',
     name: 'audit',
-    component: () => import('./views/AuditView.vue'),
+    component: lazyView(() => import('./views/AuditView.vue')),
     meta: {
       title: '文案审核',
       icon: 'Checked',
@@ -119,41 +125,79 @@ const contentLegacyRoutes: RouteRecordRaw[] = [
   {
     path: 'communities',
     name: 'communities',
-    component: () => import('./views/CommunitiesView.vue'),
+    component: lazyView(() => import('./views/CommunitiesView.vue')),
     meta: { title: '社群运营', icon: 'ChatLineRound', group: 'campaigns', order: 10 }
   }
 ];
+
+const PLATFORM_ROLES = ['admin', 'platform_operator', 'auditor'] as const;
 
 const cockpitRoutes: RouteRecordRaw[] = [
   {
     path: 'overview',
     name: 'overview',
-    component: () => import('./views/OverviewView.vue'),
-    meta: { title: '总览 KPI', icon: 'DataAnalysis', group: 'reports', order: 10 }
+    component: lazyView(() => import('./views/OverviewView.vue')),
+    meta: {
+      title: '总览 KPI',
+      icon: 'DataAnalysis',
+      group: 'reports',
+      order: 10,
+      roles: [...PLATFORM_ROLES]
+    }
+  },
+  {
+    path: 'data-analysis',
+    name: 'data-analysis',
+    component: lazyView(() => import('./views/DataAnalysisView.vue')),
+    meta: {
+      title: '数据分析',
+      icon: 'DataBoard',
+      group: 'reports',
+      order: 15,
+      roles: [...PLATFORM_ROLES]
+    }
   },
   {
     path: 'gmv-cockpit',
     name: 'gmv-cockpit',
-    component: () => import('./views/GmvCockpitView.vue'),
-    meta: { title: 'GMV看板', icon: 'DataLine', group: 'home', order: 20 }
+    component: lazyView(() => import('./views/GmvCockpitView.vue')),
+    meta: {
+      title: 'GMV看板',
+      icon: 'DataLine',
+      group: 'home',
+      order: 20,
+      roles: [...PLATFORM_ROLES]
+    }
   },
   {
     path: 'movement',
     name: 'movement',
-    component: () => import('./views/MovementListView.vue'),
+    component: lazyView(() => import('./views/MovementListView.vue')),
     meta: { title: '动销 / 不动销', icon: 'TrendCharts', group: 'orders', order: 10 }
   },
   {
     path: 'refund-verify',
     name: 'refund-verify',
-    component: () => import('./views/RefundVerifyView.vue'),
-    meta: { title: '退款 / 核销', icon: 'Wallet', group: 'orders', order: 20 }
+    component: lazyView(() => import('./views/RefundVerifyView.vue')),
+    meta: {
+      title: '退款 / 核销',
+      icon: 'Wallet',
+      group: 'orders',
+      order: 20,
+      roles: [...PLATFORM_ROLES]
+    }
   },
   {
     path: 'merchant-sales',
     name: 'merchant-sales',
-    component: () => import('./views/MerchantSalesView.vue'),
-    meta: { title: '商家销售数据', icon: 'DataAnalysis', group: 'merchants', order: 10 }
+    component: lazyView(() => import('./views/MerchantSalesView.vue')),
+    meta: {
+      title: '商家销售数据',
+      icon: 'DataAnalysis',
+      group: 'merchants',
+      order: 10,
+      roles: [...PLATFORM_ROLES]
+    }
   }
 ];
 
@@ -225,7 +269,9 @@ const operationsDataRoutes: RouteRecordRaw[] = [
     'Histogram',
     'growth',
     20,
-    () => import('./views/PerformanceView.vue')
+    () => import('./views/PerformanceView.vue'),
+    false,
+    PLATFORM_ROLES
   ),
   route(
     'zero-sales',
@@ -266,6 +312,6 @@ export const appRoutes: RouteRecordRaw[] = [
   {
     path: ':pathMatch(.*)*',
     name: 'not-found',
-    component: () => import('./views/NotFoundView.vue')
+    component: lazyView(() => import('./views/NotFoundView.vue'))
   }
 ];

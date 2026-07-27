@@ -1,10 +1,12 @@
 /** Consolidated GMV module — compute, trend, distribution (queries in gmv-order-header.query). */
-import { beijingDateKey, beijingDayRangeUtc, shiftDateKey } from '@content/shared';
-import { gmvFromParts, rateAgainstGmv } from '../common';
+import { beijingDateKey, shiftDateKey } from '@content/shared';
+import { beijingDayRangeSqlite, gmvFromParts, rateAgainstGmv } from '../common';
+import { DATA_ANALYSIS_OH_CONCURRENCY, mapPool } from '../common/sql-chunk';
 import { PrismaService } from '../prisma/prisma.service';
 import { mapDistributionRows } from './gmv-metrics';
 import {
   emptyTrendPoint,
+  type GmvDistributionPayload,
   type GmvDistributionRow,
   type GmvHourlyPoint,
   type GmvTodayPayload,
@@ -114,21 +116,32 @@ export async function computeFromOrderHeader(
   prisma: PrismaLike,
   date: string
 ): Promise<GmvTodayPayload> {
-  const { start: dayStart, end: dayEnd } = beijingDayRangeUtc(date);
-  const startIso = dayStart.toISOString();
-  const endIso = dayEnd.toISOString();
+  const { start: startBound, end: endBound } = beijingDayRangeSqlite(date);
   const monthStart = `${date.slice(0, 7)}-01`;
-  const { start: monthStartUtc } = beijingDayRangeUtc(monthStart);
+  const { start: monthStartBound } = beijingDayRangeSqlite(monthStart);
   const prevDate = shiftDateKey(date, -1);
-  const { start: prevStart, end: prevEnd } = beijingDayRangeUtc(prevDate);
+  const { start: prevStart, end: prevEnd } = beijingDayRangeSqlite(prevDate);
 
-  const [gmvRows, refundRows, monthRows, prevGmvRows, prevRefundRows] = await Promise.all([
-    queryOrderHeaderGmv(prisma, startIso, endIso),
-    queryOrderHeaderRefund(prisma, startIso, endIso),
-    queryOrderHeaderGmv(prisma, monthStartUtc.toISOString(), endIso),
-    queryOrderHeaderGmv(prisma, prevStart.toISOString(), prevEnd.toISOString()),
-    queryOrderHeaderRefund(prisma, prevStart.toISOString(), prevEnd.toISOString())
-  ]);
+  // Cap concurrent OH aggregates (parity with data-analysis mapPool) — 5-way
+  // Promise.all storms SQLite under multi-tab home + GMV cold path.
+  const ohJobs: Array<() => Promise<unknown>> = [
+    () => queryOrderHeaderGmv(prisma, startBound, endBound),
+    () => queryOrderHeaderRefund(prisma, startBound, endBound),
+    () => queryOrderHeaderGmv(prisma, monthStartBound, endBound),
+    () => queryOrderHeaderGmv(prisma, prevStart, prevEnd),
+    () => queryOrderHeaderRefund(prisma, prevStart, prevEnd)
+  ];
+  const [gmvRows, refundRows, monthRows, prevGmvRows, prevRefundRows] = (await mapPool(
+    ohJobs,
+    DATA_ANALYSIS_OH_CONCURRENCY,
+    (job) => job()
+  )) as [
+    Awaited<ReturnType<typeof queryOrderHeaderGmv>>,
+    Awaited<ReturnType<typeof queryOrderHeaderRefund>>,
+    Awaited<ReturnType<typeof queryOrderHeaderGmv>>,
+    Awaited<ReturnType<typeof queryOrderHeaderGmv>>,
+    Awaited<ReturnType<typeof queryOrderHeaderRefund>>
+  ];
 
   const gmvRow = gmvRows[0] ?? EMPTY_ORDER_HEADER_GMV_ROW;
   const monthRow = monthRows[0] ?? EMPTY_ORDER_HEADER_GMV_ROW;
@@ -149,8 +162,8 @@ export async function computeHourlyFromOrderHeader(
   prisma: PrismaLike,
   date: string
 ): Promise<GmvHourlyPoint[]> {
-  const { start, end } = beijingDayRangeUtc(date);
-  return queryOrderHeaderHourly(prisma, start.toISOString(), end.toISOString());
+  const { start, end } = beijingDayRangeSqlite(date);
+  return queryOrderHeaderHourly(prisma, start, end);
 }
 
 // ── Trend ────────────────────────────────────────────
@@ -197,20 +210,20 @@ export async function computeTrendFromOrderHeader(
   startDate: string,
   endDate: string
 ): Promise<GmvTrendPoint[]> {
-  const { start: dayStart } = beijingDayRangeUtc(startDate),
-    { end: dayEnd } = beijingDayRangeUtc(endDate);
-  const rows = await queryOrderHeaderTrendAgg(prisma, dayStart.toISOString(), dayEnd.toISOString());
+  const { start: dayStart } = beijingDayRangeSqlite(startDate);
+  const { end: dayEnd } = beijingDayRangeSqlite(endDate);
+  const rows = await queryOrderHeaderTrendAgg(prisma, dayStart, dayEnd);
   return mapOrderHeaderTrendRows(rows, startDate, endDate);
 }
 
 // ── Distribution ─────────────────────────────────────
 
-function weekWindowIso() {
+function weekWindowBounds() {
   const todayStr = beijingDateKey(new Date());
   const weekAgoStr = beijingDateKey(Date.now() - 6 * 86400000);
   return {
-    startIso: beijingDayRangeUtc(weekAgoStr).start.toISOString(),
-    endIso: beijingDayRangeUtc(todayStr).end.toISOString()
+    startBound: beijingDayRangeSqlite(weekAgoStr).start,
+    endBound: beijingDayRangeSqlite(todayStr).end
   };
 }
 
@@ -218,15 +231,23 @@ export async function computeDistributionFromOrderHeader(
   prisma: PrismaLike,
   dim: string,
   limit: number
-): Promise<GmvDistributionRow[]> {
-  if (dim !== 'area' && dim !== 'category') return [];
+): Promise<GmvDistributionPayload> {
+  const safeLimit = Math.max(1, Math.floor(limit) || 20);
+  const empty: GmvDistributionPayload = {
+    items: [],
+    limit: safeLimit,
+    matched: 0,
+    truncated: false
+  };
+  if (dim !== 'area' && dim !== 'category') return empty;
 
-  const { startIso, endIso } = weekWindowIso();
+  const { startBound, endBound } = weekWindowBounds();
   const { totalGmv, rows } =
     dim === 'area'
-      ? await loadOrderHeaderAreaDistribution(prisma, startIso, endIso, limit)
-      : await loadOrderHeaderCategoryDistribution(prisma, startIso, endIso, limit);
+      ? await loadOrderHeaderAreaDistribution(prisma, startBound, endBound, safeLimit)
+      : await loadOrderHeaderCategoryDistribution(prisma, startBound, endBound, safeLimit);
 
-  if (totalGmv <= 0) return [];
-  return mapDistributionRows(rows, totalGmv);
+  if (totalGmv <= 0) return empty;
+  // Residual #289: pass limit so payload projects honesty even when head is full.
+  return mapDistributionRows(rows, totalGmv, safeLimit);
 }

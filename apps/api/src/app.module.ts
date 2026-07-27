@@ -11,6 +11,7 @@ import { MerchantModule } from './merchant/merchant.module';
 import { MerchantSalesModule } from './merchant-sales/merchant-sales.module';
 import { MovementModule } from './movement/movement.module';
 import { OverviewModule } from './overview/overview.module';
+import { DataAnalysisModule } from './data-analysis/data-analysis.module';
 import { RefundModule } from './refund/refund.module';
 import { ZeroSalesModule } from './zero-sales/zero-sales.module';
 import { CampaignModule } from './campaign/campaign.module';
@@ -20,6 +21,7 @@ import { AttributionModule } from './attribution/attribution.module';
 import { JobsModule } from './jobs/jobs.module';
 import { UserAccessModule } from './user-access/user-access.module';
 import { AuditLogModule } from './audit-log/audit-log.module';
+import { AuditLogInterceptor } from './audit-log/audit-log.interceptor';
 import { RolesGuard } from './user-access/role.guard';
 import { appThrottlerConfig } from './app-throttler.config';
 
@@ -33,6 +35,7 @@ import { appThrottlerConfig } from './app-throttler.config';
     MerchantSalesModule,
     MovementModule,
     OverviewModule,
+    DataAnalysisModule,
     RefundModule,
     ZeroSalesModule,
     CampaignModule,
@@ -47,6 +50,8 @@ import { appThrottlerConfig } from './app-throttler.config';
   providers: [
     { provide: APP_FILTER, useClass: GlobalExceptionFilter },
     { provide: APP_INTERCEPTOR, useClass: BigIntSerializerInterceptor },
+    // Capture POST/PATCH/PUT/DELETE mutations into OperationAuditLog (bodies redacted).
+    { provide: APP_INTERCEPTOR, useClass: AuditLogInterceptor },
     { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard }

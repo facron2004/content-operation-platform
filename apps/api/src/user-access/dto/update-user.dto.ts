@@ -1,16 +1,31 @@
-import { IsString, IsOptional, IsEmail, IsBoolean, IsArray } from 'class-validator';
+import { Type } from 'class-transformer';
+import {
+  ArrayMaxSize,
+  IsArray,
+  IsBoolean,
+  IsEmail,
+  IsOptional,
+  IsString,
+  MaxLength,
+  MinLength,
+  ValidateNested
+} from 'class-validator';
+import { RoleBindingDto } from './role-binding.dto';
 
 export class UpdateUserDto {
   @IsString()
   @IsOptional()
+  @MaxLength(100)
   displayName?: string;
 
   @IsEmail()
   @IsOptional()
+  @MaxLength(200)
   email?: string;
 
   @IsString()
   @IsOptional()
+  @MaxLength(32)
   phone?: string;
 
   @IsBoolean()
@@ -19,10 +34,15 @@ export class UpdateUserDto {
 
   @IsString()
   @IsOptional()
+  @MinLength(8)
+  @MaxLength(128)
   password?: string;
 }
 
 export class UpdateUserRolesDto {
   @IsArray()
-  roles!: { role: string; scopeType?: string; scopeId?: string }[];
+  @ArrayMaxSize(20)
+  @ValidateNested({ each: true })
+  @Type(() => RoleBindingDto)
+  roles!: RoleBindingDto[];
 }

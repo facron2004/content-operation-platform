@@ -6,6 +6,8 @@
         :loading="merchantLoading"
         :page="merchantPage"
         :has-more="merchantHasMore"
+        :truncated="merchantTruncated"
+        :limit="merchantLimit"
         :row-class-name="merchantRowClass"
         @prev="$emit('prev-merchant')"
         @next="$emit('next-merchant')"
@@ -18,11 +20,14 @@
         :loading="skuLoading"
         :page="skuPage"
         :has-more="skuHasMore"
+        :truncated="skuTruncated"
+        :limit="skuLimit"
         :row-class-name="skuRowClass"
         @prev="$emit('prev-sku')"
         @next="$emit('next-sku')"
         @analysis="$emit('analysis', $event)"
         @generate="$emit('generate', $event)"
+        @timeline="$emit('timeline', $event)"
       />
     </el-tab-pane>
   </el-tabs>
@@ -38,10 +43,16 @@ export type ZeroSalesTabsProps = {
   merchantLoading: boolean;
   merchantPage: number;
   merchantHasMore: boolean;
+  // Residual #266: ZERO_SALES_MERCHANTS_CACHE_CAP honesty.
+  merchantTruncated?: boolean;
+  merchantLimit?: number | null;
   skuRows: ZeroSalesSkuRow[];
   skuLoading: boolean;
   skuPage: number;
   skuHasMore: boolean;
+  // Residual #266: ZERO_SALES_SKUS_CACHE_CAP honesty.
+  skuTruncated?: boolean;
+  skuLimit?: number | null;
   merchantRowClass: (data: { row: ZeroSalesMerchantRow }) => string;
   skuRowClass: (data: { row: ZeroSalesSkuRow }) => string;
 };
@@ -56,5 +67,7 @@ defineEmits<{
   drill: [merchantId: string];
   analysis: [packageId: string];
   generate: [packageId: string];
+  // Residual #211: bubble timeline open to page body.
+  timeline: [row: ZeroSalesSkuRow];
 }>();
 </script>

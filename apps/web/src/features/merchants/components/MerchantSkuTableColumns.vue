@@ -27,13 +27,14 @@
   </el-table-column>
   <el-table-column label="操作" width="120" align="right" fixed="right">
     <template #default="{ row }">
-      <el-button type="primary" size="small" text @click="$emit('go-analysis', row.packageId)">
+      <AppleButton variant="ghost" size="sm" @click="$emit('go-analysis', row.packageId)">
         分析
-      </el-button>
+      </AppleButton>
     </template>
   </el-table-column>
 </template>
 <script setup lang="ts">
+import AppleButton from '../../../components/AppleButton.vue';
 defineProps<{ staleColor: (bucket: string) => string; staleLabel: (bucket: string) => string }>();
 defineEmits<{ (e: 'go-analysis', packageId: string): void }>();
 </script>

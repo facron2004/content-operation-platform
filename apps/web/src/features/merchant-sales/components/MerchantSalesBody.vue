@@ -17,7 +17,13 @@ export type MerchantSalesBodyProps = {
   loading: boolean;
   gmvLabel: string;
   trendOption: Record<string, unknown>;
-  ranking: { items: Array<Record<string, unknown>>; pagination: { total: number } };
+  ranking: {
+    items: Array<Record<string, unknown>>;
+    pagination: { total: number };
+    truncated?: boolean;
+    limit?: number;
+    totalMerchants?: number;
+  };
   rankingPagination: unknown;
   listLoading: boolean;
   exporting: boolean;

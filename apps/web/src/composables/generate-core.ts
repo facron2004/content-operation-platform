@@ -11,6 +11,16 @@ export const GENERATE_CHANNEL_OPTIONS = [
   { label: '商家转发', value: 'merchant_share' }
 ];
 
+/** Residual #238: server scenarioWritingGoal / rule fallbacks key off these phrases. */
+export const GENERATE_SCENARIO_PRESETS = [
+  '日常运营推荐',
+  '库存冲刺',
+  '开抢提醒',
+  '社群预告',
+  '转化优化',
+  '售罄承接'
+] as const;
+
 export async function copyGeneratedText(copy: GeneratedCopy): Promise<void> {
   const text = `${copy.title}\n${copy.body}\n${copy.cta}`;
   try {
@@ -39,6 +49,7 @@ export type GenerateActionParams = {
   form: {
     packageId: string;
     channel: Channel;
+    scenario: string;
     tone: string;
     copyCount: number;
     extraInstruction: string;
@@ -53,12 +64,65 @@ export type GenerateActionParams = {
   detail: ReturnType<typeof usePackageDetail>;
 };
 
+/** Residual #268: generate package picker loads a single recommend page (DTO max). */
+export const GENERATE_PACKAGE_PICKER_PAGE_SIZE = 200;
+
 export async function loadGeneratePackages(
   packages: Ref<RecommendPackageItem[]>,
-  form: { packageId: string }
+  form: { packageId: string },
+  // Residual #268: first-200 / RECOMMEND_CACHE_CAP honesty sinks.
+  honesty?: {
+    listTruncated?: Ref<boolean>;
+    listLimit?: Ref<number | null>;
+    matchedCount?: Ref<number | null>;
+  }
 ) {
-  const data = await api.getRecommendations();
-  packages.value = data.packages;
+  // Bound picker list (API always pages; max pageSize=200).
+  const data = await api.getRecommendations({
+    page: 1,
+    pageSize: GENERATE_PACKAGE_PICKER_PAGE_SIZE
+  });
+  packages.value = data.packages ?? [];
+  // Residual #268: sink recommend honesty (#267) + first-page-only picker clip.
+  // truncated when RECOMMEND_CACHE_CAP clips the ranked head OR more pages exist beyond 200.
+  const pageTotal =
+    typeof data.pagination?.total === 'number' && Number.isFinite(data.pagination.total)
+      ? Math.max(0, Math.floor(data.pagination.total))
+      : packages.value.length;
+  const capTruncated = Boolean(data.truncated);
+  const pageTruncated = pageTotal > packages.value.length;
+  const nextTruncated = capTruncated || pageTruncated;
+  // Prefer the visible picker head size when page-clipped; else RECOMMEND_CACHE_CAP.
+  const nextLimit = nextTruncated
+    ? pageTruncated
+      ? GENERATE_PACKAGE_PICKER_PAGE_SIZE
+      : typeof data.limit === 'number' && data.limit > 0
+        ? data.limit
+        : GENERATE_PACKAGE_PICKER_PAGE_SIZE
+    : typeof data.limit === 'number' && data.limit > 0
+      ? data.limit
+      : null;
+  const nextMatched =
+    typeof data.matchedCount === 'number' && data.matchedCount >= 0
+      ? data.matchedCount
+      : pageTotal > 0
+        ? pageTotal
+        : null;
+  if (honesty?.listTruncated) honesty.listTruncated.value = nextTruncated;
+  if (honesty?.listLimit) honesty.listLimit.value = nextLimit;
+  if (honesty?.matchedCount) honesty.matchedCount.value = nextMatched;
+  // Residual #249: deep-link ?packageId= may fall outside the first-200 recommend page
+  // (default sort). Resolve via analysis so the picker option + selectedPackage hydrate.
+  if (form.packageId && !packages.value.some((p) => p.packageId === form.packageId)) {
+    try {
+      const analysis = await api.getPackageAnalysis(form.packageId);
+      if (analysis?.package?.packageId === form.packageId) {
+        packages.value = [analysis.package, ...packages.value];
+      }
+    } catch {
+      // Keep form.packageId; generate / battle-card / detail still work by id.
+    }
+  }
   if (!form.packageId && packages.value[0]) form.packageId = packages.value[0].packageId;
 }
 
@@ -86,6 +150,7 @@ export async function loadGenerateBattleCard(options: {
 export async function generateCopiesAction(options: {
   packageId: string;
   channel: Channel;
+  scenario: string;
   tone: string;
   copyCount: number;
   extraInstruction: string;
@@ -107,9 +172,11 @@ export async function generateCopiesAction(options: {
   options.loading.value = true;
   options.generationMode.value = options.useAI ? 'ai' : 'rule';
   try {
+    // Residual #238: empty scenario → undefined so server falls back to DEFAULT_SCENARIO.
     const data = await api.generateCopies({
       packageId: options.packageId,
       channel: options.channel,
+      scenario: options.scenario.trim() || undefined,
       tone: options.tone,
       copyCount: options.copyCount,
       extraInstruction: options.extraInstruction,
@@ -161,6 +228,7 @@ export function createGenerateActions(params: GenerateActionParams) {
     await generateCopiesAction({
       packageId: params.form.packageId,
       channel: params.form.channel,
+      scenario: params.form.scenario,
       tone: params.form.tone,
       copyCount: params.form.copyCount,
       extraInstruction: params.form.extraInstruction,
@@ -188,6 +256,7 @@ export function buildUseGenerateReturn(p: {
   form: {
     packageId: string;
     channel: Channel;
+    scenario: string;
     tone: string;
     copyCount: number;
     extraInstruction: string;
@@ -200,6 +269,10 @@ export function buildUseGenerateReturn(p: {
   channelOptions: typeof GENERATE_CHANNEL_OPTIONS;
   copyText: typeof copyGeneratedText;
   riskTagType: typeof riskTagType;
+  // Residual #268: generate package picker honesty.
+  listTruncated?: Ref<boolean>;
+  listLimit?: Ref<number | null>;
+  matchedCount?: Ref<number | null>;
 }) {
   const {
     loading,
@@ -220,6 +293,10 @@ export function buildUseGenerateReturn(p: {
     configSaving: ai.configSaving,
     generationMode,
     packages,
+    // Residual #268: generate package picker honesty.
+    listTruncated: p.listTruncated,
+    listLimit: p.listLimit,
+    matchedCount: p.matchedCount,
     copies,
     aiStatus: ai.aiStatus,
     packageDetail: detail.packageDetail,

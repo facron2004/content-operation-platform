@@ -9,6 +9,8 @@ export interface AppUser {
   lastLoginAt?: string;
   roles: UserRoleBinding[];
   createdAt: string;
+  /** Server session epoch — bumped on password reset; not required by clients. */
+  tokenVersion?: number;
 }
 
 export type UserRole =

@@ -1,5 +1,6 @@
 import { withForce } from './with-force';
 import client from '../http-client';
+import type { RetryableConfig } from '../http-client-utils';
 
 export interface GmvCompareDelta {
   totalGmv?: number | null;
@@ -62,6 +63,14 @@ export interface GmvDistributionRow {
   share: number;
 }
 
+/** Residual #289: Top-N named-bucket head + honesty for /gmv/distribution. */
+export interface GmvDistributionResponse {
+  items: GmvDistributionRow[];
+  limit: number;
+  matched: number;
+  truncated: boolean;
+}
+
 export interface GmvMerchantRow {
   merchantId: string;
   merchantName: string;
@@ -87,27 +96,32 @@ export async function refreshGmvFromJeesite(startDate?: string, endDate?: string
       errors: number;
       pagesFetched: number;
       kpi: GmvKpi;
-    }>(`/gmv/refresh?_=${Date.now()}`, { startDate, endDate })
+    }>(`/gmv/refresh?_=${Date.now()}`, { startDate, endDate }, {
+      timeout: 15000,
+      __silentError__: true
+    } as RetryableConfig)
   ).data;
 }
 
 export async function getGmvToday(date?: string, force = false) {
   return (
     await client.get<GmvKpi>(withForce('/gmv/today', force), {
-      params: date ? { date } : undefined
+      params: date ? { date } : undefined,
+      timeout: 10000
     })
   ).data;
 }
 
 export async function getGmvTrend(
-  days: 7 | 30 | 90 | 365,
+  days: 7 | 30 | 90,
   endDate?: string,
   force = false,
   granularity: GmvTrendGranularity = 'day'
 ) {
   return (
     await client.get<GmvTrendPoint[]>(withForce('/gmv/trend', force), {
-      params: { days, granularity, ...(endDate ? { endDate } : {}) }
+      params: { days, granularity, ...(endDate ? { endDate } : {}) },
+      timeout: 10000
     })
   ).data;
 }
@@ -115,7 +129,8 @@ export async function getGmvTrend(
 export async function getGmvHourly(date?: string, force = false) {
   return (
     await client.get<GmvHourlyPoint[]>(withForce('/gmv/hourly', force), {
-      params: date ? { date } : undefined
+      params: date ? { date } : undefined,
+      timeout: 10000
     })
   ).data;
 }
@@ -126,8 +141,9 @@ export async function getGmvDistribution(
   force = false
 ) {
   return (
-    await client.get<GmvDistributionRow[]>(withForce('/gmv/distribution', force), {
-      params: { dim, limit }
+    await client.get<GmvDistributionResponse>(withForce('/gmv/distribution', force), {
+      params: { dim, limit },
+      timeout: 10000
     })
   ).data;
 }
@@ -139,9 +155,11 @@ export async function getGmvByMerchant(
   force = false
 ) {
   return (
-    await client.get<{ items: GmvMerchantRow[]; hasMore: boolean }>(
-      withForce('/gmv/by-merchant', force),
-      { params: { sortBy, page, pageSize } }
-    )
+    await client.get<{
+      items: GmvMerchantRow[];
+      hasMore: boolean;
+      limit?: number;
+      truncated?: boolean;
+    }>(withForce('/gmv/by-merchant', force), { params: { sortBy, page, pageSize }, timeout: 10000 })
   ).data;
 }

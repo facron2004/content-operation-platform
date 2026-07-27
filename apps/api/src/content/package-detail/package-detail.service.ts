@@ -24,7 +24,10 @@ export class PackageDetailService {
     packageId: string,
     options?: { forceRefresh?: boolean; saveRawHtml?: boolean }
   ): Promise<PackageDetail | null> {
-    if (!options?.forceRefresh) {
+    if (options?.forceRefresh) {
+      // Drop warm entry first — getOrLoad always prefers cache and would no-op.
+      this.cache.remove(packageId);
+    } else {
       const cached = this.cache.get(packageId);
       if (cached) return cached;
     }
@@ -56,16 +59,16 @@ export class PackageDetailService {
   }
 
   getCacheStats() {
+    // Counts only — never list packageIds (catalog recon).
     return {
-      size: this.cache.size,
-      entries: this.cache.keys()
+      size: this.cache.size
     };
   }
 
   getDetailedStats() {
+    // Counts only — never list packageIds (catalog recon for any platform_operator).
     return {
-      totalCached: this.cache.size,
-      packages: this.cache.keys().map((id) => ({ packageId: id }))
+      totalCached: this.cache.size
     };
   }
 
@@ -73,13 +76,13 @@ export class PackageDetailService {
   async debugRawHtml(packageId: string) {
     const html = await this.fetcher.fetchHtml(packageId);
     if (!html) return { error: 'No HTML returned from fetcher' };
+    // Metadata only — never return full HTML (may embed session tokens / PII).
     return {
       length: html.length,
       hasLongitude: html.includes('longitude'),
       hasLatitude: html.includes('latitude'),
       hasLoginPage: html.includes('loginForm'),
-      hasCommodityDetail: html.includes('commodityDetailUE'),
-      preview: html.substring(0, 2000)
+      hasCommodityDetail: html.includes('commodityDetailUE')
     };
   }
 
@@ -98,12 +101,7 @@ export class PackageDetailService {
       hasLongitude: html.includes('longitude'),
       hasLatitude: html.includes('latitude'),
       hasLoginPage: html.includes('loginForm'),
-      title: html.match(/<title>([^<]+)<\/title>/)?.[1] || null,
-      inputSnippet:
-        html.substring(
-          Math.max(0, html.indexOf('longitude') - 100),
-          Math.min(html.length, html.indexOf('longitude') + 200)
-        ) || null
+      title: html.match(/<title>([^<]+)<\/title>/)?.[1] || null
     };
   }
 }

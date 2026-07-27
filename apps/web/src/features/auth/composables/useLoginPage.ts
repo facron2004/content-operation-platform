@@ -4,6 +4,9 @@ import { ElMessage } from 'element-plus';
 import axios from 'axios';
 import { useAuthStore } from '../../../stores/auth';
 import { extractErrorMessage } from '../../../services/http-client';
+import { resolveLoginRedirect } from '../utils/login-redirect';
+
+export { resolveLoginRedirect } from '../utils/login-redirect';
 
 type AuthStoreLike = { setAuth: (token: string, username: string) => void };
 
@@ -38,10 +41,6 @@ export async function performLogin(args: {
   }
 }
 
-export function resolveLoginRedirect(raw: unknown): string {
-  return (Array.isArray(raw) ? raw[0] : raw) || '/';
-}
-
 export function useLoginPage() {
   const authStore = useAuthStore(),
     router = useRouter(),
@@ -49,11 +48,6 @@ export function useLoginPage() {
     loading = ref(false),
     error = ref<string | null>(null),
     form = reactive({ username: '', password: '' });
-  function fillDefaults() {
-    form.username = 'admin';
-    form.password = 'contentops2024';
-    error.value = null;
-  }
   async function handleLogin() {
     await performLogin({
       username: form.username,
@@ -71,5 +65,5 @@ export function useLoginPage() {
       }
     });
   }
-  return { form, loading, error, fillDefaults, handleLogin };
+  return { form, loading, error, handleLogin };
 }

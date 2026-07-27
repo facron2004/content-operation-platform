@@ -8,16 +8,18 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
     const request = ctx.getRequest<Request>();
-    const requestId = (request as Record<string, unknown>).requestId as string | undefined;
+    const requestId = (request as unknown as { requestId?: string }).requestId;
     const { status, message, details } = resolveExceptionPayload(exception, (msg, stack) => {
       this.logger.error(`[${requestId ?? '-'}] Unhandled error: ${msg}`, stack);
     });
+    // Never echo query strings (may contain tokens) — path only.
+    const safePath = (request.path || request.url || '').split('?')[0]?.slice(0, 200);
     response.status(status).json(
       buildExceptionBody({
         status,
         message,
         details,
-        path: request.url,
+        path: safePath,
         isProduction: process.env.NODE_ENV === 'production'
       })
     );

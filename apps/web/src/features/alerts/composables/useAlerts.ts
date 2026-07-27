@@ -16,6 +16,22 @@ export function useAlerts(role: Ref<string | undefined>) {
   const { recordSuccess, recordError } = useOperationHistory();
   const summary = computed(() => state.alertResponse.value?.summary ?? EMPTY_ALERT_SUMMARY);
   const topPackages = computed(() => state.alertResponse.value?.topPackages ?? []);
+  // Residual #283: Top-N focus package head honesty.
+  const focusPackageTruncated = computed(
+    () => state.alertResponse.value?.focusPackageTruncated === true
+  );
+  const focusPackageLimit = computed(() => state.alertResponse.value?.focusPackageLimit ?? 0);
+  const focusPackageMatched = computed(() => state.alertResponse.value?.focusPackageMatched ?? 0);
+  // Residual #274: surface silent RESOLVED_ALERT_DAY_LIMIT clip.
+  const resolvedIdsTruncated = computed(
+    () => state.alertResponse.value?.resolvedIdsTruncated === true
+  );
+  const resolvedIdsLimit = computed(() => state.alertResponse.value?.resolvedIdsLimit ?? 0);
+  const resolvedIdsLoaded = computed(() => state.alertResponse.value?.resolvedIdsLoaded ?? 0);
+  // Residual #275: surface RECOMMEND_CACHE_CAP source undercount.
+  const sourceTruncated = computed(() => state.alertResponse.value?.sourceTruncated === true);
+  const sourceLimit = computed(() => state.alertResponse.value?.sourceLimit ?? 0);
+  const sourceMatchedCount = computed(() => state.alertResponse.value?.sourceMatchedCount ?? 0);
   const load = createAlertLoader(state, role);
   const handlers = useAlertHandlers({
     alerts: state.alerts,
@@ -55,6 +71,18 @@ export function useAlerts(role: Ref<string | undefined>) {
     alerts: state.alerts,
     summary,
     topPackages,
+    // Residual #283
+    focusPackageTruncated,
+    focusPackageLimit,
+    focusPackageMatched,
+    // Residual #274
+    resolvedIdsTruncated,
+    resolvedIdsLimit,
+    resolvedIdsLoaded,
+    // Residual #275
+    sourceTruncated,
+    sourceLimit,
+    sourceMatchedCount,
     filters: state.filters,
     pagination: state.pagination,
     load,

@@ -8,11 +8,7 @@
       @update:password="$emit('update:password', $event)"
       @submit="$emit('submit')"
     />
-    <LoginFormActions
-      :loading="loading"
-      @submit="$emit('submit')"
-      @fill-defaults="$emit('fill-defaults')"
-    />
+    <LoginFormActions :loading="loading" @submit="$emit('submit')" />
     <LoginFormHint :error="error" />
   </el-form>
 </template>
@@ -23,7 +19,6 @@ import LoginFormActions from './LoginFormActions.vue';
 defineProps<{ username: string; password: string; loading: boolean; error: string | null }>();
 defineEmits<{
   submit: [];
-  'fill-defaults': [];
   'update:username': [value: string];
   'update:password': [value: string];
 }>();

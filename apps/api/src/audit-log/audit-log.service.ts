@@ -1,6 +1,15 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Inject } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { likeContains } from '../common/like-escape';
+import { newEntityId } from '../common/id';
+import {
+  beijingDayRangeSqlite,
+  sqlDatetimeExclusiveRange,
+  toSqliteDateTime
+} from '../common/sqlite-datetime';
+import { INTERACTIVE_LIST_MAX_DAYS, resolveInteractiveDateSpan } from '../common/list-date-span';
+import { clampListPage, clampListPageSize } from '../common/sql-chunk';
 
 export interface AuditLogEntry {
   userId?: string;
@@ -30,6 +39,14 @@ interface AuditLogRow {
   createdAt: string;
 }
 
+/** Full row including before/after blobs (detail path only). */
+const AUDIT_LOG_ROW_COLUMNS = `"logId", "userId", "username", "action", "objectType",
+  "objectId", "before", "after", "result", "failReason", "ip", "createdAt"`;
+
+/** Interactive list omits free-form before/after JSON (≤4 KB each × page). */
+const AUDIT_LOG_LIST_COLUMNS = `"logId", "userId", "username", "action", "objectType",
+  "objectId", "result", "failReason", "ip", "createdAt"`;
+
 @Injectable()
 export class AuditLogService {
   private readonly logger = new Logger(AuditLogService.name);
@@ -40,10 +57,10 @@ export class AuditLogService {
    * Create an audit log entry. Throws on error.
    */
   async log(entry: AuditLogEntry): Promise<void> {
-    const logId = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+    const logId = newEntityId();
     await this.prisma.$executeRawUnsafe(
       `INSERT INTO "OperationAuditLog" ("logId", "userId", "username", "action", "objectType", "objectId", "before", "after", "result", "failReason", "ip", "createdAt")
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       logId,
       entry.userId ?? null,
       entry.username ?? null,
@@ -54,7 +71,8 @@ export class AuditLogService {
       entry.after ?? null,
       entry.result ?? null,
       entry.failReason ?? null,
-      entry.ip ?? null
+      entry.ip ?? null,
+      toSqliteDateTime()
     );
   }
 
@@ -81,8 +99,9 @@ export class AuditLogService {
     page?: number;
     pageSize?: number;
   }) {
-    const page = filters.page ?? 1;
-    const pageSize = filters.pageSize ?? 20;
+    // Defense-in-depth: clamp even if a caller bypasses the DTO Max.
+    const page = clampListPage(filters.page, 100);
+    const pageSize = clampListPageSize(filters.pageSize);
     const offset = (page - 1) * pageSize;
 
     const conditions: string[] = [];
@@ -93,21 +112,24 @@ export class AuditLogService {
       params.push(filters.userId);
     }
     if (filters.action) {
-      conditions.push(`"action" LIKE ?`);
-      params.push(`%${filters.action}%`);
+      conditions.push(`"action" LIKE ? ESCAPE '\\'`);
+      params.push(likeContains(filters.action));
     }
     if (filters.objectType) {
       conditions.push(`"objectType" = ?`);
       params.push(filters.objectType);
     }
-    if (filters.dateFrom) {
-      conditions.push(`"createdAt" >= ?`);
-      params.push(filters.dateFrom);
-    }
-    if (filters.dateTo) {
-      conditions.push(`"createdAt" <= ?`);
-      params.push(filters.dateTo);
-    }
+    // Always bound the interactive window — unbounded COUNT(*) + ORDER BY on
+    // OperationAuditLog pins SQLite when auditors omit dates or span years.
+    // Exclusive half-open datetime bounds keep createdAt index-friendly.
+    const span = resolveInteractiveDateSpan(
+      filters.dateFrom,
+      filters.dateTo,
+      INTERACTIVE_LIST_MAX_DAYS
+    );
+    conditions.push(sqlDatetimeExclusiveRange('"createdAt"'));
+    params.push(beijingDayRangeSqlite(span.dateFrom).start);
+    params.push(beijingDayRangeSqlite(span.dateTo).end);
 
     const where = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';
     const countParams = [...params];
@@ -118,14 +140,23 @@ export class AuditLogService {
     const total = Number(countRows[0]?.count ?? 0);
 
     const queryParams = [...params, pageSize, offset];
+    // List never materializes before/after — detail uses findById for full row.
     const rows = await this.prisma.$queryRawUnsafe<AuditLogRow[]>(
-      `SELECT * FROM "OperationAuditLog" ${where} ORDER BY "createdAt" DESC LIMIT ? OFFSET ?`,
+      `SELECT ${AUDIT_LOG_LIST_COLUMNS} FROM "OperationAuditLog" ${where} ORDER BY "createdAt" DESC LIMIT ? OFFSET ?`,
       ...queryParams
     );
 
     const data = rows.map(this.mapRow);
 
-    return { data, total, page, pageSize };
+    // Residual #273: project INTERACTIVE window so SPA can surface honesty.
+    return {
+      data,
+      total,
+      page,
+      pageSize,
+      dateFrom: span.dateFrom,
+      dateTo: span.dateTo
+    };
   }
 
   /**
@@ -133,7 +164,7 @@ export class AuditLogService {
    */
   async findById(logId: string) {
     const rows = await this.prisma.$queryRawUnsafe<AuditLogRow[]>(
-      `SELECT * FROM "OperationAuditLog" WHERE "logId" = ?`,
+      `SELECT ${AUDIT_LOG_ROW_COLUMNS} FROM "OperationAuditLog" WHERE "logId" = ?`,
       logId
     );
     if (!rows[0]) return null;

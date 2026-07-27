@@ -10,6 +10,15 @@ export type MerchantTrendRow = {
   clickCount: number;
 };
 
+/**
+ * Merchant money trend from MerchantDailyMetrics (live GMV truth).
+ * SalesSnapshot is no longer written by the durable money stack — reading it
+ * returned empty/wrong GMV. MDM is date-indexed and retained 180d.
+ *
+ * merchantId may be either Merchant.merchantId or a merchantName (list/export
+ * paths often key by name). Match both via Merchant join OR direct name.
+ * Exposure/click are not in MDM — zero-filled for API shape compatibility.
+ */
 export async function loadMerchantTrendRows(
   prisma: PrismaService,
   merchantId: string,
@@ -17,10 +26,26 @@ export async function loadMerchantTrendRows(
   today: string
 ) {
   return (await prisma.$queryRawUnsafe(
-    `SELECT date(datetime(ss."snapshotTime" / 1000, 'unixepoch', '+8 hours')) AS "date", COALESCE(SUM(ss."gmv"), 0) AS "gmv", COALESCE(SUM(ss."paidOrderCount"), 0) AS "paidOrderCount", COALESCE(SUM(ss."orderCount"), 0) AS "orderCount", COALESCE(SUM(ss."exposureCount"), 0) AS "exposureCount", COALESCE(SUM(ss."clickCount"), 0) AS "clickCount" FROM "SalesSnapshot" ss JOIN "ContentPackage" cp ON cp."packageId" = ss."packageId" WHERE cp."merchantId" = ? AND date(datetime(ss."snapshotTime" / 1000, 'unixepoch', '+8 hours')) >= ? AND date(datetime(ss."snapshotTime" / 1000, 'unixepoch', '+8 hours')) <= ? GROUP BY date(datetime(ss."snapshotTime" / 1000, 'unixepoch', '+8 hours')) ORDER BY "date" ASC`,
-    merchantId,
+    `SELECT mdm."date" AS "date",
+            COALESCE(SUM(mdm."paidAmountOnline" + mdm."paidAmountWallet"), 0) AS "gmv",
+            COALESCE(SUM(mdm."paidOrderCount"), 0) AS "paidOrderCount",
+            COALESCE(SUM(mdm."orderCount"), 0) AS "orderCount",
+            0 AS "exposureCount",
+            0 AS "clickCount"
+     FROM "MerchantDailyMetrics" mdm
+     WHERE mdm."date" >= ? AND mdm."date" <= ?
+       AND (
+         mdm."merchantName" = ?
+         OR mdm."merchantName" IN (
+           SELECT m."merchantName" FROM "Merchant" m WHERE m."merchantId" = ? LIMIT 1
+         )
+       )
+     GROUP BY mdm."date"
+     ORDER BY mdm."date" ASC`,
     start,
-    today
+    today,
+    merchantId,
+    merchantId
   )) as Array<{
     date: string;
     gmv: number;

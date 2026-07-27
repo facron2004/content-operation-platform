@@ -55,7 +55,10 @@ export interface MovementSkuRow {
 
 export type MovementListResponse = {
   items: MovementSkuRow[];
-  pagination: { page: number; pageSize: number; hasMore: boolean };
+  pagination: { page: number; pageSize: number; hasMore: boolean; total?: number };
+  // Residual #266: MOVEMENT_CACHE_CAP honesty.
+  limit?: number;
+  truncated?: boolean;
 };
 
 export type MovementTimelineResponse = {
@@ -101,12 +104,12 @@ export async function getMovementMoving(params: {
   return (await client.get<MovementListResponse>('/movement/skus/moving', { params })).data;
 }
 
+/** Relative path for axios client (baseURL already includes /api). */
 export function getStagnantExportUrl(params: Record<string, string | number | undefined>) {
   const qs = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) {
     if (v !== undefined && v !== null && v !== '') qs.set(k, String(v));
   }
-  const base = (import.meta.env.VITE_API_BASE_URL ?? '/api') + '/movement/skus/stagnant/export';
-  const sep = base.includes('?') ? '&' : '?';
-  return `${base}${sep}${qs.toString()}`;
+  const q = qs.toString();
+  return q ? `/movement/skus/stagnant/export?${q}` : '/movement/skus/stagnant/export';
 }

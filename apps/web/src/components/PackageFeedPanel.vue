@@ -5,15 +5,18 @@
       description="把实际输入给模型的套餐信息拆开看，方便判断哪里需要补充。"
     >
       <template #actions>
-        <el-button
-          size="small"
-          :icon="Refresh"
+        <AppleButton
+          size="sm"
+          variant="secondary"
           :loading="detailLoading"
           :disabled="!packageId"
           @click="$emit('refresh')"
         >
+          <template #icon>
+            <el-icon><Refresh /></el-icon>
+          </template>
           刷新详情
-        </el-button>
+        </AppleButton>
       </template>
     </SectionHeader>
     <EmptyState
@@ -38,6 +41,7 @@ import { Refresh } from '@element-plus/icons-vue';
 import EmptyState from './EmptyState.vue';
 import SectionHeader from './SectionHeader.vue';
 import PackageFeedBody from './PackageFeedBody.vue';
+import AppleButton from './AppleButton.vue';
 
 import type { RecommendPackageItem } from '@content/shared';
 import type { PackageDetailResponse } from '../services/api';

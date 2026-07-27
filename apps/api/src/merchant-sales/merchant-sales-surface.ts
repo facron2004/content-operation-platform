@@ -1,6 +1,6 @@
 /** Merchant-sales query + recompute surface. */
-import { Logger } from '@nestjs/common';
-import { TtlCache } from '../common';
+import { ConflictException, Logger } from '@nestjs/common';
+import { TtlCache, withHeavyAggregateGate } from '../common';
 import { PrismaService } from '../prisma/prisma.service';
 import { queryExportCsv } from './merchant-sales-query';
 import {
@@ -22,7 +22,10 @@ export type MerchantSalesSurfaceParams = {
   invalidateCache: () => void;
 };
 
-function createMerchantSalesQuerySurface({ prisma, cache }: MerchantSalesSurfaceParams) {
+function createMerchantSalesQuerySurface(params: MerchantSalesSurfaceParams) {
+  const { prisma, cache, logger } = params;
+  // Single-flight CSV export — concurrent tabs must not double-run ranking GROUP BY.
+  let exportRunning = false;
   return {
     getSummary: (window: MerchantSalesWindow, date?: string, endDate?: string, force = false) =>
       loadMerchantSalesSummary(prisma, cache, window, date, endDate, force),
@@ -50,14 +53,31 @@ function createMerchantSalesQuerySurface({ prisma, cache }: MerchantSalesSurface
       endDate?: string,
       force = false
     ) => loadMerchantSalesTrend(prisma, cache, window, date, endDate, force),
-    getExport: (
+    getExport: async (
       window: MerchantSalesWindow,
       date?: string,
       endDate?: string,
       sortBy: MerchantSalesSort = 'gmvDesc'
     ) => {
-      const { start, end } = resolveWindow(window, date, endDate);
-      return queryExportCsv(prisma, window, start, end, sortBy);
+      if (exportRunning) {
+        logger.warn('Skipping merchant-sales export — previous run still in flight');
+        throw new ConflictException('商家销售导出进行中，请稍后再试');
+      }
+      exportRunning = true;
+      try {
+        const { start, end } = resolveWindow(window, date, endDate);
+        // Share process heavy pool so export GROUP BY cannot run beside GMV/movement cold.
+        return await withHeavyAggregateGate(() =>
+          queryExportCsv(prisma, window, start, end, sortBy)
+        );
+      } catch (err) {
+        if (err instanceof Error && err.name === 'HeavyAggregateQueueFullError') {
+          throw new ConflictException('商家销售导出繁忙，请稍后再试');
+        }
+        throw err;
+      } finally {
+        exportRunning = false;
+      }
     }
   };
 }

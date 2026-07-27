@@ -15,10 +15,10 @@
     />
     <template #footer>
       <div class="dialog-footer">
-        <el-button @click="$emit('update:visible', false)">取消</el-button>
-        <el-button type="primary" :loading="updatingCookie" @click="saveCookie">
+        <AppleButton variant="secondary" @click="$emit('update:visible', false)">取消</AppleButton>
+        <AppleButton variant="primary" :loading="updatingCookie" @click="saveCookie">
           验证并更新
-        </el-button>
+        </AppleButton>
       </div>
     </template>
   </el-dialog>
@@ -26,6 +26,7 @@
 <script setup lang="ts">
 import { useCookieConfigDialog } from '../composables/useCookieConfigDialog';
 import CookieConfigBody from './CookieConfigBody.vue';
+import AppleButton from './AppleButton.vue';
 defineProps<{ visible: boolean }>();
 const emit = defineEmits<{ 'update:visible': [value: boolean] }>();
 const { cookieStatus, updatingCookie, newCookieString, onOpen, saveCookie, formatTime } =

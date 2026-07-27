@@ -1,8 +1,106 @@
 import { beijingDateKey, shiftDateKey } from '@content/shared';
+import { MOVEMENT_CACHE_CAP } from '../common/sql-chunk';
 import type { PrismaService } from '../prisma/prisma.service';
 import type { MovementSkusQueryDto } from './movement.dto';
-import { assembleSkuRows, fetchMovingPackageIds, loadActiveSkus } from './movement-skus';
+import type { MovementSkuRow } from './movement.types';
+import { computeSkuRows, loadActiveSkus, paginateMovementSkuRows } from './movement-skus';
 import { staleDaysFromBucket } from './movement-stale';
+
+/** Bound TTL-cached aggregates after sort (export pageSize ≤ CSV_EXPORT_MAX_ROWS ≤ cap). */
+function capMovementRows(rows: MovementSkuRow[]): MovementSkuRow[] {
+  return rows.length <= MOVEMENT_CACHE_CAP ? rows : rows.slice(0, MOVEMENT_CACHE_CAP);
+}
+
+type ScopeFilters = {
+  merchantId?: string;
+  merchantIds?: string[];
+  category?: string;
+  areaId?: string;
+  areaIds?: string[];
+  search?: string;
+};
+
+function scopeKey(q: ScopeFilters): string {
+  const areaIds = [...(q.areaIds ?? [])].sort().join(',');
+  const merchantIds = [...(q.merchantIds ?? [])].sort().join(',');
+  return [
+    q.merchantId ?? '',
+    merchantIds,
+    q.category ?? '',
+    q.areaId ?? '',
+    areaIds,
+    q.search ?? ''
+  ].join('|');
+}
+
+/** Aggregate cache key — page/pageSize intentionally excluded. */
+export function movingSkusCacheKey(
+  params: ScopeFilters & { days: 1 | 7 | 30 },
+  today: string
+): string {
+  return ['movement:moving', today, String(params.days), scopeKey(params)].join('|');
+}
+
+/** Aggregate cache key — page/pageSize intentionally excluded. */
+export function stagnantSkusCacheKey(q: MovementSkusQueryDto, today: string): string {
+  return [
+    'movement:stagnant',
+    today,
+    q.bucket ?? 'stale_30d',
+    q.sort ?? 'lastSalesDateAsc',
+    scopeKey(q)
+  ].join('|');
+}
+
+/**
+ * Full sorted moving SKU aggregate (no page).
+ * Membership is filter-first in SQL (EXISTS sales in window) — no 10k candidate
+ * materialize + second DISTINCT PackageSalesDaily pass.
+ */
+export async function computeMovingSkus(
+  prisma: PrismaService,
+  params: ScopeFilters & { days: 1 | 7 | 30 },
+  today = beijingDateKey(new Date())
+): Promise<MovementSkuRow[]> {
+  const start = shiftDateKey(today, -(params.days - 1));
+  const candidates = await loadActiveSkus(prisma, {
+    ...params,
+    salesWindow: { mode: 'moving', start, today }
+  });
+  if (!candidates.length) return [];
+  const movingIds = candidates.map((c) => c.packageId);
+  const rows = await computeSkuRows(prisma, {
+    candidates,
+    filterPackageIds: movingIds,
+    sort: 'gmvDesc'
+  });
+  return capMovementRows(rows);
+}
+
+/**
+ * Full sorted stagnant SKU aggregate (no page).
+ * Membership is filter-first in SQL (NOT EXISTS sales in window).
+ */
+export async function computeStagnantSkus(
+  prisma: PrismaService,
+  q: MovementSkusQueryDto,
+  today = beijingDateKey(new Date())
+): Promise<MovementSkuRow[]> {
+  const days = staleDaysFromBucket(q.bucket);
+  const start = shiftDateKey(today, -(days - 1));
+  const candidates = await loadActiveSkus(prisma, {
+    ...q,
+    salesWindow: { mode: 'stagnant', start, today }
+  });
+  if (!candidates.length) return [];
+  const stagnantIds = candidates.map((c) => c.packageId);
+  const rows = await computeSkuRows(prisma, {
+    candidates,
+    filterPackageIds: stagnantIds,
+    sort: q.sort
+  });
+  return capMovementRows(rows);
+}
 
 export async function listMovingSkus(
   prisma: PrismaService,
@@ -11,48 +109,18 @@ export async function listMovingSkus(
     page: number;
     pageSize: number;
     merchantId?: string;
+    merchantIds?: string[];
     category?: string;
     areaId?: string;
+    areaIds?: string[];
     search?: string;
   }
 ) {
-  const today = beijingDateKey(new Date());
-  const start = shiftDateKey(today, -(params.days - 1));
-  const candidates = await loadActiveSkus(prisma, params);
-  const pkgIds = candidates.map((c) => c.packageId);
-  const empty = {
-    items: [],
-    pagination: { hasMore: false, page: params.page, pageSize: params.pageSize }
-  };
-  if (!pkgIds.length) return empty;
-  const movingSet = await fetchMovingPackageIds(prisma, pkgIds, start, today);
-  const movingIds = pkgIds.filter((id) => movingSet.has(id));
-  if (!movingIds.length) return empty;
-  return assembleSkuRows(prisma, {
-    candidates,
-    filterPackageIds: movingIds,
-    sort: 'gmvDesc',
-    page: params.page,
-    pageSize: params.pageSize
-  });
+  const rows = await computeMovingSkus(prisma, params);
+  return paginateMovementSkuRows(rows, params.page, params.pageSize);
 }
 
 export async function listStagnantSkus(prisma: PrismaService, q: MovementSkusQueryDto) {
-  const today = beijingDateKey(new Date());
-  const days = staleDaysFromBucket(q.bucket);
-  const start = shiftDateKey(today, -(days - 1));
-  const candidates = await loadActiveSkus(prisma, q);
-  const pkgIds = candidates.map((c) => c.packageId);
-  const empty = { items: [], pagination: { hasMore: false, page: q.page, pageSize: q.pageSize } };
-  if (!pkgIds.length) return empty;
-  const movingIds = await fetchMovingPackageIds(prisma, pkgIds, start, today);
-  const stagnantIds = pkgIds.filter((id) => !movingIds.has(id));
-  if (!stagnantIds.length) return empty;
-  return assembleSkuRows(prisma, {
-    candidates,
-    filterPackageIds: stagnantIds,
-    sort: q.sort,
-    page: q.page,
-    pageSize: q.pageSize
-  });
+  const rows = await computeStagnantSkus(prisma, q);
+  return paginateMovementSkuRows(rows, q.page, q.pageSize);
 }

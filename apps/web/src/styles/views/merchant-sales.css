@@ -78,6 +78,7 @@
 }
 
 .chart-card :deep(.chart-shell) {
+  height: 280px;
   min-height: 280px;
 }
 

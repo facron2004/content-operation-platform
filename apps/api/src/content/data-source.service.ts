@@ -9,6 +9,12 @@ import type { ContentPackage, SalesSnapshot } from '@content/shared';
 import { clamp, describeError, exponentialBackoff, isRecord, sleep } from '@content/shared';
 import { LOGIN_FORM_HTML_MARKER, LOGIN_PAGE_MARKERS } from '../common/login-markers';
 import {
+  JSON_RESPONSE_MAX_BYTES,
+  readResponseText,
+  ResponseBodyTooLargeError
+} from '../common/response-body';
+import { PLATFORM_SCAN_LIMIT } from '../common/sql-chunk';
+import {
   PAGE_FAILURE_RATIO_THRESHOLD,
   RETRY_BASE_DELAY_MS,
   RETRY_MAX_DELAY_MS
@@ -30,7 +36,13 @@ export interface LoadDatasetOptions {
 export class DataSourceService {
   private readonly logger = new Logger(DataSourceService.name);
   private cache: { key: string; expiresAt: number; data: ContentDataset } | null = null;
+  /** Any in-flight load (force or non-force). Non-force waiters always join. */
   private inFlight: Promise<ContentDataset> | null = null;
+  /**
+   * Force-only coalescer. Concurrent forceRefresh callers share one crawl;
+   * non-force waiters still join via inFlight (fresher data is fine).
+   */
+  private forceInFlight: Promise<ContentDataset> | null = null;
   private lastFetchTime = 0;
   private minFetchInterval = 1000; // 最小请求间隔 1 秒
 
@@ -42,24 +54,58 @@ export class DataSourceService {
     const cacheKey = this.buildCacheKey(source);
     const now = Date.now();
 
-    const cached = this.getFreshCache(cacheKey, now);
-    if (!forceRefresh && cached) return cached;
-    if (!forceRefresh && this.inFlight) return this.inFlight;
-    if (!forceRefresh && now - this.lastFetchTime < this.minFetchInterval && this.cache)
-      return this.cache.data;
-
-    this.inFlight = (async () => {
-      try {
-        this.lastFetchTime = Date.now();
-        const data = await this.loadDatasetBySource(source);
-        this.cache = { key: cacheKey, expiresAt: Date.now() + this.resolveCacheTtlMs(), data };
-        return data;
-      } finally {
-        this.inFlight = null;
+    if (!forceRefresh) {
+      const cached = this.getFreshCache(cacheKey, now);
+      if (cached) return cached;
+      // Join any current flight (force or not) — fresher data is fine.
+      if (this.inFlight) return this.inFlight;
+      if (now - this.lastFetchTime < this.minFetchInterval && this.cache) {
+        return this.cache.data;
       }
+      return this.startLoad(cacheKey, source, false);
+    }
+
+    // Force path: join an existing force flight so concurrent forces share one crawl.
+    if (this.forceInFlight) return this.forceInFlight;
+
+    // Wait out a non-force flight so we do not double-crawl in parallel, then
+    // re-check forceInFlight (another force may have started while we waited).
+    if (this.inFlight) {
+      try {
+        await this.inFlight;
+      } catch {
+        /* previous flight failed — still attempt force */
+      }
+      if (this.forceInFlight) return this.forceInFlight;
+    }
+
+    return this.startLoad(cacheKey, source, true);
+  }
+
+  /**
+   * Start a dataset load and register it on inFlight / forceInFlight.
+   * Assignment is synchronous (no await before set) so concurrent microtasks
+   * that re-enter after a shared wait see the first flight and join it.
+   */
+  private startLoad(cacheKey: string, source: string, isForce: boolean): Promise<ContentDataset> {
+    // Re-check under single-threaded re-entry (post-await microtasks).
+    if (isForce && this.forceInFlight) return this.forceInFlight;
+    if (!isForce && this.inFlight) return this.inFlight;
+
+    const loadPromise = (async () => {
+      this.lastFetchTime = Date.now();
+      const data = await this.loadDatasetBySource(source);
+      this.cache = { key: cacheKey, expiresAt: Date.now() + this.resolveCacheTtlMs(), data };
+      return data;
     })();
 
-    return this.inFlight;
+    this.inFlight = loadPromise;
+    if (isForce) this.forceInFlight = loadPromise;
+    return loadPromise.finally(() => {
+      // Identity-check: do not clear a newer flight started after this one finished.
+      if (this.inFlight === loadPromise) this.inFlight = null;
+      if (this.forceInFlight === loadPromise) this.forceInFlight = null;
+    });
   }
 
   private getFreshCache(cacheKey: string, now: number) {
@@ -126,11 +172,24 @@ export class DataSourceService {
     const firstPayload = await readPage(1);
     const { mergedList, totalPages } = this.collectPages(firstPayload);
 
-    if (totalPages > 1) {
-      const pages = Array.from({ length: totalPages - 1 }, (_, index) => index + 2);
+    // Soft page ceiling — bound outbound fan-out even before row cap.
+    const maxPages = Math.max(
+      1,
+      Math.min(100, Number(process.env.EXTERNAL_MAX_PAGES ?? 100) || 100)
+    );
+    const effectivePages = Math.min(totalPages, maxPages);
+    if (totalPages > maxPages) {
+      this.logger.warn(
+        `External pagination capped ${totalPages} → ${maxPages} pages (EXTERNAL_MAX_PAGES)`
+      );
+    }
+    if (effectivePages > 1) {
+      const pages = Array.from({ length: effectivePages - 1 }, (_, index) => index + 2);
+      // Default 2 / hard max 4 — outbound fan-out must not storm JeSite or pin
+      // the Node event loop while SQLite heavy aggregates also run.
       const concurrency = Math.max(
-        2,
-        Math.min(10, Number(process.env.EXTERNAL_FETCH_CONCURRENCY ?? 6))
+        1,
+        Math.min(4, Number(process.env.EXTERNAL_FETCH_CONCURRENCY ?? 2) || 2)
       );
       const failedPages: number[] = [];
 
@@ -161,16 +220,42 @@ export class DataSourceService {
       }
     }
 
+    // Bound in-process retain: recommend scores further to RECOMMEND_SCORE_CAP, but
+    // cold load must not hold unbounded JeeSite pages in RAM (PLATFORM_SCAN_LIMIT).
+    if (mergedList.length > PLATFORM_SCAN_LIMIT) {
+      this.logger.warn(
+        `External catalog truncated ${mergedList.length} → ${PLATFORM_SCAN_LIMIT} rows (PLATFORM_SCAN_LIMIT)`
+      );
+      mergedList.length = PLATFORM_SCAN_LIMIT;
+    }
     const dataset = mapJeesiteBargainListToDataset({ list: mergedList }, { baseUrl });
     if (!dataset.packages.length) {
       throw new ServiceUnavailableException('External backend returned empty dataset');
+    }
+    // Defense-in-depth: also cap mapped packages/snapshots after transform.
+    if (dataset.packages.length > PLATFORM_SCAN_LIMIT) {
+      dataset.packages = dataset.packages.slice(0, PLATFORM_SCAN_LIMIT);
+    }
+    if (Array.isArray(dataset.snapshots) && dataset.snapshots.length > PLATFORM_SCAN_LIMIT) {
+      dataset.snapshots = dataset.snapshots.slice(0, PLATFORM_SCAN_LIMIT);
     }
     return dataset;
   }
 
   private buildPageUrl(baseUrl: string, path: string, pageNo: number) {
     const pagePath = this.withPage(path, pageNo);
-    return pagePath.startsWith('http') ? pagePath : `${baseUrl}${pagePath}`;
+    // Absolute paths must stay on the configured EXTERNAL_API host (cookie-bearing).
+    if (/^https?:\/\//i.test(pagePath)) {
+      const parsed = new URL(pagePath);
+      const allowedHost = new URL(baseUrl).hostname;
+      if (parsed.hostname !== allowedHost) {
+        throw new BadRequestException(
+          `EXTERNAL_PACKAGES_PATH host ${parsed.hostname} does not match EXTERNAL_API_BASE_URL host ${allowedHost}`
+        );
+      }
+      return parsed.toString();
+    }
+    return `${baseUrl}${pagePath.startsWith('/') ? '' : '/'}${pagePath}`;
   }
 
   private withPage(path: string, pageNo: number) {
@@ -227,7 +312,17 @@ export class DataSourceService {
       throw new ServiceUnavailableException(`External backend request failed: ${response.status}`);
     }
 
-    const text = await response.text();
+    let text: string;
+    try {
+      text = await readResponseText(response, JSON_RESPONSE_MAX_BYTES);
+    } catch (err) {
+      if (err instanceof ResponseBodyTooLargeError) {
+        throw new ServiceUnavailableException(
+          `External backend response exceeds max ${JSON_RESPONSE_MAX_BYTES} bytes`
+        );
+      }
+      throw err;
+    }
     if ([LOGIN_FORM_HTML_MARKER, ...LOGIN_PAGE_MARKERS].some((marker) => text.includes(marker))) {
       throw new ServiceUnavailableException(
         'External backend requires authentication (received HTML/login)'
@@ -272,18 +367,26 @@ export class DataSourceService {
         signal: controller.signal,
         redirect: 'manual'
       });
-      // SSRF guard: validate redirect targets
+      // SSRF guard: pin single-hop redirect to original host so Cookie/Bearer never leave.
       if (response.status >= 300 && response.status < 400) {
         const location = response.headers.get('location');
-        if (location) {
-          const redirectUrl = new URL(location, input);
-          await assertHostnameNotPrivateAsync(redirectUrl.hostname);
-          return fetch(redirectUrl.toString(), {
-            ...init,
-            signal: controller.signal,
-            redirect: 'manual'
-          });
+        if (!location) return response;
+        const originHost = new URL(input).hostname;
+        const redirectUrl = new URL(location, input);
+        if (redirectUrl.protocol !== 'http:' && redirectUrl.protocol !== 'https:') {
+          this.logger.warn(`Blocked non-http redirect: ${redirectUrl.protocol}`);
+          return response;
         }
+        if (redirectUrl.hostname !== originHost) {
+          this.logger.warn(`Blocked off-host redirect: ${redirectUrl.hostname}`);
+          return response;
+        }
+        await assertHostnameNotPrivateAsync(redirectUrl.hostname);
+        return fetch(redirectUrl.toString(), {
+          ...init,
+          signal: controller.signal,
+          redirect: 'manual'
+        });
       }
       return response;
     } finally {

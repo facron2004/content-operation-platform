@@ -97,7 +97,12 @@ const mockAlertService = {
     .mockImplementation((alerts) =>
       alerts.map((a: OperationAlert) => ({ ...a, priorityScore: 0 }))
     ),
-  loadResolvedAlertIds: vi.fn().mockResolvedValue(new Set())
+  loadResolvedAlertIds: vi.fn().mockResolvedValue({
+    ids: new Set(),
+    truncated: false,
+    limit: 5000,
+    loaded: 0
+  })
 };
 
 describe('DashboardService', () => {
@@ -167,7 +172,8 @@ describe('DashboardService', () => {
 
       const mockGetRecommendations = vi.fn().mockResolvedValue({
         date: '2026-06-10',
-        packages: [pkg1, pkg2]
+        packages: [pkg1, pkg2],
+        matchedCount: 2
       });
 
       const result = await service.getTodayOperationConsole(undefined, mockGetRecommendations);
@@ -181,6 +187,24 @@ describe('DashboardService', () => {
       expect(result.summary).toHaveProperty('activeAlertCount');
       expect(result.summary).toHaveProperty('updatedAt');
       expect(result.summary).toHaveProperty('dataSource', 'JeeSite');
+    });
+
+    it('uses matchedCount over capped packages.length for sellingCount', async () => {
+      // packages array is intentionally truncated (RECOMMEND_CACHE_CAP); KPI must
+      // still report the pre-cap selling total when matchedCount is provided.
+      const packages = Array.from({ length: 5 }, (_, i) =>
+        makePackageItem({ packageId: `PKG-CAP-${i}` })
+      );
+      const mockGetRecommendations = vi.fn().mockResolvedValue({
+        date: '2026-06-10',
+        packages,
+        matchedCount: 1372
+      });
+
+      const result = await service.getTodayOperationConsole(undefined, mockGetRecommendations);
+
+      expect(result.summary.sellingCount).toBe(1372);
+      expect(packages).toHaveLength(5);
     });
 
     it('filters out resolved alerts from the active list', async () => {
@@ -203,11 +227,17 @@ describe('DashboardService', () => {
 
       const mockGetRecommendations = vi.fn().mockResolvedValue({
         date: '2026-06-10',
-        packages: [pkg]
+        packages: [pkg],
+        matchedCount: 1
       });
 
       // Mark ALERT-1 as resolved
-      mockAlertService.loadResolvedAlertIds.mockResolvedValueOnce(new Set(['ALERT-1']));
+      mockAlertService.loadResolvedAlertIds.mockResolvedValueOnce({
+        ids: new Set(['ALERT-1']),
+        truncated: false,
+        limit: 5000,
+        loaded: 1
+      });
 
       const result = await service.getTodayOperationConsole(undefined, mockGetRecommendations);
 
@@ -218,7 +248,8 @@ describe('DashboardService', () => {
     it('returns empty arrays when there are no packages', async () => {
       const mockGetRecommendations = vi.fn().mockResolvedValue({
         date: '2026-06-10',
-        packages: []
+        packages: [],
+        matchedCount: 0
       });
 
       const result = await service.getTodayOperationConsole(undefined, mockGetRecommendations);
@@ -235,15 +266,24 @@ describe('DashboardService', () => {
 
   describe('getDashboardSummary', () => {
     it('returns counts and GMV aggregated from prisma', async () => {
-      mockPrisma.generatedCopy.count
-        .mockResolvedValueOnce(50) // generatedCount
-        .mockResolvedValueOnce(20) // approvedCount
-        .mockResolvedValueOnce(10) // pendingCount
-        .mockResolvedValueOnce(3); // riskCount
-      mockPrisma.copyPerformance.count.mockResolvedValueOnce(30);
-      mockPrisma.$queryRawUnsafe.mockResolvedValueOnce([
-        { exposureCount: 5000, clickCount: 800, orderCount: 200, verifyCount: 150, gmv: 19800.5 }
-      ]);
+      // Residual #125: GROUP BY auditStatus + combined CopyPerformance aggregate.
+      mockPrisma.$queryRawUnsafe
+        .mockResolvedValueOnce([
+          { auditStatus: 'approved', cnt: 20 },
+          { auditStatus: 'pending', cnt: 10 },
+          { auditStatus: 'risk', cnt: 3 },
+          { auditStatus: 'draft', cnt: 17 }
+        ])
+        .mockResolvedValueOnce([
+          {
+            rowCount: 30,
+            exposureCount: 5000,
+            clickCount: 800,
+            orderCount: 200,
+            verifyCount: 150,
+            gmv: 19800.5
+          }
+        ]);
 
       const mockGetRecommendations = vi.fn().mockResolvedValue({ packages: [] });
 
@@ -260,16 +300,63 @@ describe('DashboardService', () => {
     });
 
     it('returns zero conversion rate when clickCount is zero', async () => {
-      mockPrisma.generatedCopy.count.mockResolvedValue(0);
-      mockPrisma.copyPerformance.count.mockResolvedValue(0);
-      mockPrisma.$queryRawUnsafe.mockResolvedValueOnce([
-        { exposureCount: 0, clickCount: 0, orderCount: 0, verifyCount: 0, gmv: 0 }
-      ]);
+      mockPrisma.$queryRawUnsafe
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([
+          { rowCount: 0, exposureCount: 0, clickCount: 0, orderCount: 0, verifyCount: 0, gmv: 0 }
+        ]);
 
       const result = await service.getDashboardSummary(vi.fn().mockResolvedValue({ packages: [] }));
 
       expect(result.contentConversionRate).toBe(0);
       expect(result.verifyConversionRate).toBe(0);
+    });
+
+    it('caps CopyPerformance SUM to trailing 90d (date params on createdAt)', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-07-18T12:00:00+08:00'));
+      mockPrisma.$queryRawUnsafe
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([
+          { rowCount: 1, exposureCount: 1, clickCount: 1, orderCount: 0, verifyCount: 0, gmv: 0 }
+        ]);
+
+      await service.getDashboardSummary(vi.fn().mockResolvedValue({ packages: [] }));
+
+      expect(mockPrisma.$queryRawUnsafe).toHaveBeenCalledTimes(2);
+      // Second call is the CopyPerformance aggregate (COUNT + SUMs).
+      const [sql, createdStart, createdEnd] = mockPrisma.$queryRawUnsafe.mock.calls[1];
+      expect(String(sql)).toContain('CopyPerformance');
+      expect(String(sql)).toMatch(/createdAt/);
+      // Exclusive half-open Beijing-day bounds as SQLite space-form params.
+      expect(createdStart).toBe('2026-04-19 16:00:00');
+      expect(createdEnd).toBe('2026-07-18 16:00:00');
+      expect(String(sql)).toContain('datetime(?)');
+      vi.useRealTimers();
+    });
+
+    it('scopes platform COUNTs to trailing 90d createdAt window', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-07-18T12:00:00+08:00'));
+      mockPrisma.$queryRawUnsafe
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([
+          { rowCount: 0, exposureCount: 0, clickCount: 0, orderCount: 0, verifyCount: 0, gmv: 0 }
+        ]);
+
+      await service.getDashboardSummary(vi.fn().mockResolvedValue({ packages: [] }));
+
+      // Residual #125: both raw queries use the same exclusive datetime window.
+      expect(mockPrisma.$queryRawUnsafe).toHaveBeenCalledTimes(2);
+      for (const call of mockPrisma.$queryRawUnsafe.mock.calls) {
+        const [, createdStart, createdEnd] = call;
+        expect(createdStart).toBe('2026-04-19 16:00:00');
+        expect(createdEnd).toBe('2026-07-18 16:00:00');
+      }
+      // First call groups GeneratedCopy by auditStatus.
+      expect(String(mockPrisma.$queryRawUnsafe.mock.calls[0][0])).toMatch(/GeneratedCopy/);
+      expect(String(mockPrisma.$queryRawUnsafe.mock.calls[0][0])).toMatch(/GROUP BY "auditStatus"/);
+      vi.useRealTimers();
     });
   });
 

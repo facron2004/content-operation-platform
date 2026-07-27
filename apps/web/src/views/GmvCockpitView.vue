@@ -27,6 +27,13 @@
       :hourly-option="hourlyOption"
       :distribution-option="distributionOption"
       :top-merchants="topMerchants"
+      :merchant-page="merchantPage"
+      :merchant-has-more="merchantHasMore"
+      :merchant-truncated="merchantTruncated"
+      :merchant-limit="merchantLimit"
+      :distribution-truncated="distributionTruncated"
+      :distribution-limit="distributionLimit"
+      :distribution-matched="distributionMatched"
       :hourly-date-label="hourlyDateLabel"
       :categories="categories"
       :channels="channels"
@@ -38,6 +45,8 @@
       @trend-change="loadTrend"
       @dist-change="loadDistribution"
       @merchants-change="loadTopMerchants"
+      @merchants-prev="prevMerchantPage"
+      @merchants-next="nextMerchantPage"
     />
   </section>
 </template>
@@ -53,6 +62,14 @@ const {
   loadError,
   kpi,
   topMerchants,
+  merchantPage,
+  merchantHasMore,
+  merchantTruncated,
+  merchantLimit,
+  // Residual #289
+  distributionTruncated,
+  distributionLimit,
+  distributionMatched,
   trendGranularity,
   trendMode,
   distDim,
@@ -72,6 +89,8 @@ const {
   loadTrend,
   loadDistribution,
   loadTopMerchants,
+  prevMerchantPage,
+  nextMerchantPage,
   onKpiDateChange,
   onBackfillCommand,
   reload,

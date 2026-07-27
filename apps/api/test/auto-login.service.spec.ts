@@ -73,42 +73,24 @@ describe('AutoLoginService', () => {
       expect(status.isValid).toBe(false);
     });
 
-    it('auto refreshes and persists a new cookie when status check finds an expired cookie', async () => {
+    it('does not auto-refresh when status check finds an expired cookie (read-only)', async () => {
       process.env.EXTERNAL_API_USERNAME = 'login-user';
       process.env.EXTERNAL_API_PASSWORD = 'login-password';
-      const fetchMock = vi
-        .fn()
-        .mockResolvedValueOnce({
-          ok: true,
-          text: vi.fn().mockResolvedValue(JSON.stringify({ result: 'login' }))
-        })
-        .mockResolvedValueOnce({
-          headers: { get: vi.fn().mockReturnValue('initial=abc; Path=/') }
-        })
-        .mockResolvedValueOnce({
-          status: 302,
-          headers: {
-            get: vi.fn((name: string) =>
-              name === 'set-cookie' ? 'jeesite.session.id=fresh-session; Path=/; HttpOnly' : '/'
-            )
-          }
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          text: vi.fn().mockResolvedValue(JSON.stringify({ count: 1, list: [] }))
-        });
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        text: vi.fn().mockResolvedValue(JSON.stringify({ result: 'login' }))
+      });
       vi.stubGlobal('fetch', fetchMock);
 
       const status = await service.getCookieStatus();
 
-      expect(status.isValid).toBe(true);
-      expect(status.autoRefreshed).toBe(true);
-      expect(status.maskedCookie).toContain('jeesite.session.id=***');
-      expect(fs.writeFile).toHaveBeenCalledWith(
-        expect.any(String),
-        'skinName=skin-green; jeesite.session.id=fresh-session; pageSize=10; pageNo=1',
-        { encoding: 'utf8', mode: 0o600 }
-      );
+      // Status is read-only: expired cookie stays invalid, no JeeSite re-login.
+      expect(status.isValid).toBe(false);
+      expect(status.autoRefreshed).toBe(false);
+      expect(status.hasCookie).toBe(true);
+      // Only the validation probe — never login flow
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(fs.writeFile).not.toHaveBeenCalled();
     });
 
     it('does not return an expired environment cookie from ensureValidCookie', async () => {
@@ -221,15 +203,18 @@ describe('AutoLoginService', () => {
 
       const status = await service.getCookieStatus();
       expect(status.isValid).toBe(true);
-      expect(status.failedAttempts).toBe(0);
+      // failedAttempts is intentionally omitted from the public status payload
+      // (lockout recon). SPA uses cooldownMinutes only.
+      expect(status).not.toHaveProperty('failedAttempts');
+      expect(status.cooldownMinutes).toBe(0);
     });
   });
 
   // ---- SSRF guard ----
-  // 覆盖 Round 1 只保护 data-source 留下的漏洞:auto-login 的 3 处 fetch
-  // (login page / login form / cookie validation) 现在都先校验 hostname。
-  // 关键断言:SSRF 触发时 fetch 永远不应该被调用。
-  describe.skip('SSRF guard', () => {
+  // auto-login 的 3 处 fetch (login page / login form / cookie validation)
+  // 都经 assertHostnameNotPrivateAsync；SSRF 触发时 fetch 永远不应该被调用。
+  // Residual #46: re-enabled after guard landed in auto-login-client.
+  describe('SSRF guard', () => {
     const fetchSpy = vi.fn();
 
     beforeEach(() => {

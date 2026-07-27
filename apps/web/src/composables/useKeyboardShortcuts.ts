@@ -115,14 +115,21 @@ export function buildGlobalShortcutDefs(router: Router): ShortcutDefinition[] {
 }
 export function showShortcutHelp(shortcuts: ShortcutDefinition[]) {
   const modKey = IS_MAC ? 'Cmd' : 'Ctrl';
+  const escapeHtml = (value: string) =>
+    value
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
   const helpHtml = shortcuts
     .map((s) => {
       const keys: string[] = [];
       if (s.ctrl) keys.push(`<kbd>${modKey}</kbd>`);
       if (s.alt) keys.push('<kbd>Alt</kbd>');
       if (s.shift) keys.push('<kbd>Shift</kbd>');
-      keys.push(`<kbd>${s.key.toUpperCase()}</kbd>`);
-      return `<div style="display:flex;justify-content:space-between;padding:4px 0"><span>${keys.join(' + ')}</span><span style="color:var(--muted)">${s.description}</span></div>`;
+      keys.push(`<kbd>${escapeHtml(s.key.toUpperCase())}</kbd>`);
+      return `<div style="display:flex;justify-content:space-between;padding:4px 0"><span>${keys.join(' + ')}</span><span style="color:var(--muted)">${escapeHtml(s.description)}</span></div>`;
     })
     .join('');
   ElMessageBox.alert(helpHtml, '键盘快捷键', {

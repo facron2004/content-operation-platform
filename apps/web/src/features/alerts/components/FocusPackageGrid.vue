@@ -7,6 +7,11 @@
       </div>
       <span class="muted-cell">点击卡片可直接进入套餐详情</span>
     </div>
+    <!-- Residual #283: Top-N focus package head honesty. -->
+    <p v-if="focusPackageTruncated" class="list-cap-hint">
+      优先处理套餐仅展示优先级前 {{ focusPackageLimit }} 个（共
+      {{ focusPackageMatched }} 个有预警套餐），其余未展示。
+    </p>
     <div class="focus-grid">
       <FocusPackageCard
         v-for="item in topPackages"
@@ -23,7 +28,13 @@
 <script setup lang="ts">
 import type { AlertPackageFocus } from '../composables/useAlerts';
 import FocusPackageCard from './FocusPackageCard.vue';
-defineProps<{ topPackages: AlertPackageFocus[]; resolving: boolean }>();
+defineProps<{
+  topPackages: AlertPackageFocus[];
+  resolving: boolean;
+  focusPackageTruncated?: boolean;
+  focusPackageLimit?: number;
+  focusPackageMatched?: number;
+}>();
 defineEmits<{
   navigate: [packageId: string];
   'create-task': [packageId: string];

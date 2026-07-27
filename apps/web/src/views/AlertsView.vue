@@ -2,10 +2,23 @@
   <section v-loading="loading" class="page-stack alerts-page">
     <AlertsHero :loading="loading" :summary="summary" @reload="load(true)" />
     <ErrorAlert :message="loadError" />
+    <!-- Residual #274: RESOLVED_ALERT_DAY_LIMIT silent clip honesty. -->
+    <p v-if="resolvedIdsTruncated" class="list-cap-hint">
+      今日已处理记录超过 {{ resolvedIdsLimit }} 条上限（已加载 {{ resolvedIdsLoaded }}
+      条），部分已处理预警可能仍显示为待处理。
+    </p>
+    <!-- Residual #275: RECOMMEND_CACHE_CAP source undercount honesty. -->
+    <p v-if="sourceTruncated" class="list-cap-hint">
+      推荐源仅加载评分前 {{ sourceLimit }} 个在售套餐（匹配
+      {{ sourceMatchedCount }}），预警汇总可能不完整。
+    </p>
     <AlertMetrics :summary="summary" />
     <FocusPackageGrid
       :top-packages="topPackages"
       :resolving="resolving"
+      :focus-package-truncated="focusPackageTruncated"
+      :focus-package-limit="focusPackageLimit"
+      :focus-package-matched="focusPackageMatched"
       @navigate="goAnalysis"
       @create-task="goCreateTask"
       @resolve-batch="resolveBatch"
@@ -18,6 +31,7 @@
       @update:keyword="filters.keyword = $event"
       @update:level="filters.level = $event"
       @update:type="filters.type = $event"
+      @update:date="filters.date = $event"
       @clear="clearFilters"
       @open-detail="openAlert"
       @resolve="resolve"
@@ -51,6 +65,18 @@ const {
   alerts,
   summary,
   topPackages,
+  // Residual #283
+  focusPackageTruncated,
+  focusPackageLimit,
+  focusPackageMatched,
+  // Residual #274
+  resolvedIdsTruncated,
+  resolvedIdsLimit,
+  resolvedIdsLoaded,
+  // Residual #275
+  sourceTruncated,
+  sourceLimit,
+  sourceMatchedCount,
   filters,
   pagination,
   drawerVisible,

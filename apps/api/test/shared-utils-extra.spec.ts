@@ -243,6 +243,12 @@ describe('resolvePagination', () => {
     expect(resolvePagination(1, 999, 10).pageSize).toBe(200);
   });
 
+  it('clamps page to LIST_PAGE_MAX (500)', () => {
+    const result = resolvePagination(9_999, 20, 1_000_000);
+    expect(result.page).toBe(500);
+    expect(result.offset).toBe(499 * 20);
+  });
+
   it('returns totalPages=1 when total is 0', () => {
     expect(resolvePagination(1, 10, 0).totalPages).toBe(1);
   });

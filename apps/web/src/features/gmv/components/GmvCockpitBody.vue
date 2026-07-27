@@ -32,6 +32,15 @@ export type GmvCockpitBodyProps = {
   hourlyOption: Record<string, unknown>;
   distributionOption: Record<string, unknown>;
   topMerchants: GmvTopMerchant[];
+  merchantPage: number;
+  merchantHasMore: boolean;
+  // Residual #265: GMV_TOP_MERCHANTS_LIMIT honesty.
+  merchantTruncated?: boolean;
+  merchantLimit?: number | null;
+  // Residual #289: GMV distribution Top-N honesty.
+  distributionTruncated?: boolean;
+  distributionLimit?: number | null;
+  distributionMatched?: number | null;
   hourlyDateLabel?: string;
   categories: GmvCategoryRow[];
   channels: GmvChannelRow[];
@@ -53,6 +62,8 @@ defineEmits<{
   'trend-change': [];
   'dist-change': [];
   'merchants-change': [];
+  'merchants-prev': [];
+  'merchants-next': [];
 }>();
 </script>
 
@@ -77,6 +88,9 @@ defineEmits<{
       :option="distributionOption"
       :model-value="distDim"
       :options="GMV_DIST_OPTIONS"
+      :truncated="distributionTruncated"
+      :limit="distributionLimit"
+      :matched="distributionMatched"
       @change="
         (v) => {
           distDim = String(v) as 'area' | 'category';
@@ -87,7 +101,13 @@ defineEmits<{
     <GmvTopMerchantsTable
       v-model:merchant-sort="merchantSort"
       :top-merchants="topMerchants"
+      :page="merchantPage"
+      :has-more="merchantHasMore"
+      :truncated="merchantTruncated"
+      :limit="merchantLimit"
       @change="$emit('merchants-change')"
+      @prev="$emit('merchants-prev')"
+      @next="$emit('merchants-next')"
     />
   </div>
 

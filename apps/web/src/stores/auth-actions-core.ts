@@ -28,6 +28,21 @@ export function createAuthCore(options: AuthActionOptions) {
     options.username.value = null;
     clearStoredAuth();
     options.scheduler.clear();
+    // Drop in-memory GET cache + role session so a subsequent login (shared
+    // browser / 401 forced re-auth) cannot flash previous user's scoped data
+    // or keep hasServerSession true with stale roles until full reload.
+    void import('../services/cache.service')
+      .then(({ clearCache }) => clearCache())
+      .catch(() => undefined);
+    void import('./role')
+      .then(({ useRoleStore }) => {
+        try {
+          useRoleStore().clearSession();
+        } catch {
+          /* pinia may not be active in unit tests */
+        }
+      })
+      .catch(() => undefined);
   };
   const refresh = () =>
     refreshAuthToken({

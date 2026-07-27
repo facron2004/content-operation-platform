@@ -1,6 +1,11 @@
 import type { LoggerService } from '@nestjs/common';
 import { describeError, isRecord } from '@content/shared';
 import { containsLoginPageMarker, LOGIN_INVALID_CREDENTIALS_MARKER } from '../common/login-markers';
+import {
+  LOGIN_RESPONSE_MAX_BYTES,
+  readResponseText,
+  ResponseBodyTooLargeError
+} from '../common/response-body';
 import { assertHostnameNotPrivateAsync, DEFAULT_USER_AGENT } from './jeesite-url';
 
 const BARGAIN_COOKIE_TEMPLATE =
@@ -49,11 +54,20 @@ export function parseAllSetCookies(setCookieHeader: string): Record<string, stri
   return cookies;
 }
 
+/**
+ * Cookie-bearing JeeSite calls must never auto-follow off-host redirects.
+ * Callers that need a hop can re-issue with redirect: 'manual' and host-pin themselves.
+ */
 async function fetchWithTimeout(input: string, init?: RequestInit): Promise<Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), LOGIN_FETCH_TIMEOUT_MS);
   try {
-    return await fetch(input, { ...init, signal: controller.signal });
+    return await fetch(input, {
+      ...init,
+      signal: controller.signal,
+      // Default fetch follows redirects and can leak Cookie/credentials off-host.
+      redirect: init?.redirect ?? 'manual'
+    });
   } finally {
     clearTimeout(timer);
   }
@@ -77,7 +91,13 @@ export async function validateJeesiteCookie(cookie: string, baseUrl?: string): P
     });
     if (!response.ok) return false;
 
-    const text = await response.text();
+    let text: string;
+    try {
+      text = await readResponseText(response, LOGIN_RESPONSE_MAX_BYTES);
+    } catch (err) {
+      if (err instanceof ResponseBodyTooLargeError) return false;
+      throw err;
+    }
     if (containsLoginPageMarker(text)) return false;
     try {
       const data = JSON.parse(text);
@@ -196,7 +216,17 @@ export async function loginToJeesite(params: {
       return finishLogin(loginCookies, 'redirect', baseUrl, logger);
     }
 
-    const responseText = await loginResponse.text();
+    let responseText: string;
+    try {
+      responseText = await readResponseText(loginResponse, LOGIN_RESPONSE_MAX_BYTES);
+    } catch (err) {
+      if (err instanceof ResponseBodyTooLargeError) {
+        const error = 'Login failed: response body too large';
+        logger.error(error);
+        return { success: false, error };
+      }
+      throw err;
+    }
     if (
       responseText.includes('loginForm') ||
       responseText.includes(LOGIN_INVALID_CREDENTIALS_MARKER)

@@ -67,7 +67,7 @@ if (!fs.existsSync(outputDir)) {
 
 try {
   execSync(
-    `npx pkg apps/api/package.json --targets node18-win-x64 --output dist/content-ops.exe --compress GZip --public`,
+    `npx pkg apps/api/package.json --targets node18.15.0-win-x64 --output dist/content-ops.exe --compress GZip --public`,
     { stdio: 'inherit', cwd: path.join(__dirname, '..') }
   );
   console.log('   ✅ exe 打包完成');

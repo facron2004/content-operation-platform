@@ -1,5 +1,14 @@
 <template>
-  <el-dialog v-model="visible" title="操作历史" width="800px" :close-on-click-modal="false">
+  <el-drawer
+    v-model="visible"
+    title="操作历史"
+    :size="drawerSize"
+    direction="rtl"
+    append-to-body
+    destroy-on-close
+    class="operation-history-drawer"
+    @open="refresh"
+  >
     <OperationHistoryList
       v-model:search-text="searchText"
       v-model:filter-type="filterType"
@@ -13,7 +22,7 @@
       @clear="clearHistory"
       @show-details="showDetails"
     />
-  </el-dialog>
+  </el-drawer>
   <OperationHistoryDetails
     v-model="detailsVisible"
     :record="selectedRecord"
@@ -23,6 +32,7 @@
 </template>
 <script setup lang="ts">
 import { useOperationHistoryDialog } from '../composables/useOperationHistoryDialog';
+import { useResponsiveDrawerSize } from '../composables/useResponsiveDrawerSize';
 import OperationHistoryList from './OperationHistoryList.vue';
 import OperationHistoryDetails from './OperationHistoryDetails.vue';
 const visible = defineModel<boolean>('visible', { default: false });
@@ -42,6 +52,7 @@ const {
   clearHistory,
   refresh
 } = useOperationHistoryDialog();
+const { drawerSize } = useResponsiveDrawerSize('440px');
 defineExpose({ refresh });
 </script>
-<style src="../styles/components/operation-history.css" scoped></style>
+<style src="../styles/components/operation-history.css"></style>

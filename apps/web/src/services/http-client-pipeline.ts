@@ -6,6 +6,7 @@ import { useAuthStore } from '../stores/auth';
 import {
   extractErrorMessage,
   isAuthEndpoint,
+  isRequestCanceled,
   MAX_RETRIES,
   requestKey,
   responseKey,
@@ -73,9 +74,18 @@ export async function maybeRetryHttpRequest(params: {
 }): Promise<unknown | undefined> {
   const { error, client, inFlightControllers, endProgress } = params;
   endProgress();
-  if (error.config && !axios.isCancel(error)) inFlightControllers.delete(responseKey(error.config));
+  // Drop the slot only when this error still owns it (newer call may already
+  // have replaced the controller for the same method+url key).
+  if (error.config) {
+    const key = responseKey(error.config);
+    const owner = inFlightControllers.get(key);
+    if (owner && error.config.signal && owner.signal === error.config.signal) {
+      inFlightControllers.delete(key);
+    }
+  }
   const config = error.config as RetryableConfig | undefined;
-  if (axios.isCancel(error)) return Promise.reject(error);
+  // Stale request aborted by a newer call to the same endpoint — silent.
+  if (isRequestCanceled(error) || axios.isCancel(error)) return Promise.reject(error);
   if (config && shouldRetry(error) && (config.retryCount ?? 0) < MAX_RETRIES) {
     config.retryCount = (config.retryCount ?? 0) + 1;
     await sleep(exponentialBackoff(config.retryCount - 1, RETRY_DELAY, RETRY_DELAY * 8));
@@ -83,11 +93,15 @@ export async function maybeRetryHttpRequest(params: {
     return client(config);
   }
   if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
-    ElMessage.error('请求超时。首次同步 JeeSite 全量库存可能较慢，请稍后重试');
+    if (!config?.url?.includes('/gmv/')) {
+      ElMessage.error('请求超时。首次同步 JeeSite 全量库存可能较慢，请稍后重试');
+    }
     return Promise.reject(error);
   }
   if (!error.response) {
-    ElMessage.error(error.request ? '网络连接失败，请检查网络' : '请求配置错误');
+    if (!config?.url?.includes('/gmv/')) {
+      ElMessage.error(error.request ? '网络连接失败，请检查网络' : '请求配置错误');
+    }
     return Promise.reject(error);
   }
   return undefined;
@@ -96,9 +110,15 @@ export async function maybeRetryHttpRequest(params: {
 export function handleHttpStatusError(error: AxiosError): Promise<never> {
   const status = error.response?.status ?? 0;
   const data = error.response?.data as { message?: string; error?: string } | undefined;
-  const message = data?.message || data?.error || '';
-  const statusMessage = statusErrorMessage(status, message);
-  if (statusMessage) ElMessage.error(statusMessage);
+  const config = error.config as RetryableConfig | undefined;
+  // GMV API 的限流/超时由 refreshGmvCockpit / loadGmvValue 统一处理，不重复弹 toast
+  const isGmvApi = config?.url?.includes('/gmv/');
+  const isThrottler = data?.message?.includes('ThrottlerException');
+  if (!isGmvApi && !isThrottler && !config?.__silentError__) {
+    const message = data?.message || data?.error || '';
+    const statusMessage = statusErrorMessage(status, message);
+    if (statusMessage) ElMessage.error(statusMessage);
+  }
   return Promise.reject(error);
 }
 
@@ -116,6 +136,17 @@ export async function downloadBlobWithClient(
   anchor.click();
   document.body.removeChild(anchor);
   URL.revokeObjectURL(blobUrl);
+
+  // Residual #262: CSV_EXPORT_MAX_ROWS honesty — API sets X-Export-* when clipped.
+  const headers = response.headers ?? {};
+  const truncated =
+    String(headers['x-export-truncated'] ?? headers['X-Export-Truncated'] ?? '') === '1';
+  if (truncated) {
+    const limit = headers['x-export-limit'] ?? headers['X-Export-Limit'] ?? '1000';
+    const total = headers['x-export-total'] ?? headers['X-Export-Total'];
+    const totalHint = total ? `（匹配 ${total} 条）` : '';
+    ElMessage.warning(`导出已截断为前 ${limit} 条${totalHint}，请缩小筛选条件后重试`);
+  }
 }
 
 export async function handleHttpError(params: {

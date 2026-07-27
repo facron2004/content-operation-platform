@@ -14,7 +14,10 @@ export type { RetryableConfig } from './http-client-utils';
 NProgress.configure({ showSpinner: false, trickleSpeed: 200, minimum: 0.1 });
 const client = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL ?? '/api',
-  timeout: 30000
+  // Heavy cold aggregates (recommend/ops-console) can take >30s on first load; the
+  // backend now pre-warms these caches on boot, so 20s covers rare cache-miss cases
+  // without blocking the UI for over a minute when the server is unreachable.
+  timeout: 20000
 });
 let authRestoreInflight: Promise<string | null> | null = null;
 const inFlightControllers = new Map<string, AbortController>(),

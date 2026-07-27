@@ -35,6 +35,10 @@ export interface MerchantSalesRankingRow {
 export interface MerchantSalesRanking {
   items: MerchantSalesRankingRow[];
   pagination: { page: number; pageSize: number; hasMore: boolean; total: number };
+  // Residual #264: GMV_TOP_MERCHANTS_LIMIT honesty (pagination.total is capped head).
+  limit?: number;
+  truncated?: boolean;
+  totalMerchants?: number;
 }
 
 export interface MerchantSalesTrendPoint {
@@ -74,8 +78,6 @@ export interface GetMerchantSalesTrendParams {
   endDate?: string;
   force?: boolean;
 }
-
-const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? '/api';
 
 export async function getMerchantSalesSummary(params: GetMerchantSalesSummaryParams) {
   return (
@@ -131,7 +133,8 @@ export function getMerchantSalesExportUrl(params: {
   if (params.endDate) q.set('endDate', params.endDate);
   if (params.sortBy) q.set('sortBy', params.sortBy);
   q.set('_', String(Date.now()));
-  return `${API_BASE}/merchant-sales/export?${q.toString()}`;
+  // Relative path: axios client baseURL already includes /api.
+  return `/merchant-sales/export?${q.toString()}`;
 }
 
 export async function postMerchantSalesRefresh(body?: { startDate?: string; endDate?: string }) {

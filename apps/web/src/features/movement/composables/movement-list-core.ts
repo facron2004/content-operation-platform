@@ -14,6 +14,10 @@ export type MovementListFilters = {
   days: 1 | 7 | 30;
   search?: string;
   sort: 'lastSalesDateAsc' | 'staleDesc' | 'gmvDesc';
+  // Residual #214: API MovementSkusQueryDto / MovementMovingQueryDto already apply these.
+  merchantId?: string;
+  category?: string;
+  areaId?: string;
 };
 
 export type MovementListState = {
@@ -21,17 +25,31 @@ export type MovementListState = {
   listLoading: Ref<boolean>;
   loadError: Ref<string | null>;
   today: Ref<MovementTodayPayload | null>;
+  // Residual #227: as-of business day (getMovementToday already accepts date).
+  // Empty string means "server default today".
+  kpiDate: Ref<string>;
   rows: Ref<MovementSkuRow[]>;
   activeTab: Ref<'stagnant' | 'moving'>;
   filters: Ref<MovementListFilters>;
   page: Ref<number>;
   hasMore: Ref<boolean>;
+  // Residual #266: MOVEMENT_CACHE_CAP honesty.
+  listTruncated: Ref<boolean>;
+  listLimit: Ref<number | null>;
 };
 
 const PAGE_SIZE = 20;
 
 function createDefaultMovementFilters(): MovementListFilters {
-  return { bucket: 'stale_30d', days: 7, search: undefined, sort: 'lastSalesDateAsc' };
+  return {
+    bucket: 'stale_30d',
+    days: 7,
+    search: undefined,
+    sort: 'lastSalesDateAsc',
+    merchantId: undefined,
+    category: undefined,
+    areaId: undefined
+  };
 }
 
 export function createMovementListState(): MovementListState {
@@ -40,20 +58,26 @@ export function createMovementListState(): MovementListState {
     listLoading: ref(false),
     loadError: ref<string | null>(null),
     today: ref<MovementTodayPayload | null>(null),
+    kpiDate: ref(''),
     rows: ref<MovementSkuRow[]>([]),
     activeTab: ref<'stagnant' | 'moving'>('stagnant'),
     filters: ref<MovementListFilters>(createDefaultMovementFilters()),
     page: ref(1),
-    hasMore: ref(false)
+    hasMore: ref(false),
+    // Residual #266: MOVEMENT_CACHE_CAP honesty.
+    listTruncated: ref(false),
+    listLimit: ref<number | null>(null)
   };
 }
 
 async function loadMovementToday(params: {
   today: Ref<MovementTodayPayload | null>;
   loadError: Ref<string | null>;
+  // Residual #227: as-of business day.
+  date?: string;
 }): Promise<void> {
   try {
-    params.today.value = await getMovementToday();
+    params.today.value = await getMovementToday(params.date || undefined);
   } catch (err) {
     params.loadError.value = extractErrorMessage(err, '加载今日动销汇总失败');
   }
@@ -67,29 +91,41 @@ async function loadMovementList(params: {
   hasMore: Ref<boolean>;
   listLoading: Ref<boolean>;
   loadError: Ref<string | null>;
+  // Residual #266: optional honesty sinks for MOVEMENT_CACHE_CAP.
+  listTruncated?: Ref<boolean>;
+  listLimit?: Ref<number | null>;
 }): Promise<void> {
   params.listLoading.value = true;
   try {
-    if (params.activeTab.value === 'stagnant') {
-      const result = await getMovementStagnant({
-        bucket: params.filters.value.bucket,
-        search: params.filters.value.search,
-        sort: params.filters.value.sort,
-        page: params.page.value,
-        pageSize: PAGE_SIZE
-      });
-      params.rows.value = result.items;
-      params.hasMore.value = result.pagination.hasMore;
-    } else {
-      const result = await getMovementMoving({
-        days: params.filters.value.days,
-        search: params.filters.value.search,
-        page: params.page.value,
-        pageSize: PAGE_SIZE
-      });
-      params.rows.value = result.items;
-      params.hasMore.value = result.pagination.hasMore;
-    }
+    const f = params.filters.value;
+    // Residual #214: pass merchantId/category/areaId (API+client existed; SPA unwired).
+    const result =
+      params.activeTab.value === 'stagnant'
+        ? await getMovementStagnant({
+            bucket: f.bucket,
+            search: f.search,
+            sort: f.sort,
+            merchantId: f.merchantId || undefined,
+            category: f.category || undefined,
+            areaId: f.areaId || undefined,
+            page: params.page.value,
+            pageSize: PAGE_SIZE
+          })
+        : await getMovementMoving({
+            days: f.days,
+            search: f.search,
+            merchantId: f.merchantId || undefined,
+            category: f.category || undefined,
+            areaId: f.areaId || undefined,
+            page: params.page.value,
+            pageSize: PAGE_SIZE
+          });
+    params.rows.value = result.items;
+    params.hasMore.value = result.pagination.hasMore;
+    if (params.listTruncated) params.listTruncated.value = Boolean(result.truncated);
+    if (params.listLimit)
+      params.listLimit.value =
+        typeof result.limit === 'number' && result.limit > 0 ? result.limit : null;
   } catch (err) {
     params.loadError.value = extractErrorMessage(err, '加载清单失败');
   } finally {
@@ -137,13 +173,19 @@ export function bindMovementListLoaders(state: MovementListState) {
       rows: state.rows,
       hasMore: state.hasMore,
       listLoading: state.listLoading,
-      loadError: state.loadError
+      loadError: state.loadError,
+      listTruncated: state.listTruncated,
+      listLimit: state.listLimit
     });
   async function reload() {
     state.loading.value = true;
     state.loadError.value = null;
     await Promise.all([
-      loadMovementToday({ today: state.today, loadError: state.loadError }),
+      loadMovementToday({
+        today: state.today,
+        loadError: state.loadError,
+        date: state.kpiDate.value || undefined
+      }),
       loadList()
     ]);
     state.loading.value = false;

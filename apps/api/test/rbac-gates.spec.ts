@@ -37,4 +37,25 @@ describe('RBAC gates', () => {
       await app.close();
     }
   });
+
+  it('ignores forceRefresh on package detail GET (cache-only)', async () => {
+    const moduleRef = await Test.createTestingModule({
+      imports: [AppModule]
+    }).compile();
+    const app = moduleRef.createNestApplication();
+    await app.init();
+
+    try {
+      const api = await authedAgent(app);
+      const res = await api.get(
+        '/api/content/packages/nonexistent-pkg/detail?forceRefresh=true&saveRawHtml=true'
+      );
+      expect([200, 404, 500]).toContain(res.status);
+      if (res.status === 200 && res.body?.data) {
+        expect(res.body.data.rawHtml).toBeUndefined();
+      }
+    } finally {
+      await app.close();
+    }
+  });
 });

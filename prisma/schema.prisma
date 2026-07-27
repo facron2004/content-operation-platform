@@ -23,6 +23,12 @@ model ContentPackage {
   temporarySalePrice       Float?
   commissionRate           Float
   grossProfit              Float
+  // ── VNext 金额精度治理（PRD §7.4）：分整数影子字段，Phase 1 新增 / Phase 2 回填 ──
+  originalPriceFen         BigInt?
+  salePriceFen             BigInt?
+  welfarePriceFen          BigInt?
+  temporarySalePriceFen    BigInt?
+  grossProfitFen           BigInt?
   stockTotal               Int
   stockLeft                Int
   startTime                DateTime
@@ -30,6 +36,10 @@ model ContentPackage {
   useRules                 String
   sellingPoints            String
   saleStatus               String?
+  /// JeeSite 店铺 ID（drift 治理时从活加列收编，2026-07-27）
+  shopId                   String?
+  /// 商家地址原文（drift 治理时从活加列收编，2026-07-27）
+  merchantAddress          String?
   fallbackPackageId        String?
   miniProgramPath          String
   detailSummary            String?
@@ -49,6 +59,10 @@ model ContentPackage {
   @@index([saleStatus])
   @@index([category])
   @@index([areaId, saleStatus])
+  // Hot inventory predicates: stockLeft > 0 across movement/zero-sales/overview.
+  @@index([stockLeft])
+  @@index([stockLeft, merchantId])
+  @@index([areaId, stockLeft])
 }
 
 model Merchant {
@@ -87,6 +101,15 @@ model SalesSnapshot {
   paidAmountCard   Float          @default(0)
   refundAmount     Float
   verifyAmount     Float          @default(0)
+  // ── VNext 金额精度治理（PRD §7.4）：分整数影子字段 ──
+  gmvFen              BigInt?
+  paidAmountFen       BigInt?
+  paidAmountOnlineFen BigInt?
+  paidAmountWalletFen BigInt?
+  paidAmountBonusFen  BigInt?
+  paidAmountCardFen   BigInt?
+  refundAmountFen     BigInt?
+  verifyAmountFen     BigInt?
   conversionRate   Float
   verifyRate       Float
   refundRate       Float
@@ -151,6 +174,8 @@ model GeneratedCopy {
   @@index([packageId])
   @@index([areaId])
   @@index([auditStatus, channel])
+  // List filters auditStatus+channel with ORDER BY createdAt DESC (90d window).
+  @@index([auditStatus, channel, createdAt])
   @@index([createdAt])
 }
 
@@ -169,6 +194,8 @@ model CopyPerformance {
   verifyCount    Int
   refundCount    Int
   gmv            Float
+  // ── VNext 金额精度治理（PRD §7.4）：分整数影子字段 ──
+  gmvFen         BigInt?
   conversionRate Float
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
@@ -179,6 +206,10 @@ model CopyPerformance {
   @@index([packageId])
   @@index([channel])
   @@index([groupId])
+  // Dashboard clamps reads to 90d; retention purge + age filters use createdAt.
+  @@index([createdAt])
+  // Dashboard package perf: packageId IN (...) ORDER BY createdAt DESC.
+  @@index([packageId, createdAt])
 }
 
 model JeeSiteInventoryDailySnapshot {
@@ -230,17 +261,35 @@ model DailyMetrics {
   stagnantSkus     Int      @default(0)
   paidAmountBonus  Float    @default(0)
   paidAmountWallet Float    @default(0)
+  // ── VNext 金额精度治理（PRD §7.4）：分整数影子字段 ──
+  totalGmvFen         BigInt?
+  gmvOnlineFen        BigInt?
+  gmvWalletFen        BigInt?
+  gmvBonusFen         BigInt?
+  gmvCardFen          BigInt?
+  totalRefundFen      BigInt?
+  totalVerifyFen      BigInt?
+  paidAmountBonusFen  BigInt?
+  paidAmountWalletFen BigInt?
   updatedAt        DateTime @updatedAt
 }
 
 model OrderHeader {
   orderId          String    @id
+  /// JeSite 展示单号（导出「订单编号」，形如 K2026…）；主键仍是雪花 id
+  orderCode        String?
   memberId         String?
   packageId        String?
   merchantId       String?
   merchantName     String?
   areaId           String?
   areaName         String?
+  /// 业务员姓名（JeSite 砍价订单导出「业务员」）
+  salesman         String?
+  /// 上级业务员姓名（导出「上级业务员」）
+  parentSalesman   String?
+  /// 优惠券文案（导出「优惠券」）
+  coupon           String?
   orderTime        DateTime
   paidTime         DateTime?
   verifyTime       DateTime?
@@ -252,6 +301,14 @@ model OrderHeader {
   paidAmountCard   Float     @default(0)
   refundAmount     Float     @default(0)
   verifyAmount     Float     @default(0)
+  // ── VNext 金额精度治理（PRD §7.4）：分整数影子字段 ──
+  orderAmountFen      BigInt?
+  paidAmountFen       BigInt?
+  paidAmountWalletFen BigInt?
+  paidAmountBonusFen  BigInt?
+  paidAmountCardFen   BigInt?
+  refundAmountFen     BigInt?
+  verifyAmountFen     BigInt?
   pointEarned      Int       @default(0)
   pointUsed        Int       @default(0)
   status           String
@@ -261,12 +318,21 @@ model OrderHeader {
 
   @@index([memberId, orderTime])
   @@index([packageId])
+  // Attribution recompute: packageId equality + orderTime range in one plan.
+  @@index([packageId, orderTime])
   @@index([orderTime])
   @@index([merchantId])
   @@index([merchantName])
   @@index([merchantName, orderTime])
+  @@index([orderCode])
+  @@index([salesman])
   @@index([status])
   @@index([paidTime])
+  // Refund/verify day totals + top-merchant metric filters.
+  @@index([refundTime])
+  @@index([verifyTime])
+  // Direct attribution: memberId + packageId equality + orderTime range.
+  @@index([memberId, packageId, orderTime])
 }
 
 model Member {
@@ -276,6 +342,9 @@ model Member {
   level         String?
   pointsBalance Int       @default(0)
   walletBalance Float     @default(0)
+  // ── VNext 金额精度治理（PRD §7.4）：分整数影子字段 ──
+  walletBalanceFen BigInt?
+  totalGmvFen      BigInt?
   firstOrderAt  DateTime?
   lastOrderAt   DateTime?
   totalGmv      Float     @default(0)
@@ -344,6 +413,13 @@ model MerchantDailyMetrics {
   paidAmountCard   Float    @default(0)
   refundAmount     Float    @default(0)
   verifyAmount     Float    @default(0)
+  // ── VNext 金额精度治理（PRD §7.4）：分整数影子字段 ──
+  paidAmountOnlineFen BigInt?
+  paidAmountWalletFen BigInt?
+  paidAmountBonusFen  BigInt?
+  paidAmountCardFen   BigInt?
+  refundAmountFen     BigInt?
+  verifyAmountFen     BigInt?
   orderCount       Int      @default(0)
   packageCount     Int      @default(0)
   updatedAt        DateTime @updatedAt
@@ -361,6 +437,8 @@ model PackageSalesDaily {
   date        String
   salesQty    Int      @default(0)
   salesAmount Float    @default(0)
+  // ── VNext 金额精度治理（PRD §7.4）：分整数影子字段 ──
+  salesAmountFen BigInt?
   refundQty   Int      @default(0)
   deltaSource String?
   computedAt  DateTime @default(now())
@@ -370,6 +448,9 @@ model PackageSalesDaily {
   @@unique([packageId, date])
   @@index([date])
   @@index([packageId, date])
+  // Hot "sold recently" filters: date range + salesQty > 0 (movement / zero-sales / overview).
+  @@index([date, salesQty])
+  @@index([packageId, salesQty, date])
 }
 
 model RuleConfig {
@@ -388,6 +469,8 @@ model RuleConfig {
 
   @@index([tenantId, merchantId, type])
   @@index([isActive])
+  // Hot resolve: merchantId + type + isActive + version DESC (platform merchantId=null too).
+  @@index([merchantId, type, isActive, version])
 }
 
 model AppUser {
@@ -398,6 +481,8 @@ model AppUser {
   email        String?
   phone        String?
   isActive     Int      @default(1)
+  /// Bumped on password reset so live JWTs / refresh are refused.
+  tokenVersion Int      @default(0)
   lastLoginAt  String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -406,6 +491,7 @@ model AppUser {
   auditLogs OperationAuditLog[]
 
   @@index([username])
+  @@index([createdAt])
 }
 
 model UserRoleBinding {
@@ -436,6 +522,9 @@ model MarketingCampaign {
   merchantIds  String?
   budget       Float    @default(0)
   targetGmv    Float    @default(0)
+  // ── VNext 金额精度治理（PRD §7.4）：分整数影子字段 ──
+  budgetFen    BigInt?
+  targetGmvFen BigInt?
   targetOrders Int      @default(0)
   kpiJson      String?
   ownerId      String?
@@ -446,6 +535,7 @@ model MarketingCampaign {
 
   @@index([status])
   @@index([startDate, endDate])
+  @@index([createdAt])
 }
 
 model CommunityGroup {
@@ -473,6 +563,8 @@ model CommunityGroup {
 
   @@index([areaId])
   @@index([isActive])
+  @@index([createdAt])
+  @@index([areaId, createdAt])
 }
 
 model DistributionTask {
@@ -508,11 +600,23 @@ model DistributionTask {
   attributions OrderAttribution[]
   performance  TaskPerformanceDaily[]
 
+  @@unique([idempotencyKey])
+  @@unique([trackingCode])
   @@index([status])
   @@index([plannedAt])
   @@index([campaignId])
   @@index([groupId])
   @@index([assigneeId])
+  @@index([packageId])
+  // List ORDER BY createdAt DESC; hourly perf/attribution ORDER BY updatedAt DESC.
+  @@index([createdAt])
+  @@index([updatedAt])
+  // Status-filtered boards order by recency (updatedAt).
+  @@index([status, updatedAt])
+  // Overdue job: status = scheduled AND plannedAt <= now.
+  @@index([status, plannedAt])
+  // Community nested tasks: groupId = ? ORDER BY createdAt DESC.
+  @@index([groupId, createdAt])
 }
 
 model DistributionExecution {
@@ -531,6 +635,8 @@ model DistributionExecution {
   task DistributionTask @relation(fields: [taskId], references: [taskId], onDelete: Cascade)
 
   @@index([taskId])
+  // Age-ordered retention purge (no taskId predicate).
+  @@index([createdAt])
 }
 
 model TrackingVisit {
@@ -546,7 +652,10 @@ model TrackingVisit {
   task DistributionTask @relation(fields: [taskId], references: [taskId], onDelete: Cascade)
 
   @@index([taskId])
-  @@index([trackingCode])
+  // Leftmost prefix still covers equality-only trackingCode lookups.
+  @@index([trackingCode, visitTime])
+  // Retention purge scans by age without a trackingCode predicate.
+  @@index([visitTime])
 }
 
 model OrderAttribution {
@@ -565,7 +674,11 @@ model OrderAttribution {
   task DistributionTask @relation(fields: [taskId], references: [taskId], onDelete: Cascade)
 
   @@unique([taskId, orderId])
+  // One order may only belong to one task — prevents multi-claim GMV double-count.
+  @@unique([orderId])
   @@index([orderId])
+  // Performance job + updatePerformance day filters: taskId equality + attributedAt range.
+  @@index([taskId, attributedAt])
 }
 
 model TaskPerformanceDaily {
@@ -580,12 +693,18 @@ model TaskPerformanceDaily {
   gmv            Float    @default(0)
   verifyAmount   Float    @default(0)
   refundAmount   Float    @default(0)
+  // ── VNext 金额精度治理（PRD §7.4）：分整数影子字段 ──
+  gmvFen          BigInt?
+  verifyAmountFen BigInt?
+  refundAmountFen BigInt?
   conversionRate Float    @default(0)
   computedAt     DateTime @default(now())
 
   task DistributionTask @relation(fields: [taskId], references: [taskId], onDelete: Cascade)
 
   @@unique([taskId, date])
+  // Age-ordered retention purge + range aggregates by date.
+  @@index([date])
 }
 
 model OperationAuditLog {
@@ -608,4 +727,7 @@ model OperationAuditLog {
   @@index([action])
   @@index([createdAt])
   @@index([objectType, objectId])
+  // Filtered list ORDER BY createdAt DESC (userId / objectType windows).
+  @@index([userId, createdAt])
+  @@index([objectType, createdAt])
 }

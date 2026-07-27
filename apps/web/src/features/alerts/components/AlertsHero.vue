@@ -14,11 +14,14 @@
         <span>高危</span>
         <strong>{{ summary.dangerCount }}</strong>
       </div>
-      <el-button type="primary" :loading="loading" @click="$emit('reload')">刷新预警</el-button>
+      <AppleButton variant="primary" :loading="loading" @click="$emit('reload')">
+        刷新预警
+      </AppleButton>
     </div>
   </section>
 </template>
 <script setup lang="ts">
+import AppleButton from '../../../components/AppleButton.vue';
 defineProps<{ loading: boolean; summary: { activeCount: number; dangerCount: number } }>();
 defineEmits<{ reload: [] }>();
 </script>

@@ -1,4 +1,5 @@
 import { beijingDateKey, shiftDateKey } from '@content/shared';
+import { MERCHANT_SKU_LIST_LIMIT } from '../common/sql-chunk';
 import { DEFAULT_INVENTORY_RULES } from '../domain/rules-defaults';
 import type { PrismaService } from '../prisma/prisma.service';
 
@@ -28,17 +29,25 @@ export async function queryMerchantSkuRows(
   threshold: string,
   merchantId: string
 ): Promise<MerchantSkuSqlRow[]> {
+  // Cap SKUs per merchant — unbounded GROUP BY can balloon on large catalogs.
   return (await prisma.$queryRawUnsafe(
-    `SELECT cp."packageId", cp."packageName", cp."areaName", cp."category", cp."salePrice", cp."stockLeft", MAX(sd."date") AS "lastSalesDate", CAST(julianday(?) - julianday(MAX(sd."date")) AS INTEGER) AS "daysSinceLastSale" FROM "ContentPackage" cp LEFT JOIN "PackageSalesDaily" sd ON sd."packageId" = cp."packageId" AND sd."salesQty" > 0 AND sd."date" >= ? WHERE cp."merchantId" = ? GROUP BY cp."packageId" ORDER BY "daysSinceLastSale" DESC NULLS FIRST`,
+    `SELECT cp."packageId", cp."packageName", cp."areaName", cp."category", cp."salePrice", cp."stockLeft", MAX(sd."date") AS "lastSalesDate", CAST(julianday(?) - julianday(MAX(sd."date")) AS INTEGER) AS "daysSinceLastSale" FROM "ContentPackage" cp LEFT JOIN "PackageSalesDaily" sd ON sd."packageId" = cp."packageId" AND sd."salesQty" > 0 AND sd."date" >= ? WHERE cp."merchantId" = ? GROUP BY cp."packageId" ORDER BY "daysSinceLastSale" IS NULL DESC, "daysSinceLastSale" DESC LIMIT ?`,
     today,
     threshold,
-    merchantId
+    merchantId,
+    MERCHANT_SKU_LIST_LIMIT
   )) as MerchantSkuSqlRow[];
 }
 
-export async function loadMerchantSkuRows(prisma: PrismaService, merchantId: string) {
+export async function loadMerchantSkuRows(
+  prisma: PrismaService,
+  merchantId: string,
+  // Residual #246: honor SPA day window (was hard-coded stale60Days).
+  days = DEFAULT_INVENTORY_RULES.stale60Days
+) {
   const today = beijingDateKey(new Date());
-  const threshold = shiftDateKey(today, -(DEFAULT_INVENTORY_RULES.stale60Days - 1));
+  const windowDays = Math.max(1, Math.floor(days));
+  const threshold = shiftDateKey(today, -(windowDays - 1));
   return queryMerchantSkuRows(prisma, today, threshold, merchantId);
 }
 

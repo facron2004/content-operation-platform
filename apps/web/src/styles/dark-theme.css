@@ -65,7 +65,7 @@
 
 body,
 .el-card,
-.el-button,
+.apple-btn,
 .el-tag,
 .el-input__wrapper,
 .el-input__inner,
@@ -73,7 +73,9 @@ body,
 .el-textarea__inner,
 .el-drawer,
 .el-dialog,
-.el-menu,
+.nav-rail,
+.nav-item,
+.sidebar-collapse-btn,
 .el-radio-button__inner,
 .page-stack section,
 .page-stack .ops-grid > *,
@@ -173,6 +175,77 @@ body,
 
 [data-theme='dark'] .metric-tile.info strong {
   color: #8fb6ff;
+}
+
+/* AppleButton dark adaptations — avoid washed-out fills / low-contrast labels */
+[data-theme='dark'] .apple-btn--secondary {
+  --apple-btn-bg: rgba(255, 255, 255, 0.1);
+  --apple-btn-bg-hover: rgba(255, 255, 255, 0.16);
+  --apple-btn-bg-active: rgba(255, 255, 255, 0.22);
+  --apple-btn-fg: #f5f5f7;
+}
+
+[data-theme='dark'] .apple-btn--ghost {
+  --apple-btn-bg: transparent;
+  --apple-btn-bg-hover: rgba(10, 132, 255, 0.16);
+  --apple-btn-bg-active: rgba(10, 132, 255, 0.24);
+  --apple-btn-fg: #0a84ff;
+}
+
+[data-theme='dark'] .apple-btn--quiet {
+  --apple-btn-bg: transparent;
+  --apple-btn-bg-hover: rgba(255, 255, 255, 0.1);
+  --apple-btn-bg-active: rgba(255, 255, 255, 0.16);
+  --apple-btn-fg: #d1d1d6;
+}
+
+[data-theme='dark'] .apple-btn--tinted {
+  --apple-btn-bg: rgba(10, 132, 255, 0.18);
+  --apple-btn-bg-hover: rgba(10, 132, 255, 0.26);
+  --apple-btn-bg-active: rgba(10, 132, 255, 0.34);
+  --apple-btn-fg: #64b5ff;
+}
+
+[data-theme='dark'] .apple-btn[data-tone='danger'].apple-btn--ghost,
+[data-theme='dark'] .apple-btn[data-tone='danger'].apple-btn--quiet {
+  --apple-btn-fg: #ff6961;
+  --apple-btn-bg-hover: rgba(255, 69, 58, 0.16);
+  --apple-btn-bg-active: rgba(255, 69, 58, 0.24);
+}
+
+[data-theme='dark'] .apple-btn[data-tone='warning'].apple-btn--ghost,
+[data-theme='dark'] .apple-btn[data-tone='warning'].apple-btn--quiet {
+  --apple-btn-fg: #ffb340;
+  --apple-btn-bg-hover: rgba(255, 159, 10, 0.16);
+  --apple-btn-bg-active: rgba(255, 159, 10, 0.24);
+}
+
+[data-theme='dark'] .apple-btn[data-tone='success'].apple-btn--ghost,
+[data-theme='dark'] .apple-btn[data-tone='success'].apple-btn--quiet {
+  --apple-btn-fg: #30d158;
+  --apple-btn-bg-hover: rgba(48, 209, 88, 0.16);
+  --apple-btn-bg-active: rgba(48, 209, 88, 0.24);
+}
+
+[data-theme='dark'] .apple-btn[data-tone='danger'].apple-btn--tinted {
+  --apple-btn-bg: rgba(255, 69, 58, 0.18);
+  --apple-btn-bg-hover: rgba(255, 69, 58, 0.26);
+  --apple-btn-bg-active: rgba(255, 69, 58, 0.34);
+  --apple-btn-fg: #ff6961;
+}
+
+[data-theme='dark'] .apple-btn[data-tone='warning'].apple-btn--tinted {
+  --apple-btn-bg: rgba(255, 159, 10, 0.18);
+  --apple-btn-bg-hover: rgba(255, 159, 10, 0.26);
+  --apple-btn-bg-active: rgba(255, 159, 10, 0.34);
+  --apple-btn-fg: #ffb340;
+}
+
+[data-theme='dark'] .apple-btn[data-tone='success'].apple-btn--tinted {
+  --apple-btn-bg: rgba(48, 209, 88, 0.18);
+  --apple-btn-bg-hover: rgba(48, 209, 88, 0.26);
+  --apple-btn-bg-active: rgba(48, 209, 88, 0.34);
+  --apple-btn-fg: #30d158;
 }
 
 [data-theme='dark'] .panel-head p,

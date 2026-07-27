@@ -43,9 +43,24 @@ const buildPrisma = (
       ) {
         return [{ totalGmv: v.todayGmv, gmv: v.todayGmv, paidOrderCount: v.todayOrderCount }];
       }
-      if (/stale30SkuCount/i.test(sql))
-        return [{ stale30SkuCount: v.stale30SkuCount, distinctMerchants: v.distinctMerchants }];
-      if (/DISTINCT "merchantId"/i.test(sql)) return [{ c: v.merchantCount }];
+      // Shared stale-bucket histogram (loadPlatformStaleBucketStats).
+      // KPI derives zeroSalesSkuCount = stale_30d + stale_60d.
+      if (/julianday/i.test(sql) && /bucket/i.test(sql)) {
+        // Put all stale-30-equivalent SKUs into stale_30d for a simple mock.
+        return [
+          { bucket: 'stale_30d', totalSku: v.stale30SkuCount },
+          { bucket: 'stale_60d', totalSku: 0 },
+          { bucket: 'normal', totalSku: Math.max(0, v.skuCount - v.stale30SkuCount) }
+        ];
+      }
+      // Stale-merchant DISTINCT (aggregateStaleSkuStats) — distinct from total merchant count.
+      if (/distinctMerchants/i.test(sql)) {
+        return [{ distinctMerchants: v.distinctMerchants }];
+      }
+      // Total distinct merchants on ContentPackage (countDistinctMerchants).
+      if (/DISTINCT "merchantId"/i.test(sql) && /AS "c"/i.test(sql)) {
+        return [{ c: v.merchantCount }];
+      }
       return [];
     })
   } as unknown as PrismaService;

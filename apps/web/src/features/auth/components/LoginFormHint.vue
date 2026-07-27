@@ -4,16 +4,6 @@ defineProps<{ error: string | null }>();
 <template>
   <p v-if="error" class="login-error">{{ error }}</p>
   <p v-else class="login-hint">
-    开发环境默认账号：
-    <code>admin</code>
-    /
-    <code>contentops2024</code>
-    （生产环境请在
-    <code>.env</code>
-    中覆盖
-    <code>AUTH_USERNAME</code>
-    /
-    <code>AUTH_PASSWORD</code>
-    ）
+    请使用运维分配的账号登录。本地开发请在服务端配置 AUTH_USERNAME / AUTH_PASSWORD。
   </p>
 </template>

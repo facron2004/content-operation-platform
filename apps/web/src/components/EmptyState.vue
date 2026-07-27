@@ -3,13 +3,17 @@
     <div class="empty-icon">{{ icon }}</div>
     <div class="empty-title">{{ title }}</div>
     <div v-if="description" class="empty-description">{{ description }}</div>
-    <el-button v-if="actionText" :type="actionType" @click="$emit('action')">
+    <AppleButton v-if="actionText" :variant="mappedVariant" @click="$emit('action')">
       {{ actionText }}
-    </el-button>
+    </AppleButton>
+    <slot />
   </div>
 </template>
 <script setup lang="ts">
-withDefaults(
+import { computed } from 'vue';
+import AppleButton from './AppleButton.vue';
+
+const props = withDefaults(
   defineProps<{
     icon?: string;
     title: string;
@@ -20,5 +24,10 @@ withDefaults(
   { icon: '📭', description: '', actionText: '', actionType: 'primary' }
 );
 defineEmits<{ action: [] }>();
+
+const mappedVariant = computed(() => {
+  if (props.actionType === 'info') return 'secondary' as const;
+  return props.actionType;
+});
 </script>
 <style src="../styles/components/empty-state.css" scoped></style>

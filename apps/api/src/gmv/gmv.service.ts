@@ -1,6 +1,7 @@
 /** Consolidated GMV module. */
-import { Inject, Injectable, Optional } from '@nestjs/common';
-import { TtlCache } from '../common';
+import { ConflictException, Inject, Injectable, Optional } from '@nestjs/common';
+import { TtlCache, withHeavyAggregateGate } from '../common';
+import { HEAVY_LIST_CACHE_MAX_SIZE } from '../common/heavy-aggregate-gate';
 import { AutoLoginService } from '../content/auto-login.service';
 import { MerchantSalesService } from '../merchant-sales/merchant-sales.service';
 import { OverviewService } from '../overview/overview.service';
@@ -8,14 +9,16 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RefundService } from '../refund/refund.service';
 import { refreshGmvFromJeesite } from './gmv-refresh';
 import {
+  computeGmvTopMerchants,
   resolveGmvDistribution,
   resolveGmvHourly,
   resolveGmvKpis,
-  resolveGmvTopMerchants,
   resolveGmvTrend
 } from './gmv-resolve';
+import { pageMerchants } from './gmv-metrics';
 import type {
   GmvDistributionDim,
+  GmvDistributionPayload,
   GmvDistributionRow,
   GmvHourlyPoint,
   GmvMerchantRow,
@@ -26,12 +29,26 @@ import type {
   TrendWindow
 } from './gmv.dto';
 
+/** Money KPI payloads are small but multi-key (date/force) — keep a tight maxSize. */
+const GMV_CACHE_TTL_MS = 60_000;
+
+async function gmvHeavyLoad<T>(load: () => Promise<T>): Promise<T> {
+  try {
+    return await withHeavyAggregateGate(load);
+  } catch (err) {
+    if (err instanceof Error && err.name === 'HeavyAggregateQueueFullError') {
+      throw new ConflictException('GMV 计算繁忙，请稍后再试');
+    }
+    throw err;
+  }
+}
+
 // --- gmv-service-cache.ts ---
 export function createGmvCacheMethods(cache: TtlCache, prisma: PrismaService) {
   return {
     getKpis(date?: string, force = false): Promise<GmvTodayPayload> {
       return cache.getOrLoad(`gmvToday:${date ?? 'today'}`, force, () =>
-        resolveGmvKpis(prisma, date)
+        gmvHeavyLoad(() => resolveGmvKpis(prisma, date))
       );
     },
     getTrend(
@@ -41,23 +58,31 @@ export function createGmvCacheMethods(cache: TtlCache, prisma: PrismaService) {
       granularity: TrendGranularity = 'day'
     ): Promise<GmvTrendPoint[]> {
       return cache.getOrLoad(`gmvTrend:${granularity}:${days}:${endDate ?? 'today'}`, force, () =>
-        resolveGmvTrend(prisma, days, endDate, granularity)
+        gmvHeavyLoad(() => resolveGmvTrend(prisma, days, endDate, granularity))
       );
     },
     getHourly(date?: string, force = false): Promise<GmvHourlyPoint[]> {
       return cache.getOrLoad(`gmvHourly:${date ?? 'today'}`, force, () =>
-        resolveGmvHourly(prisma, date)
+        gmvHeavyLoad(() => resolveGmvHourly(prisma, date))
       );
     },
     getDistribution(dim: GmvDistributionDim, limit: number, force = false) {
       return cache.getOrLoad(`gmvDist:${dim}:${limit}`, force, () =>
-        resolveGmvDistribution(prisma, dim, limit)
-      ) as Promise<GmvDistributionRow[]>;
+        gmvHeavyLoad(() => resolveGmvDistribution(prisma, dim, limit))
+      ) as Promise<GmvDistributionPayload>;
     },
     getTopMerchants(sortBy: GmvMerchantSort, page: number, pageSize: number, force = false) {
-      return cache.getOrLoad(`gmvMerchants:${sortBy}:${page}:${pageSize}`, force, () =>
-        resolveGmvTopMerchants(prisma, sortBy, page, pageSize)
-      ) as Promise<{ items: GmvMerchantRow[]; hasMore: boolean }>;
+      // Aggregate cache key excludes page so flips share one sorted merchant list.
+      return cache
+        .getOrLoad(`gmvMerchants:${sortBy}`, force, () =>
+          gmvHeavyLoad(() => computeGmvTopMerchants(prisma, sortBy))
+        )
+        .then((rows) => pageMerchants(rows, page, pageSize)) as Promise<{
+        items: GmvMerchantRow[];
+        hasMore: boolean;
+        limit: number;
+        truncated: boolean;
+      }>;
     },
     invalidateCache(prefix?: string) {
       cache.clear(prefix);
@@ -74,20 +99,33 @@ export function createGmvServiceOps(
   onMoneyWrite?: () => void
 ) {
   const ops = createGmvCacheMethods(cache, prisma);
+  // Serialize refresh: concurrent tabs must not double-pull Jeesite, and a later
+  // call with a different [start,end] must not inherit the first call's result.
+  let refreshTail: Promise<unknown> = Promise.resolve();
   return {
     ...ops,
     refreshFromJeesite(startDate: string, endDate: string) {
-      return refreshGmvFromJeesite({
-        prisma,
-        autoLogin,
-        getMerchantSalesService: async () => merchantSales ?? null,
-        invalidateCache: () => {
-          ops.invalidateCache();
-          onMoneyWrite?.();
-        },
-        startDate,
-        endDate
-      });
+      const run = refreshTail
+        .catch(() => undefined)
+        .then(() =>
+          refreshGmvFromJeesite({
+            prisma,
+            autoLogin,
+            getMerchantSalesService: async () => merchantSales ?? null,
+            invalidateCache: () => {
+              ops.invalidateCache();
+              onMoneyWrite?.();
+            },
+            startDate,
+            endDate
+          })
+        );
+      // Keep the chain alive even if this run fails so the next caller still waits.
+      refreshTail = run.then(
+        () => undefined,
+        () => undefined
+      );
+      return run;
     }
   };
 }
@@ -98,6 +136,7 @@ export type {
   GmvTrendPoint,
   GmvHourlyPoint,
   GmvDistributionRow,
+  GmvDistributionPayload,
   GmvMerchantRow
 } from './gmv.dto';
 
@@ -114,10 +153,16 @@ export class GmvService {
     @Optional() @Inject(OverviewService) overview?: OverviewService,
     @Optional() @Inject(RefundService) refund?: RefundService
   ) {
-    this.ops = createGmvServiceOps(new TtlCache(), prisma, autoLogin, merchantSales, () => {
-      overview?.invalidateCache();
-      refund?.invalidateCache();
-    });
+    this.ops = createGmvServiceOps(
+      new TtlCache(GMV_CACHE_TTL_MS, HEAVY_LIST_CACHE_MAX_SIZE),
+      prisma,
+      autoLogin,
+      merchantSales,
+      () => {
+        overview?.invalidateCache();
+        refund?.invalidateCache();
+      }
+    );
   }
 
   getKpis(date?: string, force = false) {

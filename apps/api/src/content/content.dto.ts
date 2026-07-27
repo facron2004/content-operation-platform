@@ -1,19 +1,33 @@
 import {
   IsString,
   IsOptional,
+  IsNotEmpty,
   IsNumber,
   IsBoolean,
   IsIn,
   IsArray,
+  ArrayMaxSize,
   Min,
-  Max
+  Max,
+  MaxLength
 } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
 import type { Channel, AuditStatus, UserRole } from '@content/shared';
-import { ALERT_LEVELS, ALERT_TYPES, AUDIT_DECISION_STATUSES, CHANNELS } from '@content/shared';
-import { optionalString, requiredString } from './dto-decorators';
+import {
+  ALERT_LEVELS,
+  ALERT_TYPES,
+  AUDIT_DECISION_STATUSES,
+  CHANNELS,
+  USER_ROLES
+} from '@content/shared';
+import { optionalDateKey, optionalString, requiredString } from './dto-decorators';
 
-export { optionalString, requiredString } from './dto-decorators';
+export {
+  optionalDateKey,
+  optionalIsoDateTime,
+  optionalString,
+  requiredString
+} from './dto-decorators';
 export { CreateRuleDto, ListRulesQueryDto } from './rule-config.dto';
 
 // --- Cookie Update ---
@@ -53,9 +67,11 @@ export class AICopyConfigDto {
 
 // --- Copy Generation ---
 export class GenerateCopyDto {
-  @requiredString()
+  @requiredString(64)
   packageId!: string;
 
+  // IsNotEmpty: bare @IsString skips missing properties in class-validator.
+  @IsNotEmpty()
   @IsString()
   @IsIn(CHANNELS)
   channel!: Channel;
@@ -80,8 +96,7 @@ export class GenerateCopyDto {
   @IsBoolean()
   useAI?: boolean;
 
-  @optionalString()
-  createdBy?: string;
+  // createdBy is stamped from JWT in the controller.
 }
 
 // --- Copy Audit ---
@@ -102,23 +117,24 @@ export class AuditCopyDto {
 
 // --- Battle Card ---
 export class BattleCardGenerateDto {
-  @requiredString()
+  @requiredString(64)
   packageId!: string;
 }
 
 // --- Alert Resolution ---
 export class AlertResolveDto {
-  @optionalString(100)
-  resolvedBy?: string;
+  // resolvedBy is stamped from JWT in the controller.
 }
 
 export class AlertResolveBatchDto {
   @IsArray()
+  @ArrayMaxSize(200)
   @IsString({ each: true })
+  // packageId:type — package ids can be up to 64 + type ~32 + colon.
+  @MaxLength(100, { each: true })
   alertIds!: string[];
 
-  @optionalString(100)
-  resolvedBy?: string;
+  // resolvedBy is stamped from JWT in the controller.
 }
 
 // --- Package detail query ---
@@ -134,8 +150,14 @@ export class PackageDetailQueryDto {
 
 // --- Alert Query ---
 export class AlertQueryDto {
-  @optionalString()
+  @IsOptional()
+  @IsString()
+  @IsIn([...USER_ROLES])
   role?: UserRole;
+
+  /** As-of business day for inventory window (defaults to today in recommend). */
+  @optionalDateKey()
+  date?: string;
 
   @IsOptional()
   @IsString()
@@ -154,6 +176,7 @@ export class AlertQueryDto {
   @IsOptional()
   @IsNumber()
   @Min(1)
+  @Max(100)
   @Type(() => Number)
   page?: number;
 
@@ -167,13 +190,42 @@ export class AlertQueryDto {
 
 // --- Ops today query ---
 export class OpsTodayQueryDto {
-  @optionalString()
+  @IsOptional()
+  @IsString()
+  @IsIn([...USER_ROLES])
   role?: UserRole;
+}
+
+// --- Copy list query ---
+export class ListCopiesQueryDto {
+  @IsOptional()
+  @IsString()
+  @IsIn([...AUDIT_DECISION_STATUSES, 'pending', 'draft'] as string[])
+  auditStatus?: AuditStatus;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(CHANNELS)
+  channel?: Channel;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(1)
+  @Max(100)
+  page?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(1)
+  @Max(200)
+  pageSize?: number;
 }
 
 // --- Recommendations query ---
 export class RecommendationsQueryDto {
-  @optionalString(20)
+  @optionalDateKey()
   date?: string;
 
   @optionalString(100)
@@ -188,7 +240,7 @@ export class RecommendationsQueryDto {
   @optionalString(100)
   merchantId?: string;
 
-  @optionalString()
+  @optionalString(40)
   role?: UserRole;
 
   @IsOptional()
@@ -220,6 +272,7 @@ export class RecommendationsQueryDto {
   @Type(() => Number)
   @IsNumber()
   @Min(1)
+  @Max(100)
   page?: number;
 
   @IsOptional()

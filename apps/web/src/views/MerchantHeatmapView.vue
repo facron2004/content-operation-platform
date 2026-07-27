@@ -22,6 +22,11 @@
       </div>
     </header>
 
+    <!-- Residual #269: PLATFORM_SCAN_LIMIT honesty. -->
+    <p v-if="truncated" class="list-cap-hint">
+      热力图仅加载前 {{ limitLabel }} 个商家（按 merchantId 排序），超出部分未纳入统计与渲染。
+    </p>
+
     <!-- Error state -->
     <ErrorAlert v-if="error" :message="error" />
 
@@ -33,7 +38,7 @@
     <!-- Empty state -->
     <div v-else-if="!data && !loading" class="heatmap-empty">
       <p>暂无商家数据，请确认数据库有内容。</p>
-      <el-button type="primary" @click="load">重新加载</el-button>
+      <AppleButton variant="primary" @click="load">重新加载</AppleButton>
     </div>
 
     <!-- Map area -->
@@ -92,10 +97,20 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue';
+import {
+  ref,
+  computed,
+  onMounted,
+  onUnmounted,
+  onActivated,
+  onDeactivated,
+  watch,
+  nextTick
+} from 'vue';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import ErrorAlert from '../components/ErrorAlert.vue';
+import AppleButton from '../components/AppleButton.vue';
 import { useMerchantHeatmap } from '../features/merchant-heatmap/composables/useMerchantHeatmap';
 import type { MerchantHeatmapPoint } from '../services/api/merchant.api';
 
@@ -109,10 +124,17 @@ const {
   mappedMerchants,
   unmappedMerchants,
   center,
+  // Residual #269
+  truncated,
+  limit,
   intensityMode,
   load,
   toggleMode
 } = useMerchantHeatmap();
+
+const limitLabel = computed(() =>
+  typeof limit.value === 'number' && limit.value > 0 ? limit.value : 10000
+);
 
 const mapContainer = ref<HTMLDivElement | null>(null);
 const hoveredArea = ref<MerchantHeatmapPoint | null>(null);
@@ -258,10 +280,29 @@ watch(intensityMode, () => {
   }
 });
 
-onMounted(async () => {
-  await load();
+async function ensureMapReady() {
+  if (!data.value) await load();
   await nextTick();
-  initMap();
+  if (!map) {
+    initMap();
+  } else {
+    // KeepAlive reuses the DOM; Leaflet needs a size refresh after the shell re-shows it.
+    map.invalidateSize();
+    renderHeatCircles();
+    renderInteractionMarkers();
+  }
+}
+
+onMounted(() => {
+  void ensureMapReady();
+});
+
+onActivated(() => {
+  void ensureMapReady();
+});
+
+onDeactivated(() => {
+  hoveredArea.value = null;
 });
 
 onUnmounted(() => {
@@ -274,4 +315,15 @@ onUnmounted(() => {
 
 <style scoped>
 @import '../styles/views/merchant-heatmap.css';
+/* Residual #269: PLATFORM_SCAN_LIMIT honesty banner. */
+.list-cap-hint {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #b45309;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 6px;
+}
 </style>

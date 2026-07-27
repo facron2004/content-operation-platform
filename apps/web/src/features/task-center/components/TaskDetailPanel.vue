@@ -54,6 +54,25 @@
         <el-descriptions-item label="社群">
           {{ task.groupName || task.groupId || '—' }}
         </el-descriptions-item>
+        <!-- Residual #251: #233 write fields already returned by API; surface on detail. -->
+        <el-descriptions-item label="文案 ID">
+          <span class="mono">{{ task.contentId || '—' }}</span>
+        </el-descriptions-item>
+        <el-descriptions-item label="风险等级">
+          <el-tag
+            v-if="task.riskLevel"
+            :type="riskType"
+            size="small"
+            effect="plain"
+            disable-transitions
+          >
+            {{ riskLabel }}
+          </el-tag>
+          <span v-else>—</span>
+        </el-descriptions-item>
+        <el-descriptions-item label="承接套餐" :span="2">
+          <span class="mono">{{ task.fallbackPackageId || '—' }}</span>
+        </el-descriptions-item>
       </el-descriptions>
 
       <el-alert
@@ -107,6 +126,24 @@ const channelLabel = computed(
 );
 const priorityLabel = computed(() => priorityLabels[props.task?.priority || ''] || '—');
 const priorityType = computed(() => priorityTypes[props.task?.priority || ''] || 'info');
+
+// Residual #251: riskLevel from #233 form — already on DistributionTask.
+const riskLabels: Record<string, string> = {
+  low: '低',
+  medium: '中',
+  high: '高'
+};
+const riskTypes: Record<string, 'success' | 'warning' | 'danger'> = {
+  low: 'success',
+  medium: 'warning',
+  high: 'danger'
+};
+const riskLabel = computed(
+  () => riskLabels[props.task?.riskLevel || ''] || props.task?.riskLevel || '—'
+);
+const riskType = computed(
+  (): 'success' | 'warning' | 'danger' | 'info' => riskTypes[props.task?.riskLevel || ''] || 'info'
+);
 
 function formatDateTime(value?: string): string {
   if (!value) return '—';

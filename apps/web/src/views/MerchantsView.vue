@@ -9,12 +9,17 @@
     <div class="layout-grid">
       <MerchantListPanel
         v-model:search="search"
+        v-model:area-id="areaId"
+        v-model:sort="sort"
         :merchants="merchants"
+        :sort-options="sortOptions"
         :page="page"
         :has-more="hasMore"
+        :truncated="listTruncated"
+        :limit="listLimit"
         :selected-merchant-id="selectedMerchantId"
         :list-height="listHeight"
-        @search-change="reloadList"
+        @filter-change="onFilterChange"
         @select="selectMerchant"
         @prev="prevPage"
         @next="nextPage"
@@ -26,10 +31,18 @@
         :competitors="competitors"
         :trend-summary="trendSummary"
         :trend-option="trendOption"
+        :detail-days="detailDays"
+        :detail-day-options="detailDayOptions"
+        :sku-truncated="skuTruncated"
+        :sku-limit="skuLimit"
+        :competitors-truncated="competitorsTruncated"
+        :competitors-limit="competitorsLimit"
+        :competitors-matched="competitorsMatched"
         :stale-color="(b: string) => staleColor(b as never)"
         :stale-label="(b: string) => staleLabel(b as never)"
         @go-zero-sales="goZeroSalesForMerchant"
         @go-analysis="goAnalysis"
+        @change-days="setDetailDays"
       />
     </div>
   </section>
@@ -46,23 +59,38 @@ const {
   loadError,
   merchants,
   search,
+  areaId,
+  sort,
+  sortOptions,
   page,
   hasMore,
+  // Residual #266: MERCHANT_LIST_CACHE_CAP honesty.
+  listTruncated,
+  listLimit,
   selectedMerchantId,
   selectedMerchant,
   profile,
   skuList,
   competitors,
+  detailDays,
+  detailDayOptions,
+  skuTruncated,
+  skuLimit,
+  // Residual #285: MERCHANT_COMPETITORS_LIMIT honesty.
+  competitorsTruncated,
+  competitorsLimit,
+  competitorsMatched,
   listHeight,
   trendSummary,
   trendOption,
   reload,
-  reloadList,
+  onFilterChange,
   selectMerchant,
   prevPage,
   nextPage,
   goZeroSalesForMerchant,
   goAnalysis,
+  setDetailDays,
   staleColor,
   staleLabel
 } = useMerchants();

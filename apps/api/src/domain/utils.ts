@@ -162,11 +162,10 @@ export const scoreLevel = (score: number): PromotionLevel => {
 /**
  * 动态兜底日期:取当前时间往前推 1 天,避免硬编码过期日期。
  * 用于 promotion score 计算时没有传入日期的场景。
+ * Use wall-clock ms (not setDate) so process TZ cannot skip/double a local DST day.
  */
 export function getFallbackDate(): Date {
-  const d = new Date();
-  d.setDate(d.getDate() - 1);
-  return d;
+  return new Date(Date.now() - MS_PER_DAY);
 }
 
 /** 把多空白、多竖线分隔统一压成空格 + 「、」 */

@@ -14,7 +14,9 @@ export function resolveExceptionPayload(
     const res = exception.getResponse();
     if (typeof res === 'string') message = res;
     else if (isRecord(res)) {
-      message = (res.message as string) ?? exception.message;
+      // ValidationPipe often sets message to string[]; never put an array into
+      // the top-level message field (clients/logs expect a string).
+      message = normalizeExceptionMessage(res.message, exception.message);
       details = res;
     }
   } else if (exception instanceof Error) {
@@ -22,6 +24,25 @@ export function resolveExceptionPayload(
     logUnhandled(exception.message, exception.stack);
   }
   return { status, message, details };
+}
+
+/** Coerce Nest/class-validator message shapes to a single bounded string. */
+export function normalizeExceptionMessage(raw: unknown, fallback: string, maxLen = 2000): string {
+  let text: string;
+  if (typeof raw === 'string') {
+    text = raw;
+  } else if (Array.isArray(raw)) {
+    text = raw
+      .map((item) => (typeof item === 'string' ? item : String(item ?? '')))
+      .filter(Boolean)
+      .join('; ');
+  } else if (raw == null) {
+    text = fallback;
+  } else {
+    text = fallback;
+  }
+  if (!text) text = fallback || 'Error';
+  return text.length > maxLen ? `${text.slice(0, maxLen)}…` : text;
 }
 
 export function buildExceptionBody(params: {

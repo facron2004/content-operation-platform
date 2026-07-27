@@ -4,7 +4,11 @@
       <h3>支付构成</h3>
       <span class="gmv-channel-meta">{{ rows.length }} 项</span>
     </header>
-    <div v-if="rows.length === 0" class="gmv-channel-empty">暂无支付构成数据</div>
+    <EmptyState
+      v-if="rows.length === 0"
+      title="暂无支付构成"
+      description="订单数据同步后将自动生成支付构成分析"
+    />
     <div v-else class="gmv-channel-table">
       <div class="gmv-channel-thead">
         <span>支付方式</span>
@@ -35,6 +39,7 @@
 
 <script setup lang="ts">
 import { formatNumber, formatPercentRaw } from '../../../utils/format';
+import EmptyState from '../../../components/EmptyState.vue';
 
 type ChannelRow = {
   name: string;
@@ -72,17 +77,6 @@ defineProps<{ rows: ChannelRow[] }>();
 .gmv-channel-meta {
   color: #98a2b3;
   font-size: 12px;
-}
-
-.gmv-channel-empty {
-  flex: 1;
-  min-height: 140px;
-  display: grid;
-  place-items: center;
-  color: #98a2b3;
-  font-size: 13px;
-  background: #f9fafb;
-  border-radius: 10px;
 }
 
 .gmv-channel-table {

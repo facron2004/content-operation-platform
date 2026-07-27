@@ -1,7 +1,10 @@
 /** Consolidated GMV module. */
 import { shiftDateKey } from '@content/shared';
+import { clampListPage, clampListPageSize } from '../common';
+import { GMV_TOP_MERCHANTS_LIMIT } from '../common/sql-chunk';
 import {
   emptyTrendPoint,
+  type GmvDistributionPayload,
   type GmvDistributionRow,
   type GmvMerchantRow,
   type GmvMerchantSort,
@@ -130,22 +133,37 @@ export function mapDailyMetricsTrend(
 }
 
 // --- gmv-distribution-map.ts ---
+/**
+ * Residual #289: project Top-N named buckets + optional synthetic 「其他」 long-tail,
+ * plus honesty fields so SPA can banner when head is incomplete.
+ *
+ * `limit` is the requested named-bucket head (SQL LIMIT). `matched` is at-least
+ * `limit + 1` when truncated (long-tail remainder exists) — no extra COUNT(*) of
+ * distinct keys. Share denominators stay platform totalGmv (not re-based on head).
+ */
 export function mapDistributionRows(
   rows: Array<{ key: string; gmv: number; gmvOnline: number; gmvWallet: number; gmvBonus: number }>,
-  totalGmv: number
-): GmvDistributionRow[] {
+  totalGmv: number,
+  limit?: number
+): GmvDistributionPayload {
+  const safeLimit =
+    typeof limit === 'number' && Number.isFinite(limit) && limit > 0
+      ? Math.floor(limit)
+      : rows.length;
   const topGmv = rows.reduce((s, r) => s + Number(r.gmv), 0);
-  const result: GmvDistributionRow[] = rows.map((r) => ({
+  const items: GmvDistributionRow[] = rows.map((r) => ({
     key: r.key,
     totalGmv: Number(r.gmv),
     gmvOnline: Number(r.gmvOnline),
     gmvWallet: Number(r.gmvWallet),
     gmvBonus: Number(r.gmvBonus),
-    share: Number(r.gmv) / totalGmv
+    share: totalGmv > 0 ? Number(r.gmv) / totalGmv : 0
   }));
-  if (topGmv < totalGmv) {
+  // Residual #289: long-tail remainder means head was capped.
+  const truncated = totalGmv > 0 && topGmv < totalGmv - 1e-9;
+  if (truncated) {
     const otherGmv = totalGmv - topGmv;
-    result.push({
+    items.push({
       key: '其他',
       totalGmv: otherGmv,
       gmvOnline: otherGmv,
@@ -154,16 +172,21 @@ export function mapDistributionRows(
       share: otherGmv / totalGmv
     });
   }
-  return result;
+  return {
+    items,
+    limit: safeLimit,
+    // When truncated we know at least one extra named bucket exists beyond the head.
+    matched: truncated ? Math.max(safeLimit + 1, rows.length + 1) : rows.length,
+    truncated
+  };
 }
 
 // --- gmv-merchant-page.ts ---
-export function sortAndPageMerchants(
+/** Sort merchants by the requested metric (no page). */
+export function sortMerchants(
   merchants: GmvMerchantRow[],
-  sortBy: GmvMerchantSort,
-  page: number,
-  pageSize: number
-): { items: GmvMerchantRow[]; hasMore: boolean } {
+  sortBy: GmvMerchantSort
+): GmvMerchantRow[] {
   const sorted = [...merchants];
   sorted.sort((a, b) => {
     if (sortBy === 'refundDesc')
@@ -172,7 +195,44 @@ export function sortAndPageMerchants(
       return b.gmvVerify - a.gmvVerify || a.merchantName.localeCompare(b.merchantName);
     return b.gmv - a.gmv || a.merchantName.localeCompare(b.merchantName);
   });
-  const offset = (page - 1) * pageSize,
-    paged = sorted.slice(offset, offset + pageSize);
-  return { items: paged, hasMore: paged.length === pageSize && sorted.length > offset + pageSize };
+  return sorted;
+}
+
+export type GmvMerchantPage = {
+  items: GmvMerchantRow[];
+  hasMore: boolean;
+  /** Residual #265: GMV_TOP_MERCHANTS_LIMIT honesty (parity merchant-sales #264). */
+  limit: number;
+  truncated: boolean;
+};
+
+export function pageMerchants(
+  sorted: GmvMerchantRow[],
+  page: number,
+  pageSize: number
+): GmvMerchantPage {
+  // Defense-in-depth: DTO Max already bounds interactive callers; still clamp here
+  // so internal/miswired call sites cannot OFFSET into huge cached rankings.
+  const safePage = clampListPage(page);
+  const safePageSize = clampListPageSize(pageSize, 100, 20);
+  const offset = (safePage - 1) * safePageSize,
+    paged = sorted.slice(offset, offset + safePageSize);
+  const limit = GMV_TOP_MERCHANTS_LIMIT;
+  // Head-full means SQL LIMIT may have clipped the true merchant set.
+  const truncated = sorted.length >= limit;
+  return {
+    items: paged,
+    hasMore: paged.length === safePageSize && sorted.length > offset + safePageSize,
+    limit,
+    truncated
+  };
+}
+
+export function sortAndPageMerchants(
+  merchants: GmvMerchantRow[],
+  sortBy: GmvMerchantSort,
+  page: number,
+  pageSize: number
+): GmvMerchantPage {
+  return pageMerchants(sortMerchants(merchants, sortBy), page, pageSize);
 }

@@ -1,3 +1,5 @@
+import { csvEscape } from '../common/csv-escape';
+
 export type StagnantCsvItem = {
   packageId: string;
   packageName: string;
@@ -30,18 +32,15 @@ export const STAGNANT_CSV_HEADER = [
   'recent30dSalesAmount'
 ] as const;
 
-export function csvEscape(s: string): string {
-  if (s == null) return '';
-  if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
-  return s;
-}
+export { csvEscape };
 
 export function buildStagnantCsv(items: StagnantCsvItem[]): string {
   const lines = [STAGNANT_CSV_HEADER.join(',')];
   for (const r of items) {
     lines.push(
       [
-        r.packageId,
+        // packageId is free-form and can start with =/+/-/@ — always formula-escape.
+        csvEscape(r.packageId),
         csvEscape(r.packageName),
         csvEscape(r.merchantName),
         csvEscape(r.areaName ?? ''),
@@ -51,7 +50,7 @@ export function buildStagnantCsv(items: StagnantCsvItem[]): string {
         r.stockTotal,
         r.lastSalesDate ?? '',
         r.daysSinceLastSale,
-        r.staleBucket,
+        csvEscape(r.staleBucket),
         r.recent30dSalesQty,
         r.recent30dSalesAmount
       ].join(',')

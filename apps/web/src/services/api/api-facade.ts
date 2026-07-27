@@ -11,6 +11,7 @@ import * as communityApi from './community.api';
 import * as performanceApi from './performance.api';
 import * as gmvApi from './gmv.api';
 import * as merchantSalesApi from './merchant-sales.api';
+import * as dataAnalysisApi from './data-analysis.api';
 import * as movementApi from './movement.api';
 import * as refundApi from './refund.api';
 import * as campaignApi from './campaign.api';
@@ -33,6 +34,7 @@ export const api = {
   ...performanceApi,
   ...gmvApi,
   ...merchantSalesApi,
+  ...dataAnalysisApi,
   ...movementApi,
   ...refundApi,
   ...campaignApi,

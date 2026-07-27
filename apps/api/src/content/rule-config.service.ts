@@ -42,6 +42,8 @@ export type CreateRuleInput = {
 export class RuleConfigService {
   private readonly logger = new Logger(RuleConfigService.name);
   private readonly cache = new Map<string, CacheEntry>();
+  /** Cold-path coalesce for concurrent merchant×type resolve (recommend storms). */
+  private readonly inFlight = new Map<string, Promise<unknown>>();
   private readonly cacheTtlMs = Number.parseInt(
     process.env.RULE_CONFIG_CACHE_TTL_MS ?? process.env.CONTENT_CACHE_TTL_MS ?? '60000',
     10
@@ -56,7 +58,8 @@ export class RuleConfigService {
       cacheTtlMs: this.cacheTtlMs,
       type,
       merchantId,
-      warn: (m: string) => this.logger.warn(m)
+      warn: (m: string) => this.logger.warn(m),
+      inFlight: this.inFlight
     });
   }
 

@@ -29,6 +29,7 @@ export function useMerchantSales() {
       sortBy: state.sortBy,
       exporting: state.exporting,
       loadError: state.loadError,
+      kpiDate: state.kpiDate,
       reload,
       loadRanking
     }),

@@ -30,6 +30,11 @@ export class PrismaService extends PrismaClient implements OnModuleDestroy, OnMo
 
     // Priority 2: Scan filesystem for dev.db
     const { finalDbPath, exists } = resolveDevDbPath();
+    try {
+      require('fs').mkdirSync(require('path').dirname(finalDbPath), { recursive: true });
+    } catch {
+      // 目录已存在或无权限时忽略；后续连接失败会有明确报错
+    }
     if (!exists)
       BOOT_LOGGER.warn(`dev.db not found at ${finalDbPath}. libsql will create it on first query.`);
     const n = finalDbPath.replace(/\\/g, '/');

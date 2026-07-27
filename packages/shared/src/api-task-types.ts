@@ -26,11 +26,16 @@ export interface CommunityGroupEntity {
   areaName?: string;
   ownerId?: string;
   ownerName?: string;
+  /** Residual #231: API returns masked last-4 (never raw PII). */
+  ownerPhone?: string;
   memberCount: number;
   activityLevel: 'high' | 'medium' | 'low';
   tags: string[];
+  // Residual #236: API already returns preferredCategories (JSON array).
+  preferredCategories?: string[];
   isActive: boolean;
   source?: string;
+  note?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -69,14 +74,25 @@ export interface DistributionTask {
   cancelReason?: string;
   assigneeId?: string;
   assigneeName?: string;
+  // Residual #233: API already returns these (Create/UpdateTaskDto + list SELECT).
+  riskLevel?: 'low' | 'medium' | 'high';
+  fallbackPackageId?: string;
   createdAt: string;
   updatedAt: string;
 }
 
+/**
+ * Residual #181: schedule/complete are first-class lifecycle actions written by
+ * DistributionTaskService (parity with CreateExecutionInput). Keep reschedule for
+ * historical rows even if no current writer emits it.
+ */
+export type DistributionExecutionAction =
+  'publish' | 'reschedule' | 'schedule' | 'complete' | 'cancel' | 'confirm_fail';
+
 export interface DistributionExecution {
   executionId: string;
   taskId: string;
-  action: 'publish' | 'reschedule' | 'cancel' | 'confirm_fail';
+  action: DistributionExecutionAction;
   operatorId?: string;
   operatorName?: string;
   evidenceUrl?: string;

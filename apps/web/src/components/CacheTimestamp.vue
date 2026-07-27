@@ -4,14 +4,17 @@
     <span class="timestamp-text" :style="{ color: freshnessColor }">
       {{ freshnessText }} · 更新于 {{ relativeTime }}
     </span>
-    <el-button v-if="showRefresh" size="small" text @click="$emit('refresh')">
-      <el-icon><Refresh /></el-icon>
+    <AppleButton v-if="showRefresh" size="sm" variant="quiet" @click="$emit('refresh')">
+      <template #icon>
+        <el-icon><Refresh /></el-icon>
+      </template>
       刷新
-    </el-button>
+    </AppleButton>
   </div>
 </template>
 <script setup lang="ts">
 import { Clock, Refresh } from '@element-plus/icons-vue';
+import AppleButton from './AppleButton.vue';
 defineProps<{
   relativeTime: string;
   freshnessColor: string;

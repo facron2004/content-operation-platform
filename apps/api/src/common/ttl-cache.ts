@@ -3,11 +3,24 @@ interface CacheEntry<T> {
   value: T;
 }
 
+/** Default hard ceiling for in-memory entries (high-cardinality keys otherwise grow unbounded). */
+export const DEFAULT_TTL_CACHE_MAX_SIZE = 512;
+
 export class TtlCache {
   private readonly store = new Map<string, CacheEntry<unknown>>();
   private readonly inFlight = new Map<string, Promise<unknown>>();
+  private readonly maxSize: number;
 
-  constructor(private readonly ttlMs = 5 * 60 * 1000) {}
+  constructor(
+    private readonly ttlMs = 5 * 60 * 1000,
+    maxSize: number = DEFAULT_TTL_CACHE_MAX_SIZE
+  ) {
+    this.maxSize = Math.max(1, Math.floor(maxSize));
+  }
+
+  get size(): number {
+    return this.store.size;
+  }
 
   get<T>(key: string): T | null {
     const entry = this.store.get(key) as CacheEntry<T> | undefined;
@@ -16,11 +29,17 @@ export class TtlCache {
       this.store.delete(key);
       return null;
     }
+    // Refresh insertion order so hot keys are not LRU-evicted first.
+    this.store.delete(key);
+    this.store.set(key, entry);
     return entry.value;
   }
 
   set<T>(key: string, value: T): void {
+    // Delete first so re-set moves the key to the Map's insertion tail (LRU).
+    if (this.store.has(key)) this.store.delete(key);
     this.store.set(key, { expiresAt: Date.now() + this.ttlMs, value });
+    this.evictIfNeeded();
   }
 
   delete(key: string): void {
@@ -38,15 +57,16 @@ export class TtlCache {
   }
 
   async getOrLoad<T>(key: string, force: boolean, loader: () => Promise<T>): Promise<T> {
+    // Always coalesce concurrent loaders for the same key — force only invalidates
+    // the stored value, never drops an in-flight promise (avoids force stampede).
     if (!force) {
       const cached = this.get<T>(key);
       if (cached !== null) return cached;
-      const pending = this.inFlight.get(key) as Promise<T> | undefined;
-      if (pending) return pending;
     } else {
       this.delete(key);
-      this.inFlight.delete(key);
     }
+    const pending = this.inFlight.get(key) as Promise<T> | undefined;
+    if (pending) return pending;
 
     const loadPromise = (async () => {
       const value = await loader();
@@ -59,6 +79,20 @@ export class TtlCache {
       return await loadPromise;
     } finally {
       if (this.inFlight.get(key) === loadPromise) this.inFlight.delete(key);
+    }
+  }
+
+  /** Drop expired entries, then LRU-evict oldest until size <= maxSize. */
+  private evictIfNeeded(): void {
+    if (this.store.size <= this.maxSize) return;
+    const now = Date.now();
+    for (const [key, entry] of this.store) {
+      if (entry.expiresAt < now) this.store.delete(key);
+    }
+    while (this.store.size > this.maxSize) {
+      const oldest = this.store.keys().next().value;
+      if (oldest === undefined) break;
+      this.store.delete(oldest);
     }
   }
 }

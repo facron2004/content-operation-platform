@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia';
+import { computed, ref } from 'vue';
 import type { UserRole } from '@content/shared';
 
 export type ServerRoleInfo = {
@@ -27,6 +28,7 @@ function loadPersistedRole(): UserRole {
   } catch {
     /* localStorage unavailable */
   }
+  // UI placeholder only — effectiveRoles stays empty until server hydrates.
   return 'platform_operator';
 }
 
@@ -36,17 +38,23 @@ export const useRoleStore = defineStore('role', () => {
   const sessionLoaded = ref(false);
 
   const roleLabel = computed(() => roleLabels[currentRole.value]);
-  const roleOptions = computed(() =>
-    Object.entries(roleLabels).map(([value, label]) => ({ value, label }))
-  );
-  const isAdmin = computed(() => currentRole.value === 'admin');
-  const isPlatformOperator = computed(() => currentRole.value === 'platform_operator');
-  const isAreaOperator = computed(() => currentRole.value === 'area_operator');
-  const isAuditor = computed(() => currentRole.value === 'auditor');
+  const roleOptions = computed(() => {
+    // Empty until server hydrates — never advertise the full role catalog pre-session
+    // (that let localStorage / free setRole send any role as an API query param).
+    const granted = serverInfo.value?.roles ?? [];
+    return granted.map((value) => ({ value, label: roleLabels[value] ?? value }));
+  });
+  /** Empty until server session loads — prevents localStorage privilege elevation. */
+  const effectiveRoles = computed<UserRole[]>(() => serverInfo.value?.roles ?? []);
+  const isAdmin = computed(() => effectiveRoles.value.includes('admin'));
+  const isPlatformOperator = computed(() => effectiveRoles.value.includes('platform_operator'));
+  const isAreaOperator = computed(() => effectiveRoles.value.includes('area_operator'));
+  const isAuditor = computed(() => effectiveRoles.value.includes('auditor'));
   const hasServerSession = computed(() => sessionLoaded.value && serverInfo.value !== null);
-  const effectiveRoles = computed<UserRole[]>(() => serverInfo.value?.roles ?? [currentRole.value]);
 
   function setRole(role: UserRole) {
+    // Refuse until server session is live, and only among granted roles.
+    if (!serverInfo.value || !serverInfo.value.roles.includes(role)) return;
     currentRole.value = role;
     try {
       localStorage.setItem(STORAGE_KEY, role);
@@ -58,7 +66,7 @@ export const useRoleStore = defineStore('role', () => {
   function initFromSession(info: ServerRoleInfo) {
     serverInfo.value = info;
     sessionLoaded.value = true;
-    // Derive primary role from server roles (prefer non-admin specific role)
+    // Derive primary role from server roles (prefer highest privilege first)
     const roleOrder: UserRole[] = [
       'admin',
       'platform_operator',
@@ -70,6 +78,11 @@ export const useRoleStore = defineStore('role', () => {
     for (const r of roleOrder) {
       if (info.roles.includes(r)) {
         currentRole.value = r;
+        try {
+          localStorage.setItem(STORAGE_KEY, r);
+        } catch {
+          /* ignore */
+        }
         break;
       }
     }

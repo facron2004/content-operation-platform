@@ -4,6 +4,7 @@ import {
   recomputeDailyMetricsRange,
   recomputePackageSalesAmountRange
 } from '../src/money';
+import type { PackageSalesAmountPrisma } from '../src/money/package-sales-amount';
 import { toOrderHeaderSharedFields } from '../src/gmv/gmv-order-header.types';
 import { batchUpsertOrderHeaders } from '../src/gmv/gmv-order-header.upsert';
 import { mapJeesiteOrderListToDataset } from '../src/content/jeesite-order-adapter';
@@ -31,6 +32,26 @@ describe('recomputeDailyMetricsRange', () => {
     expect(String(execute.mock.calls[1][0])).toMatch(/INSERT OR REPLACE INTO "DailyMetrics"/);
   });
 
+  it('runs delete+insert inside $transaction when available', async () => {
+    const execute = vi
+      .fn()
+      .mockResolvedValueOnce(1) // DELETE
+      .mockResolvedValueOnce(1); // INSERT
+    const transaction = vi
+      .fn()
+      .mockImplementation(async (cb: (tx: any) => Promise<unknown>) =>
+        cb({ $executeRawUnsafe: execute })
+      );
+    const result = await recomputeDailyMetricsRange(
+      { $executeRawUnsafe: vi.fn(), $transaction: transaction },
+      '2026-07-01',
+      '2026-07-01'
+    );
+    expect(transaction).toHaveBeenCalledTimes(1);
+    expect(execute).toHaveBeenCalledTimes(2);
+    expect(result.rowsAffected).toBe(1);
+  });
+
   it('rejects inverted range', async () => {
     await expect(
       recomputeDailyMetricsRange({ $executeRawUnsafe: vi.fn() }, '2026-07-10', '2026-07-01')
@@ -47,22 +68,31 @@ describe('package-sales-amount', () => {
   });
 
   it('upserts salesAmount and reports coverage', async () => {
-    const execute = vi.fn().mockResolvedValue(4);
+    const execute = vi
+      .fn()
+      .mockResolvedValueOnce(2) // zero stale salesAmount
+      .mockResolvedValueOnce(4); // upsert
     const query = vi
       .fn()
       .mockResolvedValueOnce([{ gmv: 80 }]) // joinable
       .mockResolvedValueOnce([{ gmv: 100 }]); // total
+    const transaction = vi.fn(async (fn: (tx: PackageSalesAmountPrisma) => Promise<unknown>) =>
+      fn({ $executeRawUnsafe: execute, $queryRawUnsafe: query })
+    ) as unknown as NonNullable<PackageSalesAmountPrisma['$transaction']>;
     const result = await recomputePackageSalesAmountRange(
-      { $executeRawUnsafe: execute, $queryRawUnsafe: query },
+      { $executeRawUnsafe: execute, $queryRawUnsafe: query, $transaction: transaction },
       '2026-07-01',
       '2026-07-02'
     );
+    expect(transaction).toHaveBeenCalledTimes(1);
     expect(result.rowsUpserted).toBe(4);
     expect(result.joinableGmv).toBe(80);
     expect(result.unjoinableGmv).toBe(20);
     expect(result.coverageRatio).toBeCloseTo(0.8);
-    expect(String(execute.mock.calls[0][0])).toMatch(/PackageSalesDaily/);
-    expect(String(execute.mock.calls[0][0])).toMatch(/salesAmount/);
+    expect(String(execute.mock.calls[0][0])).toMatch(/UPDATE "PackageSalesDaily"/);
+    expect(String(execute.mock.calls[0][0])).toMatch(/"salesAmount" = 0/);
+    expect(String(execute.mock.calls[1][0])).toMatch(/PackageSalesDaily/);
+    expect(String(execute.mock.calls[1][0])).toMatch(/salesAmount/);
   });
 
   it('rejects inverted range', async () => {

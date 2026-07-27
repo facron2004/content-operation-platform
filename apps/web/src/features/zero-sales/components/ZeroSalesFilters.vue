@@ -19,7 +19,9 @@
         :active-tab="activeTab"
         :filters="filters"
         @update:area-id="emit('update:areaId', $event)"
+        @update:merchant-id="emit('update:merchantId', $event)"
         @update:category="emit('update:category', $event)"
+        @update:sort="emit('update:sort', $event)"
         @update:search="emit('update:search', $event)"
         @filter-change="emit('filter-change')"
         @export="emit('export')"
@@ -33,11 +35,20 @@ import ZeroSalesFilterFields from './ZeroSalesFilterFields.vue';
 defineProps<{
   staleBucket: string;
   activeTab: string;
-  filters: { areaId?: string; category?: string; search?: string; merchantId?: string };
+  filters: {
+    areaId?: string;
+    category?: string;
+    search?: string;
+    merchantId?: string;
+    sort?: string;
+  };
 }>();
 const emit = defineEmits<{
   (e: 'bucket-change', value: string): void;
-  (e: 'update:areaId' | 'update:category' | 'update:search', value: string): void;
+  (
+    e: 'update:areaId' | 'update:merchantId' | 'update:category' | 'update:sort' | 'update:search',
+    value: string
+  ): void;
   (e: 'filter-change' | 'export'): void;
 }>();
 </script>

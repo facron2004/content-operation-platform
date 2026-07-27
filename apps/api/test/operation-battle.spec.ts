@@ -108,8 +108,13 @@ const tag = (key: OperationTag['key'], level: OperationTag['level'] = 'info'): O
 // ---- buildDerivedCommunities ----
 
 describe('buildDerivedCommunities', () => {
-  it('returns empty array for empty input', () => {
-    expect(buildDerivedCommunities([], new Map())).toEqual([]);
+  it('returns empty items for empty input', () => {
+    expect(buildDerivedCommunities([], new Map())).toEqual({
+      items: [],
+      groupMatched: 0,
+      groupLimit: 12,
+      groupTruncated: false
+    });
   });
 
   it('groups packages with same area+category into a single group', () => {
@@ -119,7 +124,7 @@ describe('buildDerivedCommunities', () => {
       ['P1', makeCard({ packageId: 'P1', score: 80 })],
       ['P2', makeCard({ packageId: 'P2', score: 70 })]
     ]);
-    const groups = buildDerivedCommunities([pkg1, pkg2], cards);
+    const { items: groups } = buildDerivedCommunities([pkg1, pkg2], cards);
     expect(groups).toHaveLength(1);
     expect(groups[0].groupType).toBe('foodie');
     expect(groups[0].todayRecommendedPackages).toHaveLength(2);
@@ -130,7 +135,7 @@ describe('buildDerivedCommunities', () => {
   it('splits packages with same areaId but different category into 2 groups', () => {
     const pkg1 = makePkg({ packageId: 'P1', category: '餐饮' });
     const pkg2 = makePkg({ packageId: 'P2', category: '丽人' });
-    const groups = buildDerivedCommunities([pkg1, pkg2], new Map());
+    const { items: groups } = buildDerivedCommunities([pkg1, pkg2], new Map());
     expect(groups).toHaveLength(2);
   });
 
@@ -142,18 +147,22 @@ describe('buildDerivedCommunities', () => {
       conversionRate: 0.05,
       areaName: '南山'
     });
-    const groups = buildDerivedCommunities([pkg1, pkg2], new Map());
+    const { items: groups } = buildDerivedCommunities([pkg1, pkg2], new Map());
     expect(groups.length).toBe(2);
     expect(groups[0].activityScore).toBeGreaterThan(groups[1].activityScore);
   });
 
-  it('caps total groups at 12 (slice(0, 12))', () => {
+  it('caps total groups at 12 and projects group-cap honesty', () => {
     // 构造 15 个不同的 area+category 组合
     const packages = Array.from({ length: 15 }, (_, i) =>
       makePkg({ packageId: `P${i}`, areaId: `A${i}`, areaName: `区域${i}`, category: `品类${i}` })
     );
-    const groups = buildDerivedCommunities(packages, new Map());
-    expect(groups).toHaveLength(12);
+    const result = buildDerivedCommunities(packages, new Map());
+    expect(result.items).toHaveLength(12);
+    // Residual #281
+    expect(result.groupMatched).toBe(15);
+    expect(result.groupLimit).toBe(12);
+    expect(result.groupTruncated).toBe(true);
   });
 
   it('skips packageIds that have no matching card in the cards map', () => {
@@ -161,7 +170,7 @@ describe('buildDerivedCommunities', () => {
     const pkg2 = makePkg({ packageId: 'P2' });
     // 只给 P1 一张 card,P2 没有 → topCards 应只含 P1
     const cards = new Map([['P1', makeCard({ packageId: 'P1' })]]);
-    const groups = buildDerivedCommunities([pkg1, pkg2], cards);
+    const { items: groups } = buildDerivedCommunities([pkg1, pkg2], cards);
     expect(groups[0].todayRecommendedPackages).toHaveLength(1);
     expect(groups[0].todayRecommendedPackages[0].packageId).toBe('P1');
   });
@@ -180,7 +189,7 @@ describe('buildDerivedCommunities', () => {
       ['P3', makeCard({ packageId: 'P3', score: 70 })],
       ['P4', makeCard({ packageId: 'P4', score: 60 })]
     ]);
-    const groups = buildDerivedCommunities(pkgs, cards);
+    const { items: groups } = buildDerivedCommunities(pkgs, cards);
     expect(groups[0].todayRecommendedPackages).toHaveLength(3);
     expect(groups[0].todayRecommendedPackages.map((c) => c.packageId)).toEqual(['P1', 'P2', 'P3']);
   });
@@ -188,7 +197,7 @@ describe('buildDerivedCommunities', () => {
   it('clamps memberCount to [80, 500]', () => {
     // 1 个 package → rows.length = 1 → clamp(120 + 18, 80, 500) = 138
     const pkg = makePkg();
-    const groups = buildDerivedCommunities([pkg], new Map());
+    const { items: groups } = buildDerivedCommunities([pkg], new Map());
     expect(groups[0].memberCount).toBe(138);
   });
 });
@@ -254,7 +263,7 @@ describe('buildDailyReview', () => {
     expect(review.tomorrowSuggestions).toBeDefined();
   });
 
-  it('filters goodPackages to score >= 75, capped at 5', () => {
+  it('filters goodPackages to score >= 75, capped at 5, with honesty', () => {
     const cards = [
       makeCard({ packageId: 'A', score: 90 }),
       makeCard({ packageId: 'B', score: 80 }),
@@ -267,9 +276,14 @@ describe('buildDailyReview', () => {
     const review = buildDailyReview('2026-05-11', cards, []);
     expect(review.goodPackages).toHaveLength(5);
     expect(review.goodPackages.every((c) => c.score >= 75)).toBe(true);
+    // Residual #282: 6 candidates score >= 75; list head 5; narrative uses full match.
+    expect(review.goodMatched).toBe(6);
+    expect(review.goodTruncated).toBe(true);
+    expect(review.reviewListLimit).toBe(5);
+    expect(review.whatHappened.join('\n')).toContain('高分可推套餐 6 个');
   });
 
-  it('filters weakPackages to those with continuous_slow or high_refund_risk tag, capped at 5', () => {
+  it('filters weakPackages to those with continuous_slow or high_refund_risk tag, capped at 5, with honesty', () => {
     const cards = [
       makeCard({ packageId: 'A', score: 80, tags: [tag('continuous_slow', 'danger')] }),
       makeCard({ packageId: 'B', score: 80, tags: [tag('high_refund_risk', 'danger')] }),
@@ -286,6 +300,10 @@ describe('buildDailyReview', () => {
         c.tags.some((t) => t.key === 'continuous_slow' || t.key === 'high_refund_risk')
       )
     ).toBe(true);
+    // Residual #282: 6 weak candidates; list head 5; narrative uses full match.
+    expect(review.weakMatched).toBe(6);
+    expect(review.weakTruncated).toBe(true);
+    expect(review.whatHappened.join('\n')).toContain('风险/滞销套餐 6 个');
   });
 
   it('sorts highConversionCopies by conversionRate descending and caps at 5', () => {

@@ -1,5 +1,6 @@
 .theme-trigger {
   box-shadow: var(--shadow-soft);
+  flex-shrink: 0;
 }
 
 .active {
@@ -9,5 +10,6 @@
 
 .theme-trigger-wrap {
   display: inline-flex;
+  align-items: center;
   line-height: 1;
 }

@@ -39,13 +39,16 @@ export function exportZeroSalesCsv(params: {
   category?: string;
   areaId?: string;
   search?: string;
+  // Residual #217: keep CSV order aligned with on-screen SKU sort.
+  sort?: string;
 }) {
   const url = getZeroSalesExportUrl({
     staleBucket: params.staleBucket,
     merchantId: params.merchantId,
     category: params.category,
     areaId: params.areaId,
-    search: params.search
+    search: params.search,
+    sort: params.sort
   });
   downloadBlob(url, `零动销SKU-${params.staleBucket ?? '全部'}.csv`);
 }
@@ -211,10 +214,16 @@ export function exposeZeroSalesController(
     merchantLoading: state.merchantLoading,
     merchantPage: state.merchantPage,
     merchantHasMore: state.merchantHasMore,
+    // Residual #266: ZERO_SALES_MERCHANTS_CACHE_CAP honesty.
+    merchantTruncated: state.merchantTruncated,
+    merchantLimit: state.merchantLimit,
     skuRows: state.skuRows,
     skuLoading: state.skuLoading,
     skuPage: state.skuPage,
     skuHasMore: state.skuHasMore,
+    // Residual #266: ZERO_SALES_SKUS_CACHE_CAP honesty.
+    skuTruncated: state.skuTruncated,
+    skuLimit: state.skuLimit,
     reload,
     merchantRowClass,
     skuRowClass,

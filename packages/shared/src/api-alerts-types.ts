@@ -34,5 +34,26 @@ export interface AlertsResponse {
     nextAction: string;
     alertIds: string[];
   }>;
+  /**
+   * Residual #283: Top-N focus package head honesty — cards are clipped;
+   * summary.packageCount stays full distinct active packages.
+   */
+  focusPackageLimit?: number;
+  focusPackageMatched?: number;
+  focusPackageTruncated?: boolean;
   pagination: { page: number; pageSize: number; total: number; totalPages: number };
+  /**
+   * Residual #274: honesty for RESOLVED_ALERT_DAY_LIMIT silent clip.
+   * When truncated, some already-resolved alerts may still appear active.
+   */
+  resolvedIdsLimit?: number;
+  resolvedIdsLoaded?: number;
+  resolvedIdsTruncated?: boolean;
+  /**
+   * Residual #275: honesty for RECOMMEND_CACHE_CAP source undercount.
+   * Alerts flatten operationAlerts from the recommend ranked head only.
+   */
+  sourceMatchedCount?: number;
+  sourceLimit?: number;
+  sourceTruncated?: boolean;
 }

@@ -8,11 +8,13 @@ const page = useMerchantSalesPage();
 <template>
   <section v-loading="page.loading" class="page-stack ms-view">
     <MerchantSalesHero
+      v-model:kpi-date="page.kpiDate"
       :loading="page.loading"
       :exporting="page.exporting"
       :can-export="page.ranking.items.length > 0"
       @reload="page.reload"
       @export="page.onExport"
+      @date-change="page.reload"
     />
     <ErrorAlert :message="page.loadError" />
     <MerchantSalesBody

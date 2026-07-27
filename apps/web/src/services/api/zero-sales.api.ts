@@ -57,6 +57,9 @@ export interface ZeroSalesSkuRow {
 export interface ZeroSalesListResponse<T> {
   items: T[];
   pagination: { page: number; pageSize: number; hasMore: boolean; total?: number };
+  // Residual #266: ZERO_SALES_*_CACHE_CAP honesty.
+  limit?: number;
+  truncated?: boolean;
 }
 
 export interface ZeroSalesTimelinePoint {
@@ -109,13 +112,12 @@ export async function getZeroSalesTimeline(packageId: string, days = 30) {
   return res.data;
 }
 
-/** 触发浏览器下载 CSV（拼接 URL,避免 axios 流式响应配置） */
+/** Relative path for axios client (baseURL already includes /api). */
 export function getZeroSalesExportUrl(params: Record<string, string | number | undefined>) {
   const qs = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) {
     if (v !== undefined && v !== null && v !== '') qs.set(k, String(v));
   }
-  const base = (import.meta.env.VITE_API_BASE_URL ?? '/api') + '/zero-sales/skus/export';
-  const sep = base.includes('?') ? '&' : '?';
-  return `${base}${sep}${qs.toString()}`;
+  const q = qs.toString();
+  return q ? `/zero-sales/skus/export?${q}` : '/zero-sales/skus/export';
 }

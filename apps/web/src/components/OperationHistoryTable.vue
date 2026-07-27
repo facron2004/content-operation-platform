@@ -1,29 +1,41 @@
 <template>
-  <el-table :data="filteredRecords" height="400" class="history-table">
-    <el-table-column label="时间" width="160">
-      <template #default="{ row }">{{ formatTime(row.timestamp) }}</template>
-    </el-table-column>
-    <el-table-column label="类型" width="120">
-      <template #default="{ row }">
-        <el-tag size="small">{{ getTypeLabel(row.type) }}</el-tag>
-      </template>
-    </el-table-column>
-    <el-table-column label="操作" prop="action" min-width="200" show-overflow-tooltip />
-    <el-table-column label="结果" width="80">
-      <template #default="{ row }">
-        <el-tag :type="row.result === 'success' ? 'success' : 'danger'" size="small">
-          {{ row.result === 'success' ? '成功' : '失败' }}
-        </el-tag>
-      </template>
-    </el-table-column>
-    <el-table-column label="详情" width="100">
-      <template #default="{ row }">
-        <el-button size="small" text @click="$emit('show-details', row)">查看</el-button>
-      </template>
-    </el-table-column>
-  </el-table>
+  <div v-if="filteredRecords.length === 0" class="history-empty">
+    <el-empty description="暂无操作记录" :image-size="72" />
+  </div>
+  <div v-else class="history-list">
+    <button
+      v-for="row in filteredRecords"
+      :key="row.id"
+      type="button"
+      class="history-item"
+      :class="{ 'is-error': row.result === 'error' }"
+      @click="$emit('show-details', row)"
+    >
+      <div class="history-item-icon" :class="row.result === 'success' ? 'is-success' : 'is-error'">
+        <el-icon v-if="row.result === 'success'"><SuccessFilled /></el-icon>
+        <el-icon v-else><CircleCloseFilled /></el-icon>
+      </div>
+      <div class="history-item-body">
+        <div class="history-item-title-row">
+          <span class="history-item-action">{{ row.action }}</span>
+          <el-tag size="small" effect="plain" class="history-type-tag">
+            {{ getTypeLabel(row.type) }}
+          </el-tag>
+        </div>
+        <div class="history-item-meta">
+          <span class="history-item-time">{{ formatTime(row.timestamp) }}</span>
+          <span class="history-item-result" :data-result="row.result">
+            {{ row.result === 'success' ? '成功' : '失败' }}
+          </span>
+        </div>
+        <div v-if="row.error" class="history-item-error">{{ row.error }}</div>
+      </div>
+      <el-icon class="history-item-chevron"><ArrowRight /></el-icon>
+    </button>
+  </div>
 </template>
 <script setup lang="ts">
+import { ArrowRight, CircleCloseFilled, SuccessFilled } from '@element-plus/icons-vue';
 import type { OperationRecord } from '../services/operation-history';
 defineProps<{
   filteredRecords: OperationRecord[];

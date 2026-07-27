@@ -1,5 +1,10 @@
-import { beijingDayRangeUtc, shiftDateKey } from '@content/shared';
-import { SQL_GMV_OH } from '../common';
+import { shiftDateKey } from '@content/shared';
+import {
+  beijingDayRangeSqlite,
+  SQL_GMV_OH,
+  sqlBeijingDate,
+  sqlDatetimeExclusiveRange
+} from '../common';
 import type { PrismaService } from '../prisma/prisma.service';
 import type { OverviewTrendPoint } from './overview.types';
 
@@ -8,18 +13,18 @@ export async function loadTrendRows(
   startDate: string,
   end: string
 ): Promise<OverviewTrendPoint[]> {
-  const { start } = beijingDayRangeUtc(startDate);
-  const { end: endExclusive } = beijingDayRangeUtc(end);
+  const { start } = beijingDayRangeSqlite(startDate);
+  const { end: endExclusive } = beijingDayRangeSqlite(end);
   const salesRows = (await prisma.$queryRawUnsafe(
-    `SELECT date(datetime("paidTime", '+8 hours')) AS "date",
+    `SELECT ${sqlBeijingDate('"paidTime"')} AS "date",
             COALESCE(SUM(${SQL_GMV_OH}), 0) AS "gmv",
             COUNT(*) AS "paidOrderCount"
      FROM "OrderHeader"
-     WHERE "paidTime" >= ? AND "paidTime" < ?
-     GROUP BY date(datetime("paidTime", '+8 hours'))
+     WHERE ${sqlDatetimeExclusiveRange('"paidTime"')}
+     GROUP BY ${sqlBeijingDate('"paidTime"')}
      ORDER BY "date" ASC`,
-    start.toISOString(),
-    endExclusive.toISOString()
+    start,
+    endExclusive
   )) as Array<{ date: string; gmv: number; paidOrderCount: number }>;
 
   const byDate = new Map(salesRows.map((r) => [r.date, r]));

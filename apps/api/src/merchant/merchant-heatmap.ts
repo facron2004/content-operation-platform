@@ -1,6 +1,6 @@
 import { beijingDateKey, shiftDateKey } from '@content/shared';
-import { Logger } from '@nestjs/common';
 import { DEFAULT_INVENTORY_RULES } from '../domain/rules-defaults';
+import { PLATFORM_SCAN_LIMIT, queryInChunks } from '../common/sql-chunk';
 import type { PrismaService } from '../prisma/prisma.service';
 import { AREA_COORDINATES, lookupAreaCoordinates } from './area-coordinates';
 
@@ -20,6 +20,9 @@ export interface MerchantHeatmapResponse {
   mappedMerchants: number;
   unmappedMerchants: number;
   center: { lat: number; lng: number };
+  // Residual #269: PLATFORM_SCAN_LIMIT honesty — totalMerchants is returned-head size.
+  limit?: number;
+  truncated?: boolean;
 }
 
 type AreaGroup = {
@@ -43,47 +46,53 @@ function hashCode(s: string): number {
 }
 
 export async function buildMerchantHeatmap(
-  prisma: PrismaService
+  prisma: PrismaService,
+  scope?: { areaIds?: string[]; merchantIds?: string[] }
 ): Promise<MerchantHeatmapResponse> {
-  const logger = new Logger('MerchantHeatmap');
-
   // 1. Gather distinct merchants from ContentPackage with their area info
-  const rows = (await prisma.$queryRawUnsafe(`
+  const whereParts = [`cp."merchantId" IS NOT NULL`, `cp."merchantId" <> ''`];
+  const params: string[] = [];
+  // Scope IN lists are already capped at 200 by buildDataScope; still chunk defensively.
+  if (scope?.merchantIds?.length) {
+    const mid = scope.merchantIds.slice(0, PLATFORM_SCAN_LIMIT);
+    whereParts.push(`cp."merchantId" IN (${mid.map(() => '?').join(',')})`);
+    params.push(...mid);
+  }
+  if (scope?.areaIds?.length) {
+    const aid = scope.areaIds.slice(0, PLATFORM_SCAN_LIMIT);
+    whereParts.push(`cp."areaId" IN (${aid.map(() => '?').join(',')})`);
+    params.push(...aid);
+  }
+  const rows = (await prisma.$queryRawUnsafe(
+    `
     SELECT
       cp."merchantId",
       MIN(cp."merchantName") AS "merchantName",
       MIN(cp."areaId")       AS "areaId",
       MIN(cp."areaName")     AS "areaName"
     FROM "ContentPackage" cp
-    WHERE cp."merchantId" IS NOT NULL AND cp."merchantId" <> ''
+    WHERE ${whereParts.join(' AND ')}
     GROUP BY cp."merchantId"
-  `)) as Array<{
+    ORDER BY cp."merchantId" ASC
+    LIMIT ?
+  `,
+    ...params,
+    PLATFORM_SCAN_LIMIT
+  )) as Array<{
     merchantId: string;
     merchantName: string;
     areaId: string | null;
     areaName: string | null;
   }>;
 
-  // 2. Load Merchant table lat/lng (if populated)
-  const merchantRows = (await prisma.$queryRawUnsafe(`
-    SELECT "merchantId", "lat", "lng", "address"
-    FROM "Merchant"
-    WHERE "lat" IS NOT NULL AND "lng" IS NOT NULL
-  `)) as Array<{
-    merchantId: string;
-    lat: number;
-    lng: number;
-    address: string | null;
-  }>;
-  const coordByMerchantId = new Map(
-    merchantRows.map((m) => [m.merchantId, { lat: m.lat, lng: m.lng }])
-  );
+  // 2. Load Merchant lat/lng only for the merchant id set (not full-table scan).
+  const allMerchantIds = rows.map((r) => r.merchantId);
+  const coordByMerchantId = await loadCoordsByMerchantId(prisma, allMerchantIds);
 
-  // 2. Load 30d GMV per merchant
+  // 3. Load 30d GMV per merchant
   const today = beijingDateKey(new Date());
   const rules = DEFAULT_INVENTORY_RULES;
   const fromDate = shiftDateKey(today, -(rules.stale30Days - 1));
-  const allMerchantIds = rows.map((r) => r.merchantId);
   const gmvByMerchantId = await loadGmvByMerchantId(prisma, allMerchantIds, fromDate);
 
   // 3. Build heatmap points — one per merchant, with scatter if coords are from area lookup
@@ -132,18 +141,18 @@ export async function buildMerchantHeatmap(
     }
   }
 
-  // 6. Normalize intensity (0-1) by merchant count
-  //    为每个点计算附近密度（1km 半径内商家数）作为 intensity
+  // 6. Normalize intensity (0-1) via ~1km grid density — O(n) instead of O(n²) pairwise.
+  //    Cell size ≈ 0.009° lat (~1km); lon cells scaled by cos(lat) at DEFAULT_CENTER.
+  const CELL_DEG = 0.009;
+  const cosLat = Math.cos((DEFAULT_CENTER.lat * Math.PI) / 180) || 1;
+  const cellCounts = new Map<string, number>();
   for (const p of points) {
-    let nearby = 0;
-    for (const q of points) {
-      const dlat = (p.lat - q.lat) * 111_000; // deg → m
-      const dlng = (p.lng - q.lng) * 111_000 * Math.cos((p.lat * Math.PI) / 180);
-      if (dlat * dlat + dlng * dlng < 1000 * 1000) {
-        nearby += q.merchantCount;
-      }
-    }
-    p.intensity = Math.min(nearby / 10, 1);
+    const key = `${Math.floor(p.lat / CELL_DEG)}:${Math.floor(p.lng / (CELL_DEG / cosLat))}`;
+    cellCounts.set(key, (cellCounts.get(key) ?? 0) + p.merchantCount);
+  }
+  for (const p of points) {
+    const key = `${Math.floor(p.lat / CELL_DEG)}:${Math.floor(p.lng / (CELL_DEG / cosLat))}`;
+    p.intensity = Math.min((cellCounts.get(key) ?? 0) / 10, 1);
   }
 
   // 7. Compute map center
@@ -155,13 +164,37 @@ export async function buildMerchantHeatmap(
         }
       : DEFAULT_CENTER;
 
+  // Residual #269: head-full heuristic — totalMerchants stays returned-head size.
+  const limit = PLATFORM_SCAN_LIMIT;
+  const truncated = rows.length >= limit;
+
   return {
     points,
     totalMerchants: rows.length,
     mappedMerchants: mappedCount,
     unmappedMerchants: unmappedCount,
-    center
+    center,
+    limit,
+    truncated
   };
+}
+
+async function loadCoordsByMerchantId(
+  prisma: PrismaService,
+  merchantIds: string[]
+): Promise<Map<string, { lat: number; lng: number }>> {
+  if (!merchantIds.length) return new Map();
+  const rows = await queryInChunks(merchantIds, async (chunk) => {
+    const ph = chunk.map(() => '?').join(',');
+    return (await prisma.$queryRawUnsafe(
+      `SELECT "merchantId", "lat", "lng"
+       FROM "Merchant"
+       WHERE "merchantId" IN (${ph})
+         AND "lat" IS NOT NULL AND "lng" IS NOT NULL`,
+      ...chunk
+    )) as Array<{ merchantId: string; lat: number; lng: number }>;
+  });
+  return new Map(rows.map((m) => [m.merchantId, { lat: m.lat, lng: m.lng }]));
 }
 
 async function loadGmvByMerchantId(
@@ -170,16 +203,18 @@ async function loadGmvByMerchantId(
   fromDate: string
 ): Promise<Map<string, number>> {
   if (!merchantIds.length) return new Map();
-  const ph = merchantIds.map(() => '?').join(',');
-  const rows = (await prisma.$queryRawUnsafe(
-    `SELECT cp."merchantId", COALESCE(SUM(psd."salesAmount"), 0) AS "gmv"
-     FROM "ContentPackage" cp
-     LEFT JOIN "PackageSalesDaily" psd ON psd."packageId" = cp."packageId" AND psd."date" >= ? AND psd."salesQty" > 0
-     WHERE cp."merchantId" IN (${ph})
-     GROUP BY cp."merchantId"`,
-    fromDate,
-    ...merchantIds
-  )) as Array<{ merchantId: string; gmv: number }>;
+  const rows = await queryInChunks(merchantIds, async (chunk) => {
+    const ph = chunk.map(() => '?').join(',');
+    return (await prisma.$queryRawUnsafe(
+      `SELECT cp."merchantId", COALESCE(SUM(psd."salesAmount"), 0) AS "gmv"
+       FROM "ContentPackage" cp
+       LEFT JOIN "PackageSalesDaily" psd ON psd."packageId" = cp."packageId" AND psd."date" >= ? AND psd."salesQty" > 0
+       WHERE cp."merchantId" IN (${ph})
+       GROUP BY cp."merchantId"`,
+      fromDate,
+      ...chunk
+    )) as Array<{ merchantId: string; gmv: number }>;
+  });
   return new Map(rows.map((r) => [r.merchantId, Number(r.gmv)]));
 }
 

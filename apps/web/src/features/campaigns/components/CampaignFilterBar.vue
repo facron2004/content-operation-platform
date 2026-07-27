@@ -43,8 +43,36 @@
           />
         </el-select>
       </el-form-item>
+      <!-- Residual #202: startDate range already on DTO + listCampaigns client. -->
+      <el-form-item label="开始日">
+        <el-date-picker
+          :model-value="model.startDateFrom || undefined"
+          type="date"
+          placeholder="起始日"
+          value-format="YYYY-MM-DD"
+          clearable
+          style="width: 150px"
+          @update:model-value="update({ startDateFrom: String($event ?? '') })"
+        />
+      </el-form-item>
+      <el-form-item label="截止日">
+        <el-date-picker
+          :model-value="model.startDateTo || undefined"
+          type="date"
+          placeholder="结束日"
+          value-format="YYYY-MM-DD"
+          clearable
+          style="width: 150px"
+          @update:model-value="update({ startDateTo: String($event ?? '') })"
+        />
+      </el-form-item>
       <el-form-item>
-        <el-button type="primary" :icon="Search" @click="emit('search')">搜索</el-button>
+        <AppleButton variant="primary" @click="emit('search')">
+          <template #icon>
+            <el-icon><Search /></el-icon>
+          </template>
+          搜索
+        </AppleButton>
       </el-form-item>
     </el-form>
   </section>
@@ -52,6 +80,7 @@
 
 <script setup lang="ts">
 import { Search } from '@element-plus/icons-vue';
+import AppleButton from '../../../components/AppleButton.vue';
 import {
   CAMPAIGN_STATUS_LABELS,
   CAMPAIGN_TYPE_LABELS,

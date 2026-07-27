@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import bcrypt from 'bcrypt';
 import { createHash, randomBytes } from 'crypto';
 import {
+  burnPasswordVerifyCost,
   isLegacyHash,
   verifyLegacyPassword,
   verifyPassword
@@ -82,5 +83,27 @@ describe('verifyPassword with legacy hash (compatibility)', () => {
     const password = 'test123';
     const legacy = makeLegacyHash(password);
     expect(await verifyPassword(password, legacy)).toBe(false);
+  });
+});
+
+describe('burnPasswordVerifyCost (login timing equalization)', () => {
+  it('resolves without throwing for arbitrary password input', async () => {
+    await expect(burnPasswordVerifyCost('any-probe-password')).resolves.toBeUndefined();
+    await expect(burnPasswordVerifyCost('')).resolves.toBeUndefined();
+  });
+
+  it('takes comparable wall time to a real bcrypt.compare miss', async () => {
+    const password = 'timing-probe';
+    const realHash = await bcrypt.hash('other-password', 10);
+    const t0 = Date.now();
+    await verifyPassword(password, realHash);
+    const realMs = Date.now() - t0;
+    const t1 = Date.now();
+    await burnPasswordVerifyCost(password);
+    const dummyMs = Date.now() - t1;
+    // Both paths must pay bcrypt cost. Allow generous slack for CI jitter —
+    // the bug was dummyMs ≈ 0 while realMs ≈ 50–150.
+    expect(dummyMs).toBeGreaterThan(10);
+    expect(realMs).toBeGreaterThan(10);
   });
 });

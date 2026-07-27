@@ -98,7 +98,7 @@ npm run build:exe
 |------|------|--------|
 | `CONTENT_CACHE_TTL_MS` | 数据缓存有效期（毫秒） | `300000` |
 | `EXTERNAL_FETCH_TIMEOUT_MS` | 外部 API 请求超时（毫秒） | `8000` |
-| `EXTERNAL_FETCH_CONCURRENCY` | 分页并发数 | `6` |
+| `EXTERNAL_FETCH_CONCURRENCY` | 分页并发数（默认 2，硬上限 4） | `2` |
 
 ### 服务配置
 

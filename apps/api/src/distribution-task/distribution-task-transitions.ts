@@ -27,14 +27,5 @@ export function canTransition(fromStatus: string, toStatus: string): boolean {
   return allowed.includes(toStatus);
 }
 
-export function assertCanTransition(
-  fromStatus: string,
-  toStatus: string,
-  actionLabel: string
-): void {
-  if (!canTransition(fromStatus, toStatus)) {
-    throw new Error(
-      `Cannot ${actionLabel} task with status '${fromStatus}'. Allowed: [${(VALID_TRANSITIONS[fromStatus] ?? []).join(', ')}]`
-    );
-  }
-}
+// Residual #111: removed dead assertCanTransition — callers use canTransition
+// and throw richer BadRequestException messages themselves.

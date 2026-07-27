@@ -8,39 +8,52 @@
       @update:model-value="onDateChange"
       @change="$emit('date-change')"
     />
-    <el-select model-value="all" class="proto-filter-item" disabled>
-      <el-option label="城市：全部城市" value="all" />
-    </el-select>
-    <el-select model-value="all" class="proto-filter-item" disabled>
-      <el-option label="商圈：全部商圈" value="all" />
-    </el-select>
-    <el-select model-value="all" class="proto-filter-item" disabled>
-      <el-option label="商家类型：全部" value="all" />
-    </el-select>
-    <el-select model-value="all" class="proto-filter-item" disabled>
-      <el-option label="品类：全部" value="all" />
-    </el-select>
-    <el-button class="proto-filter-reset" @click="onReset">
-      <el-icon><RefreshRight /></el-icon>
+    <span class="apple-filter-chip is-disabled">城市：全部城市</span>
+    <span class="apple-filter-chip is-disabled">商圈：全部商圈</span>
+    <span class="apple-filter-chip is-disabled">商家类型：全部</span>
+    <span class="apple-filter-chip is-disabled">品类：全部</span>
+    <AppleButton variant="secondary" size="sm" class="proto-filter-reset" @click="onReset">
+      <template #icon>
+        <svg
+          viewBox="0 0 24 24"
+          width="14"
+          height="14"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M3 12a9 9 0 1 0 3-6.7" />
+          <polyline points="3 4 3 10 9 10" />
+        </svg>
+      </template>
       重置
-    </el-button>
+    </AppleButton>
     <div class="proto-filter-actions">
-      <el-tag size="small" effect="plain" type="info">{{ dataSource || '加载中' }}</el-tag>
+      <span class="apple-meta-pill">{{ dataSource || '加载中' }}</span>
       <span class="updated-at">更新 {{ formatTime(updatedAt) }}</span>
       <GmvCockpitBackfill
         :backfilling="backfilling"
         :backfill-label="backfillLabel"
         @backfill="$emit('backfill', $event)"
       />
-      <el-button size="small" :loading="loading" data-testid="gmv-reload" @click="$emit('reload')">
+      <AppleButton
+        variant="secondary"
+        size="sm"
+        :loading="loading"
+        data-testid="gmv-reload"
+        @click="$emit('reload')"
+      >
         刷新
-      </el-button>
+      </AppleButton>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { RefreshRight } from '@element-plus/icons-vue';
+import AppleButton from '../../../components/AppleButton.vue';
 import { formatTime } from '../../../utils/labels';
 import GmvCockpitBackfill from './GmvCockpitBackfill.vue';
 import AppleDatePicker from './AppleDatePicker.vue';
@@ -74,3 +87,37 @@ function onReset() {
 </script>
 
 <style src="../../../styles/components/gmv-proto-filter.css" scoped></style>
+<style scoped>
+.apple-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: rgba(120, 120, 128, 0.1);
+  color: #86868b;
+  font-size: 12px;
+  font-weight: 560;
+  letter-spacing: -0.01em;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif;
+  white-space: nowrap;
+}
+
+.apple-filter-chip.is-disabled {
+  opacity: 0.75;
+  cursor: not-allowed;
+}
+
+.apple-meta-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: rgba(120, 120, 128, 0.12);
+  color: #3a3a3c;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif;
+}
+</style>

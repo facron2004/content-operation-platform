@@ -21,6 +21,9 @@
       :feed-facts="feedFacts"
       :feed-checks="feedChecks"
       :format-detail-items="formatDetailItems"
+      :truncated="listTruncated"
+      :limit="listLimit"
+      :matched-count="matchedCount"
       @refresh-status="loadAICopyStatus"
       @save-config="saveAICopyConfig"
       @generate="generate"
@@ -47,6 +50,10 @@ const {
   configSaving,
   generationMode,
   packages,
+  // Residual #268: generate package picker honesty.
+  listTruncated,
+  listLimit,
+  matchedCount,
   copies,
   aiStatus,
   packageDetail,

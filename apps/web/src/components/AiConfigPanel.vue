@@ -15,6 +15,10 @@ defineProps<{
   generationMode: 'ai' | 'rule' | null;
   packages: RecommendPackageItem[];
   channelOptions: Array<{ label: string; value: string }>;
+  // Residual #268: generate package picker honesty.
+  truncated?: boolean;
+  limit?: number | null;
+  matchedCount?: number | null;
 }>();
 const form = defineModel<GenerateForm>('form', { required: true }),
   configForm = defineModel<AIConfigForm>('configForm', { required: true });
@@ -46,6 +50,9 @@ defineEmits<{ 'refresh-status': []; 'save-config': []; generate: [useAI: boolean
       :channel-options="channelOptions"
       :loading="loading"
       :generation-mode="generationMode"
+      :truncated="truncated"
+      :limit="limit"
+      :matched-count="matchedCount"
       @generate="(useAI) => $emit('generate', useAI)"
     />
   </section>

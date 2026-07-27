@@ -45,14 +45,58 @@
       <el-table-column label="目标订单" width="100" align="right">
         <template #default="{ row }">{{ formatCount(row.targetOrders) }}</template>
       </el-table-column>
-      <el-table-column label="操作" width="150" fixed="right">
+      <!-- Residual #207: wider ops column for status transitions (mirror detail hero). -->
+      <el-table-column label="操作" min-width="280" width="320" fixed="right">
         <template #default="{ row }">
-          <el-button text type="primary" size="small" :icon="Edit" @click="emit('edit', row)">
-            编辑
-          </el-button>
-          <el-button text type="danger" size="small" :icon="Delete" @click="emit('delete', row)">
-            删除
-          </el-button>
+          <div class="action-cell">
+            <AppleButton
+              v-if="canStart(row)"
+              variant="ghost"
+              size="sm"
+              data-tone="success"
+              @click="emit('start', row)"
+            >
+              {{ row.status === 'paused' ? '恢复' : '启动' }}
+            </AppleButton>
+            <AppleButton
+              v-if="canPause(row)"
+              variant="ghost"
+              size="sm"
+              data-tone="warning"
+              @click="emit('pause', row)"
+            >
+              暂停
+            </AppleButton>
+            <AppleButton
+              v-if="canComplete(row)"
+              variant="ghost"
+              size="sm"
+              @click="emit('complete', row)"
+            >
+              结束
+            </AppleButton>
+            <AppleButton
+              v-if="canCancel(row)"
+              variant="ghost"
+              size="sm"
+              data-tone="danger"
+              @click="emit('cancel', row)"
+            >
+              取消
+            </AppleButton>
+            <AppleButton variant="ghost" size="sm" @click="emit('edit', row)">
+              <template #icon>
+                <el-icon><Edit /></el-icon>
+              </template>
+              编辑
+            </AppleButton>
+            <AppleButton variant="ghost" data-tone="danger" size="sm" @click="emit('delete', row)">
+              <template #icon>
+                <el-icon><Delete /></el-icon>
+              </template>
+              删除
+            </AppleButton>
+          </div>
         </template>
       </el-table-column>
       <template #empty>
@@ -77,6 +121,7 @@
 <script setup lang="ts">
 import { Delete, Edit } from '@element-plus/icons-vue';
 import type { MarketingCampaign } from '@content/shared';
+import AppleButton from '../../../components/AppleButton.vue';
 import { CAMPAIGN_TYPE_LABELS } from '../composables/useCampaigns';
 import CampaignStatusTag from './CampaignStatusTag.vue';
 import { formatCount, formatGmv } from '../../../utils/format';
@@ -96,6 +141,11 @@ const emit = defineEmits<{
   view: [campaign: MarketingCampaign];
   edit: [campaign: MarketingCampaign];
   delete: [campaign: MarketingCampaign];
+  // Residual #207: list status transitions (same gates as CampaignDetailHero).
+  start: [campaign: MarketingCampaign];
+  pause: [campaign: MarketingCampaign];
+  complete: [campaign: MarketingCampaign];
+  cancel: [campaign: MarketingCampaign];
   'update:page': [page: number];
   'update:pageSize': [pageSize: number];
 }>();
@@ -115,6 +165,20 @@ function typeLabel(type: MarketingCampaign['campaignType']): string {
 
 function typeTagType(type: MarketingCampaign['campaignType']): TagType {
   return TYPE_TAG_TYPES[type] ?? 'info';
+}
+
+// Residual #207: status gates mirror CampaignDetailHero.
+function canStart(row: MarketingCampaign): boolean {
+  return row.status === 'draft' || row.status === 'paused';
+}
+function canPause(row: MarketingCampaign): boolean {
+  return row.status === 'active';
+}
+function canComplete(row: MarketingCampaign): boolean {
+  return row.status === 'active' || row.status === 'paused';
+}
+function canCancel(row: MarketingCampaign): boolean {
+  return row.status === 'draft' || row.status === 'active' || row.status === 'paused';
 }
 
 function formatDate(value?: string): string {
@@ -151,5 +215,12 @@ function formatDate(value?: string): string {
   display: flex;
   justify-content: flex-end;
   margin-top: 16px;
+}
+
+.action-cell {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  align-items: center;
 }
 </style>

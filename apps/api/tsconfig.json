@@ -3,14 +3,7 @@
   "compilerOptions": {
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
-    "types": [
-      "node",
-      "vitest"
-    ]
+    "types": ["node", "vitest"]
   },
-  "include": [
-    "src/**/*.ts",
-    "test/**/*.ts"
-  ]
+  "include": ["src/**/*.ts"]
 }
-

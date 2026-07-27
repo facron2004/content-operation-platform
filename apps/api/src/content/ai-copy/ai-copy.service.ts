@@ -11,6 +11,7 @@ import { COPY_VERSION_LETTERS, clamp } from '@content/shared';
 import { randomUUID } from 'crypto';
 import { auditCopyText } from '../../domain/copy-rules';
 import { nowISO } from '../../common/format';
+import { AI_COPY_CONCURRENCY_MAX, AI_COPY_WAIT_QUEUE_MAX } from '../../common/sql-chunk';
 import type { PackageDetail } from '../package-detail';
 import { AIClientManager } from './ai-client.manager';
 import { PromptBuilder } from './prompt.builder';
@@ -27,6 +28,11 @@ export class AICopyService {
   private readonly responseParser = new ResponseParser();
   private readonly retryHandler: RetryHandler;
   private readonly copyGenerator: CopyGenerator;
+  /** Process-wide concurrent outbound LLM calls (not per-IP throttle). */
+  private activeGenerations = 0;
+  private readonly waitQueue: Array<() => void> = [];
+  /** Per-package single-flight so double-click reuses one outbound call. */
+  private readonly packageInFlight = new Map<string, Promise<GeneratedCopy[]>>();
 
   constructor(@Inject(ConfigService) private readonly config: ConfigService) {
     this.clientManager = new AIClientManager({
@@ -51,6 +57,70 @@ export class AICopyService {
   }
 
   async generateCopies(
+    pkg: ContentPackage,
+    promotion: PromotionScore,
+    request: GenerateCopyRequest,
+    packageDetail: PackageDetail | null
+  ): Promise<GeneratedCopy[]> {
+    const client = this.clientManager.getClient();
+    if (!client) {
+      throw new ServiceUnavailableException(
+        'AI文案接口未配置：请先配置 AI_API_KEY、AI_API_BASE_URL 和 AI_MODEL'
+      );
+    }
+
+    const flightKey = `${pkg.packageId}|${request.channel}|${request.copyCount ?? 3}|${request.scenario ?? ''}|${request.tone ?? ''}`;
+    const pending = this.packageInFlight.get(flightKey);
+    if (pending) return pending;
+
+    const run = this.runGenerateWithConcurrency(pkg, promotion, request, packageDetail);
+    this.packageInFlight.set(flightKey, run);
+    try {
+      return await run;
+    } finally {
+      if (this.packageInFlight.get(flightKey) === run) this.packageInFlight.delete(flightKey);
+    }
+  }
+
+  private async runGenerateWithConcurrency(
+    pkg: ContentPackage,
+    promotion: PromotionScore,
+    request: GenerateCopyRequest,
+    packageDetail: PackageDetail | null
+  ): Promise<GeneratedCopy[]> {
+    await this.acquireSlot();
+    try {
+      return await this.doGenerateCopies(pkg, promotion, request, packageDetail);
+    } finally {
+      this.releaseSlot();
+    }
+  }
+
+  private acquireSlot(): Promise<void> {
+    const max = Math.max(1, AI_COPY_CONCURRENCY_MAX);
+    if (this.activeGenerations < max) {
+      this.activeGenerations += 1;
+      return Promise.resolve();
+    }
+    const waitMax = Math.max(0, AI_COPY_WAIT_QUEUE_MAX);
+    if (this.waitQueue.length >= waitMax) {
+      throw new ServiceUnavailableException('AI 生成繁忙，请稍后重试');
+    }
+    return new Promise<void>((resolve) => {
+      this.waitQueue.push(() => {
+        this.activeGenerations += 1;
+        resolve();
+      });
+    });
+  }
+
+  private releaseSlot(): void {
+    this.activeGenerations = Math.max(0, this.activeGenerations - 1);
+    const next = this.waitQueue.shift();
+    if (next) next();
+  }
+
+  private async doGenerateCopies(
     pkg: ContentPackage,
     promotion: PromotionScore,
     request: GenerateCopyRequest,

@@ -13,9 +13,10 @@ const loadEnvFile = (filePath: string) => {
     if (!trimmed || trimmed.startsWith('#')) continue;
     const eq = trimmed.indexOf('=');
     if (eq < 1) continue;
-    /* .env 覆盖进程残留旧值（watch/restart / 复用终端环境变量） */ process.env[
-      trimmed.slice(0, eq).trim()
-    ] = parseEnvValue(trimmed.slice(eq + 1));
+    const key = trimmed.slice(0, eq).trim();
+    if (!process.env[key]) {
+      process.env[key] = parseEnvValue(trimmed.slice(eq + 1));
+    }
   }
 };
 const rootDir = resolve(__dirname, '../../../..');

@@ -1,0 +1,42 @@
+{
+  "appId": "com.contentops.app",
+  "productName": "内容运营平台",
+  "copyright": "Copyright © 2026 Content Ops",
+  "directories": {
+    "output": "dist-electron"
+  },
+  "asar": true,
+  "npmRebuild": false,
+  "nodeGypRebuild": false,
+  "files": [
+    "electron/**/*",
+    "apps/api/dist/**/*",
+    "apps/web/dist/**/*",
+    "packages/shared/dist/**/*",
+    "prisma/schema.prisma",
+    ".env.example",
+    "package.json",
+    "node_modules/**/*",
+    "!node_modules/playwright/**/*",
+    "!node_modules/@playwright/**/*",
+    "!node_modules/electron/**/*",
+    "!node_modules/electron-builder/**/*",
+    "!node_modules/app-builder-bin/**/*",
+    "!node_modules/typescript/**/*",
+    "!node_modules/vitest/**/*",
+    "!node_modules/@vitest/**/*",
+    "!node_modules/vite/**/*",
+    "!node_modules/@types/**/*",
+    "!node_modules/eslint/**/*",
+    "!node_modules/@eslint/**/*"
+  ],
+  "asarUnpack": ["**/node_modules/.prisma/**/*", "**/node_modules/@prisma/client/**/*"],
+  "win": {
+    "target": [
+      {
+        "target": "dir",
+        "arch": ["x64"]
+      }
+    ]
+  }
+}

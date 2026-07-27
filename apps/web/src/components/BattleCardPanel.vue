@@ -5,9 +5,9 @@
       description="把推荐理由、人群、渠道和多场景文案一次性整理好。"
     >
       <template #actions>
-        <el-button type="primary" :loading="battleCardLoading" @click="$emit('generate')">
+        <AppleButton variant="primary" :loading="battleCardLoading" @click="$emit('generate')">
           生成作战卡
-        </el-button>
+        </AppleButton>
       </template>
     </SectionHeader>
     <div v-if="battleCard" class="battle-card-grid">
@@ -28,6 +28,7 @@ import EmptyState from './EmptyState.vue';
 import SectionHeader from './SectionHeader.vue';
 import BattleCardSummary from './BattleCardSummary.vue';
 import BattleCardCopies from './BattleCardCopies.vue';
+import AppleButton from './AppleButton.vue';
 defineProps<{
   selectedPackage: RecommendPackageItem | undefined;
   battleCard: BattleCard | null;

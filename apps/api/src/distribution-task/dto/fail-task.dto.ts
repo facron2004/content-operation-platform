@@ -1,27 +1,25 @@
-import { IsString, IsOptional } from 'class-validator';
+import { IsString, IsOptional, MaxLength } from 'class-validator';
 
 export class FailTaskDto {
-  @IsOptional()
-  @IsString()
-  operatorId?: string;
+  // operatorId/operatorName are stamped from JWT in the controller.
 
   @IsOptional()
   @IsString()
-  operatorName?: string;
-
-  @IsOptional()
-  @IsString()
+  @MaxLength(500)
   failReason?: string;
 
   @IsOptional()
   @IsString()
+  @MaxLength(100)
   failCategory?: string;
 
   @IsOptional()
   @IsString()
+  @MaxLength(500)
   evidenceUrl?: string;
 
   @IsOptional()
   @IsString()
+  @MaxLength(1000)
   note?: string;
 }

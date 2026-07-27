@@ -1,6 +1,7 @@
 /** Merchant sales service facade. */
 import { Inject, Injectable } from '@nestjs/common';
 import { TtlCache } from '../common';
+import { HEAVY_LIST_CACHE_MAX_SIZE } from '../common/heavy-aggregate-gate';
 import { PrismaService } from '../prisma/prisma.service';
 import { createMerchantSalesServiceMethods } from './merchant-sales-surface';
 export { MERCHANT_SALES_SERVICE } from './merchant-sales.dto';
@@ -11,9 +12,12 @@ export type {
   MerchantSalesTrendPoint
 } from './merchant-sales.dto';
 
+/** Ranking/summary aggregates — short TTL + size bound (parity GMV/overview). */
+const MERCHANT_SALES_CACHE_TTL_MS = 60_000;
+
 @Injectable()
 export class MerchantSalesService {
-  private readonly cache = new TtlCache();
+  private readonly cache = new TtlCache(MERCHANT_SALES_CACHE_TTL_MS, HEAVY_LIST_CACHE_MAX_SIZE);
   private readonly lastRefreshAt = { value: 0 };
   private static readonly REFRESH_MIN_INTERVAL_MS = 10_000;
   private readonly api: ReturnType<typeof createMerchantSalesServiceMethods>;

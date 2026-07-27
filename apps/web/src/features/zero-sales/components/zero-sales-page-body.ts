@@ -23,10 +23,22 @@ export function useZeroSalesPageBody(p: Page) {
     merchantLoading = computed(() => unref(p.merchantLoading));
   const merchantPage = computed(() => unref(p.merchantPage)),
     merchantHasMore = computed(() => unref(p.merchantHasMore));
+  // Residual #266: ZERO_SALES_MERCHANTS_CACHE_CAP honesty.
+  const merchantTruncated = computed(() => Boolean(unref(p.merchantTruncated)));
+  const merchantLimit = computed(() => {
+    const v = unref(p.merchantLimit);
+    return typeof v === 'number' && v > 0 ? v : null;
+  });
   const skuRows = computed(() => unref(p.skuRows)),
     skuLoading = computed(() => unref(p.skuLoading));
   const skuPage = computed(() => unref(p.skuPage)),
     skuHasMore = computed(() => unref(p.skuHasMore));
+  // Residual #266: ZERO_SALES_SKUS_CACHE_CAP honesty.
+  const skuTruncated = computed(() => Boolean(unref(p.skuTruncated)));
+  const skuLimit = computed(() => {
+    const v = unref(p.skuLimit);
+    return typeof v === 'number' && v > 0 ? v : null;
+  });
   return {
     overviewKpi,
     dim,
@@ -39,9 +51,13 @@ export function useZeroSalesPageBody(p: Page) {
     merchantLoading,
     merchantPage,
     merchantHasMore,
+    merchantTruncated,
+    merchantLimit,
     skuRows,
     skuLoading,
     skuPage,
-    skuHasMore
+    skuHasMore,
+    skuTruncated,
+    skuLimit
   };
 }

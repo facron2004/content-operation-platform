@@ -72,12 +72,17 @@ const mockPrisma = {
     findUnique: vi.fn().mockResolvedValue(null),
     createMany: vi.fn().mockResolvedValue({ count: 0 }),
     update: vi.fn().mockResolvedValue({}),
+    // Legacy path kept for other suites; residual #104 audit uses $executeRawUnsafe.
+    updateMany: vi.fn().mockResolvedValue({ count: 1 }),
     count: vi.fn().mockResolvedValue(0)
   },
   contentPackage: {
     upsert: vi.fn().mockResolvedValue({}),
     findUnique: vi.fn().mockResolvedValue(null)
-  }
+  },
+  // Residual #104/#168: atomic versionNo MAX+1 audit write via $executeRawUnsafe slim shell.
+  $executeRawUnsafe: vi.fn().mockResolvedValue(1),
+  $queryRawUnsafe: vi.fn().mockResolvedValue([])
 };
 
 const mockDataSource = {
@@ -110,6 +115,8 @@ describe('CopyService', () => {
     mockPrisma.generatedCopy.findUnique.mockResolvedValue(null);
     mockPrisma.generatedCopy.createMany.mockResolvedValue({ count: 0 });
     mockPrisma.generatedCopy.update.mockResolvedValue({});
+    mockPrisma.generatedCopy.updateMany.mockResolvedValue({ count: 1 });
+    mockPrisma.$executeRawUnsafe.mockResolvedValue(1);
     mockPrisma.contentPackage.upsert.mockResolvedValue({});
     mockPrisma.contentPackage.findUnique.mockResolvedValue(null);
 
@@ -269,15 +276,31 @@ describe('CopyService', () => {
       expect(result.items[0].channel).toBe('wechat_group');
     });
 
-    it('passes auditStatus and channel filters to prisma', async () => {
+    it('passes auditStatus, channel, and trailing 90d createdAt window to prisma', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-07-18T12:00:00+08:00'));
       await service.listCopies({ auditStatus: 'approved', channel: 'moments' }, 1, 20);
 
-      expect(mockPrisma.generatedCopy.findMany).toHaveBeenCalledWith({
-        where: { auditStatus: 'approved', channel: 'moments' },
-        orderBy: { createdAt: 'desc' },
-        skip: 0,
-        take: 20
-      });
+      const call = mockPrisma.generatedCopy.findMany.mock.calls[0][0];
+      expect(call.where.auditStatus).toBe('approved');
+      expect(call.where.channel).toBe('moments');
+      expect(call.where.createdAt.gte).toEqual(new Date('2026-04-20T00:00:00+08:00'));
+      expect(call.where.createdAt.lt).toEqual(new Date('2026-07-19T00:00:00+08:00'));
+      expect(call.orderBy).toEqual({ createdAt: 'desc' });
+      expect(call.skip).toBe(0);
+      expect(call.take).toBe(20);
+      vi.useRealTimers();
+    });
+
+    it('returns dateFrom/dateTo on pagination for trailing 90d window', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-07-18T12:00:00+08:00'));
+      mockPrisma.generatedCopy.findMany.mockResolvedValueOnce([]);
+      mockPrisma.generatedCopy.count.mockResolvedValueOnce(0);
+      const result = await service.listCopies({});
+      expect(result.pagination.dateFrom).toBe('2026-04-20');
+      expect(result.pagination.dateTo).toBe('2026-07-18');
+      vi.useRealTimers();
     });
   });
 
@@ -307,13 +330,15 @@ describe('CopyService', () => {
       );
     });
 
-    it('updates copy with audit status and returns mapped result', async () => {
+    it('updates copy with audit status and returns slim success shell', async () => {
       mockPrisma.generatedCopy.findUnique.mockResolvedValueOnce({
         contentId: 'C1',
         packageId: 'PKG-COPY-001',
+        channel: 'wechat_group',
         title: '原标题',
         body: '原内容',
-        strategyType: 'sprint'
+        strategyType: 'sprint',
+        auditStatus: 'pending'
       });
       mockPrisma.contentPackage.findUnique.mockResolvedValueOnce({
         packageId: 'PKG-COPY-001',
@@ -345,26 +370,8 @@ describe('CopyService', () => {
         timeMatchScore: 78,
         historyScore: 75
       });
-      mockPrisma.generatedCopy.update.mockResolvedValueOnce({
-        contentId: 'C1',
-        packageId: 'PKG-COPY-001',
-        areaId: 'A001',
-        merchantId: 'M001',
-        channel: 'wechat_group',
-        scenario: '日常推荐',
-        title: '修改后标题',
-        body: '修改后内容',
-        cta: '购买',
-        copyVersion: 'A',
-        strategyType: 'sprint',
-        riskLevel: 'low',
-        riskTips: '',
-        auditStatus: 'approved',
-        auditRemark: '通过',
-        createdBy: 'tester',
-        createdAt: new Date('2026-06-09'),
-        updatedAt: new Date('2026-06-10')
-      });
+      // Residual #168: changed-rows probe via $executeRawUnsafe (no full-row payload).
+      mockPrisma.$executeRawUnsafe.mockResolvedValueOnce(1);
 
       const result = await service.auditCopy('C1', {
         auditStatus: 'approved',
@@ -373,18 +380,32 @@ describe('CopyService', () => {
         auditRemark: '通过'
       });
 
+      expect(result.success).toBe(true);
       expect(result.contentId).toBe('C1');
       expect(result.auditStatus).toBe('approved');
-      expect(mockPrisma.generatedCopy.update).toHaveBeenCalledTimes(1);
+      expect(result.packageId).toBe('PKG-COPY-001');
+      expect(result.channel).toBe('wechat_group');
+      // Happy-path audit write is $executeRawUnsafe (slim shell).
+      // ensureTaskForApprovedCopy may issue additional raw queries for task mint.
+      expect(mockPrisma.$executeRawUnsafe.mock.calls.length).toBeGreaterThanOrEqual(1);
+      const sql = String(mockPrisma.$executeRawUnsafe.mock.calls[0][0]);
+      expect(sql).toMatch(/MAX\(v\."versionNo"\)/);
+      expect(sql).toMatch(/auditStatus" IN \('pending', 'draft', 'risk'\)/);
+      expect(sql).not.toMatch(/\bRETURNING\b/);
+      expect(mockPrisma.generatedCopy.count).not.toHaveBeenCalled();
+      // Happy path must not re-read full row after write (only pre-check findUnique).
+      expect(mockPrisma.generatedCopy.findUnique).toHaveBeenCalledTimes(1);
     });
 
     it('overrides approved to risk when machine audit detects high risk', async () => {
       mockPrisma.generatedCopy.findUnique.mockResolvedValueOnce({
         contentId: 'C2',
         packageId: 'PKG-COPY-001',
+        channel: 'wechat_group',
         title: '全网最低福利',
         body: '全网最低价格，只要9.9',
-        strategyType: 'sprint'
+        strategyType: 'sprint',
+        auditStatus: 'pending'
       });
       mockPrisma.contentPackage.findUnique.mockResolvedValueOnce({
         packageId: 'PKG-COPY-001',
@@ -416,35 +437,20 @@ describe('CopyService', () => {
         timeMatchScore: 78,
         historyScore: 75
       });
-      mockPrisma.generatedCopy.update.mockImplementationOnce(
-        async ({ data }: { where: unknown; data: Prisma.GeneratedCopyUpdateInput }) => ({
-          contentId: 'C2',
-          packageId: 'PKG-COPY-001',
-          areaId: 'A001',
-          merchantId: 'M001',
-          channel: 'wechat_group',
-          scenario: '日常推荐',
-          title: data.title,
-          body: data.body,
-          cta: '购买',
-          copyVersion: 'A',
-          strategyType: 'sprint',
-          riskLevel: data.riskLevel,
-          riskTips: data.riskTips,
-          auditStatus: data.auditStatus,
-          auditRemark: data.auditRemark,
-          createdBy: 'tester',
-          createdAt: new Date('2026-06-09'),
-          updatedAt: new Date('2026-06-10')
-        })
-      );
+      // Residual #168: changed-rows only — slim shell synthesizes auditStatus from finalStatus.
+      mockPrisma.$executeRawUnsafe.mockResolvedValueOnce(1);
 
       const result = await service.auditCopy('C2', { auditStatus: 'approved' });
 
       // Because the title contains '全网最低' (forbidden word), machine audit
       // should flag it as high risk and override approved -> risk
+      expect(result.success).toBe(true);
       expect(result.auditStatus).toBe('risk');
-      expect(result.riskLevel).toBe('high');
+      // Risk level is not part of the slim shell (SPA discards body); assert via write params.
+      const writeParams = mockPrisma.$executeRawUnsafe.mock.calls[0].slice(1);
+      // Param order: title, body, finalStatus, auditRemark, riskLevel, riskTips, ...
+      expect(writeParams[2]).toBe('risk');
+      expect(writeParams[4]).toBe('high');
     });
   });
 });

@@ -18,7 +18,9 @@ import {
   mapDailyMetricsToKpi,
   mapDailyMetricsTrend,
   mapDistributionRows,
-  sortAndPageMerchants
+  pageMerchants,
+  sortAndPageMerchants,
+  sortMerchants
 } from '../src/gmv/gmv-metrics';
 import { resolveGmvKpis } from '../src/gmv/gmv-resolve';
 import {
@@ -26,9 +28,19 @@ import {
   groupCandidatesByMerchant,
   staleDaysFromBucket
 } from '../src/zero-sales/zero-sales-candidates';
-import { buildZeroSalesMerchantRows, mapZeroSalesSkuRows } from '../src/zero-sales/zero-sales-list';
+import {
+  buildZeroSalesMerchantRows,
+  mapZeroSalesSkuRows,
+  paginateZeroSalesMerchants,
+  zeroSalesMerchantsCacheKey
+} from '../src/zero-sales/zero-sales-list';
+import { buildZeroSalesSkuFilters } from '../src/zero-sales/zero-sales-loaders';
 import { DEFAULT_INVENTORY_RULES } from '../src/domain/rules-defaults';
-import { sortMerchantItems, paginateMerchantItems } from '../src/merchant/merchant-list';
+import {
+  merchantListCacheKey,
+  sortMerchantItems,
+  paginateMerchantItems
+} from '../src/merchant/merchant-list';
 import { emptyMerchantProfile } from '../src/merchant/merchant-profile';
 import { staleBucketFromDays as merchantStaleBucketFromDays } from '../src/merchant/merchant-sku';
 import {
@@ -37,7 +49,11 @@ import {
   staleDaysFromBucket as movementStaleDaysFromBucket
 } from '../src/movement/movement-stale';
 import { buildStagnantCsv, csvEscape } from '../src/movement/movement-csv';
+import { movingSkusCacheKey, stagnantSkusCacheKey } from '../src/movement/movement-list';
+import { paginateMovementSkuRows } from '../src/movement/movement-skus';
 import { buildOverviewKpiPayload } from '../src/overview/overview-kpis';
+import { alertAggregateCacheKey, extractRankedAlerts } from '../src/content/alert.service';
+import { prefilterPackagesForRecommend } from '../src/content/content-facade';
 
 describe('refund resolveWithCacheFallback', () => {
   it('returns cached value without calling loaders', async () => {
@@ -114,12 +130,16 @@ describe('merchant-sales window and mappers', () => {
     expect(sortColumn('orderCountDesc')).toBe('"orderCount"');
 
     expect(whereClauseForWindow('day')).toContain('"date" >= ?');
-    expect(whereClauseForWindow('year')).toContain('substr("date", 1, 4)');
+    // year uses the same inclusive date bounds (trailing 90d), not substr year-key.
+    expect(whereClauseForWindow('year')).toContain('"date" >= ?');
     expect(whereArgsForWindow('day', '2026-07-01', '2026-07-10')).toEqual([
       '2026-07-01',
       '2026-07-10'
     ]);
-    expect(whereArgsForWindow('year', '2026-07-01', '2026-07-10')).toEqual(['2026-07-01']);
+    expect(whereArgsForWindow('year', '2026-04-20', '2026-07-18')).toEqual([
+      '2026-04-20',
+      '2026-07-18'
+    ]);
     expect(bucketExprFor('week')).toContain('%Y-W%W');
     expect(bucketExprFor('month')).toContain('substr("date", 1, 7)');
     expect(bucketExprFor('year')).toContain('substr("date", 1, 4)');
@@ -133,10 +153,30 @@ describe('merchant-sales window and mappers', () => {
     });
   });
 
+  it('resolves year to trailing 90d (not full calendar year)', () => {
+    expect(resolveWindow('year', '2026-07-18')).toEqual({
+      start: '2026-04-20',
+      end: '2026-07-18'
+    });
+  });
+
+  it('caps multi-year custom week/month windows', () => {
+    expect(() => resolveWindow('month', '2020-01-01', '2026-07-22')).toThrow();
+    expect(resolveWindow('week', '2026-07-01', '2026-07-07')).toEqual({
+      start: '2026-07-01',
+      end: '2026-07-07'
+    });
+  });
+
   it('escapes csv cells and maps summary/ranking', () => {
     expect(csvCell('plain')).toBe('plain');
     expect(csvCell('a,b')).toBe('"a,b"');
     expect(csvCell('say "hi"')).toBe('"say ""hi"""');
+    // Excel/Sheets formula injection: leading = + - @ must be neutralized.
+    expect(csvCell('=cmd|"/c calc"!A0')).toBe(`"'=cmd|""/c calc""!A0"`);
+    expect(csvCell('+2+3')).toBe(`'+2+3`);
+    expect(csvCell('-2+3')).toBe(`'-2+3`);
+    expect(csvCell('@SUM(A1)')).toBe(`'@SUM(A1)`);
 
     const summary = mapSummaryAggregate(
       {
@@ -267,12 +307,17 @@ describe('gmv metrics and resolve priority', () => {
 
     const dist = mapDistributionRows(
       [{ key: 'A', gmv: 80, gmvOnline: 80, gmvWallet: 0, gmvBonus: 0 }],
-      100
+      100,
+      1
     );
-    expect(dist).toHaveLength(2);
-    expect(dist[0].share).toBeCloseTo(0.8);
-    expect(dist[1].totalGmv).toBe(20);
-    expect(dist[1].key).toBe('其他');
+    // Residual #289: payload { items, limit, matched, truncated }
+    expect(dist.items).toHaveLength(2);
+    expect(dist.items[0].share).toBeCloseTo(0.8);
+    expect(dist.items[1].totalGmv).toBe(20);
+    expect(dist.items[1].key).toBe('其他');
+    expect(dist.truncated).toBe(true);
+    expect(dist.limit).toBe(1);
+    expect(dist.matched).toBeGreaterThanOrEqual(2);
   });
 
   it('sorts and pages merchants', () => {
@@ -288,6 +333,19 @@ describe('gmv metrics and resolve priority', () => {
     );
     expect(page.items.map((x) => x.merchantName)).toEqual(['A', 'C']);
     expect(page.hasMore).toBe(true);
+
+    // Aggregate sort once, page flips slice only — same pattern as list caches.
+    const sorted = sortMerchants(
+      [
+        { merchantName: 'B', gmv: 10, gmvRefund: 5, gmvVerify: 1 } as any,
+        { merchantName: 'A', gmv: 20, gmvRefund: 1, gmvVerify: 9 } as any,
+        { merchantName: 'C', gmv: 15, gmvRefund: 8, gmvVerify: 2 } as any
+      ],
+      'gmvDesc'
+    );
+    const p2 = pageMerchants(sorted, 2, 2);
+    expect(p2.items.map((x) => x.merchantName)).toEqual(['B']);
+    expect(p2.hasMore).toBe(false);
   });
 
   it('uses OrderHeader for Beijing today without consulting DailyMetrics', async () => {
@@ -425,6 +483,25 @@ describe('zero-sales bucket and list mapping', () => {
     expect(bucketFromDays(60, rules)).toBe('stale_60d');
   });
 
+  it('builds multi-area / multi-merchant zero-sales filters', () => {
+    const multi = buildZeroSalesSkuFilters({
+      areaIds: ['A1', 'A2'],
+      merchantIds: ['M1', 'M2'],
+      threshold: '2026-01-01'
+    });
+    expect(multi.filters.some((f) => f.includes('IN (?,?)'))).toBe(true);
+    expect(multi.params).toEqual(['M1', 'M2', 'A1', 'A2', '2026-01-01']);
+
+    const single = buildZeroSalesSkuFilters({
+      areaId: 'A1',
+      merchantId: 'M1',
+      threshold: '2026-01-01'
+    });
+    expect(single.filters).toContain('cp."areaId" = ?');
+    expect(single.filters).toContain('cp."merchantId" = ?');
+    expect(single.params).toEqual(['M1', 'A1', '2026-01-01']);
+  });
+
   it('groups candidates and builds merchant rows', () => {
     const byMerchant = groupCandidatesByMerchant([
       {
@@ -467,11 +544,10 @@ describe('zero-sales bucket and list mapping', () => {
         ['m1', 8],
         ['m2', 3]
       ]),
-      today: '2026-07-18',
-      offset: 0,
-      pageSize: 10
+      today: '2026-07-18'
     });
 
+    expect(rows).toHaveLength(2);
     expect(rows[0].merchantId).toBe('m1');
     expect(rows[0].staleSkuCount).toBe(2);
     expect(rows[0].staleGmv30d).toBe(15);
@@ -545,6 +621,64 @@ describe('merchant list/profile helpers', () => {
     expect(page.pagination.total).toBe(2);
   });
 
+  it('builds merchant list cache keys without page so flips share one aggregate', () => {
+    const base = {
+      query: { areaId: 'a1', search: 'foo', sort: 'stale30Desc' as const },
+      scope: { areaIds: ['z', 'a'], merchantIds: ['m2', 'm1'] },
+      today: '2026-07-23'
+    };
+    const k1 = merchantListCacheKey(base);
+    const k2 = merchantListCacheKey({
+      ...base,
+      scope: { areaIds: ['a', 'z'], merchantIds: ['m1', 'm2'] }
+    });
+    expect(k1).toBe(k2);
+    expect(k1).toContain('merchants:list');
+    expect(k1).not.toMatch(/\|1\|20$/);
+  });
+
+  it('paginates zero-sales merchants from a full aggregate cache payload', () => {
+    const rows = [
+      {
+        merchantId: 'm1',
+        merchantName: 'M1',
+        areaName: 'A',
+        areaId: 'a',
+        totalSku: 3,
+        staleSkuCount: 2,
+        staleGmv30d: 10,
+        lastSalesDate: null
+      },
+      {
+        merchantId: 'm2',
+        merchantName: 'M2',
+        areaName: 'B',
+        areaId: 'b',
+        totalSku: 1,
+        staleSkuCount: 1,
+        staleGmv30d: 0,
+        lastSalesDate: null
+      }
+    ];
+    const p1 = paginateZeroSalesMerchants(rows, 1, 1);
+    const p2 = paginateZeroSalesMerchants(rows, 2, 1);
+    expect(p1.items[0].merchantId).toBe('m1');
+    expect(p2.items[0].merchantId).toBe('m2');
+    expect(p1.pagination.total).toBe(2);
+    expect(p2.pagination.hasMore).toBe(false);
+
+    const keyA = zeroSalesMerchantsCacheKey(
+      { staleBucket: 'stale_30d', areaIds: ['b', 'a'], page: 1, pageSize: 20 } as any,
+      '2026-07-23'
+    );
+    const keyB = zeroSalesMerchantsCacheKey(
+      { staleBucket: 'stale_30d', areaIds: ['a', 'b'], page: 9, pageSize: 5 } as any,
+      '2026-07-23'
+    );
+    // page/pageSize must not affect the aggregate key
+    expect(keyA).toBe(keyB);
+  });
+
   it('builds empty profile and merchant sku buckets', () => {
     expect(emptyMerchantProfile('m9')).toMatchObject({
       merchantId: 'm9',
@@ -558,6 +692,105 @@ describe('merchant list/profile helpers', () => {
 });
 
 describe('movement stale + csv', () => {
+  it('builds moving/stagnant aggregate cache keys without page', () => {
+    const today = '2026-07-23';
+    const movingA = movingSkusCacheKey(
+      { days: 7, areaIds: ['b', 'a'], merchantIds: ['m2', 'm1'], search: 'x' },
+      today
+    );
+    const movingB = movingSkusCacheKey(
+      { days: 7, areaIds: ['a', 'b'], merchantIds: ['m1', 'm2'], search: 'x' },
+      today
+    );
+    expect(movingA).toBe(movingB);
+    expect(movingA).toContain('movement:moving');
+
+    const stagnantA = stagnantSkusCacheKey(
+      {
+        bucket: 'stale_30d',
+        sort: 'gmvDesc',
+        areaIds: ['b', 'a'],
+        page: 1,
+        pageSize: 20
+      } as any,
+      today
+    );
+    const stagnantB = stagnantSkusCacheKey(
+      {
+        bucket: 'stale_30d',
+        sort: 'gmvDesc',
+        areaIds: ['a', 'b'],
+        page: 9,
+        pageSize: 5
+      } as any,
+      today
+    );
+    expect(stagnantA).toBe(stagnantB);
+    expect(stagnantA).toContain('movement:stagnant');
+
+    const page1 = paginateMovementSkuRows(
+      [{ packageId: 'p1' } as any, { packageId: 'p2' } as any, { packageId: 'p3' } as any],
+      2,
+      1
+    );
+    expect(page1.items[0].packageId).toBe('p2');
+    expect(page1.pagination.total).toBe(3);
+    expect(page1.pagination.hasMore).toBe(true);
+  });
+
+  it('builds alert aggregate cache keys without page/filter and scopes multi-tenant', () => {
+    const today = '2026-07-23';
+    const keyA = alertAggregateCacheKey(
+      { role: 'area_operator', date: '2026-07-20' },
+      { areaIds: ['b', 'a'], merchantIds: ['m2', 'm1'] },
+      today
+    );
+    const keyB = alertAggregateCacheKey(
+      { role: 'area_operator', date: '2026-07-20' },
+      { areaIds: ['a', 'b'], merchantIds: ['m1', 'm2'] },
+      today
+    );
+    expect(keyA).toBe(keyB);
+    expect(keyA).toContain('alerts:aggregate');
+    expect(keyA).toContain('2026-07-20');
+
+    const otherScope = alertAggregateCacheKey(
+      { role: 'area_operator', date: '2026-07-20' },
+      { areaIds: ['c'] },
+      today
+    );
+    expect(otherScope).not.toBe(keyA);
+
+    const ranked = extractRankedAlerts(
+      [
+        {
+          operationAlerts: [
+            { alertId: 'A1', level: 'info' } as any,
+            { alertId: 'A2', level: 'danger' } as any
+          ]
+        }
+      ],
+      (alerts) =>
+        [...alerts].sort((a, b) => (a.level === 'danger' ? -1 : b.level === 'danger' ? 1 : 0))
+    );
+    expect(ranked.map((a) => a.alertId)).toEqual(['A2', 'A1']);
+  });
+
+  it('prefilters recommend packages before inventory scoring', () => {
+    const pkgs = [
+      { packageId: 'p1', category: 'food', saleStatus: 'selling', stockLeft: 10 },
+      { packageId: 'p2', category: 'food', saleStatus: 'recycle', stockLeft: 10 },
+      { packageId: 'p3', category: 'spa', saleStatus: 'selling', stockLeft: 2 },
+      { packageId: 'p4', category: 'food', saleStatus: 'selling', stockLeft: 0 }
+    ] as any[];
+    const filtered = prefilterPackagesForRecommend(pkgs, {
+      category: 'food',
+      inventoryMin: 1,
+      status: 'selling'
+    });
+    expect(filtered.map((p) => p.packageId)).toEqual(['p1']);
+  });
+
   it('computes daysSince and stale buckets', () => {
     expect(daysSince('2026-07-18', null)).toBe(9999);
     expect(daysSince('2026-07-18', '2026-07-11')).toBe(7);
@@ -586,12 +819,57 @@ describe('movement stale + csv', () => {
         staleBucket: 'stale_30d',
         recent30dSalesQty: 0,
         recent30dSalesAmount: 0
+      },
+      {
+        // Formula-like packageId must be neutralized in CSV export.
+        packageId: "=cmd|'/c calc'!A1",
+        packageName: 'x',
+        merchantName: 'm',
+        areaName: 'a',
+        category: 'c',
+        salePrice: 1,
+        stockLeft: 0,
+        stockTotal: 0,
+        lastSalesDate: null,
+        daysSinceLastSale: 99,
+        staleBucket: 'stale_90d',
+        recent30dSalesQty: 0,
+        recent30dSalesAmount: 0
       }
     ]);
     expect(csv.charCodeAt(0)).toBe(0xfeff);
     expect(csvEscape('a,b')).toBe('"a,b"');
+    expect(csvEscape('=1+1')).toBe(`'=1+1`);
+    expect(csvEscape('+HYPERLINK("http://x")')).toBe(`"'+HYPERLINK(""http://x"")"`);
+    expect(csvEscape('\t=1+1')).toBe(`'\t=1+1`);
     expect(csv).toContain('"名,称"');
     expect(csv).toContain('"商家""A"""');
+    expect(csv).toContain(csvEscape(`=cmd|'/c calc'!A1`));
+    expect(csv).not.toMatch(/(?:^|,)=cmd/m);
+  });
+});
+
+describe('content category multi-scope filter', () => {
+  it('filters categories by multi area/merchant ids', async () => {
+    const { collectPackageCategories } = await import('../src/content/content-facade');
+    const packages = [
+      { packageId: 'p1', areaId: 'A1', merchantId: 'M1', category: '餐饮', saleStatus: 'selling' },
+      { packageId: 'p2', areaId: 'A2', merchantId: 'M2', category: '丽人', saleStatus: 'selling' },
+      { packageId: 'p3', areaId: 'A3', merchantId: 'M3', category: '休闲', saleStatus: 'selling' },
+      { packageId: 'p4', areaId: 'A1', merchantId: 'M9', category: '亲子', saleStatus: 'offline' }
+    ] as any[];
+
+    const multiArea = collectPackageCategories(packages, { areaIds: ['A1', 'A2'] });
+    expect(multiArea.categories).toEqual(['丽人', '亲子', '餐饮']);
+
+    const multiMerchant = collectPackageCategories(packages, { merchantIds: ['M2', 'M3'] });
+    expect(multiMerchant.categories).toEqual(['丽人', '休闲']);
+
+    const merchantOp = collectPackageCategories(packages, {
+      areaIds: ['A1', 'A2'],
+      role: 'merchant_operator'
+    });
+    expect(merchantOp.categories).toEqual(['丽人', '餐饮']);
   });
 });
 

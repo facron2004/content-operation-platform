@@ -19,4 +19,17 @@ export interface DailyOperationReview {
     reason: string;
   }>;
   tomorrowSuggestions: string[];
+  /**
+   * Residual #282: daily-review Top-N list-head honesty — package/copy/community
+   * arrays are clipped; matched counts power narrative + SPA banners.
+   */
+  reviewListLimit?: number;
+  goodMatched?: number;
+  goodTruncated?: boolean;
+  weakMatched?: number;
+  weakTruncated?: boolean;
+  copyMatched?: number;
+  copyTruncated?: boolean;
+  communityMatched?: number;
+  communityTruncated?: boolean;
 }

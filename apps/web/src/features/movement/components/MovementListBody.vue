@@ -16,8 +16,11 @@
       :empty-text="emptyText"
       :page="page"
       :has-more="hasMore"
+      :truncated="truncated"
+      :limit="limit"
       :row-class="rowClass"
       @analyze="$emit('analyze', $event)"
+      @timeline="$emit('timeline', $event)"
       @prev="$emit('prev')"
       @next="$emit('next')"
     />
@@ -43,6 +46,9 @@ export type MovementListBodyProps = {
   page: number;
   hasMore: boolean;
   rowClass: (args: { row: MovementSkuRow }) => string;
+  // Residual #266: MOVEMENT_CACHE_CAP honesty.
+  truncated?: boolean;
+  limit?: number | null;
 };
 defineProps<MovementListBodyProps>();
 const emit = defineEmits<{
@@ -51,6 +57,8 @@ const emit = defineEmits<{
   'reload-list': [];
   'export-csv': [];
   analyze: [packageId: string];
+  // Residual #210: bubble timeline open to list view.
+  timeline: [row: MovementSkuRow];
   prev: [];
   next: [];
 }>();

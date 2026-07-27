@@ -76,14 +76,20 @@ export function buildBattleCard(
 export function buildDerivedCommunities(
   packages: RecommendPackageItem[],
   cards: Map<string, OperationCard>
-): CommunityGroup[] {
+): {
+  items: CommunityGroup[];
+  // Residual #281: MAX_DERIVED_COMMUNITY_GROUPS output-cap honesty.
+  groupMatched: number;
+  groupLimit: number;
+  groupTruncated: boolean;
+} {
   const grouped = new Map<string, RecommendPackageItem[]>();
   for (const pkg of packages) {
     const key = `${pkg.areaId || pkg.areaName}:${pkg.category}`;
     grouped.set(key, [...(grouped.get(key) ?? []), pkg]);
   }
 
-  return [...grouped.entries()]
+  const ranked = [...grouped.entries()]
     .map(([key, rows], index) => {
       const [areaId] = key.split(':');
       const first = rows[0];
@@ -107,8 +113,17 @@ export function buildDerivedCommunities(
         todayRecommendedPackages: topCards
       } satisfies CommunityGroup;
     })
-    .sort((a, b) => b.activityScore - a.activityScore)
-    .slice(0, MAX_DERIVED_COMMUNITY_GROUPS);
+    .sort((a, b) => b.activityScore - a.activityScore);
+
+  const groupLimit = MAX_DERIVED_COMMUNITY_GROUPS;
+  const groupMatched = ranked.length;
+  const items = ranked.slice(0, groupLimit);
+  return {
+    items,
+    groupMatched,
+    groupLimit,
+    groupTruncated: groupMatched > items.length
+  };
 }
 
 export function buildCommunityTasks(communities: CommunityGroup[]): CommunityPushTask[] {
@@ -128,6 +143,9 @@ export function buildCommunityTasks(communities: CommunityGroup[]): CommunityPus
   );
 }
 
+/** Residual #282: daily-review list heads stay Top-N; narrative + honesty use full candidates. */
+const DAILY_REVIEW_LIST_LIMIT = 5;
+
 export function buildDailyReview(
   date: string,
   cards: OperationCard[],
@@ -140,40 +158,44 @@ export function buildDailyReview(
     groupId?: string | null;
   }>
 ): DailyOperationReview {
-  const goodPackages = cards.filter((card) => card.score >= 75).slice(0, 5);
-  const weakPackages = cards
-    .filter((card) =>
-      card.tags.some((tag) => tag.key === 'continuous_slow' || tag.key === 'high_refund_risk')
-    )
-    .slice(0, 5);
-  const highConversionCopies = [...performances]
-    .sort((a, b) => b.conversionRate - a.conversionRate)
-    .slice(0, 5)
-    .map((row) => ({
-      contentId: row.contentId,
-      title: row.title ?? '-',
-      channel: row.channel,
-      conversionRate: row.conversionRate,
-      orderCount: row.orderCount
-    }));
-  const valuableCommunities = performances
-    .filter((row) => row.groupId)
-    .slice(0, 5)
-    .map((row) => ({
-      groupId: row.groupId!,
-      groupName: row.groupId!,
-      conversionRate: row.conversionRate,
-      reason:
-        row.conversionRate >= HIGH_CONVERSION_RATE_THRESHOLD
-          ? '昨日转化高，建议继续安排同品类'
-          : '有转化基础，可继续小流量测试'
-    }));
+  // Residual #282: count full candidates before Top-N slice so narrative does not freeze at 5.
+  const goodCandidates = cards.filter((card) => card.score >= 75);
+  const goodPackages = goodCandidates.slice(0, DAILY_REVIEW_LIST_LIMIT);
+  const weakCandidates = cards.filter((card) =>
+    card.tags.some((tag) => tag.key === 'continuous_slow' || tag.key === 'high_refund_risk')
+  );
+  const weakPackages = weakCandidates.slice(0, DAILY_REVIEW_LIST_LIMIT);
+  const copyCandidates = [...performances].sort((a, b) => b.conversionRate - a.conversionRate);
+  const highConversionCopies = copyCandidates.slice(0, DAILY_REVIEW_LIST_LIMIT).map((row) => ({
+    contentId: row.contentId,
+    title: row.title ?? '-',
+    channel: row.channel,
+    conversionRate: row.conversionRate,
+    orderCount: row.orderCount
+  }));
+  const communityCandidates = performances.filter((row) => row.groupId);
+  const valuableCommunities = communityCandidates.slice(0, DAILY_REVIEW_LIST_LIMIT).map((row) => ({
+    groupId: row.groupId!,
+    groupName: row.groupId!,
+    conversionRate: row.conversionRate,
+    reason:
+      row.conversionRate >= HIGH_CONVERSION_RATE_THRESHOLD
+        ? '昨日转化高，建议继续安排同品类'
+        : '有转化基础，可继续小流量测试'
+  }));
+
+  const listLimit = DAILY_REVIEW_LIST_LIMIT;
+  const goodMatched = goodCandidates.length;
+  const weakMatched = weakCandidates.length;
+  const copyMatched = copyCandidates.length;
+  const communityMatched = communityCandidates.length;
 
   return {
     date,
     whatHappened: [
       `昨日共有 ${performances.length} 条推送效果记录`,
-      `高分可推套餐 ${goodPackages.length} 个，风险/滞销套餐 ${weakPackages.length} 个`,
+      // Residual #282: full candidate counts (not post-slice head lengths).
+      `高分可推套餐 ${goodMatched} 个，风险/滞销套餐 ${weakMatched} 个`,
       highConversionCopies[0]
         ? `最高转化文案为「${highConversionCopies[0].title}」`
         : '暂无足够文案效果数据'
@@ -190,7 +212,17 @@ export function buildDailyReview(
         ? `滞销/风险套餐「${weakPackages[0].packageName}」需要换卖点或降曝光`
         : '继续监控连续未售罄套餐',
       '社群文案保留价格、库存和使用规则，避免空泛促销话术'
-    ]
+    ],
+    // Residual #282: Top-N list-head honesty for SPA review panels.
+    reviewListLimit: listLimit,
+    goodMatched,
+    goodTruncated: goodMatched > goodPackages.length,
+    weakMatched,
+    weakTruncated: weakMatched > weakPackages.length,
+    copyMatched,
+    copyTruncated: copyMatched > highConversionCopies.length,
+    communityMatched,
+    communityTruncated: communityMatched > valuableCommunities.length
   };
 }
 

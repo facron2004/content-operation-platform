@@ -1,12 +1,23 @@
 <template>
   <section class="audit-layout">
     <AuditQueuePanel
-      v-model:status="status"
+      :status="status"
+      :channel="channel"
       :loading="loading"
       :copies="copies"
       :status-options="statusOptions"
+      :channel-options="channelOptions"
       :channel-labels="channelLabels"
-      @load="load"
+      :page="page"
+      :page-size="pageSize"
+      :total="total"
+      :window-label="windowLabel"
+      :date-from="dateFrom"
+      :date-to="dateTo"
+      @update:status="onStatusChange"
+      @update:channel="onChannelChange"
+      @page-change="onPageChange"
+      @page-size-change="onPageSizeChange"
       @select="selectCopy"
     />
     <AuditReviewPanel :selected="selected" :draft="draft" @audit="audit" />
@@ -17,6 +28,27 @@ import { channelLabels } from '../utils/labels';
 import { useAudit } from '../features/audit/use-audit';
 import AuditQueuePanel from '../features/audit/components/AuditQueuePanel.vue';
 import AuditReviewPanel from '../features/audit/components/AuditReviewPanel.vue';
-const { loading, status, copies, selected, draft, statusOptions, load, selectCopy, audit } =
-  useAudit();
+const {
+  loading,
+  status,
+  channel,
+  copies,
+  selected,
+  draft,
+  page,
+  pageSize,
+  total,
+  // Residual #270: listCopies INTERACTIVE window honesty.
+  dateFrom,
+  dateTo,
+  windowLabel,
+  statusOptions,
+  channelOptions,
+  selectCopy,
+  audit,
+  onStatusChange,
+  onChannelChange,
+  onPageChange,
+  onPageSizeChange
+} = useAudit();
 </script>

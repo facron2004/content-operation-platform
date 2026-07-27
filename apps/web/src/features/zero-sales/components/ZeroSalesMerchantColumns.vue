@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AppleButton from '../../../components/AppleButton.vue';
 defineEmits<{ drill: [merchantId: string] }>();
 </script>
 <template>
@@ -22,9 +23,9 @@ defineEmits<{ drill: [merchantId: string] }>();
   </el-table-column>
   <el-table-column label="操作" width="180" align="right" fixed="right">
     <template #default="{ row }">
-      <el-button type="primary" size="small" text @click="$emit('drill', row.merchantId)">
+      <AppleButton variant="ghost" size="sm" @click="$emit('drill', row.merchantId)">
         下钻 SKU
-      </el-button>
+      </AppleButton>
     </template>
   </el-table-column>
 </template>

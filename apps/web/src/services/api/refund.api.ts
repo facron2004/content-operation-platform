@@ -64,5 +64,11 @@ export const getRefundTopMerchants = (params: {
   pageSize: number;
 }) =>
   client
-    .get<{ items: TopMerchantRow[]; hasMore: boolean }>('/refund/top-merchants', { params })
+    .get<{
+      items: TopMerchantRow[];
+      hasMore: boolean;
+      // Residual #265: GMV_TOP_MERCHANTS_LIMIT honesty.
+      limit?: number;
+      truncated?: boolean;
+    }>('/refund/top-merchants', { params })
     .then((r) => r.data);

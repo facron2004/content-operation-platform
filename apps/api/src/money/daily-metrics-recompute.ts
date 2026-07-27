@@ -1,14 +1,26 @@
 import { shiftDateKey } from '@content/shared';
-import { SQL_GMV_OH } from '../common';
+import {
+  beijingDayRangeSqlite,
+  SQL_GMV_OH,
+  sqlBeijingDate,
+  sqlDatetimeExclusiveRange,
+  toSqliteDateTime
+} from '../common';
 
 export type DailyMetricsRecomputePrisma = {
   $executeRawUnsafe: (query: string, ...values: unknown[]) => Promise<unknown>;
+  $transaction?: <T>(fn: (tx: DailyMetricsRecomputePrisma) => Promise<T>) => Promise<T>;
 };
 
 /**
  * Range recompute of DailyMetrics from OrderHeader (Beijing day on paidTime).
  * Online path: delete only [startDate, endDate], then upsert aggregates.
  * Never truncates the whole table.
+ * Delete+insert run in one transaction so a mid-refresh crash cannot leave
+ * an empty KPI window for the range.
+ *
+ * WHERE paidTime uses exclusive half-open bounds (index-friendly); sqlBeijingDate
+ * only for SELECT/GROUP BY day keys.
  */
 export async function recomputeDailyMetricsRange(
   prisma: DailyMetricsRecomputePrisma,
@@ -19,14 +31,19 @@ export async function recomputeDailyMetricsRange(
     throw new Error(`recomputeDailyMetricsRange: startDate ${startDate} > endDate ${endDate}`);
   }
 
-  await prisma.$executeRawUnsafe(
-    `DELETE FROM "DailyMetrics" WHERE "date" >= ? AND "date" <= ?`,
-    startDate,
-    endDate
-  );
+  const paidStart = beijingDayRangeSqlite(startDate).start;
+  const paidEnd = beijingDayRangeSqlite(endDate).end;
 
-  const inserted = await prisma.$executeRawUnsafe(
-    `
+  const run = async (tx: DailyMetricsRecomputePrisma) => {
+    await tx.$executeRawUnsafe(
+      `DELETE FROM "DailyMetrics" WHERE "date" >= ? AND "date" <= ?`,
+      startDate,
+      endDate
+    );
+
+    const now = toSqliteDateTime();
+    return tx.$executeRawUnsafe(
+      `
       INSERT OR REPLACE INTO "DailyMetrics" (
         "date", "totalGmv", "gmvOnline", "gmvWallet", "gmvBonus", "gmvCard",
         "totalRefund", "totalVerify", "totalOrders", "paidOrderCount",
@@ -35,7 +52,7 @@ export async function recomputeDailyMetricsRange(
         "updatedAt"
       )
       SELECT
-        date(datetime(oh."paidTime", '+8 hours')) AS "date",
+        ${sqlBeijingDate('oh."paidTime"')} AS "date",
         COALESCE(SUM(${SQL_GMV_OH}), 0) AS "totalGmv",
         COALESCE(SUM(oh."paidAmount"), 0) AS "gmvOnline",
         COALESCE(SUM(oh."paidAmountWallet"), 0) AS "gmvWallet",
@@ -58,16 +75,21 @@ export async function recomputeDailyMetricsRange(
           THEN COALESCE(SUM(oh."verifyAmount"), 0) * 1.0 / SUM(${SQL_GMV_OH})
           ELSE 0
         END AS "verifyRate",
-        CURRENT_TIMESTAMP AS "updatedAt"
+        ? AS "updatedAt"
       FROM "OrderHeader" oh
       WHERE oh."paidTime" IS NOT NULL
-        AND date(datetime(oh."paidTime", '+8 hours')) >= ?
-        AND date(datetime(oh."paidTime", '+8 hours')) <= ?
-      GROUP BY date(datetime(oh."paidTime", '+8 hours'))
+        AND ${sqlDatetimeExclusiveRange('oh."paidTime"')}
+      GROUP BY ${sqlBeijingDate('oh."paidTime"')}
     `,
-    startDate,
-    endDate
-  );
+      now,
+      paidStart,
+      paidEnd
+    );
+  };
+
+  const inserted = prisma.$transaction
+    ? await prisma.$transaction((tx) => run(tx))
+    : await run(prisma);
 
   return {
     startDate,

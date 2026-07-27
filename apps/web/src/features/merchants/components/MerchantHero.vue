@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AppleButton from '../../../components/AppleButton.vue';
 defineProps<{ loading: boolean }>();
 defineEmits<{ reload: [] }>();
 </script>
@@ -12,7 +13,9 @@ defineEmits<{ reload: [] }>();
       </p>
     </div>
     <div class="hero-meta">
-      <el-button size="small" :loading="loading" @click="$emit('reload')">刷新</el-button>
+      <AppleButton size="sm" variant="secondary" :loading="loading" @click="$emit('reload')">
+        刷新
+      </AppleButton>
     </div>
   </header>
 </template>

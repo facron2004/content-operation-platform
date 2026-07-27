@@ -2,7 +2,7 @@ import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import OpenAI from 'openai';
 import type { AICopyStatus, AICopyConfigUpdate } from './types';
 import { parseNumber } from './types';
-import { assertHostnameNotPrivateAsync } from '../jeesite-bargain-adapter';
+import { assertHostnameNotPrivate, assertHostnameNotPrivateAsync } from '../jeesite-url';
 
 @Injectable()
 export class AIClientManager {
@@ -21,8 +21,28 @@ export class AIClientManager {
   /** SSRF 防护：校验 AI baseURL 不指向私网/loopback/元数据服务 */
   private async assertBaseURLSafe(baseURL: string): Promise<void> {
     try {
+      this.assertBaseURLSafeSync(baseURL);
       const hostname = new URL(baseURL).hostname;
       await assertHostnameNotPrivateAsync(hostname);
+    } catch {
+      throw new BadRequestException(`AI baseURL is not allowed: ${baseURL}`);
+    }
+  }
+
+  /** Sync guard for constructor / applyConfig (no DNS await on boot). */
+  private assertBaseURLSafeSync(baseURL: string): void {
+    let hostname: string;
+    try {
+      const parsed = new URL(baseURL);
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+        throw new Error(`unsupported protocol ${parsed.protocol}`);
+      }
+      hostname = parsed.hostname;
+    } catch {
+      throw new BadRequestException(`AI baseURL is not allowed: ${baseURL}`);
+    }
+    try {
+      assertHostnameNotPrivate(hostname);
     } catch {
       throw new BadRequestException(`AI baseURL is not allowed: ${baseURL}`);
     }
@@ -57,21 +77,37 @@ export class AIClientManager {
 
   private applyConfig(config: AICopyConfigUpdate): AICopyStatus {
     const apiKey = this.normalizeText(config.apiKey) ?? null;
-    const baseURL = this.normalizeText(config.baseURL) ?? 'https://api.deepseek.com';
+    let baseURL = this.normalizeText(config.baseURL) ?? 'https://api.deepseek.com';
+    let baseURLRejected = false;
+    // Reject private/loopback baseURL from env at boot and from updates (sync path).
+    try {
+      this.assertBaseURLSafeSync(baseURL);
+    } catch {
+      this.logger.error(`AI baseURL rejected (SSRF guard): ${baseURL}`);
+      // Never point the client at a private host. Fall back to public default and
+      // disable the client so a misconfigured env cannot silently SSRF or call
+      // an unintended provider with the configured key.
+      baseURL = 'https://api.deepseek.com';
+      baseURLRejected = true;
+    }
     const model = this.normalizeText(config.model) ?? 'deepseek-chat';
     const providerName =
       this.normalizeText(config.providerName) ?? this.resolveProviderName(baseURL);
     const temperature = parseNumber(config.temperature, 0.7);
     const maxTokens = Math.round(parseNumber(config.maxTokens, 900));
-    const missing = apiKey ? [] : ['AI_API_KEY'];
+    const missing: string[] = [];
+    if (!apiKey) missing.push('AI_API_KEY');
+    if (baseURLRejected) missing.push('AI_API_BASE_URL');
 
     this.apiKey = apiKey;
-    this.client = apiKey
-      ? new OpenAI({
-          apiKey,
-          baseURL
-        })
-      : null;
+    // Disable client when key missing OR when the configured baseURL was private.
+    this.client =
+      apiKey && !baseURLRejected
+        ? new OpenAI({
+            apiKey,
+            baseURL
+          })
+        : null;
 
     return {
       enabled: missing.length === 0,

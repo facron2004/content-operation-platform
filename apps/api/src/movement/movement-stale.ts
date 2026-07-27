@@ -1,4 +1,5 @@
 import { beijingDateKey } from '@content/shared';
+import { queryInChunks } from '../common/sql-chunk';
 import type { PrismaService } from '../prisma/prisma.service';
 import type { StaleBucket } from './movement.dto';
 import { STALE_BUCKET_ORDER, STALE_THRESHOLDS } from './movement.types';
@@ -38,11 +39,14 @@ export async function computeBucketCounts(
     stale_30d: 0,
     stale_60d: 0
   };
-  const placeholders = pkgIds.map(() => '?').join(',');
-  const rows = (await prisma.$queryRawUnsafe(
-    `SELECT "packageId", MAX("date") AS "lastSalesDate" FROM "PackageSalesDaily" WHERE "salesQty" > 0 AND "packageId" IN (${placeholders}) GROUP BY "packageId"`,
-    ...pkgIds
-  )) as Array<{ packageId: string; lastSalesDate: string | null }>;
+  if (!pkgIds.length) return counts;
+  const rows = await queryInChunks(pkgIds, async (chunk) => {
+    const placeholders = chunk.map(() => '?').join(',');
+    return (await prisma.$queryRawUnsafe(
+      `SELECT "packageId", MAX("date") AS "lastSalesDate" FROM "PackageSalesDaily" WHERE "salesQty" > 0 AND "packageId" IN (${placeholders}) GROUP BY "packageId"`,
+      ...chunk
+    )) as Array<{ packageId: string; lastSalesDate: string | null }>;
+  });
   const lastDate = new Map(rows.map((r) => [r.packageId, r.lastSalesDate]));
   for (const id of pkgIds) {
     counts[staleBucketFromDays(daysSince(today, lastDate.get(id) ?? null))] += 1;

@@ -2,7 +2,7 @@
   <section class="panel dashboard-subpanel">
     <SectionHeader title="异常预警速览" description="先看最需要处理的预警，再进入完整列表。">
       <template #actions>
-        <el-button text type="primary" @click="$emit('navigate', '/alerts')">查看全部</el-button>
+        <AppleButton variant="ghost" @click="$emit('navigate', '/alerts')">查看全部</AppleButton>
       </template>
     </SectionHeader>
     <el-table :data="alerts" height="280" empty-text="暂无预警" class="preview-table">
@@ -21,6 +21,7 @@
 </template>
 <script setup lang="ts">
 import SectionHeader from '../../../components/SectionHeader.vue';
+import AppleButton from '../../../components/AppleButton.vue';
 import type { OperationAlert } from '@content/shared';
 import { alertTagType } from '../../../utils/labels';
 defineProps<{ alerts: OperationAlert[] }>();

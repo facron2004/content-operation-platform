@@ -1,6 +1,16 @@
 import type { Router } from 'vue-router';
+import { ElMessage } from 'element-plus';
 import { useRoleStore } from './stores/role';
 import { getMe } from './services/api/user.api';
+import type { UserRole } from '@content/shared';
+import {
+  clearChunkReloadFlag,
+  consumeChunkReloadFlag,
+  hydrateServerSession,
+  isChunkLoadError,
+  markChunkReloadPending,
+  resolveRoleAccess
+} from './router-nav-reliability';
 
 export function installRouterGuards(
   router: Router,
@@ -12,43 +22,91 @@ export function installRouterGuards(
 ) {
   router.beforeEach(async (to, _from, next) => {
     progress.start();
-    const token = await progress.ensureAuth();
-    if (!to.meta.public && !token) {
-      next({ name: 'login', query: { redirect: to.fullPath } });
-      return;
-    }
-    if (to.name === 'login' && token) {
-      next({ path: '/' });
-      return;
-    }
-    // Hydrate role store from server (once per session)
-    const roleStore = useRoleStore();
-    if (token && !roleStore.hasServerSession) {
-      try {
-        const data = await getMe();
-        roleStore.initFromSession({
-          userId: data.userId,
-          username: data.username,
-          roles: data.roles.map((r: { role: string }) => r.role),
-          bindings: data.roles
-        });
-      } catch {
-        /* localStorage fallback — existing behavior */
+    try {
+      const token = await progress.ensureAuth();
+      if (!to.meta.public && !token) {
+        next({ name: 'login', query: { redirect: to.fullPath } });
+        return;
       }
-    }
-    // Role-based access control
-    const requiredRoles = to.meta.roles as string[] | undefined;
-    if (requiredRoles && requiredRoles.length > 0) {
-      const userRoles = roleStore.effectiveRoles;
-      const hasRole = userRoles.some((r: string) => requiredRoles.includes(r));
-      if (!hasRole) {
+      if (to.name === 'login' && token) {
         next({ path: '/' });
         return;
       }
+
+      const roleStore = useRoleStore();
+      if (token && !roleStore.hasServerSession) {
+        await hydrateServerSession({
+          hasServerSession: roleStore.hasServerSession,
+          fetchMe: getMe,
+          initFromSession: (info) =>
+            roleStore.initFromSession({
+              userId: info.userId,
+              username: info.username,
+              roles: info.roles as UserRole[],
+              bindings: info.bindings as Array<{
+                userId: string;
+                role: UserRole;
+                scopeType?: string;
+                scopeId?: string;
+              }>
+            }),
+          retries: 1,
+          delayMs: 200
+        });
+      }
+
+      const access = resolveRoleAccess({
+        requiredRoles: to.meta.roles as string[] | undefined,
+        hasServerSession: roleStore.hasServerSession,
+        effectiveRoles: roleStore.effectiveRoles
+      });
+
+      if (access === 'deny') {
+        // Real permission denial after a known session — go home.
+        next({ path: '/' });
+        return;
+      }
+      if (access === 'session-unknown') {
+        // Do NOT treat as deny: stay on current page and surface the failure.
+        // Retrying later (or a soft refresh) can hydrate roles without inventing privileges.
+        ElMessage.warning('角色信息加载失败，请刷新后重试');
+        progress.done();
+        next(false);
+        return;
+      }
+
+      next();
+    } catch (err) {
+      progress.done();
+      ElMessage.error('页面导航失败，请重试');
+      next(false);
     }
-    next();
   });
+
   router.afterEach(() => {
     progress.done();
+    // Successful navigation completed — allow a future one-shot chunk reload
+    // if a later deploy invalidates assets again.
+    clearChunkReloadFlag();
+  });
+
+  router.onError((error, to) => {
+    progress.done();
+    if (!isChunkLoadError(error)) {
+      ElMessage.error('页面加载失败，请重试');
+      return;
+    }
+
+    // Chunk/CSS preload failure (common after deploy or flaky first load).
+    // One full reload per failure cycle is enough to pick up the new asset map.
+    if (consumeChunkReloadFlag()) {
+      ElMessage.error('页面资源加载失败，请手动刷新');
+      return;
+    }
+    markChunkReloadPending();
+    const target = to?.fullPath || window.location.pathname + window.location.search;
+    // Hard reload lands on the intended route so the second attempt is not
+    // "stuck on the previous page".
+    window.location.assign(target);
   });
 }

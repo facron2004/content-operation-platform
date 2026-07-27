@@ -51,14 +51,15 @@ function useZeroSalesSummary(params: { onBucketSelect: (bucket: string) => void 
     summaryLoading.value = true;
     summaryError.value = null;
     try {
+      // Residual #288: distribution returns { items, limit, matched, truncated }.
       const [kpi, stale, dimRows] = await Promise.all([
         getOverviewKpis(),
         getOverviewDistribution('stale', 10),
         getOverviewDistribution(dim.value, 12)
       ]);
       overviewKpi.value = kpi;
-      staleDistribution.value = stale;
-      dimDistribution.value = dimRows;
+      staleDistribution.value = stale.items ?? [];
+      dimDistribution.value = dimRows.items ?? [];
     } catch (err) {
       summaryError.value = err instanceof Error ? err.message : '加载零动销总览失败';
     } finally {
@@ -68,7 +69,9 @@ function useZeroSalesSummary(params: { onBucketSelect: (bucket: string) => void 
   async function loadDim(next: 'area' | 'category') {
     dim.value = next;
     try {
-      dimDistribution.value = await getOverviewDistribution(next, 12);
+      // Residual #288: unwrap items from distribution payload.
+      const payload = await getOverviewDistribution(next, 12);
+      dimDistribution.value = payload.items ?? [];
     } catch {
       /* keep */
     }

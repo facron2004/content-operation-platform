@@ -19,8 +19,10 @@
       </el-form-item>
     </el-form>
     <template #footer>
-      <el-button @click="dialogVisible = false">取消</el-button>
-      <el-button type="primary" :loading="submitting" @click="handleConfirm">确认发布</el-button>
+      <AppleButton variant="secondary" @click="dialogVisible = false">取消</AppleButton>
+      <AppleButton variant="primary" :loading="submitting" @click="handleConfirm">
+        确认发布
+      </AppleButton>
     </template>
   </el-dialog>
 </template>
@@ -28,6 +30,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from 'vue';
 import type { FormInstance, FormRules } from 'element-plus';
+import AppleButton from '../../../components/AppleButton.vue';
 
 const props = defineProps<{
   modelValue?: boolean;

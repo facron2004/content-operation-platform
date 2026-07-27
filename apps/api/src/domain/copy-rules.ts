@@ -260,8 +260,14 @@ const buildCta = (pkg: ContentPackage): string => {
 
 // ---- 审核逻辑 ----
 
+/** Residual #133: only price/stock/useRules are consulted — full ContentPackage not required. */
+export type AuditPackageInput = Pick<
+  ContentPackage,
+  'originalPrice' | 'salePrice' | 'temporarySalePrice' | 'stockTotal' | 'stockLeft' | 'useRules'
+>;
+
 export function auditCopyText(
-  pkg: ContentPackage,
+  pkg: AuditPackageInput,
   copy: CopyDraftForAudit,
   rules?: Pick<CopyRuleConfig, 'forbiddenWords'>
 ): AuditResult {
@@ -273,7 +279,8 @@ export function auditCopyText(
     if (text.includes(word)) riskTips.push(`包含禁用或绝对化表述：${word}`);
   }
 
-  const pkgPrice = currentPrice(pkg);
+  // Inline currentPrice (temporarySalePrice ?? salePrice) so AuditPackageInput need not be full ContentPackage.
+  const pkgPrice = pkg.temporarySalePrice ?? pkg.salePrice;
   const expectedPrices = [priceString(pkg.originalPrice), priceString(pkgPrice)];
   const hasKnownPrice = expectedPrices.some((price) => price && text.includes(price));
   const inventedPrice = INVENTED_PRICE_RE.test(text) && !hasKnownPrice;

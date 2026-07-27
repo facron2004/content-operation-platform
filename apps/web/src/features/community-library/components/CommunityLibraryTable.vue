@@ -23,6 +23,11 @@
         <template #default="{ row }">{{ row.ownerName || '-' }}</template>
       </el-table-column>
 
+      <!-- Residual #258: API maskPhone already on list; surface for ops matching. -->
+      <el-table-column label="负责人电话" width="120">
+        <template #default="{ row }">{{ row.ownerPhone || '-' }}</template>
+      </el-table-column>
+
       <el-table-column label="成员数" width="90" align="right">
         <template #default="{ row }">{{ row.memberCount.toLocaleString('zh-CN') }}</template>
       </el-table-column>
@@ -62,20 +67,34 @@
         <template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template>
       </el-table-column>
 
-      <el-table-column label="操作" width="200" fixed="right">
+      <el-table-column label="操作" min-width="240" width="260" fixed="right">
         <template #default="{ row }">
-          <el-button link type="primary" size="small" @click="emit('view', row)">查看</el-button>
-          <el-button link type="primary" size="small" @click="emit('edit', row)">编辑</el-button>
-          <el-button
-            v-if="row.isActive"
-            link
-            type="warning"
-            size="small"
-            @click="emit('disable', row)"
-          >
-            停用
-          </el-button>
-          <el-button link type="danger" size="small" @click="emit('delete', row)">删除</el-button>
+          <div class="action-cell">
+            <AppleButton variant="ghost" size="sm" @click="emit('view', row)">查看</AppleButton>
+            <AppleButton variant="ghost" size="sm" @click="emit('edit', row)">编辑</AppleButton>
+            <AppleButton
+              v-if="row.isActive"
+              variant="ghost"
+              data-tone="warning"
+              size="sm"
+              @click="emit('disable', row)"
+            >
+              停用
+            </AppleButton>
+            <!-- Residual #199: re-enable soft-disabled communities. -->
+            <AppleButton
+              v-else
+              variant="ghost"
+              data-tone="success"
+              size="sm"
+              @click="emit('enable', row)"
+            >
+              启用
+            </AppleButton>
+            <AppleButton variant="ghost" data-tone="danger" size="sm" @click="emit('delete', row)">
+              删除
+            </AppleButton>
+          </div>
         </template>
       </el-table-column>
 
@@ -101,6 +120,7 @@
 
 <script setup lang="ts">
 import type { CommunityGroupEntity } from '@content/shared';
+import AppleButton from '../../../components/AppleButton.vue';
 
 type TagType = 'success' | 'primary' | 'warning' | 'info' | 'danger';
 
@@ -124,6 +144,8 @@ const emit = defineEmits<{
   edit: [community: CommunityGroupEntity];
   delete: [community: CommunityGroupEntity];
   disable: [community: CommunityGroupEntity];
+  // Residual #199: re-enable after soft-disable.
+  enable: [community: CommunityGroupEntity];
   'update:page': [page: number];
   'update:pageSize': [pageSize: number];
 }>();

@@ -1,5 +1,7 @@
 .cockpit {
   gap: 14px;
+  min-width: 0;
+  max-width: 100%;
 }
 
 /* ---- prototype filter bar ---- */
@@ -13,6 +15,9 @@
   border-radius: 14px;
   background: #fff;
   box-shadow: var(--shadow-soft);
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .proto-filter-item {
@@ -41,6 +46,8 @@
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 12px;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .proto-kpi-card {
@@ -147,6 +154,8 @@
   display: grid;
   grid-template-columns: 1.45fr 1fr;
   gap: 12px;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .chart-row-main {
@@ -179,6 +188,8 @@
   flex-direction: column;
   gap: 8px;
   min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 .proto-chart-header {
@@ -227,6 +238,7 @@
 
 .chart-card :deep(.chart-shell),
 .proto-chart-panel :deep(.chart-shell) {
+  height: 280px;
   min-height: 280px;
 }
 

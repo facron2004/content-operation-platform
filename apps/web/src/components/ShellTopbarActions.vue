@@ -1,20 +1,29 @@
 <template>
   <div class="topbar-actions">
     <NotificationCenter />
-    <el-button circle class="icon-button" @click="$emit('open-history')">
-      <el-icon><Clock /></el-icon>
-    </el-button>
+    <AppleButton
+      icon-only
+      variant="secondary"
+      class="icon-button"
+      title="操作历史"
+      aria-label="操作历史"
+      @click="$emit('open-history')"
+    >
+      <template #icon>
+        <el-icon><Clock /></el-icon>
+      </template>
+    </AppleButton>
     <ThemeSwitch />
     <el-badge :is-dot="!cookieStatus?.isValid" class="badge-dot">
-      <el-button
+      <AppleButton
         class="cookie-status-btn"
-        :type="cookieStatus?.isValid ? 'success' : 'danger'"
-        plain
-        size="default"
+        variant="tinted"
+        size="sm"
+        :data-tone="cookieStatus?.isValid ? 'success' : 'danger'"
         @click="$emit('open-cookie')"
       >
         JeeSite: {{ cookieStatus?.isValid ? '已连接' : '未连接' }}
-      </el-button>
+      </AppleButton>
     </el-badge>
     <!-- Parent passes a live store object; field write is intentional. -->
     <!-- eslint-disable-next-line vue/no-mutating-props -->
@@ -34,6 +43,7 @@ import { Clock } from '@element-plus/icons-vue';
 import type { UserRole } from '@content/shared';
 import NotificationCenter from './NotificationCenter.vue';
 import ThemeSwitch from './ThemeSwitch.vue';
+import AppleButton from './AppleButton.vue';
 defineProps<{
   cookieStatus: { isValid?: boolean } | null | undefined;
   roleStore: {
@@ -45,3 +55,44 @@ defineProps<{
 }>();
 defineEmits<{ 'open-history': []; 'open-cookie': [] }>();
 </script>
+<style scoped>
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.icon-button {
+  box-shadow: var(--shadow-soft);
+  flex-shrink: 0;
+}
+
+.badge-dot {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+}
+
+.badge-dot :deep(.el-badge__content.is-fixed.is-dot) {
+  right: 4px;
+  top: 4px;
+}
+
+.cookie-status-btn {
+  margin-right: 0;
+  flex-shrink: 0;
+}
+
+.role-select {
+  min-width: 140px;
+  max-width: 180px;
+}
+
+@media (max-width: 1280px) {
+  .topbar-actions {
+    justify-content: flex-start;
+  }
+}
+</style>

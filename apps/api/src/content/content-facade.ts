@@ -12,7 +12,8 @@ import type {
   SalesSnapshot,
   UserRole
 } from '@content/shared';
-import { latestSnapshotsByPackage, localDateKey } from '@content/shared';
+import { latestSnapshotsByPackage, beijingDateKey } from '@content/shared';
+import { RECOMMEND_CACHE_CAP, RECOMMEND_SCORE_CAP } from '../common/sql-chunk';
 import { buildBattleCard, buildDerivedCommunities } from '../domain/operation-rules';
 import type { DataSourceService } from './data-source.service';
 import type { DailyInventoryCrawlerService } from './daily-inventory-crawler.service';
@@ -80,19 +81,28 @@ export function createContentAnalysisDelegates(params: {
   };
 }
 
-export function createContentCommunityDelegates(
-  getRecommendations: (query: RecommendQuery) => Promise<RecommendationResult>
-) {
+export type ContentScopeFilter = {
+  areaId?: string;
+  merchantId?: string;
+  areaIds?: string[];
+  merchantIds?: string[];
+};
+
+export function createContentCommunityDelegates(params: {
+  getRecommendations: (query: RecommendQuery) => Promise<RecommendationResult>;
+  getPackageAnalysis: (packageId: string) => Promise<PackageAnalysisResult | null>;
+}) {
   return {
-    getCommunities: (role?: UserRole) => getContentCommunities(getRecommendations, role),
-    getCommunityRecommendations: (groupId: string, role?: UserRole) =>
+    getCommunities: (role?: UserRole, scope?: ContentScopeFilter) =>
+      getContentCommunities(params.getRecommendations, role, scope),
+    getCommunityRecommendations: (groupId: string, role?: UserRole, scope?: ContentScopeFilter) =>
       getContentCommunityRecommendations(
-        (r) => getContentCommunities(getRecommendations, r),
+        (r) => getContentCommunities(params.getRecommendations, r, scope),
         groupId,
         role
       ),
     generateBattleCard: (packageId: string) =>
-      generateContentBattleCard(getRecommendations, packageId)
+      generateContentBattleCard(params.getPackageAnalysis, packageId)
   };
 }
 
@@ -102,18 +112,39 @@ export function createContentDelegates(params: {
   dailyInventoryCrawler: DailyInventoryCrawlerService;
   warn: (msg: string) => void;
 }) {
+  const analysis = createContentAnalysisDelegates(params);
   return {
-    ...createContentAnalysisDelegates(params),
-    ...createContentCommunityDelegates(params.getRecommendations)
+    ...analysis,
+    ...createContentCommunityDelegates({
+      getRecommendations: params.getRecommendations,
+      getPackageAnalysis: analysis.getPackageAnalysis
+    })
   };
 }
 
 export function collectPackageCategories(
   packages: ContentPackage[],
-  query: { areaId?: string; role?: UserRole } = {}
+  query: {
+    areaId?: string;
+    areaIds?: string[];
+    merchantId?: string;
+    merchantIds?: string[];
+    role?: UserRole;
+  } = {}
 ): { categories: string[] } {
   let filtered = packages;
-  if (query.areaId) filtered = filtered.filter((pkg) => pkg.areaId === query.areaId);
+  if (query.areaId) {
+    filtered = filtered.filter((pkg) => pkg.areaId === query.areaId);
+  } else if (query.areaIds?.length) {
+    const allowed = new Set(query.areaIds);
+    filtered = filtered.filter((pkg) => pkg.areaId != null && allowed.has(pkg.areaId));
+  }
+  if (query.merchantId) {
+    filtered = filtered.filter((pkg) => pkg.merchantId === query.merchantId);
+  } else if (query.merchantIds?.length) {
+    const allowed = new Set(query.merchantIds);
+    filtered = filtered.filter((pkg) => pkg.merchantId != null && allowed.has(pkg.merchantId));
+  }
   if (query.role === 'merchant_operator') {
     filtered = filtered.filter((pkg) => pkg.saleStatus === 'selling');
   }
@@ -123,7 +154,13 @@ export function collectPackageCategories(
 
 export async function loadContentCategories(
   dataSource: DataSourceService,
-  query: { areaId?: string; role?: UserRole } = {}
+  query: {
+    areaId?: string;
+    areaIds?: string[];
+    merchantId?: string;
+    merchantIds?: string[];
+    role?: UserRole;
+  } = {}
 ) {
   try {
     const dataset = await dataSource.loadDataset();
@@ -139,6 +176,35 @@ export type InventoryTrendLoader = (
   asOf: Date
 ) => Promise<Map<string, InventoryTrendPoint[]>>;
 
+/**
+ * Drop packages that cannot survive `filterRecommendationItems` before the
+ * expensive inventory-trend + score pass. Mirrors selling/stock filters only —
+ * inventoryFlag still needs trends and is applied after build.
+ */
+export function prefilterPackagesForRecommend(
+  packages: ContentPackage[],
+  query: RecommendQuery
+): ContentPackage[] {
+  let result = packages;
+  if (query.category) {
+    result = result.filter((pkg) => pkg.category === query.category);
+  }
+  // filterRecommendationItems always keeps selling packages; skip known non-sellers early.
+  result = result.filter((pkg) => {
+    if (pkg.saleStatus) return pkg.saleStatus === 'selling';
+    return true;
+  });
+  if (query.inventoryMin != null) {
+    const min = query.inventoryMin;
+    result = result.filter((pkg) => pkg.stockLeft >= min);
+  }
+  if (query.inventoryMax != null) {
+    const max = query.inventoryMax;
+    result = result.filter((pkg) => pkg.stockLeft <= max);
+  }
+  return result;
+}
+
 export async function computeContentRecommendations(params: {
   query: RecommendQuery;
   dataSource: DataSourceService;
@@ -148,25 +214,54 @@ export async function computeContentRecommendations(params: {
   const dataset = await params.dataSource.loadDataset();
   const asOf = resolveAsOfDate(params.query.date, dataset.snapshots),
     snapshotsByPkg = latestSnapshotsByPackage(dataset.snapshots);
-  const packages = applyRoleFilter(dataset.packages, params.query, params.warn);
-  const preFiltered = params.query.category
-    ? packages.filter((pkg) => pkg.category === params.query.category)
-    : packages;
+  const scopedPackages = applyRoleFilter(dataset.packages, params.query, params.warn);
+  // Pre-filter before inventory load — page flips share the runtime cache, but
+  // cold path (alerts + first recommend) must not score the full catalog.
+  const preFiltered = prefilterPackagesForRecommend(scopedPackages, params.query);
+  // Hard cap scoring set: prefer higher stockLeft (backlog candidates) then stable id.
+  const toScore =
+    preFiltered.length <= RECOMMEND_SCORE_CAP
+      ? preFiltered
+      : [...preFiltered]
+          .sort(
+            (a, b) =>
+              b.stockLeft - a.stockLeft || String(a.packageId).localeCompare(String(b.packageId))
+          )
+          .slice(0, RECOMMEND_SCORE_CAP);
+  if (toScore.length < preFiltered.length) {
+    params.warn(
+      `Recommend cold path capped ${preFiltered.length} → ${toScore.length} packages (RECOMMEND_SCORE_CAP)`
+    );
+  }
   const inventoryTrends = await params.loadInventoryTrends(
-    preFiltered.map((pkg) => pkg.packageId),
+    toScore.map((pkg) => pkg.packageId),
     dataset.snapshots,
     3,
     asOf
   );
-  const built = buildRecommendPackageItems(preFiltered, snapshotsByPkg, inventoryTrends, asOf);
+  const built = buildRecommendPackageItems(toScore, snapshotsByPkg, inventoryTrends, asOf);
+  // buildRecommendPackageItems already sorts by promotion score; filter preserves order.
+  const filtered = filterRecommendationItems(
+    built.map((e) => e.item),
+    params.query,
+    isSellingPackage
+  );
+  // Bound cached/HTTP-materialized ranked set below SCORE_CAP so multi-key warm
+  // caches + dashboard/alerts do not retain full 2k-item arrays per key.
+  const ranked =
+    filtered.length <= RECOMMEND_CACHE_CAP ? filtered : filtered.slice(0, RECOMMEND_CACHE_CAP);
+  if (ranked.length < filtered.length) {
+    params.warn(
+      `Recommend response capped ${filtered.length} → ${ranked.length} packages (RECOMMEND_CACHE_CAP)`
+    );
+  }
+  // matchedCount = pre-score selling set (role/category/saleStatus/inventory bounds).
+  // packages is SCORE+CACHE capped for payload; KPIs must not use packages.length.
   return {
-    date: params.query.date ?? localDateKey(new Date()),
+    date: params.query.date ?? beijingDateKey(new Date()),
     areaId: params.query.areaId ?? 'all',
-    packages: filterRecommendationItems(
-      built.map((e) => e.item),
-      params.query,
-      isSellingPackage
-    )
+    packages: ranked,
+    matchedCount: preFiltered.length
   };
 }
 
@@ -208,10 +303,15 @@ export async function loadCommunityGroup(
   return { group, packages: group.todayRecommendedPackages };
 }
 
-export async function generateContentBattleCardFromPackages(
-  getRecommendations: (query: {
-    status: 'selling';
-  }) => Promise<{ packages: RecommendPackageItem[] }>,
+/**
+ * Cap packages fed into derived-community scoring.
+ * Output is already capped at MAX_DERIVED_COMMUNITY_GROUPS; this bounds CPU/memory
+ * when the selling catalog is large (JWT-scoped or unrestricted).
+ */
+export const MAX_DERIVED_COMMUNITY_INPUT_PACKAGES = 200;
+
+export async function generateContentBattleCardFromAnalysis(
+  getPackageAnalysis: (packageId: string) => Promise<PackageAnalysisResult | null>,
   packageId: string,
   buildBattleCardFn: (
     pkg: RecommendPackageItem,
@@ -219,22 +319,114 @@ export async function generateContentBattleCardFromPackages(
     tags: OperationTag[]
   ) => BattleCard
 ) {
-  const recommendations = await getRecommendations({ status: 'selling' });
-  const pkg = recommendations.packages.find((item) => item.packageId === packageId);
-  if (!pkg?.scoreBreakdown) throw new NotFoundException(`套餐不存在: ${packageId}`);
-  return buildBattleCardFn(pkg, pkg.scoreBreakdown, pkg.operationTags ?? []);
+  // Single-package path — never scan the full selling catalog just to find one id.
+  const analysis = await getPackageAnalysis(packageId);
+  if (!analysis?.scoreBreakdown) throw new NotFoundException(`套餐不存在: ${packageId}`);
+  // RecommendPackageItem is a ContentPackage + scoring fields; analysis already has both.
+  const pkg = {
+    ...analysis.package,
+    status: analysis.status as RecommendPackageItem['status'],
+    promotionLevel: analysis.scoreBreakdown.level,
+    promotionScore: analysis.promotionScore,
+    inventoryBacklogDays: analysis.inventoryBacklogDays,
+    inventoryPriority: analysis.inventoryBacklogDays >= 3 ? 'backlog_3d' : 'normal',
+    inventoryFlag: analysis.inventoryFlag as RecommendPackageItem['inventoryFlag'],
+    inventoryFlagLabel: analysis.inventoryFlagLabel,
+    inventoryFlagLevel: analysis.inventoryFlagLevel as RecommendPackageItem['inventoryFlagLevel'],
+    inventorySalesFlag: analysis.inventorySalesFlag as RecommendPackageItem['inventorySalesFlag'],
+    inventorySalesLabel: analysis.inventorySalesLabel,
+    inventorySalesLevel:
+      analysis.inventorySalesLevel as RecommendPackageItem['inventorySalesLevel'],
+    inventoryObservedDays: analysis.inventoryObservedDays,
+    inventorySoldOutDays: analysis.inventorySoldOutDays,
+    inventoryUnsoldDays: analysis.inventoryUnsoldDays,
+    inventoryTrend: analysis.inventoryTrend,
+    recommendedStrategy: analysis.recommendation
+      .strategy as RecommendPackageItem['recommendedStrategy'],
+    reason: analysis.recommendation.reason,
+    riskTips: analysis.recommendation.riskTips,
+    recommendedChannels: analysis.recommendation.suggestedChannels,
+    conversionRate:
+      analysis.salesData.exposureCount > 0
+        ? analysis.salesData.paidOrderCount / analysis.salesData.exposureCount
+        : 0,
+    verifyRate:
+      analysis.salesData.paidOrderCount > 0
+        ? analysis.salesData.verifyCount / analysis.salesData.paidOrderCount
+        : 0,
+    refundRate:
+      analysis.salesData.paidOrderCount > 0
+        ? analysis.salesData.refundCount / analysis.salesData.paidOrderCount
+        : 0,
+    operationTags: analysis.operationTags,
+    scoreBreakdown: analysis.scoreBreakdown,
+    operationAlerts: analysis.operationAlerts
+  } satisfies RecommendPackageItem;
+  return buildBattleCardFn(pkg, analysis.scoreBreakdown, analysis.operationTags ?? []);
 }
 
 export async function getContentCommunities(
-  getRecommendations: (query: {
-    role?: UserRole;
-    status: 'selling';
-  }) => Promise<{ packages: RecommendPackageItem[] }>,
-  role?: UserRole
-): Promise<{ items: CommunityGroup[] }> {
-  const recommendations = await getRecommendations({ role, status: 'selling' });
-  const cardMap = buildOperationCardMap(recommendations.packages);
-  return { items: buildDerivedCommunities(recommendations.packages, cardMap) };
+  getRecommendations: (
+    query: RecommendQuery
+  ) => Promise<{ packages: RecommendPackageItem[]; matchedCount?: number }>,
+  role?: UserRole,
+  scope?: ContentScopeFilter
+): Promise<{
+  items: CommunityGroup[];
+  // Residual #278: dual-cap honesty for derived communities.
+  sourceMatchedCount: number;
+  sourceLimit: number;
+  sourceTruncated: boolean;
+  inputLimit: number;
+  inputLoaded: number;
+  inputTruncated: boolean;
+  // Residual #281: MAX_DERIVED_COMMUNITY_GROUPS output-cap honesty.
+  groupMatched: number;
+  groupLimit: number;
+  groupTruncated: boolean;
+}> {
+  const recommendations = await getRecommendations({
+    role,
+    status: 'selling',
+    areaId: scope?.areaId,
+    merchantId: scope?.merchantId,
+    areaIds: scope?.areaIds,
+    merchantIds: scope?.merchantIds
+  });
+  const recommendPackages = recommendations.packages ?? [];
+  // Residual #278: RECOMMEND_CACHE_CAP source honesty (parity #275/#277).
+  const sourceLimit = RECOMMEND_CACHE_CAP;
+  const sourceMatchedCount =
+    typeof recommendations.matchedCount === 'number' &&
+    Number.isFinite(recommendations.matchedCount)
+      ? Math.max(0, Math.floor(recommendations.matchedCount))
+      : recommendPackages.length;
+  const sourceTruncated = sourceMatchedCount > recommendPackages.length;
+  // Prefer highest-scored packages so the 12 derived groups stay representative
+  // without scoring the entire selling catalog on every request.
+  const ranked = [...recommendPackages].sort(
+    (a, b) => (b.promotionScore ?? 0) - (a.promotionScore ?? 0)
+  );
+  // Residual #278: second clip — MAX_DERIVED_COMMUNITY_INPUT_PACKAGES head honesty.
+  const inputLimit = MAX_DERIVED_COMMUNITY_INPUT_PACKAGES;
+  const packages = ranked.slice(0, inputLimit);
+  const inputLoaded = packages.length;
+  const inputTruncated = ranked.length > packages.length;
+  const cardMap = buildOperationCardMap(packages);
+  const derived = buildDerivedCommunities(packages, cardMap);
+  return {
+    items: derived.items,
+    sourceMatchedCount,
+    sourceLimit,
+    sourceTruncated,
+    inputLimit,
+    inputLoaded,
+    inputTruncated,
+    // Residual #281
+    groupMatched: derived.groupMatched,
+    groupLimit: derived.groupLimit,
+    groupTruncated: derived.groupTruncated
+  };
 }
 
 export async function getContentCommunityRecommendations(
@@ -246,10 +438,8 @@ export async function getContentCommunityRecommendations(
 }
 
 export async function generateContentBattleCard(
-  getRecommendations: (query: {
-    status: 'selling';
-  }) => Promise<{ packages: RecommendPackageItem[] }>,
+  getPackageAnalysis: (packageId: string) => Promise<PackageAnalysisResult | null>,
   packageId: string
 ) {
-  return generateContentBattleCardFromPackages(getRecommendations, packageId, buildBattleCard);
+  return generateContentBattleCardFromAnalysis(getPackageAnalysis, packageId, buildBattleCard);
 }

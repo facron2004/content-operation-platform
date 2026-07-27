@@ -31,15 +31,16 @@
         </div>
         <small>下一步：{{ item.nextAction }}</small>
       </div>
-      <el-button size="small" type="primary" @click.stop="$emit('generate', item.packageId)">
+      <AppleButton size="sm" variant="primary" @click.stop="$emit('generate', item.packageId)">
         作战卡
-      </el-button>
+      </AppleButton>
     </article>
   </div>
 </template>
 <script setup lang="ts">
 import type { OperationCard } from '@content/shared';
 import { levelTagType, riskTagType } from '../utils/labels';
+import AppleButton from './AppleButton.vue';
 defineProps<{ items: OperationCard[] }>();
 defineEmits<{ open: [packageId: string]; generate: [packageId: string] }>();
 </script>

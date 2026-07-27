@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AppleButton from '../../../components/AppleButton.vue';
 import SettingsCreateForm from './SettingsCreateForm.vue';
 const form = defineModel<{
   type: string;
@@ -33,8 +34,10 @@ defineEmits<{ 'type-change': []; 'load-default': []; submit: [] }>();
       </template>
     </SettingsCreateForm>
     <template #footer>
-      <el-button @click="dialogVisible = false">取消</el-button>
-      <el-button type="primary" :loading="submitting" @click="$emit('submit')">创建</el-button>
+      <AppleButton variant="secondary" @click="dialogVisible = false">取消</AppleButton>
+      <AppleButton variant="primary" :loading="submitting" @click="$emit('submit')">
+        创建
+      </AppleButton>
     </template>
   </el-dialog>
 </template>

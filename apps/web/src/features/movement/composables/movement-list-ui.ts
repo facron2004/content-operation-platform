@@ -33,9 +33,20 @@ function exportMovementStagnantCsv(params: {
   bucket?: StaleBucket;
   search?: string;
   sort?: 'lastSalesDateAsc' | 'staleDesc' | 'gmvDesc';
+  // Residual #214: export respects same merchant/category/area filters as list.
+  merchantId?: string;
+  category?: string;
+  areaId?: string;
 }): void {
   downloadBlob(
-    getStagnantExportUrl({ bucket: params.bucket, search: params.search, sort: params.sort }),
+    getStagnantExportUrl({
+      bucket: params.bucket,
+      search: params.search,
+      sort: params.sort,
+      merchantId: params.merchantId,
+      category: params.category,
+      areaId: params.areaId
+    }),
     `滞销库存-${params.bucket ?? '全部'}.csv`
   );
 }
@@ -66,6 +77,9 @@ type MovementListActionOptions = {
       days: 1 | 7 | 30;
       search?: string;
       sort: 'lastSalesDateAsc' | 'staleDesc' | 'gmvDesc';
+      merchantId?: string;
+      category?: string;
+      areaId?: string;
     };
   };
   activeTab: { value: 'stagnant' | 'moving' };
@@ -97,7 +111,10 @@ export function buildMovementListActions(options: MovementListActionOptions) {
       exportMovementStagnantCsv({
         bucket: options.filters.value.bucket,
         search: options.filters.value.search,
-        sort: options.filters.value.sort
+        sort: options.filters.value.sort,
+        merchantId: options.filters.value.merchantId,
+        category: options.filters.value.category,
+        areaId: options.filters.value.areaId
       }),
     goAnalysis: (packageId: string) => goMovementPackageAnalysis(options.router, packageId),
     rowClass: movementRowClass,

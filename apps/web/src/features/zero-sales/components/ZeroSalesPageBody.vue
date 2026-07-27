@@ -3,8 +3,10 @@ import ZeroSalesKpiRow from './ZeroSalesKpiRow.vue';
 import ZeroSalesChartsRow from './ZeroSalesChartsRow.vue';
 import ZeroSalesFilters from './ZeroSalesFilters.vue';
 import ZeroSalesTabs from './ZeroSalesTabs.vue';
+import ZeroSalesTimelineDrawer from './ZeroSalesTimelineDrawer.vue';
 import type { useZeroSalesPage } from '../composables/useZeroSalesPage';
 import { useZeroSalesPageBody } from './zero-sales-page-body';
+import { useZeroSalesTimeline } from '../composables/useZeroSalesTimeline';
 const props = defineProps<{ page: ReturnType<typeof useZeroSalesPage> }>();
 const {
   overviewKpi,
@@ -18,11 +20,29 @@ const {
   merchantLoading,
   merchantPage,
   merchantHasMore,
+  merchantTruncated,
+  merchantLimit,
   skuRows,
   skuLoading,
   skuPage,
-  skuHasMore
+  skuHasMore,
+  skuTruncated,
+  skuLimit
 } = useZeroSalesPageBody(props.page);
+
+// Residual #211: per-SKU stock/sales timeline drawer (mirrors movement #210).
+// Residual #234: setDays re-fetches with operator-selected window (7–90).
+const {
+  drawerVisible: timelineDrawerVisible,
+  loading: timelineLoading,
+  packageId: timelinePackageId,
+  packageName: timelinePackageName,
+  merchantName: timelineMerchantName,
+  days: timelineDays,
+  timeline: timelinePoints,
+  open: openTimeline,
+  setDays: setTimelineDays
+} = useZeroSalesTimeline();
 </script>
 <template>
   <ZeroSalesKpiRow :kpi="overviewKpi" />
@@ -40,7 +60,9 @@ const {
     :filters="filters"
     @bucket-change="page.onBucketChange"
     @update:area-id="filters.areaId = $event"
+    @update:merchant-id="filters.merchantId = $event"
     @update:category="filters.category = $event"
+    @update:sort="filters.sort = $event as typeof filters.sort"
     @update:search="filters.search = $event"
     @filter-change="page.onFilterChange"
     @export="page.exportCsv"
@@ -51,10 +73,14 @@ const {
     :merchant-loading="merchantLoading"
     :merchant-page="merchantPage"
     :merchant-has-more="merchantHasMore"
+    :merchant-truncated="merchantTruncated"
+    :merchant-limit="merchantLimit"
     :sku-rows="skuRows"
     :sku-loading="skuLoading"
     :sku-page="skuPage"
     :sku-has-more="skuHasMore"
+    :sku-truncated="skuTruncated"
+    :sku-limit="skuLimit"
     :merchant-row-class="page.merchantRowClass"
     :sku-row-class="page.skuRowClass"
     @tab-change="page.onTabChange"
@@ -65,5 +91,17 @@ const {
     @drill="page.goMerchantDetail"
     @analysis="page.goAnalysis"
     @generate="page.goGenerate"
+    @timeline="openTimeline"
+  />
+  <!-- Residual #211: stock/sales timeline (API + client existed unused). -->
+  <ZeroSalesTimelineDrawer
+    v-model="timelineDrawerVisible"
+    :loading="timelineLoading"
+    :package-id="timelinePackageId"
+    :package-name="timelinePackageName"
+    :merchant-name="timelineMerchantName"
+    :days="timelineDays"
+    :timeline="timelinePoints"
+    @change-days="setTimelineDays"
   />
 </template>

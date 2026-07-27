@@ -4,7 +4,11 @@
       <h3>品类GMV占比</h3>
       <span class="gmv-category-meta">{{ rows.length }} 个品类</span>
     </header>
-    <div v-if="rows.length === 0" class="gmv-category-empty">暂无品类数据</div>
+    <EmptyState
+      v-if="rows.length === 0"
+      title="暂无品类数据"
+      description="下拉刷新 JeeSite 订单或使用历史回填同步数据"
+    />
     <div v-else class="gmv-category-body">
       <div class="gmv-category-donut">
         <ChartPanel :option="donutOption" class="gmv-category-donut-panel" />
@@ -28,6 +32,7 @@
 import { computed } from 'vue';
 import { defineAsyncComponent } from 'vue';
 import { formatNumber, formatPercentRaw } from '../../../utils/format';
+import EmptyState from '../../../components/EmptyState.vue';
 
 const ChartPanel = defineAsyncComponent(() => import('../../../components/ChartPanel.vue'));
 
@@ -110,17 +115,6 @@ const donutOption = computed(() => {
   font-size: 12px;
 }
 
-.gmv-category-empty {
-  flex: 1;
-  min-height: 160px;
-  display: grid;
-  place-items: center;
-  color: #98a2b3;
-  font-size: 13px;
-  background: #f9fafb;
-  border-radius: 10px;
-}
-
 .gmv-category-body {
   display: grid;
   grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
@@ -136,6 +130,7 @@ const donutOption = computed(() => {
 }
 
 .gmv-category-donut-panel :deep(.chart-shell) {
+  height: 200px;
   min-height: 200px;
 }
 

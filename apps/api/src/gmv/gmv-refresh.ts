@@ -1,25 +1,75 @@
 /** Consolidated GMV module. */
 import { isRecord } from '@content/shared';
 import { Logger } from '@nestjs/common';
+import { withHeavyAggregateGate } from '../common';
+import {
+  JSON_RESPONSE_MAX_BYTES,
+  readResponseText,
+  ResponseBodyTooLargeError
+} from '../common/response-body';
 import { AutoLoginService } from '../content/auto-login.service';
+import { assertHostnameNotPrivateAsync, normalizeJeesiteBaseUrl } from '../content/jeesite-url';
 import { recomputeDailyMetricsRange, recomputePackageSalesAmountRange } from '../money';
 import { MerchantSalesService } from '../merchant-sales/merchant-sales.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { type OrderLike, batchUpsertOrderHeaders } from './gmv-order-header';
 
+/** Cap for non-OK error bodies — never materialize multi-MB HTML into throw messages. */
+const ERROR_BODY_MAX_BYTES = 8 * 1024;
+
 // --- gmv-refresh-order-page.ts ---
+/**
+ * Fetch one JeeSite order list page.
+ * Same-host single-hop redirect pin (parity with data-source / html-fetcher):
+ * Cookie must never leave the origin host; private DNS rechecked on hop.
+ */
 export async function fetchOrderPage(url: URL, cookie: string): Promise<unknown | null> {
   const FETCH_TIMEOUT_MS = 30000,
     controller = new AbortController(),
     timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
-    const res = await fetch(url.toString(), {
-      headers: { Cookie: cookie, 'x-ajax': 'json', Accept: 'application/json' },
+    const headers = { Cookie: cookie, 'x-ajax': 'json', Accept: 'application/json' };
+    let res = await fetch(url.toString(), {
+      headers,
       redirect: 'manual',
       signal: controller.signal
     });
-    if (!res.ok) throw new Error(`JeSite HTTP ${res.status}: ${await res.text()}`);
-    const rawText = await res.text();
+    // SSRF-safe single hop: only follow when hostname matches origin.
+    if (res.status >= 300 && res.status < 400) {
+      const location = res.headers.get('location');
+      if (location) {
+        const redirectUrl = new URL(location, url);
+        if (
+          (redirectUrl.protocol === 'http:' || redirectUrl.protocol === 'https:') &&
+          redirectUrl.hostname === url.hostname
+        ) {
+          await assertHostnameNotPrivateAsync(redirectUrl.hostname);
+          res = await fetch(redirectUrl.toString(), {
+            headers,
+            redirect: 'manual',
+            signal: controller.signal
+          });
+        }
+      }
+    }
+    if (!res.ok) {
+      let snippet = '';
+      try {
+        snippet = await readResponseText(res, ERROR_BODY_MAX_BYTES);
+      } catch {
+        snippet = '[body unreadable]';
+      }
+      throw new Error(`JeSite HTTP ${res.status}: ${snippet.slice(0, 200).replace(/\s+/g, ' ')}`);
+    }
+    let rawText: string;
+    try {
+      rawText = await readResponseText(res, JSON_RESPONSE_MAX_BYTES);
+    } catch (err) {
+      if (err instanceof ResponseBodyTooLargeError) {
+        throw new Error(`JeSite order page exceeds max ${JSON_RESPONSE_MAX_BYTES} bytes`);
+      }
+      throw err;
+    }
     if (rawText.trimStart().startsWith('<')) return null;
     try {
       const parsed = JSON.parse(rawText) as unknown;
@@ -109,7 +159,7 @@ export async function upsertOrderHeaders(
   orders: OrderLike[],
   logger: Logger
 ): Promise<{ upserted: number; skipped: number; errors: number }> {
-  const result = await batchUpsertOrderHeaders(prisma, orders, 40);
+  const result = await batchUpsertOrderHeaders(prisma, orders, 35);
   if (result.errors > 0) {
     logger.warn(
       `OrderHeader upsert partial failures: errors=${result.errors} samples=${result.errorSamples.join(',') || '(none)'}`
@@ -168,8 +218,10 @@ export async function pullJeesiteOrders(params: {
   pagesFetched: number;
 }> {
   const { prisma, autoLogin, startDate, endDate, logger } = params;
-  const baseUrl = process.env.EXTERNAL_API_BASE_URL;
-  if (!baseUrl) throw new Error('EXTERNAL_API_BASE_URL 未配置');
+  const rawBaseUrl = process.env.EXTERNAL_API_BASE_URL;
+  if (!rawBaseUrl) throw new Error('EXTERNAL_API_BASE_URL 未配置');
+  // SSRF guard: same private/loopback rejection used by data-source/auto-login.
+  const baseUrl = await normalizeJeesiteBaseUrl(rawBaseUrl);
   let cookieHeader: string | null | undefined = await resolveCookie(autoLogin, logger);
   const PAGE_SIZE = 50,
     MAX_PAGES = Number(process.env.ETL_MAX_PAGES ?? '200');
@@ -223,7 +275,38 @@ export async function refreshGmvFromJeesite(params: {
 }): Promise<GmvRefreshResult> {
   const { prisma, autoLogin, getMerchantSalesService, invalidateCache, startDate, endDate } =
     params;
+  // Pull is network-bound (serialized via refreshTail). Recompute/write is the
+  // SQLite-heavy phase — share the process-wide heavy gate so interactive GMV /
+  // overview / refund cold aggregates queue instead of contending for the lock
+  // (residual #85; deferred from #84 stampede package).
   const pull = await pullJeesiteOrders({ prisma, autoLogin, startDate, endDate, logger });
+  const recomputeWarnings = await withHeavyAggregateGate(() =>
+    runMoneyRecomputes({
+      prisma,
+      getMerchantSalesService,
+      invalidateCache,
+      startDate,
+      endDate
+    })
+  );
+  logger.log(
+    `JeSite refresh [${startDate} → ${endDate}] pages=${pull.pagesFetched} fetched=${pull.fetched} upserted=${pull.upserted} errors=${pull.errors}${recomputeWarnings.length ? ` recomputeWarnings=${recomputeWarnings.join('; ')}` : ''}`
+  );
+  return { startDate, endDate, ...pull, recomputeWarnings };
+}
+
+/**
+ * DailyMetrics + PSD + merchant-sales recompute after a JeSite order pull.
+ * Kept as a single gate unit so partial failure still frees the slot once.
+ */
+async function runMoneyRecomputes(params: {
+  prisma: PrismaService;
+  getMerchantSalesService: () => Promise<MerchantSalesService | null>;
+  invalidateCache: () => void;
+  startDate: string;
+  endDate: string;
+}): Promise<string[]> {
+  const { prisma, getMerchantSalesService, invalidateCache, startDate, endDate } = params;
   const recomputeWarnings: string[] = [];
 
   try {
@@ -244,7 +327,6 @@ export async function refreshGmvFromJeesite(params: {
     recomputeWarnings.push(msg);
   }
 
-  invalidateCache();
   try {
     const ms = await getMerchantSalesService();
     if (ms) await ms.recomputeRange(startDate, endDate);
@@ -253,8 +335,8 @@ export async function refreshGmvFromJeesite(params: {
     logger.warn(msg);
     recomputeWarnings.push(msg);
   }
-  logger.log(
-    `JeSite refresh [${startDate} → ${endDate}] pages=${pull.pagesFetched} fetched=${pull.fetched} upserted=${pull.upserted} errors=${pull.errors}${recomputeWarnings.length ? ` recomputeWarnings=${recomputeWarnings.join('; ')}` : ''}`
-  );
-  return { startDate, endDate, ...pull, recomputeWarnings };
+  // Invalidate only after all money writers finish so cold GMV/overview/refund
+  // loads do not stampede mid MDM DELETE+INSERT (residual #85).
+  invalidateCache();
+  return recomputeWarnings;
 }

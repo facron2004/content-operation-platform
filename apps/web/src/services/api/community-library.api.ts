@@ -1,6 +1,6 @@
 import type {
   CommunityListResponse,
-  TaskPerformanceResponse,
+  CommunityPerformanceResponse,
   TaskListResponse
 } from '@content/shared';
 import client from '../http-client';
@@ -11,7 +11,8 @@ export async function listCommunities(
     groupType?: string;
     areaId?: string;
     activityLevel?: string;
-    isActive?: boolean;
+    // Residual #196: match CommunityQueryDto 0|1 (boolean query strings become NaN).
+    isActive?: number | boolean;
     keyword?: string;
     page?: number;
     pageSize?: number;
@@ -34,32 +35,30 @@ export async function getCommunity(id: string) {
   );
 }
 
-export async function createCommunity(data: {
+// Residual #231: widen to Create/UpdateCommunityDto optional fields (activityLevel etc.).
+export type CommunityWritePayload = {
   groupName: string;
   groupType: string;
   areaId: string;
+  areaName?: string;
   memberCount?: number;
   tags?: string[];
   ownerId?: string;
+  ownerName?: string;
+  ownerPhone?: string;
+  activityLevel?: string;
+  preferredCategories?: string[];
   source?: string;
-}) {
+  note?: string;
+};
+
+export async function createCommunity(data: CommunityWritePayload) {
   const res = await client.post('/community-library', data);
   clearCache('/community-library');
   return res.data;
 }
 
-export async function updateCommunity(
-  id: string,
-  data: Partial<{
-    groupName: string;
-    groupType: string;
-    areaId: string;
-    memberCount: number;
-    tags: string[];
-    ownerId: string;
-    source: string;
-  }>
-) {
+export async function updateCommunity(id: string, data: Partial<CommunityWritePayload>) {
   const res = await client.put(`/community-library/${encodeURIComponent(id)}`, data);
   clearCache('/community-library');
   return res.data;
@@ -83,8 +82,16 @@ export async function disableCommunity(id: string) {
   return res.data;
 }
 
+/** Residual #199: reverse soft-disable (POST :id/enable). */
+export async function enableCommunity(id: string) {
+  const res = await client.post(`/community-library/${encodeURIComponent(id)}/enable`);
+  clearCache('/community-library');
+  return res.data;
+}
+
 export async function getCommunityPerformance(id: string) {
-  return cachedGet<TaskPerformanceResponse>(
+  // Residual #179: typed to community-scoped aggregate (was wrongly visit/order rate shape).
+  return cachedGet<CommunityPerformanceResponse>(
     () =>
       client
         .get(`/community-library/${encodeURIComponent(id)}/performance`)

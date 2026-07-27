@@ -39,6 +39,18 @@ export interface AlertResponse {
   summary: AlertSummary;
   topPackages: AlertPackageFocus[];
   pagination: { page: number; pageSize: number; total: number; totalPages: number };
+  // Residual #283: Top-N focus package head honesty.
+  focusPackageLimit?: number;
+  focusPackageMatched?: number;
+  focusPackageTruncated?: boolean;
+  // Residual #274: RESOLVED_ALERT_DAY_LIMIT honesty.
+  resolvedIdsLimit?: number;
+  resolvedIdsLoaded?: number;
+  resolvedIdsTruncated?: boolean;
+  // Residual #275: RECOMMEND_CACHE_CAP source-cap honesty.
+  sourceMatchedCount?: number;
+  sourceLimit?: number;
+  sourceTruncated?: boolean;
 }
 export type AlertPagination = Omit<PaginationMeta, 'totalPages'>;
 export const EMPTY_ALERT_SUMMARY: AlertSummary = {
@@ -60,11 +72,14 @@ export function createAlertState() {
     loadError: ref<string | null>(null),
     alerts: ref<AlertItem[]>([]),
     alertResponse: ref<AlertResponse | null>(null),
-    filters: reactive({ keyword: '', level: '', type: '' }),
+    // Residual #221: date as-of (AlertQueryDto.date) — empty = today server-side.
+    filters: reactive({ keyword: '', level: '', type: '', date: '' }),
     pagination: reactive<Omit<PaginationMeta, 'totalPages'>>({ page: 1, pageSize: 80, total: 0 }),
     filterTimer: ref<ReturnType<typeof window.setTimeout> | undefined>(undefined),
     loadRequestId: ref(0),
-    resolveRequestId: ref(0)
+    resolveRequestId: ref(0),
+    /** Soft page LRU — page flips reuse payload without blanking the table. */
+    pageCache: new Map<string, { items: AlertItem[]; total: number; response: AlertResponse }>()
   };
 }
 
@@ -73,6 +88,8 @@ export async function loadAlertsPage(p: {
   keyword: string;
   level: string;
   type: string;
+  // Residual #221: as-of business day for inventory window.
+  date: string;
   pagination: Omit<PaginationMeta, 'totalPages'>;
   force: boolean;
   requestId: number;
@@ -81,12 +98,15 @@ export async function loadAlertsPage(p: {
   setError: (v: string | null) => void;
   setResponse: (data: AlertResponse) => void;
   setItems: (items: AlertItem[]) => void;
+  pageCache?: Map<string, { items: AlertItem[]; total: number; response: AlertResponse }>;
+  pageCacheSize?: number;
 }) {
   const {
     role,
     keyword,
     level,
     type,
+    date,
     pagination: pg,
     force,
     requestId: rid,
@@ -96,15 +116,36 @@ export async function loadAlertsPage(p: {
     setResponse,
     setItems
   } = p;
+  const cacheSize = p.pageCacheSize ?? 8;
+  const cacheKey = [pg.page, pg.pageSize, role ?? '', keyword.trim(), level, type, date].join('|');
+  if (!force && p.pageCache && cacheSize > 0) {
+    const hit = p.pageCache.get(cacheKey);
+    if (hit) {
+      p.pageCache.delete(cacheKey);
+      p.pageCache.set(cacheKey, hit);
+      setResponse(hit.response);
+      setItems(hit.items);
+      pg.total = hit.total;
+      setLoading(false);
+      setError(null);
+      return;
+    }
+  }
+  // Keep previous items visible while fetching so page flips don't blank.
   setLoading(true);
   setError(null);
   try {
-    if (force) clearAlertCache();
+    if (force) {
+      clearAlertCache();
+      p.pageCache?.clear();
+    }
     const data = (await api.getAlerts({
       role,
       keyword: keyword.trim() || undefined,
       level: level || undefined,
       type: type || undefined,
+      // Residual #221: forward as-of date when set.
+      date: date || undefined,
       page: pg.page,
       pageSize: pg.pageSize
     })) as AlertResponse;
@@ -114,6 +155,19 @@ export async function loadAlertsPage(p: {
     pg.page = data.pagination?.page ?? pg.page;
     pg.pageSize = data.pagination?.pageSize ?? pg.pageSize;
     pg.total = data.pagination?.total ?? data.items?.length ?? 0;
+    if (p.pageCache && cacheSize > 0) {
+      if (p.pageCache.has(cacheKey)) p.pageCache.delete(cacheKey);
+      p.pageCache.set(cacheKey, {
+        items: data.items ?? [],
+        total: pg.total,
+        response: data
+      });
+      while (p.pageCache.size > cacheSize) {
+        const oldest = p.pageCache.keys().next().value;
+        if (oldest === undefined) break;
+        p.pageCache.delete(oldest);
+      }
+    }
   } catch {
     if (rid === cur()) setError('预警数据加载失败，请稍后重试');
   } finally {
@@ -132,6 +186,7 @@ export function createAlertLoader(
       keyword: state.filters.keyword,
       level: state.filters.level,
       type: state.filters.type,
+      date: state.filters.date,
       pagination: state.pagination,
       force,
       requestId,
@@ -147,13 +202,14 @@ export function createAlertLoader(
       },
       setItems: (items) => {
         state.alerts.value = items;
-      }
+      },
+      pageCache: state.pageCache
     });
   };
 }
 
 export function bindAlertWatchers(args: {
-  filters: { keyword: string; level: string; type: string };
+  filters: { keyword: string; level: string; type: string; date: string };
   pagination: Omit<PaginationMeta, 'totalPages'>;
   role: Ref<string | undefined>;
   load: (force?: boolean) => Promise<void> | void;
@@ -161,7 +217,7 @@ export function bindAlertWatchers(args: {
   getFilterTimer: () => ReturnType<typeof window.setTimeout> | undefined;
 }) {
   watch(
-    () => [args.filters.keyword, args.filters.level, args.filters.type],
+    () => [args.filters.keyword, args.filters.level, args.filters.type, args.filters.date],
     () => {
       const prev = args.getFilterTimer();
       if (prev) clearTimeout(prev);
@@ -181,7 +237,7 @@ export function bindAlertWatchers(args: {
 
 // --- handlers ---
 type OperationType = OperationRecord['type'];
-type Filters = { keyword: string; level: string; type: string };
+type Filters = { keyword: string; level: string; type: string; date: string };
 
 function buildResolveSuccessMeta(ids: string[]) {
   const single = ids.length === 1;
@@ -269,7 +325,7 @@ function createAlertResolveHandlers(args: AlertResolveArgs) {
       setResolving: args.setResolving,
       recordSuccess: args.recordSuccess,
       recordError: args.recordError,
-      reload: () => args.load()
+      reload: () => args.load(true)
     });
   };
   return {
@@ -293,6 +349,7 @@ function createAlertFilterHandlers(args: {
       args.filters.keyword = '';
       args.filters.level = '';
       args.filters.type = '';
+      args.filters.date = '';
     },
     handlePageChange: () => args.load(),
     handleSizeChange: () => {

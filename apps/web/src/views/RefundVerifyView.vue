@@ -14,6 +14,11 @@ const ChartPanel = defineAsyncComponent(() => import('../components/ChartPanel.v
     activeTab,
     trendDays,
     sortBy,
+    kpiDate,
+    merchantPage,
+    merchantHasMore,
+    merchantTruncated,
+    merchantLimit,
     refundToday,
     verifyToday,
     topMerchants,
@@ -22,6 +27,8 @@ const ChartPanel = defineAsyncComponent(() => import('../components/ChartPanel.v
     trendOption,
     loadTrend,
     loadTopMerchants,
+    prevMerchantPage,
+    nextMerchantPage,
     reload,
     rowClass,
     rateClass,
@@ -31,7 +38,12 @@ const ChartPanel = defineAsyncComponent(() => import('../components/ChartPanel.v
 </script>
 <template>
   <section v-loading="loading" class="page-stack refund-view">
-    <RefundVerifyHero :loading="loading" @reload="reload" />
+    <RefundVerifyHero
+      v-model:kpi-date="kpiDate"
+      :loading="loading"
+      @reload="reload"
+      @date-change="reload"
+    />
     <ErrorAlert :message="loadError" />
     <el-tabs v-model="activeTab" @tab-change="reload">
       <el-tab-pane label="退款分析" name="refund" />
@@ -58,11 +70,17 @@ const ChartPanel = defineAsyncComponent(() => import('../components/ChartPanel.v
       :active-tab="activeTab"
       :top-merchants="topMerchants"
       :list-loading="listLoading"
+      :page="merchantPage"
+      :has-more="merchantHasMore"
+      :truncated="merchantTruncated"
+      :limit="merchantLimit"
       :row-class="rowClass"
       :rate-class="rateClass"
       :format-number="formatNumber"
       :format-percent="formatPercent"
       @load-merchants="loadTopMerchants"
+      @prev="prevMerchantPage"
+      @next="nextMerchantPage"
     />
   </section>
 </template>

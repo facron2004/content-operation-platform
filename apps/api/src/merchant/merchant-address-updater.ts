@@ -1,7 +1,9 @@
 import { Logger } from '@nestjs/common';
 import type { ContentPackage } from '@content/shared';
 import type { PrismaService } from '../prisma/prisma.service';
+import { MERCHANT_UPSERT_SCAN_LIMIT } from '../common/sql-chunk';
 import { lookupAreaCoordinates } from './area-coordinates';
+import { toSqliteDateTime } from '../common/sqlite-datetime';
 
 const logger = new Logger('MerchantAddressUpdater');
 
@@ -40,15 +42,14 @@ export async function upsertMerchants(
     };
   });
 
-  // Batch upsert
+  // Batch upsert — Merchant uses firstSeenAt/lastSeenAt (not createdAt/updatedAt).
   const BATCH = 100;
   let upserted = 0;
+  const now = toSqliteDateTime();
 
   for (let i = 0; i < enriched.length; i += BATCH) {
     const batch = enriched.slice(i, i + BATCH);
-    const valueClauses = batch
-      .map(() => '(?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)')
-      .join(', ');
+    const valueClauses = batch.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ');
     const params = batch.flatMap((m) => [
       m.merchantId,
       m.merchantName,
@@ -56,22 +57,41 @@ export async function upsertMerchants(
       m.areaName,
       m.address,
       m.lat,
-      m.lng
+      m.lng,
+      now,
+      now
     ]);
 
     await prisma.$executeRawUnsafe(
       `
-        INSERT INTO "Merchant" ("merchantId", "merchantName", "areaId", "areaName", "address", "lat", "lng", "createdAt", "updatedAt")
+        INSERT INTO "Merchant" ("merchantId", "merchantName", "areaId", "areaName", "address", "lat", "lng", "firstSeenAt", "lastSeenAt")
         VALUES ${valueClauses}
         ON CONFLICT("merchantId") DO UPDATE SET
           "merchantName" = excluded."merchantName",
-          "areaId"       = COALESCE(excluded."areaId", "Merchant"."areaId"),
-          "areaName"     = COALESCE(excluded."areaName", "Merchant"."areaName"),
+          -- Freeze merchant geography while any non-terminal task still references
+          -- a package under this merchant (scope + KPI boards key off merchant.areaId).
+          "areaId" = CASE
+            WHEN EXISTS (
+              SELECT 1 FROM "DistributionTask" t
+              INNER JOIN "ContentPackage" p ON p."packageId" = t."packageId"
+              WHERE p."merchantId" = "Merchant"."merchantId"
+                AND t."status" NOT IN ('completed', 'cancelled', 'failed')
+            ) THEN "Merchant"."areaId"
+            ELSE COALESCE(excluded."areaId", "Merchant"."areaId")
+          END,
+          "areaName" = CASE
+            WHEN EXISTS (
+              SELECT 1 FROM "DistributionTask" t
+              INNER JOIN "ContentPackage" p ON p."packageId" = t."packageId"
+              WHERE p."merchantId" = "Merchant"."merchantId"
+                AND t."status" NOT IN ('completed', 'cancelled', 'failed')
+            ) THEN "Merchant"."areaName"
+            ELSE COALESCE(excluded."areaName", "Merchant"."areaName")
+          END,
           "address"      = COALESCE(NULLIF(excluded."address", ''), "Merchant"."address"),
           "lat"          = COALESCE(excluded."lat", "Merchant"."lat"),
           "lng"          = COALESCE(excluded."lng", "Merchant"."lng"),
-          "totalSku"     = excluded."totalSku",
-          "updatedAt"    = CURRENT_TIMESTAMP
+          "lastSeenAt"   = excluded."lastSeenAt"
       `,
       ...params
     );
@@ -114,29 +134,59 @@ function extractMerchantsFromPackages(packages: ContentPackage[]): MerchantInput
 }
 
 async function loadMerchantsFromDb(prisma: PrismaService): Promise<MerchantInput[]> {
+  // merchantAddress is a ContentPackage schema column (migration 0003_reclaim_live_columns).
   const rows = (await prisma.$queryRawUnsafe(`
     SELECT
       "merchantId",
-      MIN("merchantName")   AS "merchantName",
-      MIN("areaId")         AS "areaId",
-      MIN("areaName")       AS "areaName",
-      MIN("merchantAddress") AS "address"
+      MIN("merchantName") AS "merchantName",
+      MIN("areaId")       AS "areaId",
+      MIN("areaName")     AS "areaName",
+      MIN(NULLIF("merchantAddress", '')) AS "address"
     FROM "ContentPackage"
     WHERE "merchantId" IS NOT NULL AND "merchantId" <> ''
     GROUP BY "merchantId"
+    LIMIT ${MERCHANT_UPSERT_SCAN_LIMIT}
   `)) as MerchantInput[];
   return rows.filter((r) => r.merchantId);
 }
 
 async function updateSkuCounts(prisma: PrismaService, merchantIds: string[]) {
   if (!merchantIds.length) return;
-  const ph = merchantIds.map(() => '?').join(',');
-  await prisma.$executeRawUnsafe(
-    `UPDATE "Merchant" SET "totalSku" = COALESCE((
-      SELECT COUNT(*) FROM "ContentPackage" WHERE "ContentPackage"."merchantId" = "Merchant"."merchantId"
-    ), 0) WHERE "merchantId" IN (${ph})`,
-    ...merchantIds
-  );
+  // Chunk to keep IN-list size bounded. Batch GROUP BY then one CASE UPDATE per
+  // chunk (residual #91) — avoid correlated COUNT and N serial writes
+  // (up to MERCHANT_UPSERT_SCAN_LIMIT under SQLite write lock).
+  const CHUNK = 200;
+  const now = toSqliteDateTime();
+  for (let i = 0; i < merchantIds.length; i += CHUNK) {
+    const slice = merchantIds.slice(i, i + CHUNK);
+    const ph = slice.map(() => '?').join(',');
+    const counts = (await prisma.$queryRawUnsafe(
+      `SELECT "merchantId", COUNT(*) AS "totalSku"
+       FROM "ContentPackage"
+       WHERE "merchantId" IN (${ph})
+       GROUP BY "merchantId"`,
+      ...slice
+    )) as Array<{ merchantId: string; totalSku: number | bigint }>;
+    const countByMerchant = new Map(
+      counts.map((r) => [String(r.merchantId), Number(r.totalSku) || 0])
+    );
+    // Merchants with zero packages still need totalSku=0 + lastSeenAt refresh.
+    // One CASE UPDATE per chunk (not N serial UPDATEs).
+    const caseSql = slice.map(() => 'WHEN ? THEN ?').join(' ');
+    const caseParams = slice.flatMap((merchantId) => [
+      merchantId,
+      countByMerchant.get(merchantId) ?? 0
+    ]);
+    await prisma.$executeRawUnsafe(
+      `UPDATE "Merchant"
+       SET "totalSku" = CASE "merchantId" ${caseSql} ELSE "totalSku" END,
+           "lastSeenAt" = ?
+       WHERE "merchantId" IN (${ph})`,
+      ...caseParams,
+      now,
+      ...slice
+    );
+  }
 }
 
 /** Legacy: upsert from ContentPackage table (for refresh-addresses endpoint) */

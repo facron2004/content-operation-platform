@@ -3,7 +3,8 @@ import type { Request } from 'express';
 import { isLoopbackRemoteAddress } from './auth-loopback';
 export function assertLocalSessionAllowed(req: Request, logger: Logger): void {
   const env = process.env.NODE_ENV;
-  if (env !== 'development' && env !== 'test') {
+  const isDesktop = process.env.DESKTOP_APP === '1';
+  if (env !== 'development' && env !== 'test' && !isDesktop) {
     logger.warn(
       `拒绝 local-session: NODE_ENV=${env}, ip=${req.ip}, remote=${req.socket.remoteAddress}`
     );

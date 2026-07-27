@@ -52,6 +52,16 @@ export function createRefundVerifyState() {
     activeTab: ref<RefundVerifyTab>('refund'),
     trendDays: ref<7 | 30>(7),
     sortBy: ref<'refundDesc' | 'verifyDesc'>('refundDesc'),
+    // Residual #226: as-of business day (getRefundToday/getVerifyToday already accept date).
+    // Empty string means "server default today".
+    kpiDate: ref(''),
+    // Residual #229: top-merchants pagination (API returns hasMore; SPA used page=1 only).
+    merchantPage: ref(1),
+    merchantPageSize: ref(20),
+    merchantHasMore: ref(false),
+    // Residual #265: GMV_TOP_MERCHANTS_LIMIT honesty.
+    merchantTruncated: ref(false),
+    merchantLimit: ref<number | null>(null),
     refundToday: ref<RefundTodayPayload | null>(null),
     verifyToday: ref<VerifyTodayPayload | null>(null),
     trend: ref<RefundVerifyTrendPoint[]>([]),
@@ -83,11 +93,14 @@ async function loadRefundOrVerifyToday(
   activeTab: RefundVerifyTab,
   refundToday: Ref<RefundTodayPayload | null>,
   verifyToday: Ref<VerifyTodayPayload | null>,
-  loadError: Ref<string | null>
+  loadError: Ref<string | null>,
+  // Residual #226: as-of business day.
+  date?: string
 ) {
   try {
-    if (activeTab === 'refund') refundToday.value = await getRefundToday();
-    else verifyToday.value = await getVerifyToday();
+    const asOf = date || undefined;
+    if (activeTab === 'refund') refundToday.value = await getRefundToday(asOf);
+    else verifyToday.value = await getVerifyToday(asOf);
   } catch (err) {
     loadError.value = extractErrorMessage(err, '加载今日 KPI 失败');
   }
@@ -97,30 +110,51 @@ async function loadRefundOrVerifyTrend(
   activeTab: RefundVerifyTab,
   trendDays: 7 | 30,
   trend: Ref<RefundVerifyTrendPoint[]>,
-  loadError: Ref<string | null>
+  loadError: Ref<string | null>,
+  // Residual #226: endDate aligns trend window with KPI as-of day.
+  endDate?: string
 ) {
   try {
-    if (activeTab === 'refund') trend.value = mapRefundTrend(await getRefundTrend(trendDays));
-    else trend.value = mapVerifyTrend(await getVerifyTrend(trendDays));
+    const asOf = endDate || undefined;
+    if (activeTab === 'refund') trend.value = mapRefundTrend(await getRefundTrend(trendDays, asOf));
+    else trend.value = mapVerifyTrend(await getVerifyTrend(trendDays, asOf));
   } catch (err) {
     loadError.value = extractErrorMessage(err, '加载趋势失败');
   }
 }
 
-async function loadRefundTopMerchants(
-  sortBy: 'refundDesc' | 'verifyDesc',
-  topMerchants: Ref<TopMerchantRow[]>,
-  listLoading: Ref<boolean>,
-  loadError: Ref<string | null>
-) {
-  listLoading.value = true;
+async function loadRefundTopMerchants(params: {
+  sortBy: 'refundDesc' | 'verifyDesc';
+  page: number;
+  pageSize: number;
+  topMerchants: Ref<TopMerchantRow[]>;
+  hasMore: Ref<boolean>;
+  // Residual #265: optional honesty sinks.
+  truncated?: Ref<boolean>;
+  limit?: Ref<number | null>;
+  listLoading: Ref<boolean>;
+  loadError: Ref<string | null>;
+}) {
+  params.listLoading.value = true;
   try {
-    const result = await getRefundTopMerchants({ sortBy, page: 1, pageSize: 20 });
-    topMerchants.value = result.items;
+    // Residual #229: honor page/pageSize + hasMore from API.
+    const result = await getRefundTopMerchants({
+      sortBy: params.sortBy,
+      page: params.page,
+      pageSize: params.pageSize
+    });
+    params.topMerchants.value = result.items;
+    params.hasMore.value = !!result.hasMore;
+    // Residual #265: GMV_TOP_MERCHANTS_LIMIT honesty.
+    if (params.truncated) params.truncated.value = Boolean(result.truncated);
+    if (params.limit) {
+      params.limit.value =
+        typeof result.limit === 'number' && Number.isFinite(result.limit) ? result.limit : null;
+    }
   } catch (err) {
-    loadError.value = extractErrorMessage(err, '加载商家榜失败');
+    params.loadError.value = extractErrorMessage(err, '加载商家榜失败');
   } finally {
-    listLoading.value = false;
+    params.listLoading.value = false;
   }
 }
 
@@ -129,25 +163,35 @@ type RefundVerifyBindState = ReturnType<typeof createRefundVerifyState>;
 async function reloadRefundVerify(state: RefundVerifyBindState) {
   state.loading.value = true;
   state.loadError.value = null;
+  // Full reload resets merchant page (sort/tab/date changes).
+  state.merchantPage.value = 1;
+  const asOf = state.kpiDate.value || undefined;
   await Promise.all([
     loadRefundOrVerifyToday(
       state.activeTab.value,
       state.refundToday,
       state.verifyToday,
-      state.loadError
+      state.loadError,
+      asOf
     ),
     loadRefundOrVerifyTrend(
       state.activeTab.value,
       state.trendDays.value,
       state.trend,
-      state.loadError
+      state.loadError,
+      asOf
     ),
-    loadRefundTopMerchants(
-      state.sortBy.value,
-      state.topMerchants,
-      state.listLoading,
-      state.loadError
-    )
+    loadRefundTopMerchants({
+      sortBy: state.sortBy.value,
+      page: state.merchantPage.value,
+      pageSize: state.merchantPageSize.value,
+      topMerchants: state.topMerchants,
+      hasMore: state.merchantHasMore,
+      truncated: state.merchantTruncated,
+      limit: state.merchantLimit,
+      listLoading: state.listLoading,
+      loadError: state.loadError
+    })
   ]);
   state.loading.value = false;
 }
@@ -174,6 +218,20 @@ export function bindRefundVerifyLoaders(state: RefundVerifyBindState) {
   async function reload() {
     await reloadRefundVerify(state);
   }
+  async function loadTopMerchants(resetPage = false) {
+    if (resetPage) state.merchantPage.value = 1;
+    await loadRefundTopMerchants({
+      sortBy: state.sortBy.value,
+      page: state.merchantPage.value,
+      pageSize: state.merchantPageSize.value,
+      topMerchants: state.topMerchants,
+      hasMore: state.merchantHasMore,
+      truncated: state.merchantTruncated,
+      limit: state.merchantLimit,
+      listLoading: state.listLoading,
+      loadError: state.loadError
+    });
+  }
   onMounted(reload);
   return {
     reload,
@@ -182,15 +240,22 @@ export function bindRefundVerifyLoaders(state: RefundVerifyBindState) {
         state.activeTab.value,
         state.trendDays.value,
         state.trend,
-        state.loadError
+        state.loadError,
+        state.kpiDate.value || undefined
       ),
-    loadTopMerchants: () =>
-      loadRefundTopMerchants(
-        state.sortBy.value,
-        state.topMerchants,
-        state.listLoading,
-        state.loadError
-      ),
+    loadTopMerchants: () => loadTopMerchants(true),
+    prevMerchantPage() {
+      if (state.merchantPage.value > 1) {
+        state.merchantPage.value -= 1;
+        void loadTopMerchants(false);
+      }
+    },
+    nextMerchantPage() {
+      if (state.merchantHasMore.value) {
+        state.merchantPage.value += 1;
+        void loadTopMerchants(false);
+      }
+    },
     ...createRefundVerifyComputed(state)
   };
 }

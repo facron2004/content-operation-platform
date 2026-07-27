@@ -6,7 +6,11 @@
         <el-option :label="city" :value="city" />
       </el-select>
     </header>
-    <div v-if="cells.length === 0" class="gmv-heatmap-empty">暂无区域热力数据</div>
+    <EmptyState
+      v-if="cells.length === 0"
+      title="暂无区域热力数据"
+      description="区域 GMV 分布数据将在订单同步后自动生成"
+    />
     <div v-else class="gmv-heatmap-body">
       <div class="gmv-heatmap-canvas">
         <div class="gmv-heatmap-grid" :style="gridStyle">
@@ -31,6 +35,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
+import EmptyState from '../../../components/EmptyState.vue';
 
 type HeatPoint = {
   name: string;
@@ -98,17 +103,6 @@ const gridStyle = computed(() => {
 
 .gmv-heatmap-city {
   width: 110px;
-}
-
-.gmv-heatmap-empty {
-  flex: 1;
-  min-height: 160px;
-  display: grid;
-  place-items: center;
-  color: #98a2b3;
-  font-size: 13px;
-  background: #f9fafb;
-  border-radius: 10px;
 }
 
 .gmv-heatmap-body {

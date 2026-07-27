@@ -30,4 +30,14 @@ export type MerchantDetailPanelProps = {
   trendOption: Record<string, unknown>;
   staleColor: (bucket: string) => string;
   staleLabel: (bucket: string) => string;
+  // Residual #235: operator-selectable MerchantTrendQueryDto days (7–90).
+  detailDays?: number;
+  detailDayOptions?: readonly number[];
+  // Residual #250: listSkus LIMIT honesty (server MERCHANT_SKU_LIST_LIMIT).
+  skuTruncated?: boolean;
+  skuLimit?: number | null;
+  // Residual #285: MERCHANT_COMPETITORS_LIMIT Top-N honesty.
+  competitorsTruncated?: boolean;
+  competitorsLimit?: number | null;
+  competitorsMatched?: number | null;
 };

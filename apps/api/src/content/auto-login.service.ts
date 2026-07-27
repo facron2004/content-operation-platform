@@ -19,6 +19,9 @@ const COOLDOWN_MAX_MS = 30 * MS_PER_MINUTE;
 const computeCooldownMs = (failedAttempts: number): number =>
   exponentialBackoff(failedAttempts - 3, COOLDOWN_BASE_MS, COOLDOWN_MAX_MS);
 
+/** How long a cookie validation result stays fresh (SPA polls every 30s). */
+const COOKIE_STATUS_CACHE_MS = 60_000;
+
 @Injectable()
 export class AutoLoginService implements OnModuleInit {
   private readonly logger = new Logger(AutoLoginService.name);
@@ -27,6 +30,13 @@ export class AutoLoginService implements OnModuleInit {
   private loginInProgress: Promise<LoginResult> | null = null;
   private failedAttempts = 0;
   private lastFailedTime = 0;
+  /** Cache last validateCookie result so status polling does not thrash EXTERNAL_API. */
+  private lastValidateAt = 0;
+  private lastValidateCookie: string | null = null;
+  private lastValidateResult = false;
+  /** Coalesce concurrent validateCookie calls for the same cookie (residual #84). */
+  private validateInFlight: Promise<boolean> | null = null;
+  private validateInFlightCookie: string | null = null;
 
   async onModuleInit() {
     await this.loadCookieFromCacheFile();
@@ -157,6 +167,9 @@ export class AutoLoginService implements OnModuleInit {
       this.cachedCookie = result.cookie;
       this.lastLoginTime = Date.now();
       this.failedAttempts = 0;
+      this.lastValidateCookie = result.cookie;
+      this.lastValidateResult = true;
+      this.lastValidateAt = Date.now();
       this.logger.log(`Auto login successful, new cookie: ${maskCookie(result.cookie)}`);
       await this.saveCookieToCacheFile(result.cookie);
       return result.cookie;
@@ -174,8 +187,35 @@ export class AutoLoginService implements OnModuleInit {
     });
   }
 
+  /**
+   * Validate a cookie against EXTERNAL_API with TTL cache + in-flight coalesce.
+   * Concurrent SPA polls / ensureValidCookie cold hits share one outbound check.
+   */
   private validateCookie(cookie: string): Promise<boolean> {
-    return validateJeesiteCookie(cookie, process.env.EXTERNAL_API_BASE_URL);
+    const now = Date.now();
+    if (cookie === this.lastValidateCookie && now - this.lastValidateAt < COOKIE_STATUS_CACHE_MS) {
+      return Promise.resolve(this.lastValidateResult);
+    }
+    if (this.validateInFlight && this.validateInFlightCookie === cookie) {
+      return this.validateInFlight;
+    }
+
+    const flight = validateJeesiteCookie(cookie, process.env.EXTERNAL_API_BASE_URL)
+      .then((result) => {
+        this.lastValidateCookie = cookie;
+        this.lastValidateResult = result;
+        this.lastValidateAt = Date.now();
+        return result;
+      })
+      .finally(() => {
+        if (this.validateInFlightCookie === cookie) {
+          this.validateInFlight = null;
+          this.validateInFlightCookie = null;
+        }
+      });
+    this.validateInFlight = flight;
+    this.validateInFlightCookie = cookie;
+    return flight;
   }
 
   clearCache(): void {
@@ -183,30 +223,16 @@ export class AutoLoginService implements OnModuleInit {
     this.lastLoginTime = 0;
   }
 
+  /**
+   * Read-only cookie status. Never triggers JeeSite re-login — that side effect
+   * let any authenticated poller thrash external credentials. Use ensureValidCookie
+   * / updateManualCookie / dedicated refresh paths for renewal.
+   */
   async getCookieStatus() {
     const now = Date.now();
-    let cookieToTest = this.cachedCookie || process.env.EXTERNAL_API_COOKIE;
-    let isValid = false;
-    let autoRefreshed = false;
-
-    if (cookieToTest) {
-      isValid = await this.validateCookie(cookieToTest);
-      if (!isValid) {
-        const refreshedCookie = await this.refreshExpiredCookie('status check');
-        if (refreshedCookie) {
-          cookieToTest = refreshedCookie;
-          autoRefreshed = true;
-          isValid = true;
-        }
-      }
-    } else {
-      const refreshedCookie = await this.refreshExpiredCookie('missing cookie');
-      if (refreshedCookie) {
-        cookieToTest = refreshedCookie;
-        autoRefreshed = true;
-        isValid = true;
-      }
-    }
+    const cookieToTest = this.cachedCookie || process.env.EXTERNAL_API_COOKIE || null;
+    // validateCookie owns TTL + in-flight coalesce (shared with ensureValidCookie).
+    const isValid = cookieToTest ? await this.validateCookie(cookieToTest) : false;
 
     const cooldownMinutes =
       this.failedAttempts >= 3
@@ -218,15 +244,17 @@ export class AutoLoginService implements OnModuleInit {
           )
         : 0;
 
+    // Do not return maskedCookie — cookie *names* (session id keys) are recon
+    // even when values are redacted. hasCookie + isValid is enough for SPA status.
+    // failedAttempts is also omitted: SPA only needs cooldownMinutes; exposing
+    // the raw counter aids recon of lockout thresholds.
     return {
       hasCookie: !!cookieToTest,
-      maskedCookie: cookieToTest ? maskCookie(cookieToTest) : null,
       isValid,
-      autoRefreshed,
+      autoRefreshed: false,
       username: process.env.EXTERNAL_API_USERNAME
         ? maskIdentifier(process.env.EXTERNAL_API_USERNAME)
         : null,
-      failedAttempts: this.failedAttempts,
       cooldownMinutes,
       lastLoginTime: msToISO(this.lastLoginTime)
     };
@@ -236,6 +264,9 @@ export class AutoLoginService implements OnModuleInit {
     const trimmedCookie = cookie.trim();
     if (!trimmedCookie) return { success: false, error: 'Cookie 内容不能为空' };
     if (!(await this.validateCookie(trimmedCookie))) {
+      this.lastValidateCookie = trimmedCookie;
+      this.lastValidateResult = false;
+      this.lastValidateAt = Date.now();
       return {
         success: false,
         error: 'Cookie 校验失败，该 Cookie 可能已失效，请重新从浏览器获取。'
@@ -245,6 +276,9 @@ export class AutoLoginService implements OnModuleInit {
     this.cachedCookie = trimmedCookie;
     this.lastLoginTime = Date.now();
     this.failedAttempts = 0;
+    this.lastValidateCookie = trimmedCookie;
+    this.lastValidateResult = true;
+    this.lastValidateAt = Date.now();
     await this.saveCookieToCacheFile(trimmedCookie);
     this.logger.log('Manual cookie update validated and saved');
     return { success: true };

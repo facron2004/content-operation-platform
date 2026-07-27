@@ -42,7 +42,9 @@ describe('Cookie config API', () => {
     const statusAfter = await api.get('/api/content/cookie/status').expect(200);
 
     expect(statusAfter.body.isValid).toBe(true);
-    expect(statusAfter.body.maskedCookie).toContain('jeesite.session.id=***');
+    expect(statusAfter.body.hasCookie).toBe(true);
+    // Cookie names/values must not leave the host (recon aid).
+    expect(statusAfter.body.maskedCookie).toBeUndefined();
 
     await app.close();
     vi.unstubAllGlobals();

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { AICopyStatus } from '../services/api';
 import type { AIConfigForm } from './AiConfigPanel.vue';
+import AppleButton from './AppleButton.vue';
 defineProps<{ aiStatus: AICopyStatus | null; configSaving: boolean }>();
 const configForm = defineModel<AIConfigForm>('configForm', { required: true });
 defineEmits<{ save: [] }>();
@@ -33,8 +34,13 @@ defineEmits<{ save: [] }>();
         <el-input-number v-model="configForm.maxTokens" :min="200" :max="4000" :step="100" />
       </el-form-item>
     </div>
-    <el-button class="config-save-button" :loading="configSaving" @click="$emit('save')">
+    <AppleButton
+      class="config-save-button"
+      variant="secondary"
+      :loading="configSaving"
+      @click="$emit('save')"
+    >
       保存接口配置
-    </el-button>
+    </AppleButton>
   </el-form>
 </template>

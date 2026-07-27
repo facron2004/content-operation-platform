@@ -1,7 +1,8 @@
 import type { PrismaService } from '../prisma/prisma.service';
 import { beijingDateKey } from '@content/shared';
 import { DEFAULT_INVENTORY_RULES } from '../domain/rules-defaults';
-import { TtlCache } from '../common';
+import { TtlCache, withHeavyAggregateGate } from '../common';
+import { DATA_ANALYSIS_OH_CONCURRENCY, mapPool } from '../common/sql-chunk';
 import { resolveDayGmvMoney } from '../money';
 import type { OverviewKpiPayload } from './overview.types';
 import { aggregateStaleSkuStats } from './overview-stale';
@@ -39,24 +40,51 @@ export async function countDistinctMerchants(prisma: PrismaService): Promise<num
   return Number(row?.c ?? 0);
 }
 
-export function loadOverviewKpis(prisma: PrismaService, cache: TtlCache, date?: string) {
-  return cache.getOrLoad(`kpis:${date ?? 'today'}`, false, async () => {
-    const today = date ?? beijingDateKey(new Date());
-    const rules = DEFAULT_INVENTORY_RULES;
-    const [totalMerchants, totalSkus, money, staleSkuRows] = await Promise.all([
-      countDistinctMerchants(prisma),
-      prisma.contentPackage.count({ where: { stockLeft: { gt: 0 } } }),
-      resolveDayGmvMoney(prisma, today),
-      aggregateStaleSkuStats(prisma, today, rules)
-    ]);
-    return buildOverviewKpiPayload({
-      today,
-      totalMerchants,
-      totalSkus,
-      todayGmv: money.totalGmv,
-      todayOrderCount: money.paidOrderCount,
-      staleSkuRows,
-      moneyDataSource: money.dataSource
-    });
+type KpiLegResult =
+  | { kind: 'merchants'; v: number }
+  | { kind: 'skus'; v: number }
+  | { kind: 'money'; v: Awaited<ReturnType<typeof resolveDayGmvMoney>> }
+  | { kind: 'stale'; v: Awaited<ReturnType<typeof aggregateStaleSkuStats>> };
+
+export function loadOverviewKpis(
+  prisma: PrismaService,
+  cache: TtlCache,
+  date?: string,
+  /** When true, cold compute shares process-wide heavy aggregate pool. */
+  useHeavyGate = false
+) {
+  return cache.getOrLoad(`kpis:${date ?? 'today'}`, false, () => {
+    const load = async () => {
+      const today = date ?? beijingDateKey(new Date());
+      const rules = DEFAULT_INVENTORY_RULES;
+      // Cap concurrent catalog COUNTs inside the heavy-gate slot. Bare 4-way
+      // Promise.all still storms SQLite under multi-tab cold even with gate
+      // (gate serializes holders, not nested queries). mapPool(2) matches
+      // data-analysis OH matrix concurrency.
+      const legs: Array<() => Promise<KpiLegResult>> = [
+        async () => ({ kind: 'merchants', v: await countDistinctMerchants(prisma) }),
+        async () => ({
+          kind: 'skus',
+          v: await prisma.contentPackage.count({ where: { stockLeft: { gt: 0 } } })
+        }),
+        async () => ({ kind: 'money', v: await resolveDayGmvMoney(prisma, today) }),
+        async () => ({ kind: 'stale', v: await aggregateStaleSkuStats(prisma, today, rules) })
+      ];
+      const results = await mapPool(legs, DATA_ANALYSIS_OH_CONCURRENCY, (fn) => fn());
+      const totalMerchants = results.find((r) => r.kind === 'merchants')!.v;
+      const totalSkus = results.find((r) => r.kind === 'skus')!.v;
+      const money = results.find((r) => r.kind === 'money')!.v;
+      const staleSkuRows = results.find((r) => r.kind === 'stale')!.v;
+      return buildOverviewKpiPayload({
+        today,
+        totalMerchants,
+        totalSkus,
+        todayGmv: money.totalGmv,
+        todayOrderCount: money.paidOrderCount,
+        staleSkuRows,
+        moneyDataSource: money.dataSource
+      });
+    };
+    return useHeavyGate ? withHeavyAggregateGate(load) : load();
   });
 }

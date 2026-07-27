@@ -4,12 +4,29 @@ import { extractErrorMessage as extractErrorMessageBase } from '@content/shared'
 import { useAuthStore } from '../stores/auth';
 import { router } from '../router';
 
-export function requestKey(config: { method?: string; url?: string; params?: unknown }): string {
-  const paramsKey = config.params ? JSON.stringify(config.params) : '';
-  return `${config.method}:${config.url ?? ''}?${paramsKey}`;
+/**
+ * In-flight de-dupe key: method + url only (no params).
+ * Same endpoint with different query (e.g. date range change) must share one
+ * slot so the newer call can abort the older one cleanly.
+ */
+export function requestKey(config: { method?: string; url?: string }): string {
+  return `${(config.method ?? 'get').toLowerCase()}:${config.url ?? ''}`;
 }
 export function responseKey(config: { method?: string; url?: string }): string {
-  return `${config.method}:${config.url ?? ''}`;
+  return requestKey(config);
+}
+
+/** True for AbortController / axios cancel — not a real network failure. */
+export function isRequestCanceled(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  if (axios.isCancel(error)) return true;
+  const e = error as { code?: string; name?: string; message?: string };
+  if (e.code === 'ERR_CANCELED' || e.name === 'CanceledError' || e.name === 'AbortError') {
+    return true;
+  }
+  // DOMException / legacy AbortError message shapes
+  const msg = typeof e.message === 'string' ? e.message.toLowerCase() : '';
+  return msg === 'canceled' || msg === 'cancelled' || msg.includes('aborted');
 }
 
 export function statusErrorMessage(status: number, message: string): string | null {
@@ -65,6 +82,8 @@ export function createLoginRedirector() {
 export type RetryableConfig = InternalAxiosRequestConfig & {
   retryCount?: number;
   __authRetried__?: boolean;
+  /** Suppress error toasts — caller handles the error itself. */
+  __silentError__?: boolean;
 };
 export const MAX_RETRIES = 3,
   RETRY_DELAY = 1000;
@@ -72,16 +91,12 @@ export function isAuthEndpoint(url?: string): boolean {
   return !!url && /^\/auth(\/|$)/.test(url.startsWith('/') ? url : `/${url}`);
 }
 export function shouldRetry(error: AxiosError): boolean {
-  if (
-    axios.isCancel(error) ||
-    error.code === 'ERR_CANCELED' ||
-    (error as { name?: string }).name === 'CanceledError'
-  )
-    return false;
+  if (isRequestCanceled(error)) return false;
   const method = error.config?.method?.toLowerCase();
   if (method && !['get', 'head', 'options'].includes(method)) return false;
   const s = error.response?.status;
-  return s == null || (s >= 500 && s < 600);
+  // Server errors only (5xx) — timeouts and rate limits fail fast
+  return s != null && s >= 500 && s < 600;
 }
 export async function restoreAuth(): Promise<string | null> {
   const a = useAuthStore();

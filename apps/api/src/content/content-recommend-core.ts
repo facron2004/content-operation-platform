@@ -9,7 +9,12 @@ import type {
   SaleStatus,
   SalesSnapshot
 } from '@content/shared';
-import { INVENTORY_PRIORITIES, localDateKey } from '@content/shared';
+import {
+  INVENTORY_PRIORITIES,
+  beijingDateKey,
+  beijingDayRangeUtc,
+  shiftDateKey
+} from '@content/shared';
 import {
   buildOperationAlerts,
   buildOperationTags,
@@ -31,7 +36,8 @@ export function isSellingPackage(item: RecommendPackageItem) {
 
 export function resolveAsOfDate(date: string | undefined, snapshots: SalesSnapshot[]) {
   if (date) {
-    const parsed = new Date(`${date}T12:00:00.000`);
+    // Anchor query date to Beijing noon so "as of YYYY-MM-DD" is TZ-stable.
+    const parsed = new Date(`${date}T12:00:00+08:00`);
     if (Number.isFinite(parsed.getTime())) return parsed;
   }
   return (
@@ -42,22 +48,48 @@ export function resolveAsOfDate(date: string | undefined, snapshots: SalesSnapsh
   );
 }
 
+/**
+ * Apply area/merchant filters from the query.
+ * NOTE: `role` is advisory-only and must NOT expand visibility. Server-side
+ * data scope (JWT bindings via resolveScopedQuery) is the real gate; controllers
+ * should pass areaId/merchantId/areaIds/merchantIds derived from bindings.
+ */
 export function applyRoleFilter(
   packages: ContentPackage[],
-  query: { areaId?: string; merchantId?: string; role?: string },
+  query: {
+    areaId?: string;
+    merchantId?: string;
+    areaIds?: string[];
+    merchantIds?: string[];
+    role?: string;
+  },
   warn?: (msg: string) => void
 ) {
   let result = packages;
-  if (query.areaId) result = result.filter((pkg) => pkg.areaId === query.areaId);
-  if (query.merchantId) result = result.filter((pkg) => pkg.merchantId === query.merchantId);
-  if (query.role === 'area_operator' && !query.areaId)
+  if (query.areaIds?.length) {
+    const set = new Set(query.areaIds);
+    result = result.filter((pkg) => pkg.areaId != null && set.has(pkg.areaId));
+  } else if (query.areaId) {
+    result = result.filter((pkg) => pkg.areaId === query.areaId);
+  }
+  if (query.merchantIds?.length) {
+    const set = new Set(query.merchantIds);
+    result = result.filter((pkg) => pkg.merchantId != null && set.has(pkg.merchantId));
+  } else if (query.merchantId) {
+    result = result.filter((pkg) => pkg.merchantId === query.merchantId);
+  }
+  // Client-supplied role without a scope is intentionally a no-op for filtering —
+  // never treat it as "show everything for this persona".
+  const hasArea = Boolean(query.areaId || query.areaIds?.length);
+  const hasMerchant = Boolean(query.merchantId || query.merchantIds?.length);
+  if (query.role === 'area_operator' && !hasArea) {
+    warn?.('area_operator without areaId — no area filter applied. Bind area scope server-side.');
+  }
+  if (query.role === 'merchant_operator' && !hasMerchant) {
     warn?.(
-      'area_operator role without areaId — showing all packages. Select a specific area to filter.'
+      'merchant_operator without merchantId — no merchant filter applied. Bind merchant scope server-side.'
     );
-  if (query.role === 'merchant_operator' && !query.merchantId)
-    warn?.(
-      'merchant_operator role without merchantId — showing all packages. Select a specific merchant to filter.'
-    );
+  }
   return result;
 }
 
@@ -85,22 +117,22 @@ export function buildLiveInventoryTrends(
   days: number,
   asOf: Date
 ): Map<string, InventoryTrendPoint[]> {
-  const result = new Map<string, InventoryTrendPoint[]>(),
-    dayEnd = new Date(asOf);
-  dayEnd.setHours(23, 59, 59, 999);
-  const dayStart = new Date(dayEnd);
-  dayStart.setDate(dayStart.getDate() - Math.max(1, days) + 1);
-  dayStart.setHours(0, 0, 0, 0);
+  const result = new Map<string, InventoryTrendPoint[]>();
+  // Window is Beijing calendar days ending on asOf's business day (TZ-stable).
+  const endKey = beijingDateKey(asOf);
+  const startKey = shiftDateKey(endKey, -(Math.max(1, days) - 1));
+  const rangeStart = beijingDayRangeUtc(startKey).start;
+  const rangeEnd = beijingDayRangeUtc(endKey).end; // exclusive
   const latestByPkgAndDate = new Map<string, InventoryTrendPoint>();
   for (const snapshot of snapshots) {
     const snapshotDate = new Date(snapshot.snapshotTime);
     if (
       !Number.isFinite(snapshotDate.getTime()) ||
-      snapshotDate < dayStart ||
-      snapshotDate > dayEnd
+      snapshotDate < rangeStart ||
+      snapshotDate >= rangeEnd
     )
       continue;
-    const date = localDateKey(snapshotDate),
+    const date = beijingDateKey(snapshotDate),
       key = `${snapshot.packageId}:${date}`,
       point = {
         date,
@@ -127,8 +159,8 @@ export function ensureTodayInTrend(
 ): InventoryTrendPoint[] {
   const snapshotDate = new Date(snapshotTime);
   const date = Number.isFinite(snapshotDate.getTime())
-    ? localDateKey(snapshotDate)
-    : localDateKey(new Date());
+    ? beijingDateKey(snapshotDate)
+    : beijingDateKey(new Date());
   if (trend.some((point) => point.date === date)) return trend;
   return [...trend, { date, snapshotTime, remainingStock: stockLeft }];
 }

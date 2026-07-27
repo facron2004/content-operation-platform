@@ -4,7 +4,11 @@
       <h3>活动效果分析</h3>
       <a class="gmv-activity-more" href="javascript:void(0)">更多 ›</a>
     </header>
-    <div v-if="rows.length === 0" class="gmv-activity-empty">暂无活动数据</div>
+    <EmptyState
+      v-if="rows.length === 0"
+      title="暂无活动数据"
+      description="活动效果数据需要从 JeeSite 同步，请使用历史回填拉取"
+    />
     <div v-else class="gmv-activity-table">
       <div class="gmv-activity-thead">
         <span>活动名称</span>
@@ -30,6 +34,7 @@
 
 <script setup lang="ts">
 import { formatNumber, formatPercentRaw } from '../../../utils/format';
+import EmptyState from '../../../components/EmptyState.vue';
 
 type ActivityRow = {
   name: string;
@@ -84,17 +89,6 @@ function verifyClass(rate: number) {
 }
 .gmv-activity-more:hover {
   color: #2e90fa;
-}
-
-.gmv-activity-empty {
-  flex: 1;
-  min-height: 140px;
-  display: grid;
-  place-items: center;
-  color: #98a2b3;
-  font-size: 13px;
-  background: #f9fafb;
-  border-radius: 10px;
 }
 
 .gmv-activity-table {

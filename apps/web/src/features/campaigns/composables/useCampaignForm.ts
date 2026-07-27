@@ -135,6 +135,8 @@ export function useCampaignForm(existing?: MarketingCampaign, options: CampaignF
       if (isEdit.value && editingId.value) {
         await api.updateCampaign(editingId.value, {
           name: form.name.trim(),
+          // Residual #195: campaignType was editable in dialog but dropped on PATCH.
+          campaignType: form.campaignType,
           description: form.description.trim(),
           startDate: form.startDate,
           endDate: form.endDate,

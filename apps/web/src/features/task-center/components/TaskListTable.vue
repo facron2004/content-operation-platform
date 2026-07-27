@@ -5,18 +5,22 @@
         <template #default="{ row }">
           <div class="task-id-cell">
             <el-tooltip :content="row.taskId" placement="top" :show-after="200">
-              <el-button type="primary" link class="task-id-link" @click="emit('view', row)">
+              <AppleButton variant="ghost" class="task-id-link" @click="emit('view', row)">
                 {{ shortId(row.taskId) }}
-              </el-button>
+              </AppleButton>
             </el-tooltip>
-            <el-button
-              text
-              size="small"
-              :icon="CopyDocument"
+            <AppleButton
+              variant="quiet"
+              size="sm"
+              icon-only
               class="copy-btn"
               title="复制任务 ID"
               @click="copyTaskId(row.taskId)"
-            />
+            >
+              <template #icon>
+                <el-icon><CopyDocument /></el-icon>
+              </template>
+            </AppleButton>
           </div>
         </template>
       </el-table-column>
@@ -33,6 +37,21 @@
           </el-tag>
         </template>
       </el-table-column>
+      <!-- Residual #259: API list SELECT already projects riskLevel; form/detail write it. -->
+      <el-table-column label="风险" width="80">
+        <template #default="{ row }">
+          <el-tag
+            v-if="row.riskLevel"
+            :type="riskType(row.riskLevel)"
+            size="small"
+            effect="plain"
+            disable-transitions
+          >
+            {{ riskLabel(row.riskLevel) }}
+          </el-tag>
+          <span v-else>—</span>
+        </template>
+      </el-table-column>
       <el-table-column label="状态" width="110">
         <template #default="{ row }">
           <TaskStatusTag :status="row.status" size="small" />
@@ -47,55 +66,74 @@
       <el-table-column label="创建时间" width="160">
         <template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template>
       </el-table-column>
-      <el-table-column label="操作" width="250" fixed="right">
+      <el-table-column label="操作" min-width="280" width="300" fixed="right">
         <template #default="{ row }">
           <div class="action-cell">
-            <el-button type="primary" link size="small" @click="emit('view', row)">查看</el-button>
-            <el-button
-              v-if="canEdit(row)"
-              type="primary"
-              link
-              size="small"
-              @click="emit('edit', row)"
-            >
+            <AppleButton variant="ghost" size="sm" @click="emit('view', row)">查看</AppleButton>
+            <AppleButton v-if="canEdit(row)" variant="ghost" size="sm" @click="emit('edit', row)">
               编辑
-            </el-button>
-            <el-button
+            </AppleButton>
+            <!-- Residual #180: schedule before publish; complete after publish. -->
+            <AppleButton
+              v-if="canSchedule(row)"
+              variant="ghost"
+              size="sm"
+              @click="emit('schedule', row)"
+            >
+              排期
+            </AppleButton>
+            <AppleButton
               v-if="canPublish(row)"
-              type="success"
-              link
-              size="small"
+              variant="ghost"
+              size="sm"
               @click="emit('publish', row)"
             >
               发布
-            </el-button>
-            <el-button
+            </AppleButton>
+            <AppleButton
+              v-if="canComplete(row)"
+              variant="ghost"
+              size="sm"
+              @click="emit('complete', row)"
+            >
+              完成
+            </AppleButton>
+            <AppleButton
               v-if="canFail(row)"
-              type="danger"
-              link
-              size="small"
+              variant="ghost"
+              data-tone="danger"
+              size="sm"
               @click="emit('fail', row)"
             >
               失败
-            </el-button>
-            <el-button
+            </AppleButton>
+            <AppleButton
               v-if="canCancel(row)"
-              type="warning"
-              link
-              size="small"
+              variant="ghost"
+              data-tone="warning"
+              size="sm"
               @click="emit('cancel', row)"
             >
               取消
-            </el-button>
-            <el-button
+            </AppleButton>
+            <!-- Residual #204: list reassign (detail already has handleReassignClick). -->
+            <AppleButton
+              v-if="canReassign(row)"
+              variant="ghost"
+              size="sm"
+              @click="emit('reassign', row)"
+            >
+              转派
+            </AppleButton>
+            <AppleButton
               v-if="canDelete(row)"
-              type="danger"
-              link
-              size="small"
+              variant="ghost"
+              data-tone="danger"
+              size="sm"
               @click="emit('delete', row)"
             >
               删除
-            </el-button>
+            </AppleButton>
           </div>
         </template>
       </el-table-column>
@@ -123,6 +161,7 @@ import { ElMessage } from 'element-plus';
 import { CopyDocument } from '@element-plus/icons-vue';
 import type { DistributionTask, TaskChannel, TaskPriority, TaskStatus } from '@content/shared';
 import TaskStatusTag from './TaskStatusTag.vue';
+import AppleButton from '../../../components/AppleButton.vue';
 
 withDefaults(
   defineProps<{
@@ -137,9 +176,13 @@ const emit = defineEmits<{
   view: [row: DistributionTask];
   edit: [row: DistributionTask];
   delete: [row: DistributionTask];
+  schedule: [row: DistributionTask];
   publish: [row: DistributionTask];
+  complete: [row: DistributionTask];
   fail: [row: DistributionTask];
   cancel: [row: DistributionTask];
+  // Residual #204: list reassign → parent prompts assigneeId → api.reassignTask.
+  reassign: [row: DistributionTask];
   'update:page': [value: number];
   'update:pageSize': [value: number];
 }>();
@@ -162,8 +205,26 @@ const priorityTypes: Record<TaskPriority, 'danger' | 'primary' | 'info'> = {
   low: 'info'
 };
 
-const PUBLISHABLE: TaskStatus[] = ['draft', 'waiting_audit', 'scheduled'];
-const FAILABLE: TaskStatus[] = ['published', 'overdue'];
+// Residual #259: same labels as TaskDetailPanel / TaskCreateDialog riskLevelOptions.
+const riskLabels: Record<string, string> = {
+  low: '低',
+  medium: '中',
+  high: '高'
+};
+
+const riskTypes: Record<string, 'success' | 'warning' | 'danger' | 'info'> = {
+  low: 'success',
+  medium: 'warning',
+  high: 'danger'
+};
+
+// Residual #176: gates must match API transitions (publish/fail only accept scheduled).
+// Residual #180: schedule (draft/waiting_audit/blocked) + complete (published).
+// draft/waiting_audit need schedule first; published/overdue cannot fail via this endpoint.
+const SCHEDULABLE: TaskStatus[] = ['draft', 'waiting_audit', 'blocked'];
+const PUBLISHABLE: TaskStatus[] = ['scheduled'];
+const COMPLETABLE: TaskStatus[] = ['published'];
+const FAILABLE: TaskStatus[] = ['scheduled'];
 const CANCELLABLE: TaskStatus[] = [
   'draft',
   'waiting_audit',
@@ -174,6 +235,15 @@ const CANCELLABLE: TaskStatus[] = [
 ];
 const EDITABLE: TaskStatus[] = ['draft', 'waiting_audit', 'scheduled'];
 const DELETABLE: TaskStatus[] = ['draft', 'cancelled', 'failed'];
+// Residual #204: API rejects completed/cancelled/failed; allow all other statuses.
+const REASSIGNABLE: TaskStatus[] = [
+  'draft',
+  'waiting_audit',
+  'scheduled',
+  'published',
+  'overdue',
+  'blocked'
+];
 
 function channelLabel(channel: string) {
   return channelLabels[channel as TaskChannel] || channel;
@@ -187,8 +257,24 @@ function priorityType(priority: string) {
   return priorityTypes[priority as TaskPriority] || 'info';
 }
 
+function riskLabel(level: string) {
+  return riskLabels[level] || level;
+}
+
+function riskType(level: string): 'success' | 'warning' | 'danger' | 'info' {
+  return riskTypes[level] || 'info';
+}
+
+function canSchedule(task: DistributionTask) {
+  return SCHEDULABLE.includes(task.status);
+}
+
 function canPublish(task: DistributionTask) {
   return PUBLISHABLE.includes(task.status);
+}
+
+function canComplete(task: DistributionTask) {
+  return COMPLETABLE.includes(task.status);
 }
 
 function canFail(task: DistributionTask) {
@@ -201,6 +287,10 @@ function canCancel(task: DistributionTask) {
 
 function canEdit(task: DistributionTask) {
   return EDITABLE.includes(task.status);
+}
+
+function canReassign(task: DistributionTask) {
+  return REASSIGNABLE.includes(task.status);
 }
 
 function canDelete(task: DistributionTask) {
@@ -241,31 +331,25 @@ function formatDateTime(value?: string): string {
 }
 
 .task-id-cell {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 2px;
+  gap: 4px;
+  max-width: 100%;
 }
 
 .task-id-link {
   font-family: monospace;
   font-size: 13px;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
+/* Color only — never collapse AppleButton height/padding (was causing 14px squash) */
 .copy-btn {
-  padding: 2px;
-  min-height: auto;
   color: var(--el-color-primary);
-}
-
-.action-cell {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-
-.action-cell .el-button + .el-button {
-  margin-left: 0;
+  flex-shrink: 0;
 }
 
 .pagination-wrap {

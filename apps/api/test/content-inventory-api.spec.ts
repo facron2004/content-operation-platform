@@ -201,9 +201,20 @@ describe('content inventory API', () => {
       ]
     });
 
+    // Clear sticky resolutions from prior workers (resolvedDate is "today").
+    await app
+      .get(PrismaService)
+      .$executeRawUnsafe(
+        'DELETE FROM "OperationAlertResolution" WHERE "alertId" = ?',
+        'LIVE-PKG-ALERTS:continuous_unsold'
+      )
+      .catch(() => undefined);
+
     try {
       const response = await api
-        .get('/api/content/alerts?role=platform_operator&type=continuous_unsold&page=1&pageSize=1')
+        .get(
+          '/api/content/alerts?role=platform_operator&type=continuous_unsold&page=1&pageSize=1&date=2026-05-24'
+        )
         .expect(200);
 
       expect(response.body.items).toHaveLength(1);
@@ -224,18 +235,20 @@ describe('content inventory API', () => {
         .expect(201);
 
       const afterResolve = await api
-        .get('/api/content/alerts?role=platform_operator&type=continuous_unsold&page=1&pageSize=1')
+        .get(
+          '/api/content/alerts?role=platform_operator&type=continuous_unsold&page=1&pageSize=1&date=2026-05-24'
+        )
         .expect(200);
 
       expect(afterResolve.body.items).toHaveLength(0);
       expect(afterResolve.body.pagination.total).toBe(0);
     } finally {
+      // Resolve stamps JWT actor (not body.resolvedBy) — clean by alertId only.
       await app
         .get(PrismaService)
         .$executeRawUnsafe(
-          'DELETE FROM "OperationAlertResolution" WHERE "alertId" = ? AND "resolvedBy" = ?',
-          'LIVE-PKG-ALERTS:continuous_unsold',
-          'vitest-alerts'
+          'DELETE FROM "OperationAlertResolution" WHERE "alertId" = ?',
+          'LIVE-PKG-ALERTS:continuous_unsold'
         )
         .catch(() => undefined);
       await app.close();

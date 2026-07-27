@@ -39,6 +39,25 @@ describe('DetailCache', () => {
     expect(cache.remove('nonexistent')).toBe(false);
   });
 
+  // residual #84: remove must not drop inFlight — forceRefresh + cold miss share one fetch.
+  it('remove mid-flight does not orphan concurrent getOrLoad joiners', async () => {
+    const detail = makeDetail({ packageId: 'pkg-1' });
+    let resolveLoader!: (v: PackageDetail) => void;
+    const loader = vi.fn(
+      () =>
+        new Promise<PackageDetail>((resolve) => {
+          resolveLoader = resolve;
+        })
+    );
+    const first = cache.getOrLoad('pkg-1', loader);
+    cache.remove('pkg-1');
+    const second = cache.getOrLoad('pkg-1', loader);
+    resolveLoader(detail);
+    const [a, b] = await Promise.all([first, second]);
+    expect(loader).toHaveBeenCalledTimes(1);
+    expect(a).toBe(b);
+  });
+
   it('clears all entries', () => {
     cache.set('pkg-1', makeDetail());
     cache.set('pkg-2', makeDetail());

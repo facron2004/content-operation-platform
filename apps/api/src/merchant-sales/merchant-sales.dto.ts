@@ -1,6 +1,7 @@
 /** Consolidated merchant-sales module. */
 import { Type } from 'class-transformer';
-import { IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsIn, IsInt, IsOptional, Max, Min } from 'class-validator';
+import { optionalDateKey } from '../content/dto-decorators';
 
 // --- dto/merchant-sales-query.dto.ts ---
 export const MERCHANT_SALES_WINDOWS = ['day', 'week', 'month', 'year'] as const;
@@ -14,16 +15,17 @@ export const MERCHANT_SALES_SORTS = [
 export type MerchantSalesSort = (typeof MERCHANT_SALES_SORTS)[number];
 export class MerchantSalesQueryDto {
   @IsOptional() @IsIn([...MERCHANT_SALES_WINDOWS]) window: MerchantSalesWindow = 'day';
-  @IsOptional() @IsString() date?: string;
-  @IsOptional() @IsString() endDate?: string;
-  @IsOptional() @Type(() => Number) @IsInt() @Min(1) page: number = 1;
-  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(200) pageSize: number = 20;
+  @optionalDateKey() date?: string;
+  @optionalDateKey() endDate?: string;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100) page: number = 1;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100) pageSize: number = 20;
   @IsOptional() @IsIn([...MERCHANT_SALES_SORTS]) sortBy: MerchantSalesSort = 'gmvDesc';
   @IsOptional() force?: boolean | string;
 }
+/** Strict YYYY-MM-DD only — see GmvRefreshBodyDto for why not IsDateString. */
 export class MerchantSalesRefreshDto {
-  @IsOptional() @IsString() startDate?: string;
-  @IsOptional() @IsString() endDate?: string;
+  @optionalDateKey() startDate?: string;
+  @optionalDateKey() endDate?: string;
 }
 
 // --- merchant-sales.types.ts ---
@@ -55,7 +57,17 @@ export interface MerchantSalesRankingRow {
 }
 export interface MerchantSalesRanking {
   items: MerchantSalesRankingRow[];
+  /** Page math over the capped ranking head (not full merchant COUNT). */
   pagination: { page: number; pageSize: number; hasMore: boolean; total: number };
+  /**
+   * Residual #264: GMV_TOP_MERCHANTS_LIMIT honesty.
+   * pagination.total is the capped head length used for page flips; when the
+   * window has more merchants than the LIMIT, truncated=true and
+   * totalMerchants is the real DISTINCT count.
+   */
+  limit?: number;
+  truncated?: boolean;
+  totalMerchants?: number;
 }
 export interface MerchantSalesTrendPoint {
   bucket: string;

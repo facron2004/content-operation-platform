@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { RuleConfig } from '@content/shared';
+import AppleButton from '../../../components/AppleButton.vue';
 defineProps<{ ruleTypeLabels: Record<string, string>; formatTime: (value?: string) => string }>();
 defineEmits<{ activate: [row: RuleConfig]; remove: [row: RuleConfig] }>();
 </script>
@@ -27,17 +28,21 @@ defineEmits<{ activate: [row: RuleConfig]; remove: [row: RuleConfig] }>();
   <el-table-column label="更新时间" min-width="160">
     <template #default="{ row }">{{ formatTime(row.updatedAt) }}</template>
   </el-table-column>
-  <el-table-column label="操作" width="160" fixed="right">
+  <el-table-column label="操作" min-width="180" width="200" fixed="right">
     <template #default="{ row }">
-      <el-button
-        size="small"
-        type="success"
-        :disabled="row.isActive"
-        @click="$emit('activate', row)"
-      >
-        激活
-      </el-button>
-      <el-button size="small" type="danger" plain @click="$emit('remove', row)">删除</el-button>
+      <div class="action-cell">
+        <AppleButton
+          size="sm"
+          variant="success"
+          :disabled="row.isActive"
+          @click="$emit('activate', row)"
+        >
+          激活
+        </AppleButton>
+        <AppleButton size="sm" variant="tinted" data-tone="danger" @click="$emit('remove', row)">
+          删除
+        </AppleButton>
+      </div>
     </template>
   </el-table-column>
 </template>

@@ -4,6 +4,8 @@ import { cachedGet, clearCache } from '../cache.service';
 export async function getAlerts(
   params: {
     role?: string;
+    // Residual #221: AlertQueryDto.date as-of business day (inventory window).
+    date?: string;
     level?: string;
     type?: string;
     keyword?: string;

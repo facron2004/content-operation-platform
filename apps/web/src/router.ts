@@ -3,8 +3,11 @@ import NProgress from 'nprogress';
 import { useAuthStore } from './stores/auth';
 import { appRoutes } from './router-routes';
 import { installRouterGuards } from './router-guards';
+import { withImportRetry } from './router-nav-reliability';
 
 export type { NavGroup } from './router-routes';
+
+const lazy = (loader: () => Promise<unknown>) => withImportRetry(loader, 1, 150);
 
 export const router = createRouter({
   history: createWebHistory(),
@@ -12,12 +15,12 @@ export const router = createRouter({
     {
       path: '/login',
       name: 'login',
-      component: () => import('./views/LoginView.vue'),
+      component: lazy(() => import('./views/LoginView.vue')),
       meta: { public: true }
     },
     {
       path: '/',
-      component: () => import('./components/ShellLayout.vue'),
+      component: lazy(() => import('./components/ShellLayout.vue')),
       children: appRoutes
     }
   ]

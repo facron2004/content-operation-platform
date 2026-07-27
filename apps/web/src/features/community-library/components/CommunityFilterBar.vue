@@ -1,9 +1,19 @@
 <template>
   <el-row :gutter="12" class="community-filter-bar">
-    <el-col :span="6">
+    <el-col :span="5">
       <el-input
         v-model="local.keyword"
         placeholder="搜索社群名称"
+        clearable
+        @clear="emitSearch"
+        @keyup.enter="emitSearch"
+      />
+    </el-col>
+    <!-- Residual #203: areaId already in filter state + listCommunities + API. -->
+    <el-col :span="3">
+      <el-input
+        v-model="local.areaId"
+        placeholder="区域 ID"
         clearable
         @clear="emitSearch"
         @keyup.enter="emitSearch"
@@ -17,7 +27,7 @@
         <el-option label="商家转发" value="merchant_share" />
       </el-select>
     </el-col>
-    <el-col :span="4">
+    <el-col :span="3">
       <el-select v-model="local.activityLevel" placeholder="活跃度" clearable @change="emitSearch">
         <el-option label="全部" value="" />
         <el-option label="高" value="high" />
@@ -32,15 +42,18 @@
         <el-option label="停用" :value="false" />
       </el-select>
     </el-col>
-    <el-col :span="7">
-      <el-button type="primary" @click="emitSearch">搜索</el-button>
-      <el-button @click="emitReset">重置</el-button>
+    <el-col :span="6">
+      <div class="button-row">
+        <AppleButton variant="primary" @click="emitSearch">搜索</AppleButton>
+        <AppleButton variant="secondary" @click="emitReset">重置</AppleButton>
+      </div>
     </el-col>
   </el-row>
 </template>
 
 <script setup lang="ts">
 import { reactive, watch } from 'vue';
+import AppleButton from '../../../components/AppleButton.vue';
 
 const props = defineProps<{
   modelValue: {

@@ -2,8 +2,12 @@
   <section class="page-stack">
     <RecommendationsFilterBar
       v-model:area-id="filters.areaId"
+      v-model:merchant-id="filters.merchantId"
       v-model:category="filters.category"
       v-model:unsold-only="filters.unsoldOnly"
+      v-model:inventory-min="filters.inventoryMin"
+      v-model:inventory-max="filters.inventoryMax"
+      v-model:date="filters.date"
       :area-options="areaOptions"
       :category-options="categoryOptions"
       :loading="loading"
@@ -13,6 +17,9 @@
       :loading="loading"
       :items="items"
       :pagination="pagination"
+      :truncated="listTruncated"
+      :limit="listLimit"
+      :matched-count="matchedCount"
       @clear="clearFilters"
       @analysis="openAnalysis"
       @generate="goGenerate"
@@ -35,6 +42,10 @@ const {
   areaOptions,
   filters,
   pagination,
+  // Residual #267: RECOMMEND_CACHE_CAP honesty.
+  listTruncated,
+  listLimit,
+  matchedCount,
   load,
   loadPage,
   clearFilters,

@@ -109,6 +109,7 @@ const { onGranularityChange } = createGmvChartsHandlers(emit);
   background: #2e90fa;
 }
 .proto-chart-panel :deep(.chart-shell) {
+  height: 280px;
   min-height: 280px;
 }
 .chart-row-main {

@@ -20,9 +20,11 @@
       <span>上次成功登录</span>
       <span>{{ formatTime(String(cookieStatus.lastLoginTime)) }}</span>
     </div>
-    <div class="status-item code-row">
-      <span>Session ID</span>
-      <code>{{ cookieStatus?.maskedCookie || '无' }}</code>
+    <div class="status-item">
+      <span>Cookie</span>
+      <el-tag :type="cookieStatus?.hasCookie ? 'success' : 'info'" size="small">
+        {{ cookieStatus?.hasCookie ? '已配置' : '未配置' }}
+      </el-tag>
     </div>
   </div>
 </template>
@@ -30,10 +32,10 @@
 defineProps<{
   cookieStatus: {
     isValid?: boolean;
+    hasCookie?: boolean;
     username?: string | null;
     cooldownMinutes?: number;
     lastLoginTime?: number | string | null;
-    maskedCookie?: string | null;
   } | null;
   formatTime: (value: string) => string;
 }>();

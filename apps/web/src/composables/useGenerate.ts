@@ -1,4 +1,4 @@
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, reactive, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import type { BattleCard, Channel, GeneratedCopy, RecommendPackageItem } from '@content/shared';
 import { useAICopyConfig } from './useAICopyConfig';
@@ -18,11 +18,17 @@ export function useGenerate() {
     generationMode = ref<'ai' | 'rule' | null>(null),
     packages = ref<RecommendPackageItem[]>([]),
     copies = ref<GeneratedCopy[]>([]);
+  // Residual #268: generate package picker first-200 / RECOMMEND_CACHE_CAP honesty.
+  const listTruncated = ref(false);
+  const listLimit = ref<number | null>(null);
+  const matchedCount = ref<number | null>(null);
   const battleCard = ref<BattleCard | null>(null),
     battleCardLoading = ref(false),
     form = reactive({
       packageId: String(route.query.packageId ?? ''),
       channel: 'wechat_group' as Channel,
+      // Residual #238: DTO-ready scenario (empty → server DEFAULT_SCENARIO).
+      scenario: '',
       tone: '真实群主口吻',
       copyCount: 3,
       extraInstruction: ''
@@ -56,9 +62,17 @@ export function useGenerate() {
     selectedPackage,
     detail,
     actions,
-    loadPackages: () => loadGeneratePackages(packages, form),
+    loadPackages: () =>
+      loadGeneratePackages(packages, form, {
+        listTruncated,
+        listLimit,
+        matchedCount
+      }),
     channelOptions: GENERATE_CHANNEL_OPTIONS,
     copyText: copyGeneratedText,
-    riskTagType
+    riskTagType,
+    listTruncated,
+    listLimit,
+    matchedCount
   });
 }

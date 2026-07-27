@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AppleButton from '../../../components/AppleButton.vue';
 defineEmits<{ 'go-zero-sales': [merchantId?: string] }>();
 function ratio(row: { stale30SkuCount: number; totalSku: number }) {
   return row.totalSku ? `${((row.stale30SkuCount / row.totalSku) * 100).toFixed(1)}%` : '—';
@@ -20,9 +21,9 @@ function ratio(row: { stale30SkuCount: number; totalSku: number }) {
   </el-table-column>
   <el-table-column label="操作" width="120" align="right" fixed="right">
     <template #default="{ row }">
-      <el-button type="primary" size="small" text @click="$emit('go-zero-sales', row.merchantId)">
+      <AppleButton variant="ghost" size="sm" @click="$emit('go-zero-sales', row.merchantId)">
         下钻
-      </el-button>
+      </AppleButton>
     </template>
   </el-table-column>
 </template>

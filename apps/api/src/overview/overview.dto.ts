@@ -1,14 +1,14 @@
-import { IsIn, IsInt, IsOptional, IsString, Min, Max } from 'class-validator';
+import { IsIn, IsInt, IsOptional, Max, Min } from 'class-validator';
 import { Type } from 'class-transformer';
+import { optionalDateKey } from '../content/dto-decorators';
 
-/** OverviewView ?? KPI ?????date ???? server ? localDateKey? */
+/** OverviewView KPI; date defaults to Beijing business day (beijingDateKey). */
 export class OverviewKpiQueryDto {
-  @IsOptional()
-  @IsString()
+  @optionalDateKey()
   date?: string;
 }
 
-/** OverviewView ??????days=7 ????? 7/30 ??? */
+/** Overview trend; days=7 default, allowed 7/30. */
 export class OverviewTrendQueryDto {
   @IsOptional()
   @Type(() => Number)
@@ -16,8 +16,7 @@ export class OverviewTrendQueryDto {
   @IsIn([7, 30])
   days: number = 7;
 
-  @IsOptional()
-  @IsString()
+  @optionalDateKey()
   endDate?: string;
 }
 

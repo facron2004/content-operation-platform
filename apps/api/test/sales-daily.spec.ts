@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  assertInclusiveDaySpan,
   computeStaleFlag,
+  daySpanErrorCode,
   daysBetween,
   diffDailySales,
+  isDateKey,
   STALE_BUCKET_LABELS,
   STALE_BUCKET_SEVERITY
 } from '../src/domain/sales-daily';
@@ -24,10 +27,46 @@ describe('daysBetween', () => {
   it('returns 0 for invalid input', () => {
     expect(daysBetween('', '2026-05-13')).toBe(0);
     expect(daysBetween('not-a-date', '2026-05-13')).toBe(0);
+    // ISO datetimes must NOT count as date keys (refresh-cap bypass vector).
+    expect(daysBetween('2025-01-01T00:00:00.000Z', '2025-12-31T00:00:00.000Z')).toBe(0);
   });
 
   it('clamps negative to 0', () => {
     expect(daysBetween('2026-05-23', '2026-05-13')).toBe(0);
+  });
+});
+
+describe('isDateKey / assertInclusiveDaySpan', () => {
+  it('isDateKey accepts only YYYY-MM-DD', () => {
+    expect(isDateKey('2026-07-01')).toBe(true);
+    expect(isDateKey('2026-07-01T00:00:00.000Z')).toBe(false);
+    expect(isDateKey('2026/07/01')).toBe(false);
+  });
+
+  it('accepts span within maxDays', () => {
+    const r = assertInclusiveDaySpan('2026-07-01', '2026-07-10', 90);
+    expect(r.span).toBe(9);
+  });
+
+  it('rejects ISO keys and start>end and over-cap spans', () => {
+    try {
+      assertInclusiveDaySpan('2025-01-01T00:00:00Z', '2025-12-31', 90);
+      expect.fail('should throw');
+    } catch (err) {
+      expect(daySpanErrorCode(err)).toBe('DATE_KEY');
+    }
+    try {
+      assertInclusiveDaySpan('2026-07-20', '2026-07-01', 90);
+      expect.fail('should throw');
+    } catch (err) {
+      expect(daySpanErrorCode(err)).toBe('START_AFTER_END');
+    }
+    try {
+      assertInclusiveDaySpan('2025-01-01', '2025-12-31', 90);
+      expect.fail('should throw');
+    } catch (err) {
+      expect(daySpanErrorCode(err)).toBe('SPAN_TOO_LONG');
+    }
   });
 });
 
