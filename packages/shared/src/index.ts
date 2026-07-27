@@ -5,4 +5,5 @@ export * from './constants';
 export * from './api-types';
 export * from './money-fen';
 export * from './money-reconcile';
+export * from './money-view';
 export type { AppUser, UserRoleBinding, OperationAuditLogEntry } from './api-user-types';
