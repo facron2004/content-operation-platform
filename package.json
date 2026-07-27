@@ -31,6 +31,8 @@
     "db:backup": "node scripts/db-backup.mjs",
     "db:push": "tsx prisma/create-schema.ts",
     "db:purge-mock": "tsx scripts/purge-mock-data.ts",
+    "db:reconcile": "tsx scripts/reconcile-money-fen.ts",
+    "db:reconcile:fix": "tsx scripts/reconcile-money-fen.ts --fix",
     "prepare:db": "npm run db:migrate",
     "check:schema": "tsx scripts/check-schema.ts",
     "check:integrity": "node scripts/check-source-integrity.mjs",
