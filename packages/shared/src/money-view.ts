@@ -1,13 +1,14 @@
 /**
- * VNext 金额精度治理（PRD §7.4.4 / §7.4.5 阶段五：切换读取）。
+ * VNext 金额精度治理（PRD §7.4.4 / §7.4.5 阶段五/六）。
  *
  * 读路径序列化助手：把数据库实体（同时带 Float 旧字段与 *Fen BigInt 影子列）
  * 转换为 API 展示形态：
  *   - *Fen 一律转为字符串（JSON 不支持 BigInt；超安全整数场景防精度丢失）。
  *   - 追加 <floatField>Display（"39.90"），供前端直接展示，禁止前端浮点运算。
- *   - 原 Float 字段保留（迁移期新旧并存，§7.16.4）。
+ *   - 阶段六（§7.4.5）：响应体不再携带旧 Float 字段，仅保留 *Fen + *Display。
  *
- * 设计为「只读增强」：不删除、不修改任何既有字段，因此对现有调用方向后兼容。
+ * 删除旧 Float 为「可逆软清理」：回滚本文件改动即可恢复双发；DB 旧列保留至
+ * 稳定运行一个完整结算周期后（§7.4.5 阶段六）再随 migration 删除。
  */
 import { MONEY_FIELDS, fenToDisplay } from './money-fen';
 
@@ -30,8 +31,9 @@ const FEN_KEYS = new Set(Object.keys(MONEY_FEN_TO_FLOAT));
 /**
  * 转换单条记录：对其中出现的每个 *Fen 列，
  *   1. 值序列化为字符串（PRD §7.4.4：分用字符串传输）；
- *   2. 追加 `<floatField>Display` = fenToDisplay(fen)。
- * 原 Float 字段保持原值。无任何 money 字段时返回原引用（不拷贝）。
+ *   2. 追加 `<floatField>Display` = fenToDisplay(fen)；
+ *   3. 阶段六：删除旧 <floatField>，响应体仅保留 *Fen + *Display（§7.4.5）。
+ * 无任何 money 字段时返回原引用（不拷贝）。
  */
 export function toMoneyView<T extends Record<string, unknown>>(record: T): T {
   if (!record || typeof record !== 'object' || Array.isArray(record)) return record;
@@ -49,6 +51,8 @@ export function toMoneyView<T extends Record<string, unknown>>(record: T): T {
       out[key] = String(raw);
       out[`${floatField}Display`] = fenToDisplay(raw as FenSource);
     }
+    // 阶段六：移除旧 Float 字段（DB 列仍保留，待结算周期后 migration 删除）。
+    if (floatField && floatField in out) delete out[floatField];
     changed = true;
   }
   return (changed ? out : record) as T;
