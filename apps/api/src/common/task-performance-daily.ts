@@ -11,6 +11,7 @@ import {
   toSqliteDateTime
 } from './sqlite-datetime';
 import { queryInChunks } from './sql-chunk';
+import { yuanToFen } from '@content/shared';
 import type { PrismaService } from '../prisma/prisma.service';
 
 export type TpdUpsertRow = {
@@ -24,8 +25,8 @@ export type TpdUpsertRow = {
   conversionRate: number;
 };
 
-/** Columns per TPD upsert row (id + 9 payload fields). */
-const TPD_COLS = 10;
+/** Columns per TPD upsert row (id + 10 payload fields incl. gmvFen). */
+const TPD_COLS = 11;
 
 /**
  * Max rows per multi-row INSERT. 50 × 10 params = 500 — well under SQLite
@@ -41,12 +42,13 @@ function buildTpdUpsertSql(numRows: number): string {
     () => `(${Array.from({ length: TPD_COLS }, () => '?').join(',')})`
   ).join(',');
   return (
-    `INSERT INTO "TaskPerformanceDaily" ("id", "taskId", "date", "visitCount", "orderCount", "gmv", "verifyCount", "refundCount", "conversionRate", "computedAt") ` +
+    `INSERT INTO "TaskPerformanceDaily" ("id", "taskId", "date", "visitCount", "orderCount", "gmv", "gmvFen", "verifyCount", "refundCount", "conversionRate", "computedAt") ` +
     `VALUES ${values} ` +
     `ON CONFLICT("taskId", "date") DO UPDATE SET ` +
     `"visitCount" = excluded."visitCount", ` +
     `"orderCount" = excluded."orderCount", ` +
     `"gmv" = excluded."gmv", ` +
+    `"gmvFen" = excluded."gmvFen", ` +
     `"verifyCount" = excluded."verifyCount", ` +
     `"refundCount" = excluded."refundCount", ` +
     `"conversionRate" = excluded."conversionRate", ` +
@@ -77,6 +79,7 @@ export async function batchUpsertTaskPerformanceDaily(
         r.visitCount,
         r.orderCount,
         r.gmv,
+        yuanToFen(r.gmv),
         r.verifyCount,
         r.refundCount,
         r.conversionRate,

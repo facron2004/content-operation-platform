@@ -28,7 +28,7 @@ describe('residual #113 campaign controller scope slim', () => {
     );
 
     // Full getById remains only for GET :id detail.
-    const detailStart = src.indexOf('async getById(@Param');
+    const detailStart = src.search(/async getById\(\s*@Param/);
     expect(detailStart).toBeGreaterThan(0);
     const detailNext = src.indexOf('\n  @Roles(', detailStart + 10);
     const detail = src.slice(detailStart, detailNext > 0 ? detailNext : detailStart + 400);
@@ -43,9 +43,7 @@ describe('residual #113 campaign controller scope slim', () => {
       'cancel',
       'getPerformance'
     ] as const) {
-      const needle =
-        action === 'getPerformance' ? 'async getPerformance(@Param' : `async ${action}(@Param`;
-      const fnStart = src.indexOf(needle);
+      const fnStart = src.search(new RegExp(`async ${action}\\(\\s*@Param`));
       expect(fnStart).toBeGreaterThan(0);
       const nextRoles = src.indexOf('\n  @Roles(', fnStart + 10);
       const nextGet = src.indexOf('\n  @Get(', fnStart + 10);

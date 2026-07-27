@@ -71,7 +71,7 @@ describe('residual #156 DT update/publish/schedule preload fold', () => {
 
     // update: freeze meta → scope → update(..., meta)
     {
-      const fnStart = src.indexOf('async update(@Param');
+      const fnStart = src.search(/async update\(\s*@Param/);
       expect(fnStart).toBeGreaterThan(0);
       const nextRoles = src.indexOf('\n  @Roles(', fnStart + 10);
       const nextGet = src.indexOf('\n  @Get(', fnStart + 10);
@@ -88,7 +88,7 @@ describe('residual #156 DT update/publish/schedule preload fold', () => {
 
     // schedule: getTaskRow → scope (with packageGeo) → schedule(..., task)
     {
-      const fnStart = src.indexOf('async schedule(@Param');
+      const fnStart = src.search(/async schedule\(\s*@Param/);
       expect(fnStart).toBeGreaterThan(0);
       const nextRoles = src.indexOf('\n  @Roles(', fnStart + 10);
       const nextGet = src.indexOf('\n  @Get(', fnStart + 10);
@@ -104,7 +104,7 @@ describe('residual #156 DT update/publish/schedule preload fold', () => {
 
     // publish: getTaskRow → scope (with packageGeo) → publish(..., task)
     {
-      const fnStart = src.indexOf('async publish(@Param');
+      const fnStart = src.search(/async publish\(\s*@Param/);
       expect(fnStart).toBeGreaterThan(0);
       const nextRoles = src.indexOf('\n  @Roles(', fnStart + 10);
       const nextGet = src.indexOf('\n  @Get(', fnStart + 10);
@@ -121,7 +121,7 @@ describe('residual #156 DT update/publish/schedule preload fold', () => {
 
     // Status mutates + delete + performance keep their own probes (not folded here).
     for (const action of ['complete', 'fail', 'cancel', 'reassign'] as const) {
-      const fnStart = src.indexOf(`async ${action}(@Param`);
+      const fnStart = src.search(new RegExp(`async ${action}\\(\\s*@Param`));
       expect(fnStart).toBeGreaterThan(0);
       const nextRoles = src.indexOf('\n  @Roles(', fnStart + 10);
       const nextGet = src.indexOf('\n  @Get(', fnStart + 10);

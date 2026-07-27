@@ -36,7 +36,7 @@ describe('residual #104 copy versionNo atomic + getCopy single-trip', () => {
       'utf8'
     );
 
-    const fnStart = src.indexOf('async getCopy(@Param');
+    const fnStart = src.search(/async getCopy\(\s*@Param/);
     expect(fnStart).toBeGreaterThan(0);
     const next = src.indexOf('\n  @Roles(', fnStart + 10);
     const fn = src.slice(fnStart, next > 0 ? next : undefined);

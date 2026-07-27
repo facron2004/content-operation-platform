@@ -23,12 +23,15 @@ import {
 import { upsertOrderHeaderIso } from '../apps/api/src/gmv/gmv-order-header';
 import { recomputeDailyMetricsRange } from '../apps/api/src/money/daily-metrics-recompute';
 import { recomputePackageSalesAmountRange } from '../apps/api/src/money/package-sales-amount';
+import { moneyFenExtension } from '../apps/api/src/prisma/money-fen-extension';
 
+// $extends(moneyFenExtension)：Phase 3 双写——本脚本的 ORM 写（member.create/update）
+// 自动注入 *Fen 列；原生 SQL 写（upsertOrderHeaderIso）已在 SQL 内显式双写。
 const prisma = new PrismaClient({
   datasources: {
     db: { url: process.env.DATABASE_URL ?? 'file:./prisma/dev.db' }
   }
-});
+}).$extends(moneyFenExtension) as unknown as PrismaClient;
 
 const EXTERNAL_API_BASE_URL = process.env.EXTERNAL_API_BASE_URL ?? '';
 const JEESITE_SESSION_ID = process.env.JEESITE_SESSION_ID ?? process.env.JEESITE_COOKIE ?? '';

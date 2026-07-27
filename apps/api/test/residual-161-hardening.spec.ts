@@ -32,7 +32,7 @@ describe('residual #161 copy get/audit denormalized geo scope', () => {
     );
 
     {
-      const fnStart = src.indexOf('async getCopy(@Param');
+      const fnStart = src.search(/async getCopy\(\s*@Param/);
       expect(fnStart).toBeGreaterThan(0);
       const next = src.indexOf('\n  @Roles(', fnStart + 10);
       const fn = src.slice(fnStart, next > 0 ? next : fnStart + 600);

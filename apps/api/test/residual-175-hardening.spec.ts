@@ -23,7 +23,7 @@ describe('residual #175 cancel reason wire-up (API side)', () => {
       path.join(__dirname, '..', 'src', 'distribution-task', 'distribution-task.controller.ts'),
       'utf8'
     );
-    const fnStart = src.indexOf("async cancel(@Param('id')");
+    const fnStart = src.search(/async cancel\(\s*@Param\('id'\)/);
     expect(fnStart).toBeGreaterThan(0);
     const next = src.indexOf('\n  @', fnStart + 10);
     const fn = src.slice(fnStart, next > 0 ? next : undefined);

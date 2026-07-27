@@ -43,9 +43,9 @@ describe('residual #98 GMV batchUpsert binary-split fallback', () => {
     // Fail any multi-row attempt; succeed single-row for all but the bad order.
     const executeRaw = vi.fn().mockImplementation(async (sql: string, ...params: unknown[]) => {
       // Count '?' groups roughly by row count in VALUES — simpler: param count / col count.
-      // ALL_COLS is 28; single-row has 28 params after sql string.
+      // ALL_COLS is 35 (28 + 7 *Fen dual-write cols, PRD §7.4 Phase 3).
       const nParams = params.length;
-      const COLS = 28;
+      const COLS = 35;
       const nRows = nParams / COLS;
       if (nRows > 1) throw new Error('multi-row fail');
       const orderId = String(params[0] ?? '');
@@ -71,7 +71,7 @@ describe('residual #98 GMV batchUpsert binary-split fallback', () => {
     expect(result.errorSamples).toContain('bad-1');
     // Must not have issued 4 independent serial single-row attempts as the only strategy —
     // at least one multi-row attempt happened (the initial batch).
-    const multiRowAttempts = executeRaw.mock.calls.filter((c) => (c.length - 1) / 28 > 1);
+    const multiRowAttempts = executeRaw.mock.calls.filter((c) => (c.length - 1) / 35 > 1);
     expect(multiRowAttempts.length).toBeGreaterThan(0);
   });
 });

@@ -86,3 +86,107 @@ export function toMoneyPair(fen: bigint | number | string | null | undefined): {
         : BigInt(String(fen));
   return { fen: String(v), display: fenToDisplay(v) };
 }
+
+/**
+ * VNext 金额精度治理（PRD §7.4）Phase 3 双写映射。
+ * 每个模型：遗留 Float（元）字段 → 新增 *Fen（分，BigInt）影子列。
+ * 与 schema 中 44 个 *Fen 列一一对应（见 prisma/schema.prisma）。
+ */
+export const MONEY_FIELDS: Record<string, Record<string, string>> = {
+  ContentPackage: {
+    originalPrice: 'originalPriceFen',
+    salePrice: 'salePriceFen',
+    welfarePrice: 'welfarePriceFen',
+    temporarySalePrice: 'temporarySalePriceFen',
+    grossProfit: 'grossProfitFen'
+  },
+  SalesSnapshot: {
+    gmv: 'gmvFen',
+    paidAmount: 'paidAmountFen',
+    paidAmountOnline: 'paidAmountOnlineFen',
+    paidAmountWallet: 'paidAmountWalletFen',
+    paidAmountBonus: 'paidAmountBonusFen',
+    paidAmountCard: 'paidAmountCardFen',
+    refundAmount: 'refundAmountFen',
+    verifyAmount: 'verifyAmountFen'
+  },
+  CopyPerformance: { gmv: 'gmvFen' },
+  DailyMetrics: {
+    totalGmv: 'totalGmvFen',
+    gmvOnline: 'gmvOnlineFen',
+    gmvWallet: 'gmvWalletFen',
+    gmvBonus: 'gmvBonusFen',
+    gmvCard: 'gmvCardFen',
+    totalRefund: 'totalRefundFen',
+    totalVerify: 'totalVerifyFen',
+    paidAmountBonus: 'paidAmountBonusFen',
+    paidAmountWallet: 'paidAmountWalletFen'
+  },
+  OrderHeader: {
+    orderAmount: 'orderAmountFen',
+    paidAmount: 'paidAmountFen',
+    paidAmountWallet: 'paidAmountWalletFen',
+    paidAmountBonus: 'paidAmountBonusFen',
+    paidAmountCard: 'paidAmountCardFen',
+    refundAmount: 'refundAmountFen',
+    verifyAmount: 'verifyAmountFen'
+  },
+  Member: { walletBalance: 'walletBalanceFen', totalGmv: 'totalGmvFen' },
+  MerchantDailyMetrics: {
+    paidAmountOnline: 'paidAmountOnlineFen',
+    paidAmountWallet: 'paidAmountWalletFen',
+    paidAmountBonus: 'paidAmountBonusFen',
+    paidAmountCard: 'paidAmountCardFen',
+    refundAmount: 'refundAmountFen',
+    verifyAmount: 'verifyAmountFen'
+  },
+  PackageSalesDaily: { salesAmount: 'salesAmountFen' },
+  MarketingCampaign: { budget: 'budgetFen', targetGmv: 'targetGmvFen' },
+  TaskPerformanceDaily: {
+    gmv: 'gmvFen',
+    verifyAmount: 'verifyAmountFen',
+    refundAmount: 'refundAmountFen'
+  }
+};
+
+/**
+ * ORM 双写助手：给定模型名与写入数据对象，返回注入了 *Fen 的新对象。
+ * 仅对 data 中出现的 Float 金额字段计算 Fen（yuanToFen），未出现的字段不动，
+ * 因此局部更新不会误清空已存在的 *Fen。
+ */
+export function withMoneyFen(
+  model: string,
+  data: Record<string, unknown>
+): Record<string, unknown> {
+  const map = MONEY_FIELDS[model];
+  if (!map || !data || typeof data !== 'object' || Array.isArray(data)) return data;
+  const out: Record<string, unknown> = { ...data };
+  for (const [floatField, fenField] of Object.entries(map)) {
+    if (Object.prototype.hasOwnProperty.call(out, floatField)) {
+      const v = out[floatField];
+      out[fenField] = v === null || v === undefined ? null : yuanToFen(Number(v));
+    }
+  }
+  return out;
+}
+
+/**
+ * 原生 SQL 双写助手：给定模型名与「列名→值」的行对象，返回需要追加写入的
+ * *Fen 列及其 BigInt 值（仅包含行中出现的 Float 金额字段）。
+ * 用法：把返回对象的键并入 INSERT 列清单 / UPDATE SET 片段，值并入参数数组。
+ */
+export function fenColumnsForRawWrite(
+  model: string,
+  row: Record<string, unknown>
+): Record<string, bigint | null> {
+  const map = MONEY_FIELDS[model];
+  if (!map || !row) return {};
+  const out: Record<string, bigint | null> = {};
+  for (const [floatField, fenField] of Object.entries(map)) {
+    if (Object.prototype.hasOwnProperty.call(row, floatField)) {
+      const v = row[floatField];
+      out[fenField] = v === null || v === undefined ? null : yuanToFen(Number(v));
+    }
+  }
+  return out;
+}

@@ -56,7 +56,7 @@ describe('residual #151 DT packageId+status single probe', () => {
     }
 
     for (const action of ['complete', 'fail', 'cancel', 'reassign'] as const) {
-      const fnStart = controller.indexOf(`async ${action}(@Param`);
+      const fnStart = controller.search(new RegExp(`async ${action}\\(\\s*@Param`));
       expect(fnStart).toBeGreaterThan(0);
       const nextRoles = controller.indexOf('\n  @Roles(', fnStart + 10);
       const nextGet = controller.indexOf('\n  @Get(', fnStart + 10);

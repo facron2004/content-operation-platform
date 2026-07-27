@@ -45,7 +45,7 @@ describe('residual #158 campaign update freeze-meta preload fold', () => {
     expect(fn).toMatch(/success:\s*true/);
     expect(fn).toMatch(/if \(sets\.length === 0\)/);
 
-    const cStart = controller.indexOf('async update(@Param');
+    const cStart = controller.search(/async update\(\s*@Param/);
     expect(cStart).toBeGreaterThan(0);
     const nextRoles = controller.indexOf('\n  @Roles(', cStart + 10);
     const nextGet = controller.indexOf('\n  @Get(', cStart + 10);

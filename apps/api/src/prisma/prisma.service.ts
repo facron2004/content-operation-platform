@@ -4,6 +4,7 @@ import { PrismaLibSQL } from '@prisma/adapter-libsql';
 import { describeError } from '@content/shared';
 import { getPrismaErrorCode, resolveDevDbPath } from './prisma-path';
 import { connectPrismaOnInit } from './prisma-connect';
+import { moneyFenExtension } from './money-fen-extension';
 export { prismaJsonReplacer } from './prisma-path';
 const BOOT_LOGGER = new Logger('PrismaService');
 @Injectable()
@@ -25,7 +26,7 @@ export class PrismaService extends PrismaClient implements OnModuleDestroy, OnMo
           adapter: new PrismaLibSQL({ url: envUrl })
         });
       }
-      return;
+      return this.$extends(moneyFenExtension) as unknown as PrismaService;
     }
 
     // Priority 2: Scan filesystem for dev.db
@@ -41,6 +42,8 @@ export class PrismaService extends PrismaClient implements OnModuleDestroy, OnMo
     super({
       adapter: new PrismaLibSQL({ url: /^[a-zA-Z]:\//.test(n) ? `file:///${n}` : `file:${n}` })
     });
+    // Phase 3 双写：所有 ORM 写路径自动从 Float 金额字段派生 *Fen（PRD §7.4）。
+    return this.$extends(moneyFenExtension) as unknown as PrismaService;
   }
   async onModuleInit() {
     await connectPrismaOnInit(this, this.logger, getPrismaErrorCode, resolveDevDbPath);

@@ -51,7 +51,7 @@ export async function recomputePackageSalesAmountRange(
     // Inventory-derived salesQty is preserved; only amount is recomputed from OH.
     await tx.$executeRawUnsafe(
       `UPDATE "PackageSalesDaily"
-       SET "salesAmount" = 0, "updatedAt" = ?
+       SET "salesAmount" = 0, "salesAmountFen" = 0, "updatedAt" = ?
        WHERE "date" >= ? AND "date" <= ?`,
       now,
       startDate,
@@ -61,7 +61,7 @@ export async function recomputePackageSalesAmountRange(
     return tx.$executeRawUnsafe(
       `
         INSERT INTO "PackageSalesDaily" (
-          "id", "packageId", "date", "salesQty", "salesAmount", "refundQty",
+          "id", "packageId", "date", "salesQty", "salesAmount", "salesAmountFen", "refundQty",
           "deltaSource", "computedAt", "createdAt", "updatedAt"
         )
         SELECT
@@ -70,6 +70,7 @@ export async function recomputePackageSalesAmountRange(
           ${sqlBeijingDate('oh."paidTime"')} AS "date",
           0 AS "salesQty",
           COALESCE(SUM(${SQL_GMV_OH}), 0) AS "salesAmount",
+          CAST(ROUND(COALESCE(SUM(${SQL_GMV_OH}), 0) * 100) AS INTEGER) AS "salesAmountFen",
           0 AS "refundQty",
           'order_header' AS "deltaSource",
           ? AS "computedAt",
@@ -83,6 +84,7 @@ export async function recomputePackageSalesAmountRange(
         GROUP BY oh."packageId", ${sqlBeijingDate('oh."paidTime"')}
         ON CONFLICT("packageId", "date") DO UPDATE SET
           "salesAmount" = excluded."salesAmount",
+          "salesAmountFen" = excluded."salesAmountFen",
           "computedAt" = excluded."computedAt",
           "updatedAt" = excluded."updatedAt"
       `,

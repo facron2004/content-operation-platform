@@ -28,7 +28,7 @@ describe('residual #108 distribution-task controller packageId-only scope', () =
     );
 
     // Full getById remains only for GET :id detail; Residual #167 folds packageGeo.
-    const detailStart = src.indexOf('async getById(@Param');
+    const detailStart = src.search(/async getById\(\s*@Param/);
     expect(detailStart).toBeGreaterThan(0);
     const detailNext = src.indexOf('\n  @Roles(', detailStart + 10);
     const detail = src.slice(detailStart, detailNext > 0 ? detailNext : detailStart + 700);
@@ -37,8 +37,7 @@ describe('residual #108 distribution-task controller packageId-only scope', () =
 
     // Residual #151: status mutates use getTaskAccessMeta; others packageId-only.
     for (const action of ['complete', 'fail', 'cancel', 'reassign'] as const) {
-      const needle = `async ${action}(@Param`;
-      const fnStart = src.indexOf(needle);
+      const fnStart = src.search(new RegExp(`async ${action}\\(\\s*@Param`));
       expect(fnStart).toBeGreaterThan(0);
       const nextRoles = src.indexOf('\n  @Roles(', fnStart + 10);
       const nextGet = src.indexOf('\n  @Get(', fnStart + 10);
@@ -54,7 +53,7 @@ describe('residual #108 distribution-task controller packageId-only scope', () =
 
     // Residual #160: getPerformance uses access meta (+ geo) for scope.
     {
-      const fnStart = src.indexOf('async getPerformance(@Param');
+      const fnStart = src.search(/async getPerformance\(\s*@Param/);
       expect(fnStart).toBeGreaterThan(0);
       const nextRoles = src.indexOf('\n  @Roles(', fnStart + 10);
       const nextGet = src.indexOf('\n  @Get(', fnStart + 10);
@@ -71,7 +70,7 @@ describe('residual #108 distribution-task controller packageId-only scope', () =
 
     // Residual #159: delete meta doubles as packageId scope probe.
     {
-      const fnStart = src.indexOf('async delete(@Param');
+      const fnStart = src.search(/async delete\(\s*@Param/);
       expect(fnStart).toBeGreaterThan(0);
       const nextRoles = src.indexOf('\n  @Roles(', fnStart + 10);
       const nextGet = src.indexOf('\n  @Get(', fnStart + 10);
@@ -88,7 +87,7 @@ describe('residual #108 distribution-task controller packageId-only scope', () =
 
     // update: freeze meta doubles as packageId scope probe.
     {
-      const fnStart = src.indexOf('async update(@Param');
+      const fnStart = src.search(/async update\(\s*@Param/);
       expect(fnStart).toBeGreaterThan(0);
       const nextRoles = src.indexOf('\n  @Roles(', fnStart + 10);
       const nextGet = src.indexOf('\n  @Get(', fnStart + 10);
@@ -105,7 +104,7 @@ describe('residual #108 distribution-task controller packageId-only scope', () =
 
     // schedule/publish: full row doubles as packageId+geo scope probe.
     for (const action of ['schedule', 'publish'] as const) {
-      const fnStart = src.indexOf(`async ${action}(@Param`);
+      const fnStart = src.search(new RegExp(`async ${action}\\(\\s*@Param`));
       expect(fnStart).toBeGreaterThan(0);
       const nextRoles = src.indexOf('\n  @Roles(', fnStart + 10);
       const nextGet = src.indexOf('\n  @Get(', fnStart + 10);

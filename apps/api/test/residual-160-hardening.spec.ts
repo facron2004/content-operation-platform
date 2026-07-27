@@ -46,9 +46,7 @@ describe('residual #160 DT package geo fold into access probes', () => {
 
     // Mutates that have joined geo pass it through.
     for (const action of ['complete', 'fail', 'cancel', 'reassign', 'getPerformance'] as const) {
-      const needle =
-        action === 'getPerformance' ? 'async getPerformance(@Param' : `async ${action}(@Param`;
-      const fnStart = src.indexOf(needle);
+      const fnStart = src.search(new RegExp(`async ${action}\\(\\s*@Param`));
       expect(fnStart).toBeGreaterThan(0);
       const nextRoles = src.indexOf('\n  @Roles(', fnStart + 10);
       const nextGet = src.indexOf('\n  @Get(', fnStart + 10);
@@ -60,7 +58,7 @@ describe('residual #160 DT package geo fold into access probes', () => {
     }
 
     for (const action of ['update', 'delete'] as const) {
-      const fnStart = src.indexOf(`async ${action}(@Param`);
+      const fnStart = src.search(new RegExp(`async ${action}\\(\\s*@Param`));
       expect(fnStart).toBeGreaterThan(0);
       const nextRoles = src.indexOf('\n  @Roles(', fnStart + 10);
       const nextGet = src.indexOf('\n  @Get(', fnStart + 10);
@@ -72,8 +70,7 @@ describe('residual #160 DT package geo fold into access probes', () => {
 
     // Residual #167: detail / schedule / publish also fold packageGeo from getTaskRow JOIN.
     for (const action of ['getById', 'schedule', 'publish'] as const) {
-      const needle = action === 'getById' ? 'async getById(@Param' : `async ${action}(@Param`;
-      const fnStart = src.indexOf(needle);
+      const fnStart = src.search(new RegExp(`async ${action}\\(\\s*@Param`));
       expect(fnStart).toBeGreaterThan(0);
       const nextRoles = src.indexOf('\n  @Roles(', fnStart + 10);
       const nextGet = src.indexOf('\n  @Get(', fnStart + 10);

@@ -37,7 +37,7 @@ describe('residual #106 campaign transitionStatus status-only', () => {
     );
 
     for (const action of ['start', 'pause', 'complete', 'cancel'] as const) {
-      const fnStart = src.indexOf(`async ${action}(@Param`);
+      const fnStart = src.search(new RegExp(`async ${action}\\(\\s*@Param`));
       expect(fnStart).toBeGreaterThan(0);
       const nextRoles = src.indexOf('\n  @Roles(', fnStart + 10);
       const nextGet = src.indexOf('\n  @Get(', fnStart + 10);

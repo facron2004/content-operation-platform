@@ -45,8 +45,10 @@ export async function recomputeDailyMetricsRange(
     return tx.$executeRawUnsafe(
       `
       INSERT OR REPLACE INTO "DailyMetrics" (
-        "date", "totalGmv", "gmvOnline", "gmvWallet", "gmvBonus", "gmvCard",
-        "totalRefund", "totalVerify", "totalOrders", "paidOrderCount",
+        "date", "totalGmv", "totalGmvFen", "gmvOnline", "gmvOnlineFen", "gmvWallet", "gmvWalletFen",
+        "gmvBonus", "gmvBonusFen", "gmvCard", "gmvCardFen",
+        "totalRefund", "totalRefundFen", "totalVerify", "totalVerifyFen",
+        "totalOrders", "paidOrderCount",
         "verifyCount", "refundCount", "activeMerchants",
         "refundRate", "verifyRate",
         "updatedAt"
@@ -54,12 +56,19 @@ export async function recomputeDailyMetricsRange(
       SELECT
         ${sqlBeijingDate('oh."paidTime"')} AS "date",
         COALESCE(SUM(${SQL_GMV_OH}), 0) AS "totalGmv",
+        CAST(ROUND(COALESCE(SUM(${SQL_GMV_OH}), 0) * 100) AS INTEGER) AS "totalGmvFen",
         COALESCE(SUM(oh."paidAmount"), 0) AS "gmvOnline",
+        CAST(ROUND(COALESCE(SUM(oh."paidAmount"), 0) * 100) AS INTEGER) AS "gmvOnlineFen",
         COALESCE(SUM(oh."paidAmountWallet"), 0) AS "gmvWallet",
+        CAST(ROUND(COALESCE(SUM(oh."paidAmountWallet"), 0) * 100) AS INTEGER) AS "gmvWalletFen",
         COALESCE(SUM(oh."paidAmountBonus"), 0) AS "gmvBonus",
+        CAST(ROUND(COALESCE(SUM(oh."paidAmountBonus"), 0) * 100) AS INTEGER) AS "gmvBonusFen",
         COALESCE(SUM(oh."paidAmountCard"), 0) AS "gmvCard",
+        CAST(ROUND(COALESCE(SUM(oh."paidAmountCard"), 0) * 100) AS INTEGER) AS "gmvCardFen",
         COALESCE(SUM(oh."refundAmount"), 0) AS "totalRefund",
+        CAST(ROUND(COALESCE(SUM(oh."refundAmount"), 0) * 100) AS INTEGER) AS "totalRefundFen",
         COALESCE(SUM(oh."verifyAmount"), 0) AS "totalVerify",
+        CAST(ROUND(COALESCE(SUM(oh."verifyAmount"), 0) * 100) AS INTEGER) AS "totalVerifyFen",
         COUNT(*) AS "totalOrders",
         COUNT(*) AS "paidOrderCount",
         SUM(CASE WHEN oh."verifyTime" IS NOT NULL THEN 1 ELSE 0 END) AS "verifyCount",

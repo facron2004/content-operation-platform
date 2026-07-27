@@ -31,7 +31,7 @@ describe('residual #154 community update preloadedAreaId (no double areaId probe
       'utf8'
     );
 
-    const fnStart = src.indexOf('async update(@Param');
+    const fnStart = src.search(/async update\(\s*@Param/);
     expect(fnStart).toBeGreaterThan(0);
     const nextRoles = src.indexOf('\n  @Roles(', fnStart + 10);
     const nextGet = src.indexOf('\n  @Get(', fnStart + 10);

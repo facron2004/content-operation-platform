@@ -9,6 +9,7 @@ import {
   OnModuleDestroy
 } from '@nestjs/common';
 import type { RecommendQuery, RecommendationResult, UserRole } from '@content/shared';
+import { yuanToFen } from '@content/shared';
 import { withHeavyAggregateGate } from '../common';
 import { resolveScopedQuery, type ScopeBinding } from '../user-access/data-scope';
 import { DataSourceService } from './data-source.service';
@@ -223,7 +224,10 @@ export class ContentService implements OnModuleInit, OnModuleDestroy {
     for (let i = 0; i < pkgs.length; i += BATCH) {
       const batch = pkgs.slice(i, i + BATCH);
       const vc = batch
-        .map(() => '(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+        .map(
+          () =>
+            '(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
+        )
         .join(',');
       const now = toSqliteDateTime();
       const params = batch.flatMap((p) => [
@@ -236,10 +240,14 @@ export class ContentService implements OnModuleInit, OnModuleDestroy {
         p.areaName,
         p.category,
         p.originalPrice,
+        yuanToFen(p.originalPrice),
         p.salePrice,
+        yuanToFen(p.salePrice),
         p.welfarePrice ?? null,
+        yuanToFen(p.welfarePrice ?? null),
         p.commissionRate,
         p.grossProfit,
+        yuanToFen(p.grossProfit),
         p.stockTotal,
         p.stockLeft,
         p.startTime,
@@ -262,8 +270,10 @@ export class ContentService implements OnModuleInit, OnModuleDestroy {
         await this.prisma.$executeRawUnsafe(
           `INSERT INTO "ContentPackage" (
             "packageId","packageName","packageType","merchantId","merchantName",
-            "areaId","areaName","category","originalPrice","salePrice",
-            "welfarePrice","commissionRate","grossProfit","stockTotal","stockLeft",
+            "areaId","areaName","category",
+            "originalPrice","originalPriceFen","salePrice","salePriceFen",
+            "welfarePrice","welfarePriceFen","commissionRate",
+            "grossProfit","grossProfitFen","stockTotal","stockLeft",
             "startTime","endTime","useRules","sellingPoints",
             "miniProgramPath","detailSummary","saleStatus","merchantCooperationScore",
             "areaMatchScore","timeMatchScore","historyScore",
@@ -300,6 +310,7 @@ export class ContentService implements OnModuleInit, OnModuleDestroy {
               ELSE excluded."areaName"
             END,
             "category"=excluded."category","salePrice"=excluded."salePrice",
+            "salePriceFen"=excluded."salePriceFen",
             "stockLeft"=excluded."stockLeft","saleStatus"=excluded."saleStatus",
             "shopId"=COALESCE(NULLIF(excluded."shopId",''),"ContentPackage"."shopId"),
             "merchantAddress"=excluded."merchantAddress",

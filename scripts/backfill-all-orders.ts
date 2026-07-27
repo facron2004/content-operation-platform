@@ -14,6 +14,7 @@ import {
   type MappedOrderRecord
 } from '../apps/api/src/content/jeesite-bargain-adapter';
 import { ensureDatabaseSchema } from '../prisma/seed-data';
+import { yuanToFen } from '@content/shared';
 
 config({ path: path.join(process.cwd(), '.env') });
 
@@ -63,20 +64,27 @@ async function upsertRow(o: MappedOrderRecord): Promise<void> {
     `INSERT INTO "OrderHeader" (
       "orderId","memberId","packageId","merchantId","merchantName",
       "areaId","areaName","orderTime","paidTime","verifyTime","refundTime",
-      "orderAmount","paidAmount","paidAmountWallet","paidAmountBonus","paidAmountCard",
-      "refundAmount","verifyAmount","pointEarned","pointUsed","status","channel",
+      "orderAmount","orderAmountFen","paidAmount","paidAmountFen",
+      "paidAmountWallet","paidAmountWalletFen","paidAmountBonus","paidAmountBonusFen",
+      "paidAmountCard","paidAmountCardFen",
+      "refundAmount","refundAmountFen","verifyAmount","verifyAmountFen",
+      "pointEarned","pointUsed","status","channel",
       "createdAt","updatedAt"
-    ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,?,?,?,?,?,'jeesite',?,?)
+    ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,0,?,?,?,?,?,?,?,'jeesite',?,?)
     ON CONFLICT("orderId") DO UPDATE SET
       "memberId"=excluded."memberId","packageId"=excluded."packageId",
       "merchantId"=excluded."merchantId","merchantName"=excluded."merchantName",
       "areaId"=excluded."areaId","areaName"=excluded."areaName",
       "orderTime"=excluded."orderTime","paidTime"=excluded."paidTime",
       "verifyTime"=excluded."verifyTime","refundTime"=excluded."refundTime",
-      "orderAmount"=excluded."orderAmount",
-      "paidAmount"=excluded."paidAmount","paidAmountWallet"=excluded."paidAmountWallet",
+      "orderAmount"=excluded."orderAmount","orderAmountFen"=excluded."orderAmountFen",
+      "paidAmount"=excluded."paidAmount","paidAmountFen"=excluded."paidAmountFen",
+      "paidAmountWallet"=excluded."paidAmountWallet",
+      "paidAmountWalletFen"=excluded."paidAmountWalletFen",
       "paidAmountBonus"=excluded."paidAmountBonus",
-      "refundAmount"=excluded."refundAmount","verifyAmount"=excluded."verifyAmount",
+      "paidAmountBonusFen"=excluded."paidAmountBonusFen",
+      "refundAmount"=excluded."refundAmount","refundAmountFen"=excluded."refundAmountFen",
+      "verifyAmount"=excluded."verifyAmount","verifyAmountFen"=excluded."verifyAmountFen",
       "pointEarned"=excluded."pointEarned","pointUsed"=excluded."pointUsed",
       "status"=excluded."status","channel"=excluded."channel",
       "updatedAt"=excluded."updatedAt"`,
@@ -92,11 +100,17 @@ async function upsertRow(o: MappedOrderRecord): Promise<void> {
     f.verifyTime,
     f.refundTime,
     f.orderAmount,
+    yuanToFen(f.orderAmount),
     f.paidAmount,
+    yuanToFen(f.paidAmount),
     f.paidAmountWallet,
+    yuanToFen(f.paidAmountWallet),
     f.paidAmountBonus,
+    yuanToFen(f.paidAmountBonus),
     f.refundAmount,
+    yuanToFen(f.refundAmount),
     f.verifyAmount,
+    yuanToFen(f.verifyAmount),
     o.pointEarned ?? 0,
     o.pointUsed ?? 0,
     f.status,

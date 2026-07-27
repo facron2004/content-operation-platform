@@ -33,7 +33,7 @@ describe('residual #162 community disable slim shell (no fat RETURNING)', () => 
       'utf8'
     );
 
-    const fnStart = src.indexOf('async disable(@Param');
+    const fnStart = src.search(/async disable\(\s*@Param/);
     expect(fnStart).toBeGreaterThan(0);
     const nextRoles = src.indexOf('\n  @Roles(', fnStart + 10);
     const nextGet = src.indexOf('\n  @Get(', fnStart + 10);

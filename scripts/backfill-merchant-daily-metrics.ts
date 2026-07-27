@@ -51,9 +51,12 @@ async function main() {
     `
       INSERT OR REPLACE INTO "MerchantDailyMetrics" (
         "merchantName", "date", "areaName",
-        "paidOrderCount", "paidAmountOnline", "paidAmountWallet",
-        "paidAmountBonus", "paidAmountCard",
-        "refundAmount", "verifyAmount",
+        "paidOrderCount", "paidAmountOnline", "paidAmountOnlineFen",
+        "paidAmountWallet", "paidAmountWalletFen",
+        "paidAmountBonus", "paidAmountBonusFen",
+        "paidAmountCard", "paidAmountCardFen",
+        "refundAmount", "refundAmountFen",
+        "verifyAmount", "verifyAmountFen",
         "orderCount", "packageCount",
         "updatedAt"
       )
@@ -73,11 +76,17 @@ async function main() {
         ) AS "areaName",
         SUM(CASE WHEN oh."status" IN ('paid','verified') THEN 1 ELSE 0 END) AS "paidOrderCount",
         COALESCE(SUM(CASE WHEN oh."status" IN ('paid','verified') THEN oh."paidAmount" ELSE 0 END), 0) AS "paidAmountOnline",
+        CAST(ROUND(COALESCE(SUM(CASE WHEN oh."status" IN ('paid','verified') THEN oh."paidAmount" ELSE 0 END), 0) * 100) AS INTEGER) AS "paidAmountOnlineFen",
         COALESCE(SUM(CASE WHEN oh."status" IN ('paid','verified') THEN oh."paidAmountWallet" ELSE 0 END), 0) AS "paidAmountWallet",
+        CAST(ROUND(COALESCE(SUM(CASE WHEN oh."status" IN ('paid','verified') THEN oh."paidAmountWallet" ELSE 0 END), 0) * 100) AS INTEGER) AS "paidAmountWalletFen",
         COALESCE(SUM(CASE WHEN oh."status" IN ('paid','verified') THEN oh."paidAmountBonus" ELSE 0 END), 0) AS "paidAmountBonus",
+        CAST(ROUND(COALESCE(SUM(CASE WHEN oh."status" IN ('paid','verified') THEN oh."paidAmountBonus" ELSE 0 END), 0) * 100) AS INTEGER) AS "paidAmountBonusFen",
         COALESCE(SUM(CASE WHEN oh."status" IN ('paid','verified') THEN oh."paidAmountCard" ELSE 0 END), 0) AS "paidAmountCard",
+        CAST(ROUND(COALESCE(SUM(CASE WHEN oh."status" IN ('paid','verified') THEN oh."paidAmountCard" ELSE 0 END), 0) * 100) AS INTEGER) AS "paidAmountCardFen",
         COALESCE(SUM(oh."refundAmount"), 0) AS "refundAmount",
+        CAST(ROUND(COALESCE(SUM(oh."refundAmount"), 0) * 100) AS INTEGER) AS "refundAmountFen",
         COALESCE(SUM(oh."verifyAmount"), 0) AS "verifyAmount",
+        CAST(ROUND(COALESCE(SUM(oh."verifyAmount"), 0) * 100) AS INTEGER) AS "verifyAmountFen",
         COUNT(*) AS "orderCount",
         COUNT(DISTINCT oh."packageId") AS "packageCount",
         CURRENT_TIMESTAMP AS "updatedAt"

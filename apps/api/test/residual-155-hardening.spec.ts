@@ -44,7 +44,7 @@ describe('residual #155 campaign transition access meta (status in scope probe)'
     expect(fn).toMatch(/RETURNING \$\{CAMPAIGN_ROW_COLUMNS\}/);
 
     for (const action of ['start', 'pause', 'complete', 'cancel'] as const) {
-      const aStart = controller.indexOf(`async ${action}(@Param`);
+      const aStart = controller.search(new RegExp(`async ${action}\\(\\s*@Param`));
       expect(aStart).toBeGreaterThan(0);
       const nextRoles = controller.indexOf('\n  @Roles(', aStart + 10);
       const nextGet = controller.indexOf('\n  @Get(', aStart + 10);

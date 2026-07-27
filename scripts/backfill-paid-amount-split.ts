@@ -29,7 +29,9 @@ async function main() {
   // 拆分 4 列已 default 0,只需把 paidAmount 拷到 paidAmountOnline。
   const updated = await prisma.$executeRawUnsafe(
     `UPDATE "SalesSnapshot"
-     SET "paidAmountOnline" = "paidAmount"
+     SET "paidAmountOnline" = "paidAmount",
+         "paidAmountOnlineFen" = CAST(ROUND("paidAmount" * 100) AS INTEGER),
+         "paidAmountFen" = CAST(ROUND("paidAmount" * 100) AS INTEGER)
      WHERE "paidAmount" > 0`
   );
 

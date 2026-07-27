@@ -1,5 +1,5 @@
 import { Inject, Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
-import { beijingDateKey, shiftDateKey } from '@content/shared';
+import { beijingDateKey, shiftDateKey, yuanToFen } from '@content/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateCampaignDto } from './dto/create-campaign.dto';
 import { UpdateCampaignDto } from './dto/update-campaign.dto';
@@ -246,8 +246,8 @@ export class CampaignService {
     // ownerId only from controller JWT stamp (not free-form DTO field).
     const ownerId = dto.ownerId ?? null;
     await this.prisma.$executeRawUnsafe(
-      `INSERT INTO "MarketingCampaign" ("campaignId", "name", "description", "campaignType", "status", "startDate", "endDate", "areaIds", "merchantIds", "budget", "targetGmv", "targetOrders", "ownerId", "createdAt", "updatedAt")
-       VALUES (?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO "MarketingCampaign" ("campaignId", "name", "description", "campaignType", "status", "startDate", "endDate", "areaIds", "merchantIds", "budget", "targetGmv", "budgetFen", "targetGmvFen", "targetOrders", "ownerId", "createdAt", "updatedAt")
+       VALUES (?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       campaignId,
       dto.name,
       description,
@@ -258,6 +258,8 @@ export class CampaignService {
       merchantIdsJson,
       budget,
       targetGmv,
+      yuanToFen(budget),
+      yuanToFen(targetGmv),
       targetOrders,
       ownerId,
       now,
@@ -369,10 +371,14 @@ export class CampaignService {
     if (dto.budget !== undefined) {
       sets.push('"budget" = ?');
       params.push(dto.budget);
+      sets.push('"budgetFen" = ?');
+      params.push(yuanToFen(dto.budget));
     }
     if (dto.targetGmv !== undefined) {
       sets.push('"targetGmv" = ?');
       params.push(dto.targetGmv);
+      sets.push('"targetGmvFen" = ?');
+      params.push(yuanToFen(dto.targetGmv));
     }
     if (dto.targetOrders !== undefined) {
       sets.push('"targetOrders" = ?');

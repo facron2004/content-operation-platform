@@ -25,7 +25,7 @@ describe('residual #112 community controller areaId-only scope', () => {
     );
 
     // Full getById remains only for GET :id detail.
-    const detailStart = src.indexOf('async getById(@Param');
+    const detailStart = src.search(/async getById\(\s*@Param/);
     expect(detailStart).toBeGreaterThan(0);
     const detailNext = src.indexOf('\n  @Roles(', detailStart + 10);
     const detail = src.slice(detailStart, detailNext > 0 ? detailNext : detailStart + 400);
@@ -33,12 +33,10 @@ describe('residual #112 community controller areaId-only scope', () => {
 
     for (const action of ['update', 'delete', 'disable', 'getPerformance', 'getTasks'] as const) {
       const needle =
-        action === 'getPerformance'
-          ? 'async getPerformance(@Param'
-          : action === 'getTasks'
-            ? 'async getTasks('
-            : `async ${action}(@Param`;
-      const fnStart = src.indexOf(needle);
+        action === 'getTasks'
+          ? /async getTasks\(/
+          : new RegExp(`async ${action}\\(\\s*@Param`);
+      const fnStart = src.search(needle);
       expect(fnStart).toBeGreaterThan(0);
       const nextRoles = src.indexOf('\n  @Roles(', fnStart + 10);
       const nextGet = src.indexOf('\n  @Get(', fnStart + 10);

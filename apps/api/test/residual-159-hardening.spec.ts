@@ -48,7 +48,7 @@ describe('residual #159 DT delete packageId + delete-meta fold', () => {
     expect(del).toMatch(/const latest = await this\.getTaskDeleteMeta\(id\)/);
     expect(del).toMatch(/return \{ success: true \}/);
 
-    const cStart = controller.indexOf('async delete(@Param');
+    const cStart = controller.search(/async delete\(\s*@Param/);
     expect(cStart).toBeGreaterThan(0);
     const nextRoles = controller.indexOf('\n  @Roles(', cStart + 10);
     const nextGet = controller.indexOf('\n  @Get(', cStart + 10);

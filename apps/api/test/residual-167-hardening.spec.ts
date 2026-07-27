@@ -48,8 +48,7 @@ describe('residual #167 packageGeo fold into getTaskRow / detail / schedule / pu
     expect(byIdFn).toMatch(/packageGeo/);
 
     for (const action of ['getById', 'schedule', 'publish'] as const) {
-      const needle = action === 'getById' ? 'async getById(@Param' : `async ${action}(@Param`;
-      const fnStart = controller.indexOf(needle);
+      const fnStart = controller.search(new RegExp(`async ${action}\\(\\s*@Param`));
       expect(fnStart).toBeGreaterThan(0);
       const nextRoles = controller.indexOf('\n  @Roles(', fnStart + 10);
       const nextGet = controller.indexOf('\n  @Get(', fnStart + 10);
