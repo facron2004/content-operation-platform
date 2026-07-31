@@ -165,6 +165,18 @@ try {
       copyRecursive(stagingNodeModules, unpackedNodeModules);
     }
 
+    // 复制根目录 .env 到 win-unpacked/resources/api/.env。
+    // 打包后端的 load-env 只会从 resources/api 及后端 cwd 解析 .env，而 electron-builder 不会打包根 .env，
+    // 缺失会导致外部数据源配置（EXTERNAL_API_* / CONTENT_DATA_SOURCE）全部丢失、AutoLoginService 失败。
+    const rootEnv = path.join(ROOT, '.env');
+    const unpackedEnv = path.join(releaseDir, 'win-unpacked', 'resources', 'api', '.env');
+    if (fs.existsSync(rootEnv)) {
+      console.log('  [提示] 复制 .env 到 win-unpacked/resources/api/.env...');
+      fs.copyFileSync(rootEnv, unpackedEnv);
+    } else {
+      console.warn('  [警告] 未找到根目录 .env，打包应用将无法加载外部数据源配置');
+    }
+
     try {
       fs.rmSync(tempReleaseDir, { recursive: true, force: true });
     } catch (_) {}
