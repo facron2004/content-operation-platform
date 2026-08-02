@@ -33,9 +33,7 @@ describe('residual #112 community controller areaId-only scope', () => {
 
     for (const action of ['update', 'delete', 'disable', 'getPerformance', 'getTasks'] as const) {
       const needle =
-        action === 'getTasks'
-          ? /async getTasks\(/
-          : new RegExp(`async ${action}\\(\\s*@Param`);
+        action === 'getTasks' ? /async getTasks\(/ : new RegExp(`async ${action}\\(\\s*@Param`);
       const fnStart = src.search(needle);
       expect(fnStart).toBeGreaterThan(0);
       const nextRoles = src.indexOf('\n  @Roles(', fnStart + 10);

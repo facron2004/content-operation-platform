@@ -11,7 +11,7 @@ export function buildOverviewKpiPayload(args: {
   today: string;
   totalMerchants: number;
   totalSkus: number;
-  todayGmv: number;
+  todayGmvFen: bigint | null;
   todayOrderCount: number;
   staleSkuRows: { stale30SkuCount: number; distinctMerchants: number };
   moneyDataSource: OverviewKpiPayload['dataSource'];
@@ -26,7 +26,7 @@ export function buildOverviewKpiPayload(args: {
     zeroSalesMerchants: args.staleSkuRows.distinctMerchants,
     zeroSalesSkuCount,
     zeroSalesSkuRatio: zeroSalesRatio,
-    todayGmv: args.todayGmv,
+    todayGmvFen: args.todayGmvFen,
     todayOrderCount: args.todayOrderCount,
     updatedAt: new Date().toISOString(),
     dataSource: args.moneyDataSource
@@ -79,7 +79,7 @@ export function loadOverviewKpis(
         today,
         totalMerchants,
         totalSkus,
-        todayGmv: money.totalGmv,
+        todayGmvFen: money.totalGmvFen,
         todayOrderCount: money.paidOrderCount,
         staleSkuRows,
         moneyDataSource: money.dataSource

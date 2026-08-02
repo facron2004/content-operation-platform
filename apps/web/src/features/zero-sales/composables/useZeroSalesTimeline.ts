@@ -6,6 +6,7 @@ import {
   type ZeroSalesTimelineResponse
 } from '../../../services/api/zero-sales.api';
 import { extractErrorMessage } from '../../../services/http-client';
+import { isRequestCanceled } from '../../../services/http-client-utils';
 
 /** Residual #234: API ZeroSalesTimelineQueryDto days Min(7) Max(90). */
 export const TIMELINE_DAY_OPTIONS = [7, 14, 30, 60, 90] as const;
@@ -42,7 +43,8 @@ export function useZeroSalesTimeline() {
         days.value = clampTimelineDays(res.days);
       }
     } catch (error) {
-      ElMessage.error(extractErrorMessage(error, '加载零动销时间线失败'));
+      if (!isRequestCanceled(error))
+        ElMessage.error(extractErrorMessage(error, '加载零动销时间线失败'));
       timeline.value = [];
     } finally {
       loading.value = false;

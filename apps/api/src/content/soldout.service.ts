@@ -179,7 +179,7 @@ export class SoldoutService {
   private extractSoldout(
     packages: ContentPackage[],
     _snapshots: SalesSnapshot[],
-    baseUrl: string | undefined
+    _baseUrl: string | undefined
   ): SoldoutPackageItem[] {
     return packages
       .filter((pkg) => Number(pkg.stockLeft) <= 0)

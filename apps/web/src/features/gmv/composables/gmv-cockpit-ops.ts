@@ -120,6 +120,7 @@ export type GmvCockpitHandlerArgs = {
   loadError: Ref<string | null>;
   todayText: string;
   backfilling: Ref<boolean>;
+  backfillStatusText: Ref<string>;
   reload: () => Promise<void>;
   loadAll: () => Promise<void>;
   categories: Ref<GmvCategoryRow[]>;
@@ -200,6 +201,7 @@ export function createGmvCockpitHandlers(args: GmvCockpitHandlerArgs) {
         todayText: args.todayText,
         days,
         backfilling: args.backfilling,
+        statusText: args.backfillStatusText,
         loadError: args.loadError,
         kpiDate: args.kpiDate,
         loadAll: args.loadAll
@@ -215,6 +217,7 @@ export function useGmvCockpitDerived(params: {
   kpiDate: Ref<string>;
   todayText: string;
   backfilling: Ref<boolean>;
+  backfillStatusText: Ref<string>;
   trendMode: Ref<GmvTrendMode>;
   trendGranularity: Ref<GmvTrendGranularity>;
 }) {
@@ -225,7 +228,9 @@ export function useGmvCockpitDerived(params: {
   };
 
   return {
-    backfillLabel: computed(() => (params.backfilling.value ? '抓取中...' : '历史回填')),
+    backfillLabel: computed(() =>
+      params.backfilling.value ? params.backfillStatusText.value || '抓取中...' : '历史回填'
+    ),
     kpiDateLabel: computed(() =>
       params.kpiDate.value === params.todayText ? '今日 GMV' : `${params.kpiDate.value} GMV`
     ),

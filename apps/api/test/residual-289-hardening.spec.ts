@@ -10,10 +10,10 @@ describe('residual #289 GMV distribution LIMIT honesty', () => {
   it('mapDistributionRows projects items/limit/matched/truncated + other long-tail', () => {
     const full = mapDistributionRows(
       [
-        { key: 'A', gmv: 50, gmvOnline: 50, gmvWallet: 0, gmvBonus: 0 },
-        { key: 'B', gmv: 50, gmvOnline: 50, gmvWallet: 0, gmvBonus: 0 }
+        { key: 'A', gmvFen: 50n, gmvOnlineFen: 50n, gmvWalletFen: 0n, gmvBonusFen: 0n },
+        { key: 'B', gmvFen: 50n, gmvOnlineFen: 50n, gmvWalletFen: 0n, gmvBonusFen: 0n }
       ],
-      100,
+      100n,
       2
     );
     expect(full.truncated).toBe(false);
@@ -22,15 +22,15 @@ describe('residual #289 GMV distribution LIMIT honesty', () => {
     expect(full.matched).toBe(2);
 
     const partial = mapDistributionRows(
-      [{ key: 'A', gmv: 80, gmvOnline: 80, gmvWallet: 0, gmvBonus: 0 }],
-      100,
+      [{ key: 'A', gmvFen: 80n, gmvOnlineFen: 80n, gmvWalletFen: 0n, gmvBonusFen: 0n }],
+      100n,
       1
     );
     expect(partial.truncated).toBe(true);
     expect(partial.items).toHaveLength(2);
     expect(partial.items[0].key).toBe('A');
     expect(partial.items[1].key).toBe('其他'); // 其他
-    expect(partial.items[1].totalGmv).toBeCloseTo(20);
+    expect(partial.items[1].totalGmvFen).toBe(20n);
     expect(partial.items[0].share).toBeCloseTo(0.8);
     expect(partial.limit).toBe(1);
     expect(partial.matched).toBeGreaterThanOrEqual(2);

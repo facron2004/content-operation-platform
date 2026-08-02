@@ -1,4 +1,4 @@
-import { CHART_COLORS, CHART_GRID } from './chart-theme';
+import { CHART_CATEGORY_AXIS, CHART_COLORS, CHART_GRID, CHART_VALUE_AXIS } from './chart-theme';
 export type CategoryBarItem = {
   label: string;
   value: number;
@@ -33,17 +33,26 @@ export function buildCategoryBar(params: {
     xAxis: {
       type: 'category',
       data: params.items.map((i) => i.label),
-      axisLabel: { rotate: params.rotate ?? 30, fontSize: 11 }
+      ...CHART_CATEGORY_AXIS,
+      axisLabel: {
+        ...CHART_CATEGORY_AXIS.axisLabel,
+        rotate: params.rotate ?? 0,
+        interval: 0
+      }
     },
-    yAxis: { type: 'value', name: params.yName },
+    yAxis: { type: 'value', name: params.yName, ...CHART_VALUE_AXIS },
     series: [
       {
         type: 'bar',
-        barMaxWidth: params.barMaxWidth ?? 28,
+        barMaxWidth: params.barMaxWidth ?? 22,
+        emphasis: { focus: 'series' },
         data: params.items.map((i) => ({
           value: i.value,
           key: i.key ?? i.label,
-          itemStyle: { color: i.color ?? CHART_COLORS.primary }
+          itemStyle: {
+            color: i.color ?? CHART_COLORS.primary,
+            borderRadius: [6, 6, 2, 2]
+          }
         }))
       }
     ]

@@ -1,7 +1,6 @@
 import { shiftDateKey } from '@content/shared';
 import {
   beijingDayRangeSqlite,
-  SQL_GMV_OH,
   sqlBeijingDate,
   sqlDatetimeExclusiveRange,
   toSqliteDateTime
@@ -45,60 +44,91 @@ export async function recomputeDailyMetricsRange(
     return tx.$executeRawUnsafe(
       `
       INSERT OR REPLACE INTO "DailyMetrics" (
-        "date", "totalGmv", "totalGmvFen", "gmvOnline", "gmvOnlineFen", "gmvWallet", "gmvWalletFen",
-        "gmvBonus", "gmvBonusFen", "gmvCard", "gmvCardFen",
-        "totalRefund", "totalRefundFen", "totalVerify", "totalVerifyFen",
+        "date",
+        "totalGmvFen", "gmvOnlineFen", "gmvWalletFen",
+        "gmvBonusFen", "gmvCardFen",
+        "totalRefundFen", "totalVerifyFen",
         "totalOrders", "paidOrderCount",
         "verifyCount", "refundCount", "activeMerchants",
         "refundRate", "verifyRate",
         "updatedAt"
       )
+      WITH base AS (
+        SELECT
+          ${sqlBeijingDate('oh."paidTime"')} AS "date",
+          (COALESCE(SUM(oh."paidAmountFen"), 0) + COALESCE(SUM(oh."paidAmountWalletFen"), 0)) AS "totalGmvFen",
+          COALESCE(SUM(oh."paidAmountFen"), 0) AS "gmvOnlineFen",
+          COALESCE(SUM(oh."paidAmountWalletFen"), 0) AS "gmvWalletFen",
+          COALESCE(SUM(oh."paidAmountBonusFen"), 0) AS "gmvBonusFen",
+          COALESCE(SUM(oh."paidAmountCardFen"), 0) AS "gmvCardFen",
+          COALESCE(SUM(oh."verifyAmountFen"), 0) AS "totalVerifyFen",
+          COUNT(*) AS "totalOrders",
+          COUNT(*) AS "paidOrderCount",
+          SUM(CASE WHEN oh."verifyTime" IS NOT NULL THEN 1 ELSE 0 END) AS "verifyCount",
+          COUNT(DISTINCT oh."merchantId") AS "activeMerchants"
+        FROM "OrderHeader" oh
+        WHERE oh."paidTime" IS NOT NULL
+          AND ${sqlDatetimeExclusiveRange('oh."paidTime"')}
+        GROUP BY ${sqlBeijingDate('oh."paidTime"')}
+      ),
+      refundByDay AS (
+        SELECT
+          ${sqlBeijingDate('oh."paidTime"')} AS "date",
+          COALESCE(SUM(oh."refundAmountFen"), 0) AS "totalRefundFen",
+          SUM(CASE WHEN oh."refundAmountFen" > 0 THEN 1 ELSE 0 END) AS "refundCount"
+        FROM "OrderHeader" oh
+        WHERE oh."paidTime" IS NOT NULL
+          AND ${sqlDatetimeExclusiveRange('oh."paidTime"')}
+          AND oh."refundAmountFen" > 0
+        GROUP BY ${sqlBeijingDate('oh."paidTime"')}
+      ),
+      alldates AS (
+        SELECT "date" FROM base
+        UNION
+        SELECT "date" FROM refundByDay
+      )
       SELECT
-        ${sqlBeijingDate('oh."paidTime"')} AS "date",
-        COALESCE(SUM(${SQL_GMV_OH}), 0) AS "totalGmv",
-        CAST(ROUND(COALESCE(SUM(${SQL_GMV_OH}), 0) * 100) AS INTEGER) AS "totalGmvFen",
-        COALESCE(SUM(oh."paidAmount"), 0) AS "gmvOnline",
-        CAST(ROUND(COALESCE(SUM(oh."paidAmount"), 0) * 100) AS INTEGER) AS "gmvOnlineFen",
-        COALESCE(SUM(oh."paidAmountWallet"), 0) AS "gmvWallet",
-        CAST(ROUND(COALESCE(SUM(oh."paidAmountWallet"), 0) * 100) AS INTEGER) AS "gmvWalletFen",
-        COALESCE(SUM(oh."paidAmountBonus"), 0) AS "gmvBonus",
-        CAST(ROUND(COALESCE(SUM(oh."paidAmountBonus"), 0) * 100) AS INTEGER) AS "gmvBonusFen",
-        COALESCE(SUM(oh."paidAmountCard"), 0) AS "gmvCard",
-        CAST(ROUND(COALESCE(SUM(oh."paidAmountCard"), 0) * 100) AS INTEGER) AS "gmvCardFen",
-        COALESCE(SUM(oh."refundAmount"), 0) AS "totalRefund",
-        CAST(ROUND(COALESCE(SUM(oh."refundAmount"), 0) * 100) AS INTEGER) AS "totalRefundFen",
-        COALESCE(SUM(oh."verifyAmount"), 0) AS "totalVerify",
-        CAST(ROUND(COALESCE(SUM(oh."verifyAmount"), 0) * 100) AS INTEGER) AS "totalVerifyFen",
-        COUNT(*) AS "totalOrders",
-        COUNT(*) AS "paidOrderCount",
-        SUM(CASE WHEN oh."verifyTime" IS NOT NULL THEN 1 ELSE 0 END) AS "verifyCount",
-        SUM(CASE WHEN oh."refundAmount" > 0 THEN 1 ELSE 0 END) AS "refundCount",
-        COUNT(DISTINCT oh."merchantId") AS "activeMerchants",
+        a."date",
+        COALESCE(b."totalGmvFen", 0) AS "totalGmvFen",
+        COALESCE(b."gmvOnlineFen", 0) AS "gmvOnlineFen",
+        COALESCE(b."gmvWalletFen", 0) AS "gmvWalletFen",
+        COALESCE(b."gmvBonusFen", 0) AS "gmvBonusFen",
+        COALESCE(b."gmvCardFen", 0) AS "gmvCardFen",
+        COALESCE(r."totalRefundFen", 0) AS "totalRefundFen",
+        COALESCE(b."totalVerifyFen", 0) AS "totalVerifyFen",
+        COALESCE(b."totalOrders", 0) AS "totalOrders",
+        COALESCE(b."paidOrderCount", 0) AS "paidOrderCount",
+        COALESCE(b."verifyCount", 0) AS "verifyCount",
+        COALESCE(r."refundCount", 0) AS "refundCount",
+        COALESCE(b."activeMerchants", 0) AS "activeMerchants",
         CASE
-          WHEN COALESCE(SUM(${SQL_GMV_OH}), 0) > 0
-          THEN COALESCE(SUM(oh."refundAmount"), 0) * 1.0 / SUM(${SQL_GMV_OH})
+          WHEN COALESCE(b."totalGmvFen", 0) > 0
+          THEN CAST(COALESCE(r."totalRefundFen", 0) AS REAL) * 1.0 / CAST(b."totalGmvFen" AS REAL)
           ELSE 0
         END AS "refundRate",
         CASE
-          WHEN COALESCE(SUM(${SQL_GMV_OH}), 0) > 0
-          THEN COALESCE(SUM(oh."verifyAmount"), 0) * 1.0 / SUM(${SQL_GMV_OH})
+          WHEN COALESCE(b."totalGmvFen", 0) > 0
+          THEN CAST(COALESCE(b."totalVerifyFen", 0) AS REAL) * 1.0 / CAST(b."totalGmvFen" AS REAL)
           ELSE 0
         END AS "verifyRate",
         ? AS "updatedAt"
-      FROM "OrderHeader" oh
-      WHERE oh."paidTime" IS NOT NULL
-        AND ${sqlDatetimeExclusiveRange('oh."paidTime"')}
-      GROUP BY ${sqlBeijingDate('oh."paidTime"')}
+      FROM alldates a
+      LEFT JOIN base b ON b."date" = a."date"
+      LEFT JOIN refundByDay r ON r."date" = a."date"
     `,
-      now,
       paidStart,
-      paidEnd
+      paidEnd,
+      paidStart,
+      paidEnd,
+      now
     );
   };
 
-  const inserted = prisma.$transaction
-    ? await prisma.$transaction((tx) => run(tx))
-    : await run(prisma);
+  // Note: intentionally does NOT use callback-style $transaction — the libsql adapter
+  // throws "unknown variant SocketTimeout" on $executeRawUnsafe inside $transaction.
+  // The DELETE+INSERT pair is safe without a transaction since the range would be
+  // rerun on the next refresh if a crash occurs between the two statements.
+  const inserted = await run(prisma);
 
   return {
     startDate,

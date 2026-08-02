@@ -475,7 +475,7 @@ export class CopyService {
         now
       );
       return taskId;
-    } catch (err: unknown) {
+    } catch {
       // Lost the race: another approve inserted first (or cancelled twin still holds PK).
       const winner = await this.prisma.$queryRawUnsafe<Array<{ taskId: string }>>(
         `SELECT "taskId" FROM "DistributionTask"

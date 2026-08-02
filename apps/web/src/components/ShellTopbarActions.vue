@@ -35,7 +35,6 @@
         :value="option.value"
       />
     </el-select>
-    <el-tag effect="light" type="primary">{{ roleStore.roleLabel }}</el-tag>
   </div>
 </template>
 <script setup lang="ts">
@@ -59,8 +58,9 @@ defineEmits<{ 'open-history': []; 'open-cookie': [] }>();
 .topbar-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
+  gap: 6px;
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
   justify-content: flex-end;
 }
 
@@ -86,13 +86,14 @@ defineEmits<{ 'open-history': []; 'open-cookie': [] }>();
 }
 
 .role-select {
-  min-width: 140px;
-  max-width: 180px;
+  min-width: 120px;
+  max-width: 148px;
 }
 
-@media (max-width: 1280px) {
+@media (max-width: 960px) {
   .topbar-actions {
     justify-content: flex-start;
+    flex-wrap: wrap;
   }
 }
 </style>

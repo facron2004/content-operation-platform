@@ -29,35 +29,23 @@ export function buildDataScope(user: {
   bindings?: ScopeBinding[] | UserRoleBinding[];
 }): DataScope {
   const roles = user?.roles ?? [];
+  const bindings = user.bindings ?? [];
+  if (roles.some((r) => UNRESTRICTED_ROLES.has(r)) || bindings.some((b) => b.scopeType === 'all')) {
+    return { unrestricted: true, areaIds: [], merchantIds: [] };
+  }
   if (roles.length === 0) {
     return { unrestricted: false, areaIds: [], merchantIds: [] };
   }
-  if (roles.some((r) => UNRESTRICTED_ROLES.has(r))) {
-    return { unrestricted: true, areaIds: [], merchantIds: [] };
-  }
-
-  const bindings = user.bindings ?? [];
   const areaIds = new Set<string>();
   const merchantIds = new Set<string>();
 
   for (const b of bindings) {
     if (!b.scopeId) continue;
-    if (b.scopeType === 'area' && (roles.includes('area_operator') || b.role === 'area_operator')) {
-      areaIds.add(b.scopeId);
-    }
-    if (
-      b.scopeType === 'merchant' &&
-      (roles.includes('merchant_operator') || b.role === 'merchant_operator')
-    ) {
-      merchantIds.add(b.scopeId);
-    }
-  }
-
-  // Also honor binding.role alone when top-level roles array is incomplete
-  for (const b of bindings) {
-    if (!b.scopeId) continue;
-    if (b.role === 'area_operator' && b.scopeType === 'area') areaIds.add(b.scopeId);
-    if (b.role === 'merchant_operator' && b.scopeType === 'merchant') merchantIds.add(b.scopeId);
+    // IAM custom roles are intentionally not tied to the six legacy role names.
+    // The binding is server-generated from the current tenant assignment, so
+    // the explicit scope type is the authorization signal here.
+    if (b.scopeType === 'area') areaIds.add(b.scopeId);
+    if (b.scopeType === 'merchant') merchantIds.add(b.scopeId);
   }
 
   // Cap list size so a pathological binding dump cannot explode IN (?) SQL.
@@ -101,6 +89,16 @@ export function resolveScopedQuery(
     return { emptyScope: true };
   }
 
+  // A client filter that is outside an explicit server scope has no
+  // intersection. Returning an empty result avoids broadening the query back
+  // to the user's full scope after an attempted out-of-scope lookup.
+  if (client.areaId && hasArea && !scope.areaIds.includes(client.areaId)) {
+    return { emptyScope: true };
+  }
+  if (client.merchantId && hasMerchant && !scope.merchantIds.includes(client.merchantId)) {
+    return { emptyScope: true };
+  }
+
   const result: ScopedQuery = { emptyScope: false };
 
   if (hasMerchant) {
@@ -122,6 +120,12 @@ export function resolveScopedQuery(
       result.areaIds = scope.areaIds;
     }
   }
+
+  // Keep a filter for a dimension that is not itself represented by the
+  // assignment so the downstream query can still calculate the intersection
+  // (for example, an area filter over a merchant-only assignment).
+  if (!hasArea && client.areaId) result.areaId = client.areaId;
+  if (!hasMerchant && client.merchantId) result.merchantId = client.merchantId;
 
   return result;
 }

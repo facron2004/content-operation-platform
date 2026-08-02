@@ -15,9 +15,9 @@ export function sortColumn(sortBy: MerchantSalesSort): string {
       // Same composition as SQL_GMV_SS (online + wallet; bonus never included).
       return `(${SQL_GMV_SS})`;
     case 'refundDesc':
-      return '"refundAmount"';
+      return '"refundAmountFen"';
     case 'verifyDesc':
-      return '"verifyAmount"';
+      return '"verifyAmountFen"';
     case 'orderCountDesc':
       return '"orderCount"';
   }

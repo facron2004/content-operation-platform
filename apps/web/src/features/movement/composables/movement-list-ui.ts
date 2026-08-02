@@ -7,26 +7,127 @@ import {
   type StaleBucket
 } from '../../../services/api/movement.api';
 import { downloadBlob } from '../../../services/http-client';
-import { buildCategoryBar } from '../../../utils/chart-options';
 import { STALE_BUCKET_CHART_COLORS, STALE_BUCKET_CHART_LABELS } from '../../../utils/chart-theme';
 import { formatNumber, formatPercent } from '../../../utils/format';
 import { type createMovementPagination } from './movement-list-core';
 
+const MOVEMENT_BUCKET_ORDER: StaleBucket[] = [
+  'stale_60d',
+  'stale_30d',
+  'stale_15d',
+  'stale_7d',
+  'normal'
+];
+
+function orderedMovementBuckets(distribution: Array<{ bucket: StaleBucket; totalSku: number }>) {
+  const byBucket = new Map(distribution.map((item) => [item.bucket, item.totalSku]));
+  return MOVEMENT_BUCKET_ORDER.map((bucket) => ({
+    bucket,
+    totalSku: byBucket.get(bucket) ?? 0
+  }));
+}
+
 export function buildMovementBucketOption(
   distribution: Array<{ bucket: StaleBucket; totalSku: number }>
 ) {
-  return buildCategoryBar({
-    items: distribution.map((b) => ({
-      label: STALE_BUCKET_CHART_LABELS[b.bucket] ?? b.bucket,
-      value: b.totalSku,
-      color: STALE_BUCKET_CHART_COLORS[b.bucket] ?? '#94a3b8',
-      key: b.bucket
-    })),
-    yName: 'SKU 数',
-    showShare: true,
-    rotate: 15,
-    barMaxWidth: 36
-  });
+  const items = orderedMovementBuckets(distribution);
+  const total = items.reduce((sum, item) => sum + item.totalSku, 0);
+
+  return {
+    animationDuration: 420,
+    grid: { left: 82, right: 118, top: 2, bottom: 4, containLabel: false },
+    tooltip: {
+      trigger: 'item',
+      formatter: (params: { data?: { value?: number; shareLabel?: string }; name?: string }) =>
+        `${params.name ?? ''}<br/>${params.data?.value ?? 0} SKU · ${params.data?.shareLabel ?? '0.00%'}`
+    },
+    xAxis: {
+      type: 'value',
+      max: Math.max(total, 1),
+      show: false
+    },
+    yAxis: {
+      type: 'category',
+      inverse: true,
+      data: items.map((item) => STALE_BUCKET_CHART_LABELS[item.bucket] ?? item.bucket),
+      axisLine: { show: false },
+      axisTick: { show: false },
+      axisLabel: {
+        color: (value: string) => {
+          const bucket = items.find(
+            (item) => (STALE_BUCKET_CHART_LABELS[item.bucket] ?? item.bucket) === value
+          )?.bucket;
+          return bucket ? (STALE_BUCKET_CHART_COLORS[bucket] ?? '#8e8e93') : '#8e8e93';
+        },
+        fontSize: 12,
+        fontWeight: 700
+      }
+    },
+    series: [
+      {
+        type: 'bar',
+        barWidth: 10,
+        showBackground: true,
+        backgroundStyle: {
+          color: 'rgba(120, 120, 128, 0.10)',
+          borderRadius: 999
+        },
+        label: {
+          show: true,
+          position: 'right',
+          distance: 12,
+          color: '#6e6e73',
+          fontSize: 11,
+          formatter: (params: { data?: { value?: number; shareLabel?: string } }) =>
+            `${params.data?.value ?? 0}    ${params.data?.shareLabel ?? '0.00%'}`
+        },
+        data: items.map((item) => ({
+          value: item.totalSku,
+          key: item.bucket,
+          shareLabel: formatPercent(total > 0 ? item.totalSku / total : 0),
+          itemStyle: {
+            color: STALE_BUCKET_CHART_COLORS[item.bucket] ?? '#8e8e93',
+            borderRadius: 999
+          }
+        }))
+      }
+    ]
+  };
+}
+
+export function buildMovementHealthOption(
+  distribution: Array<{ bucket: StaleBucket; totalSku: number }>
+) {
+  const items = orderedMovementBuckets(distribution);
+
+  return {
+    animationDuration: 460,
+    tooltip: {
+      trigger: 'item',
+      formatter: '{b}<br/>{c} SKU · {d}%'
+    },
+    series: [
+      {
+        type: 'pie',
+        radius: ['58%', '78%'],
+        center: ['50%', '50%'],
+        minAngle: 2,
+        avoidLabelOverlap: true,
+        label: { show: false },
+        emphasis: { scaleSize: 4 },
+        data: items
+          .filter((item) => item.totalSku > 0)
+          .map((item) => ({
+            value: item.totalSku,
+            name: STALE_BUCKET_CHART_LABELS[item.bucket] ?? item.bucket,
+            key: item.bucket,
+            itemStyle: {
+              color: STALE_BUCKET_CHART_COLORS[item.bucket] ?? '#8e8e93'
+            }
+          }))
+      }
+    ]
+  };
 }
 
 function exportMovementStagnantCsv(params: {

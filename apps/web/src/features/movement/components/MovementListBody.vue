@@ -1,5 +1,5 @@
 <template>
-  <section class="panel">
+  <section class="panel movement-list-panel">
     <el-tabs :model-value="activeTab" @tab-change="onTabChange">
       <el-tab-pane label="不动销 SKU" name="stagnant" />
       <el-tab-pane label="动销 SKU" name="moving" />

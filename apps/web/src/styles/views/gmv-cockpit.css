@@ -1,5 +1,10 @@
+/* ============================================================
+   GMV Cockpit — Prototype v2 Styles
+   Matches 2026-07-28 design spec
+   ============================================================ */
+
 .cockpit {
-  gap: 14px;
+  gap: 10px;
   min-width: 0;
   max-width: 100%;
 }
@@ -9,8 +14,8 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
-  padding: 12px 14px;
+  gap: 8px;
+  padding: 10px 12px;
   border: 1px solid var(--line);
   border-radius: 14px;
   background: #fff;
@@ -33,7 +38,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 .updated-at {
@@ -41,31 +46,36 @@
   font-size: 12px;
 }
 
-/* ---- prototype KPI cards ---- */
+/* ---- prototype KPI cards (8-column grid) ---- */
 .proto-kpi-row {
   display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 10px;
   min-width: 0;
   max-width: 100%;
 }
 
 .proto-kpi-card {
   position: relative;
-  min-height: 108px;
-  padding: 16px 14px 14px;
+  padding: 12px 14px 10px;
   border: 1px solid var(--line);
   border-radius: 14px;
   background: #fff;
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
   overflow: hidden;
+  transition: box-shadow 200ms ease, transform 150ms ease;
+}
+
+.proto-kpi-card:hover {
+  box-shadow: var(--shadow-elevated);
+  transform: translateY(-1px);
 }
 
 .proto-kpi-main {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 8px;
+  gap: 10px;
   height: 100%;
 }
 
@@ -78,14 +88,14 @@
 
 .proto-kpi-label {
   color: #667085;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   line-height: 1.2;
 }
 
 .proto-kpi-value {
   color: #101828;
-  font-size: 24px;
+  font-size: 20px;
   font-weight: 800;
   line-height: 1.15;
   font-variant-numeric: tabular-nums;
@@ -93,7 +103,7 @@
 }
 
 .proto-kpi-delta {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   line-height: 1.2;
 }
@@ -111,55 +121,98 @@
 }
 
 .proto-kpi-icon {
-  flex: 0 0 40px;
-  width: 40px;
-  height: 40px;
+  flex: 0 0 36px;
+  width: 36px;
+  height: 36px;
   border-radius: 999px;
   display: grid;
   place-items: center;
-  font-size: 18px;
+  font-size: 16px;
 }
 
 .tone-blue .proto-kpi-icon {
   color: #2e90fa;
-  background: rgba(46, 144, 250, 0.12);
+  background: rgba(46, 144, 250, 0.10);
 }
 .tone-cyan .proto-kpi-icon {
   color: #15b79e;
-  background: rgba(21, 183, 158, 0.12);
+  background: rgba(21, 183, 158, 0.10);
 }
 .tone-indigo .proto-kpi-icon {
   color: #6172f3;
-  background: rgba(97, 114, 243, 0.12);
+  background: rgba(97, 114, 243, 0.10);
 }
 .tone-purple .proto-kpi-icon {
   color: #9e77ed;
-  background: rgba(158, 119, 237, 0.12);
+  background: rgba(158, 119, 237, 0.10);
 }
 .tone-green .proto-kpi-icon {
   color: #12b76a;
-  background: rgba(18, 183, 106, 0.12);
+  background: rgba(18, 183, 106, 0.10);
 }
 .tone-orange .proto-kpi-icon {
   color: #f79009;
-  background: rgba(247, 144, 9, 0.12);
+  background: rgba(247, 144, 9, 0.10);
 }
 .tone-sky .proto-kpi-icon {
   color: #0ba5ec;
-  background: rgba(11, 165, 236, 0.12);
+  background: rgba(11, 165, 236, 0.10);
+}
+.tone-teal .proto-kpi-icon {
+  color: #0ba5ec;
+  background: rgba(11, 165, 236, 0.10);
+}
+
+.proto-kpi-breakdown {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border-top: 1px dashed #eef0f3;
+  padding-top: 6px;
+  margin-top: 2px;
+}
+
+.proto-kpi-breakdown-row {
+  display: grid;
+  grid-template-columns: 6px 1fr auto;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: #475467;
+  font-variant-numeric: tabular-nums;
+}
+
+.proto-kpi-breakdown-swatch {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  display: inline-block;
+}
+
+.proto-kpi-breakdown-label {
+  font-weight: 600;
+  color: #667085;
+}
+
+.proto-kpi-breakdown-value {
+  font-weight: 700;
+  color: #101828;
 }
 
 /* ---- charts ---- */
 .chart-row {
   display: grid;
   grid-template-columns: 1.45fr 1fr;
-  gap: 12px;
+  gap: 20px;
   min-width: 0;
   max-width: 100%;
 }
 
 .chart-row-main {
-  grid-template-columns: 1.45fr 1fr;
+  grid-template-columns: 1.5fr 1fr;
 }
 
 .chart-row-secondary {
@@ -179,17 +232,23 @@
 
 .proto-chart-card,
 .chart-card {
-  padding: 16px 16px 12px;
+  padding: 12px 14px 10px;
   border: 1px solid var(--line);
   border-radius: 14px;
   background: #fff;
   box-shadow: var(--shadow-soft);
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
   min-width: 0;
   max-width: 100%;
   overflow: hidden;
+  transition: box-shadow 200ms ease;
+}
+
+.proto-chart-card:hover,
+.chart-card:hover {
+  box-shadow: var(--shadow-elevated);
 }
 
 .proto-chart-header {
@@ -197,6 +256,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  flex-wrap: wrap;
 }
 
 .proto-chart-header h3,
@@ -238,12 +298,12 @@
 
 .chart-card :deep(.chart-shell),
 .proto-chart-panel :deep(.chart-shell) {
-  height: 280px;
-  min-height: 280px;
+  height: 220px;
+  min-height: 220px;
 }
 
 .top-offenders {
-  padding: 16px;
+  padding: 12px 14px 10px;
   border: 1px solid var(--line);
   border-radius: 14px;
   background: #fff;
@@ -254,7 +314,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 10px;
+  margin-bottom: 4px;
 }
 
 .muted {
@@ -266,7 +326,21 @@
   font-size: 12px;
 }
 
+/* ---- responsive breakpoints ---- */
+
+@media (max-width: 1700px) {
+  .proto-kpi-row {
+    grid-template-columns: repeat(8, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 1600px) {
+  .proto-kpi-row {
+    grid-template-columns: repeat(8, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1400px) {
   .proto-kpi-row {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }

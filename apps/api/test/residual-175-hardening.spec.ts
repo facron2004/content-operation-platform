@@ -28,7 +28,7 @@ describe('residual #175 cancel reason wire-up (API side)', () => {
     const next = src.indexOf('\n  @', fnStart + 10);
     const fn = src.slice(fnStart, next > 0 ? next : undefined);
     expect(fn).toMatch(/body\?\.reason/);
-    expect(fn).toMatch(/this\.svc\.cancel\(safeId,\s*body\?\.reason/);
+    expect(fn).toMatch(/this\.cancelSvc\.cancel\(safeId,\s*body\?\.reason/);
   });
 
   it('service cancel writes cancelReason column from reason arg', async () => {

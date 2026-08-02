@@ -1,6 +1,7 @@
 import type { Ref } from 'vue';
 import * as echarts from 'echarts/core';
 import type { EChartsCoreOption } from 'echarts/core';
+import { createChartVisualTheme } from '../utils/chart-theme';
 
 export type ChartClickPayload = {
   name?: string;
@@ -17,6 +18,7 @@ export function bindChartPanel(
   let chart: echarts.ECharts | null = null;
   let resizeTimer: ReturnType<typeof setTimeout> | null = null;
   let resizeObserver: ResizeObserver | null = null;
+  let themeObserver: MutationObserver | null = null;
   let lastSize = { w: 0, h: 0 };
 
   const handleClick = (params: unknown) => {
@@ -39,7 +41,7 @@ export function bindChartPanel(
       return;
     }
     if (!chart) {
-      chart = echarts.init(el.value);
+      chart = echarts.init(el.value, createChartVisualTheme(el.value));
       chart.on('click', handleClick);
     }
     chart.setOption(option as EChartsCoreOption, true);
@@ -95,6 +97,19 @@ export function bindChartPanel(
     // back into the observed box. Fall back to self if parent is missing.
     const target = el.value?.parentElement ?? el.value;
     if (target) resizeObserver.observe(target);
+    themeObserver = new MutationObserver(() => {
+      if (!chart) return;
+      chart.off('click', handleClick);
+      chart.dispose();
+      chart = null;
+      lastSize = { w: 0, h: 0 };
+      render();
+      scheduleResize();
+    });
+    themeObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-theme']
+    });
     window.addEventListener('resize', scheduleResize);
   };
 
@@ -102,6 +117,8 @@ export function bindChartPanel(
     window.removeEventListener('resize', scheduleResize);
     resizeObserver?.disconnect();
     resizeObserver = null;
+    themeObserver?.disconnect();
+    themeObserver = null;
     if (resizeTimer) clearTimeout(resizeTimer);
     lastSize = { w: 0, h: 0 };
     chart?.off('click', handleClick);

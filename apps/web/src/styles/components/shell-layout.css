@@ -3,7 +3,7 @@
    penetrate child component internals. */
 
 .workspace {
-  padding: 0 0 32px;
+  padding: 0 0 20px;
   min-height: 100vh;
 }
 
@@ -12,50 +12,62 @@
   top: 0;
   z-index: 20;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  margin: 0 0 20px;
-  padding: 16px 24px 14px;
+  gap: 12px;
+  margin: 0 0 6px;
+  min-height: 58px;
+  padding: 7px 16px;
   box-sizing: border-box;
-  backdrop-filter: blur(12px);
-  background: rgba(244, 246, 250, 0.82);
-  border-bottom: 1px solid rgba(228, 232, 239, 0.95);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  background: color-mix(in srgb, var(--soft) 78%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 84%, transparent);
 }
 
 /* Content under the sticky topbar keeps the original horizontal inset. */
 .workspace > *:not(.topbar) {
-  margin-left: 24px;
-  margin-right: 24px;
+  margin-left: 16px;
+  margin-right: 16px;
 }
 
 .topbar-copy {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: baseline;
+  column-gap: 8px;
+  flex: 1 1 auto;
   min-width: 0;
 }
 
 .eyebrow {
-  margin: 0 0 4px;
+  margin: 0;
   color: var(--accent);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
 .topbar h1 {
   margin: 0;
   color: var(--ink);
-  font-size: 20px;
-  font-weight: 800;
+  font-size: 17px;
+  font-weight: 750;
   line-height: 1.2;
   letter-spacing: -0.01em;
 }
 
 .topbar-subtitle {
-  margin: 6px 0 0;
+  grid-column: 1 / -1;
+  max-width: 64ch;
+  margin: 1px 0 0;
   color: var(--muted);
-  font-size: 12px;
-  line-height: 1.5;
+  font-size: 10px;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* topbar-actions / icon buttons live in ShellTopbarActions.vue (their own scoped styles).
@@ -63,13 +75,26 @@
 
 @media (max-width: 1280px) {
   .topbar {
-    align-items: stretch;
-    flex-direction: column;
-    padding: 16px;
+    padding: 8px 12px;
   }
 
   .workspace > *:not(.topbar) {
-    margin-left: 16px;
-    margin-right: 16px;
+    margin-left: 12px;
+    margin-right: 12px;
+  }
+}
+
+@media (max-width: 960px) {
+  .topbar {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .topbar {
+    background: var(--soft);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
   }
 }

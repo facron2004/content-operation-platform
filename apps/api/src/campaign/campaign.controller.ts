@@ -9,7 +9,8 @@ import {
   Patch,
   Post,
   Query,
-  Req
+  Req,
+  UseGuards
 } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
@@ -19,10 +20,13 @@ import { CreateCampaignDto } from './dto/create-campaign.dto';
 import { UpdateCampaignDto } from './dto/update-campaign.dto';
 import { CampaignQueryDto } from './dto/campaign-query.dto';
 import { Roles } from '../user-access/role.decorator';
+import { RequireLogin } from '../user-access/iam/route-auth.decorator';
+import { RequirePermissions } from '../user-access/iam/require-permissions.decorator';
 import { buildDataScope, resolveScopedQuery } from '../user-access/data-scope';
 import { safePathId } from '../common/path-id';
 import { createDtoPipe } from '../common/dto-pipe';
 import { resolveInteractiveDateSpan } from '../common/list-date-span';
+import { IdempotencyGuard } from '../idempotency/idempotency.guard';
 
 type AuthUser = {
   userId: string;
@@ -32,6 +36,7 @@ type AuthUser = {
 };
 
 @ApiTags('campaigns')
+@RequireLogin()
 @Controller('api/campaigns')
 export class CampaignController {
   constructor(@Inject(CampaignService) private readonly svc: CampaignService) {}
@@ -68,6 +73,8 @@ export class CampaignController {
   }
 
   @Roles('admin', 'platform_operator')
+  @RequirePermissions('campaigns:write')
+  @UseGuards(IdempotencyGuard)
   @Throttle({ long: { limit: 20, ttl: 60000 } })
   @Post()
   @ApiOperation({ summary: 'Create campaign' })
@@ -91,6 +98,7 @@ export class CampaignController {
   }
 
   @Roles('admin', 'platform_operator')
+  @RequirePermissions('campaigns:write')
   @Throttle({ long: { limit: 30, ttl: 60000 } })
   @Patch(':id')
   @ApiOperation({ summary: 'Update campaign' })
@@ -111,6 +119,7 @@ export class CampaignController {
   }
 
   @Roles('admin', 'platform_operator')
+  @RequirePermissions('campaigns:write')
   @Throttle({ long: { limit: 20, ttl: 60000 } })
   @Delete(':id')
   @ApiOperation({
@@ -125,6 +134,8 @@ export class CampaignController {
   }
 
   @Roles('admin', 'platform_operator')
+  @RequirePermissions('campaigns:publish')
+  @UseGuards(IdempotencyGuard)
   @Throttle({ long: { limit: 30, ttl: 60000 } })
   @Post(':id/start')
   @ApiOperation({
@@ -140,6 +151,8 @@ export class CampaignController {
   }
 
   @Roles('admin', 'platform_operator')
+  @RequirePermissions('campaigns:publish')
+  @UseGuards(IdempotencyGuard)
   @Throttle({ long: { limit: 30, ttl: 60000 } })
   @Post(':id/pause')
   @ApiOperation({
@@ -154,6 +167,8 @@ export class CampaignController {
   }
 
   @Roles('admin', 'platform_operator')
+  @RequirePermissions('campaigns:publish')
+  @UseGuards(IdempotencyGuard)
   @Throttle({ long: { limit: 30, ttl: 60000 } })
   @Post(':id/complete')
   @ApiOperation({
@@ -168,6 +183,7 @@ export class CampaignController {
   }
 
   @Roles('admin', 'platform_operator')
+  @RequirePermissions('campaigns:publish')
   @Throttle({ long: { limit: 30, ttl: 60000 } })
   @Post(':id/cancel')
   @ApiOperation({ summary: 'Cancel campaign' })

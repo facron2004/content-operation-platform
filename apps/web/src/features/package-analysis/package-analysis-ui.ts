@@ -1,10 +1,5 @@
 import type { ContentPackage } from '@content/shared';
-import {
-  inventoryTagType,
-  operationTagType,
-  salesTagType,
-  statusLabels
-} from '../../utils/labels';
+import { inventoryTagType, operationTagType, salesTagType, statusLabels } from '../../utils/labels';
 import { displayMoney } from '../../utils/format';
 
 export type PackageAnalysisHeroData = {

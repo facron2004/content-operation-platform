@@ -46,6 +46,9 @@ export function toMoneyView<T extends Record<string, unknown>>(record: T): T {
     if (raw === null || raw === undefined) {
       out[key] = null;
       out[`${floatField}Display`] = '0.00';
+    } else if (typeof raw === 'number' && !Number.isInteger(raw)) {
+      // 非整数字段（如 compare.totalGmvFen 为环比比率，不是分金额），跳过金额转换。
+      out[key] = raw;
     } else {
       // raw 可能是 bigint（Prisma 原始）或 number（经 BigIntSerializer 转换后）；统一字符串化。
       out[key] = String(raw);

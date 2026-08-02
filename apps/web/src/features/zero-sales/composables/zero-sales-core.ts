@@ -8,6 +8,7 @@ import {
   type ZeroSalesSkuRow
 } from '../../../services/api/zero-sales.api';
 import { extractErrorMessage } from '../../../services/http-client';
+import { isRequestCanceled } from '../../../services/http-client-utils';
 
 // --- state / query helpers ---
 export type ZeroSalesTab = 'merchant' | 'sku';
@@ -165,7 +166,8 @@ export async function loadZeroSalesSkus(params: {
       params.skuLimit.value =
         typeof result.limit === 'number' && result.limit > 0 ? result.limit : null;
   } catch (err) {
-    params.loadError.value = extractErrorMessage(err, '加载商品清单失败');
+    if (!isRequestCanceled(err))
+      params.loadError.value = extractErrorMessage(err, '加载商品清单失败');
   } finally {
     params.skuLoading.value = false;
   }
@@ -201,7 +203,8 @@ export async function loadZeroSalesMerchants(params: {
       params.merchantLimit.value =
         typeof result.limit === 'number' && result.limit > 0 ? result.limit : null;
   } catch (err) {
-    params.loadError.value = extractErrorMessage(err, '加载商家清单失败');
+    if (!isRequestCanceled(err))
+      params.loadError.value = extractErrorMessage(err, '加载商家清单失败');
   } finally {
     params.merchantLoading.value = false;
   }

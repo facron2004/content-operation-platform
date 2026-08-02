@@ -15,7 +15,7 @@ export async function loadGmvByPackage(
   if (!packageIds.length) return m;
   const rows = await queryInChunks(packageIds, async (chunk) => {
     return (await prisma.$queryRawUnsafe(
-      `SELECT "packageId", COALESCE(SUM("salesAmount"), 0) AS "gmv30d" FROM "PackageSalesDaily" WHERE "packageId" IN (${chunk.map(() => '?').join(',')}) AND "date" >= ? AND "salesQty" > 0 GROUP BY "packageId"`,
+      `SELECT "packageId", COALESCE(SUM("salesAmountFen"), 0) / 100.0 AS "gmv30d" FROM "PackageSalesDaily" WHERE "packageId" IN (${chunk.map(() => '?').join(',')}) AND "date" >= ? AND "salesQty" > 0 GROUP BY "packageId"`,
       ...chunk,
       fromDate
     )) as Array<{ packageId: string; gmv30d: number }>;
@@ -121,7 +121,7 @@ export type ZeroSalesSkuCandidate = {
   merchantName: string;
   areaName: string;
   category: string;
-  salePrice: number;
+  salePriceFen: bigint | null;
   stockLeft: number;
   stockTotal: number;
 };
@@ -133,7 +133,7 @@ const ZERO_SALES_SKU_CANDIDATE_SELECT = `
   cp."merchantName" AS "merchantName",
   cp."areaName" AS "areaName",
   cp."category" AS "category",
-  cp."salePrice" AS "salePrice",
+  cp."salePriceFen" AS "salePriceFen",
   cp."stockLeft" AS "stockLeft",
   cp."stockTotal" AS "stockTotal"
 `;
@@ -190,7 +190,7 @@ export async function loadZeroSalesSkuMetricsByPackage(
       `SELECT
          s."packageId" AS "packageId",
          MAX(s."date") AS "lastSalesDate",
-         COALESCE(SUM(CASE WHEN s."date" >= ? THEN s."salesAmount" ELSE 0 END), 0) AS "staleGmv30d",
+         COALESCE(SUM(CASE WHEN s."date" >= ? THEN s."salesAmountFen" ELSE 0 END), 0) / 100.0 AS "staleGmv30d",
          COALESCE(SUM(CASE WHEN s."date" >= ? THEN s."salesQty" ELSE 0 END), 0) AS "staleSalesQty30d"
        FROM "PackageSalesDaily" s
        WHERE s."packageId" IN (${chunk.map(() => '?').join(',')})
@@ -241,7 +241,7 @@ export function mapZeroSalesSkuCandidates(
       merchantName: c.merchantName,
       areaName: c.areaName,
       category: c.category,
-      salePrice: Number(c.salePrice),
+      salePrice: Number(c.salePriceFen ?? 0) / 100,
       stockLeft: Number(c.stockLeft),
       stockTotal: Number(c.stockTotal),
       lastSalesDate: last,

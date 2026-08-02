@@ -2,8 +2,8 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
-  padding: 12px 14px;
+  gap: 8px;
+  padding: 10px 12px;
   border: 1px solid #e4e7ec;
   border-radius: 14px;
   background: #fff;
@@ -15,7 +15,7 @@
 }
 
 .proto-filter-date {
-  width: 156px;
+  width: auto;
 }
 
 .proto-filter-reset {
@@ -27,7 +27,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 .updated-at {

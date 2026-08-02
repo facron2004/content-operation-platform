@@ -125,8 +125,8 @@ describe('refund resolveWithCacheFallback', () => {
 describe('merchant-sales window and mappers', () => {
   it('maps sort/window SQL fragments', () => {
     expect(sortColumn('gmvDesc')).toContain('paidAmountOnline');
-    expect(sortColumn('refundDesc')).toBe('"refundAmount"');
-    expect(sortColumn('verifyDesc')).toBe('"verifyAmount"');
+    expect(sortColumn('refundDesc')).toBe('"refundAmountFen"');
+    expect(sortColumn('verifyDesc')).toBe('"verifyAmountFen"');
     expect(sortColumn('orderCountDesc')).toBe('"orderCount"');
 
     expect(whereClauseForWindow('day')).toContain('"date" >= ?');
@@ -239,46 +239,48 @@ describe('gmv metrics and resolve priority', () => {
     const payload = mapDailyMetricsToKpi(
       {
         date: '2026-07-18',
-        totalGmv: 200,
-        gmvOnline: 150,
-        gmvWallet: 50,
-        gmvBonus: 0,
-        gmvCard: 0,
-        totalRefund: 20,
+        totalGmvFen: 20_000n,
+        gmvOnlineFen: 15_000n,
+        gmvWalletFen: 5_000n,
+        gmvBonusFen: 0n,
+        gmvCardFen: 0n,
+        totalRefundFen: 2_000n,
         refundRate: 0.1,
-        totalVerify: 40,
+        refundCount: 0,
+        totalVerifyFen: 4_000n,
         verifyRate: 0.2,
         paidOrderCount: 4,
-        paidAmountBonus: 0,
-        paidAmountWallet: 50,
+        paidAmountBonusFen: 0n,
+        paidAmountWalletFen: 5_000n,
         updatedAt: new Date('2026-07-18T00:00:00Z')
       },
       {
-        monthGmv: 500,
-        monthGmvOnline: 300,
-        monthGmvWallet: 200,
+        monthGmvFen: 50_000n,
+        monthGmvOnlineFen: 30_000n,
+        monthGmvWalletFen: 20_000n,
         prev: {
           date: '2026-07-17',
-          totalGmv: 100,
-          gmvOnline: 80,
-          gmvWallet: 20,
-          gmvBonus: 0,
-          gmvCard: 0,
-          totalRefund: 5,
+          totalGmvFen: 5_000n,
+          gmvOnlineFen: 4_000n,
+          gmvWalletFen: 1_000n,
+          gmvBonusFen: 0n,
+          gmvCardFen: 0n,
+          totalRefundFen: 500n,
           refundRate: 0.05,
-          totalVerify: 10,
+          refundCount: 0,
+          totalVerifyFen: 1_000n,
           verifyRate: 0.1,
           paidOrderCount: 2,
-          paidAmountBonus: 0,
-          paidAmountWallet: 20,
+          paidAmountBonusFen: 0n,
+          paidAmountWalletFen: 2_000n,
           updatedAt: new Date('2026-07-17T00:00:00Z')
         }
       }
     );
 
     expect(payload.dataSource).toBe('DailyMetrics');
-    expect(payload.avgOrderValue).toBe(50);
-    expect(payload.compare?.totalGmv).toBe(1);
+    expect(payload.avgOrderValue).toBe(45);
+    expect(payload.compare?.totalGmv).toBe(3);
     expect(payload.compare?.paidOrderCount).toBe(1);
   });
 
@@ -287,11 +289,11 @@ describe('gmv metrics and resolve priority', () => {
       [
         {
           date: '2026-07-01',
-          totalGmv: 10,
-          gmvOnline: 8,
-          gmvWallet: 2,
-          gmvBonus: 0,
-          totalRefund: 1,
+          totalGmvFen: 1_000n,
+          gmvOnlineFen: 800n,
+          gmvWalletFen: 200n,
+          gmvBonusFen: 0n,
+          totalRefundFen: 100n,
           refundRate: 0.1,
           verifyRate: 0.2,
           paidOrderCount: 1
@@ -301,19 +303,19 @@ describe('gmv metrics and resolve priority', () => {
       3
     );
     expect(trend).toHaveLength(3);
-    expect(trend[0].totalGmv).toBe(10);
+    expect(trend[0].totalGmv).toBe(9);
     expect(trend[1].totalGmv).toBe(0);
     expect(trend[2].date).toBe('2026-07-03');
 
     const dist = mapDistributionRows(
-      [{ key: 'A', gmv: 80, gmvOnline: 80, gmvWallet: 0, gmvBonus: 0 }],
-      100,
+      [{ key: 'A', gmvFen: 80n, gmvOnlineFen: 80n, gmvWalletFen: 0n, gmvBonusFen: 0n }],
+      100n,
       1
     );
     // Residual #289: payload { items, limit, matched, truncated }
     expect(dist.items).toHaveLength(2);
     expect(dist.items[0].share).toBeCloseTo(0.8);
-    expect(dist.items[1].totalGmv).toBe(20);
+    expect(dist.items[1].totalGmvFen).toBe(20n);
     expect(dist.items[1].key).toBe('其他');
     expect(dist.truncated).toBe(true);
     expect(dist.limit).toBe(1);
@@ -430,7 +432,7 @@ describe('gmv metrics and resolve priority', () => {
 
     const payload = await resolveGmvKpis(prisma, '2026-07-18');
     expect(payload.dataSource).toBe('DailyMetrics');
-    expect(payload.totalGmv).toBe(50);
+    expect(payload.totalGmv).toBe(45);
   });
 
   it('keeps OrderHeader zeros when DailyMetrics missing (never SalesSnapshot)', async () => {
@@ -879,7 +881,7 @@ describe('overview pure helpers', () => {
       today: '2026-07-18',
       totalMerchants: 10,
       totalSkus: 50,
-      todayGmv: 100,
+      todayGmvFen: 10_000n,
       todayOrderCount: 4,
       staleSkuRows: { stale30SkuCount: 5, distinctMerchants: 2 },
       moneyDataSource: 'OrderHeader'
@@ -892,7 +894,7 @@ describe('overview pure helpers', () => {
       today: '2026-07-18',
       totalMerchants: 0,
       totalSkus: 0,
-      todayGmv: 0,
+      todayGmvFen: 0n,
       todayOrderCount: 0,
       staleSkuRows: { stale30SkuCount: 0, distinctMerchants: 0 },
       moneyDataSource: 'OrderHeader'

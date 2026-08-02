@@ -8,8 +8,8 @@
       :row-class-name="rowClass"
     >
       <MovementSkuColumns />
-      <!-- Residual #210: ops column wider for 时间线 + 分析. -->
-      <el-table-column label="操作" width="160" align="right" fixed="right">
+      <!-- Residual #210: ops column supports 时间线 + 分析. -->
+      <el-table-column label="操作" width="132" align="right" fixed="right">
         <template #default="{ row }">
           <div class="action-cell">
             <AppleButton variant="ghost" size="sm" @click="$emit('timeline', row)">
@@ -75,7 +75,7 @@ defineEmits<{
   display: flex;
   justify-content: flex-end;
   gap: 4px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 .list-cap-hint {
   margin: 8px 0 0;

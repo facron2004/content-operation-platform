@@ -2,7 +2,7 @@ import { beijingDateKey, shiftDateKey } from '@content/shared';
 import { DEFAULT_INVENTORY_RULES } from '../domain/rules-defaults';
 import { PLATFORM_SCAN_LIMIT, queryInChunks } from '../common/sql-chunk';
 import type { PrismaService } from '../prisma/prisma.service';
-import { AREA_COORDINATES, lookupAreaCoordinates } from './area-coordinates';
+import { lookupAreaCoordinates } from './area-coordinates';
 
 export interface MerchantHeatmapPoint {
   lat: number;
@@ -24,14 +24,6 @@ export interface MerchantHeatmapResponse {
   limit?: number;
   truncated?: boolean;
 }
-
-type AreaGroup = {
-  areaId: string | null;
-  areaName: string;
-  merchantIds: string[];
-  merchantNames: string[];
-  totalGmv: number;
-};
 
 /** 默认中心 —— 深圳市（平台主要运营城市） */
 const DEFAULT_CENTER = { lat: 22.543, lng: 114.058 };
@@ -206,16 +198,16 @@ async function loadGmvByMerchantId(
   const rows = await queryInChunks(merchantIds, async (chunk) => {
     const ph = chunk.map(() => '?').join(',');
     return (await prisma.$queryRawUnsafe(
-      `SELECT cp."merchantId", COALESCE(SUM(psd."salesAmount"), 0) AS "gmv"
+      `SELECT cp."merchantId", COALESCE(SUM(psd."salesAmountFen"), 0) AS "gmvFen"
        FROM "ContentPackage" cp
        LEFT JOIN "PackageSalesDaily" psd ON psd."packageId" = cp."packageId" AND psd."date" >= ? AND psd."salesQty" > 0
        WHERE cp."merchantId" IN (${ph})
        GROUP BY cp."merchantId"`,
       fromDate,
       ...chunk
-    )) as Array<{ merchantId: string; gmv: number }>;
+    )) as Array<{ merchantId: string; gmvFen: bigint | null }>;
   });
-  return new Map(rows.map((r) => [r.merchantId, Number(r.gmv)]));
+  return new Map(rows.map((r) => [r.merchantId, Number(r.gmvFen ?? 0) / 100]));
 }
 
 // ── also export AREA_COORDINATES for potential admin use ──

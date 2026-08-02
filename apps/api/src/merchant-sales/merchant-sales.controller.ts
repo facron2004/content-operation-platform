@@ -19,6 +19,8 @@ import { createDtoPipe } from '../common/dto-pipe';
 import { CSV_EXPORT_MAX_ROWS } from '../common/sql-chunk';
 import { assertInclusiveDaySpan, daySpanErrorCode, daySpanErrorSpan } from '../domain/sales-daily';
 import { Roles } from '../user-access/role.decorator';
+import { RequireLogin } from '../user-access/iam/route-auth.decorator';
+import { RequirePermissions } from '../user-access/iam/require-permissions.decorator';
 import { assertUnrestrictedAnalytics } from '../user-access/scope-guards';
 import { MerchantSalesQueryDto, MerchantSalesRefreshDto } from './merchant-sales.dto';
 import { MERCHANT_SALES_SERVICE, MerchantSalesService } from './merchant-sales.service';
@@ -89,6 +91,7 @@ export function refreshMerchantSales(
 
 // --- merchant-sales.controller.ts ---
 @ApiTags('merchant-sales')
+@RequireLogin()
 @Controller('api/merchant-sales')
 export class MerchantSalesController {
   constructor(@Inject(MERCHANT_SALES_SERVICE) private readonly service: MerchantSalesService) {}
@@ -143,6 +146,7 @@ export class MerchantSalesController {
     res.send(result.csv);
   }
   @Roles('admin', 'platform_operator')
+  @RequirePermissions('merchant:manage')
   @Throttle({ long: { limit: 2, ttl: 60000 } })
   @Post('refresh')
   @ApiOperation({
@@ -153,6 +157,7 @@ export class MerchantSalesController {
     return refreshMerchantSales(this.service, body ?? {});
   }
   @Roles('admin', 'platform_operator')
+  @RequirePermissions('merchant:manage')
   @Throttle({ long: { limit: 10, ttl: 60000 } })
   @Post('cache/invalidate')
   @ApiOperation({ summary: '清空商家销售进程内缓存(POST 代替 GET)' })

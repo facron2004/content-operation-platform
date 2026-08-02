@@ -20,6 +20,7 @@ export interface GmvKpi {
   gmvCard: number;
   totalRefund: number;
   refundRate: number;
+  refundOrderCount: number;
   totalVerify: number;
   verifyRate: number;
   paidOrderCount: number;
@@ -85,19 +86,71 @@ export interface GmvMerchantRow {
 
 export type GmvTrendGranularity = 'day' | 'week' | 'month';
 
-export async function refreshGmvFromJeesite(startDate?: string, endDate?: string) {
+export interface GmvRefreshResult {
+  startDate: string;
+  endDate: string;
+  fetched: number;
+  upserted: number;
+  skipped: number;
+  errors: number;
+  pagesFetched: number;
+  recomputeWarnings?: string[];
+  kpi?: GmvKpi;
+}
+
+export type GmvRefreshJobStatus =
+  'queued' | 'pulling' | 'recomputing' | 'finalizing' | 'done' | 'error';
+
+export interface GmvRefreshProgress {
+  pagesFetched: number;
+  fetched: number;
+  upserted: number;
+  skipped: number;
+  errors: number;
+}
+
+export interface GmvRefreshJob {
+  jobId: string;
+  status: GmvRefreshJobStatus;
+  startDate: string;
+  endDate: string;
+  progress: GmvRefreshProgress;
+  result?: GmvRefreshResult;
+  error?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface GmvRefreshStartResponse {
+  jobId: string;
+  startDate: string;
+  endDate: string;
+  status: GmvRefreshJobStatus;
+}
+
+/**
+ * Kick off an async GMV refresh (JeeSite pull + money recompute). Returns
+ * immediately with a jobId — the heavy work runs server-side and is polled via
+ * getGmvRefreshStatus, so wide ranges (e.g. 30 days) never hit the HTTP timeout.
+ */
+export async function startGmvRefresh(startDate?: string, endDate?: string) {
   return (
-    await client.post<{
-      startDate: string;
-      endDate: string;
-      fetched: number;
-      upserted: number;
-      skipped: number;
-      errors: number;
-      pagesFetched: number;
-      kpi: GmvKpi;
-    }>(`/gmv/refresh?_=${Date.now()}`, { startDate, endDate }, {
-      timeout: 15000,
+    await client.post<GmvRefreshStartResponse>(
+      `/gmv/refresh?_=${Date.now()}`,
+      { startDate, endDate },
+      {
+        timeout: 30000,
+        __silentError__: true
+      } as RetryableConfig
+    )
+  ).data;
+}
+
+/** Poll the progress/result of a refresh job started by startGmvRefresh. */
+export async function getGmvRefreshStatus(jobId: string) {
+  return (
+    await client.get<GmvRefreshJob>(`/gmv/refresh/${encodeURIComponent(jobId)}`, {
+      timeout: 10000,
       __silentError__: true
     } as RetryableConfig)
   ).data;

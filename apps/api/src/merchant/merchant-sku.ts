@@ -8,7 +8,7 @@ export type MerchantSkuSqlRow = {
   packageName: string;
   areaName: string;
   category: string;
-  salePrice: number;
+  salePriceFen: bigint | null;
   stockLeft: number;
   lastSalesDate: string | null;
   daysSinceLastSale: number | null;
@@ -31,7 +31,7 @@ export async function queryMerchantSkuRows(
 ): Promise<MerchantSkuSqlRow[]> {
   // Cap SKUs per merchant — unbounded GROUP BY can balloon on large catalogs.
   return (await prisma.$queryRawUnsafe(
-    `SELECT cp."packageId", cp."packageName", cp."areaName", cp."category", cp."salePrice", cp."stockLeft", MAX(sd."date") AS "lastSalesDate", CAST(julianday(?) - julianday(MAX(sd."date")) AS INTEGER) AS "daysSinceLastSale" FROM "ContentPackage" cp LEFT JOIN "PackageSalesDaily" sd ON sd."packageId" = cp."packageId" AND sd."salesQty" > 0 AND sd."date" >= ? WHERE cp."merchantId" = ? GROUP BY cp."packageId" ORDER BY "daysSinceLastSale" IS NULL DESC, "daysSinceLastSale" DESC LIMIT ?`,
+    `SELECT cp."packageId", cp."packageName", cp."areaName", cp."category", cp."salePriceFen", cp."stockLeft", MAX(sd."date") AS "lastSalesDate", CAST(julianday(?) - julianday(MAX(sd."date")) AS INTEGER) AS "daysSinceLastSale" FROM "ContentPackage" cp LEFT JOIN "PackageSalesDaily" sd ON sd."packageId" = cp."packageId" AND sd."salesQty" > 0 AND sd."date" >= ? WHERE cp."merchantId" = ? GROUP BY cp."packageId" ORDER BY "daysSinceLastSale" IS NULL DESC, "daysSinceLastSale" DESC LIMIT ?`,
     today,
     threshold,
     merchantId,
@@ -57,7 +57,7 @@ export function mapMerchantSkuRows(
     packageName: string;
     areaName: string | null;
     category: string | null;
-    salePrice: number | bigint;
+    salePriceFen: bigint | null;
     stockLeft: number | bigint;
     lastSalesDate: string | null;
     daysSinceLastSale: number | null;
@@ -70,7 +70,7 @@ export function mapMerchantSkuRows(
       packageName: r.packageName,
       areaName: r.areaName,
       category: r.category,
-      salePrice: Number(r.salePrice),
+      salePrice: Number(r.salePriceFen ?? 0) / 100,
       stockLeft: Number(r.stockLeft),
       lastSalesDate: r.lastSalesDate,
       daysSinceLastSale: days,

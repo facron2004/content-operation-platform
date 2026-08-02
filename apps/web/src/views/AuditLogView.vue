@@ -284,7 +284,7 @@ onMounted(() => load());
 
 <style scoped>
 .audit-log-page {
-  padding: 20px;
+  padding: 0;
 }
 .page-header {
   display: flex;

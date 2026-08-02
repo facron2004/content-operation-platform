@@ -1,11 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import {
-  formatFenYuan,
-  displayMoney,
-  readFen,
-  sumMoneyFen,
-  sumMoney
-} from './money';
+import { formatFenYuan, displayMoney, readFen, sumMoneyFen, sumMoney } from './money';
 
 describe('formatFenYuan', () => {
   it('formats integer fen with thousands + 2 decimals', () => {
@@ -34,9 +28,7 @@ describe('formatFenYuan', () => {
 
 describe('displayMoney', () => {
   it('prefers backend *Display', () => {
-    expect(displayMoney({ totalGmv: 39.9, totalGmvDisplay: '39.90' }, 'totalGmv')).toBe(
-      '¥ 39.90'
-    );
+    expect(displayMoney({ totalGmv: 39.9, totalGmvDisplay: '39.90' }, 'totalGmv')).toBe('¥ 39.90');
   });
 
   it('falls back to *Fen when *Display missing', () => {

@@ -15,12 +15,14 @@ import {
   MapLocation,
   OfficeBuilding,
   Present,
+  SetUp,
   Setting,
   TrendCharts,
   User,
   Wallet,
   Warning
 } from '@element-plus/icons-vue';
+import { permissionsForPath } from '../route-permissions';
 
 export const ICON_MAP: Record<string, unknown> = {
   HomeFilled,
@@ -41,6 +43,7 @@ export const ICON_MAP: Record<string, unknown> = {
   Wallet,
   Setting,
   Present,
+  SetUp,
   User,
   Goods,
   Coin
@@ -83,6 +86,7 @@ export interface NavLeaf {
   icon?: string;
   /** 占位/未上线 */
   disabled?: boolean;
+  permissions?: readonly string[];
 }
 
 /** 可展开分组 */
@@ -91,7 +95,12 @@ export interface NavGroupNode {
   key: string;
   title: string;
   icon?: string;
-  children: Array<{ path: string; title: string; icon?: string }>;
+  children: Array<{
+    path: string;
+    title: string;
+    icon?: string;
+    permissions?: readonly string[];
+  }>;
 }
 
 export type NavNode = NavLeaf | NavGroupNode;
@@ -185,6 +194,7 @@ export const PROTO_NAV: NavNode[] = [
   },
   { kind: 'item', path: '/settings', title: '系统设置', icon: 'Setting' },
   { kind: 'item', path: '/users', title: '用户管理', icon: 'User' },
+  { kind: 'item', path: '/permission-center', title: '权限中心', icon: 'SetUp' },
   { kind: 'item', path: '/audit-logs', title: '操作审计', icon: 'Document' }
 ];
 
@@ -201,8 +211,31 @@ export function resolveOpenGroupKeys(path: string): string[] {
 }
 
 /** 侧栏直接使用原型导航树（不再从路由 meta 推导分组） */
-export function buildNavTree(): NavNode[] {
-  return PROTO_NAV;
+export function buildNavTree(grantedPermissions?: readonly string[]): NavNode[] {
+  if (!grantedPermissions) return PROTO_NAV;
+
+  const canAccess = (path: string) => {
+    const required = permissionsForPath(path);
+    return !required || required.every((permission) => grantedPermissions.includes(permission));
+  };
+
+  const filtered: NavNode[] = [];
+  for (const node of PROTO_NAV) {
+    if (node.kind === 'item') {
+      if (!canAccess(node.path)) continue;
+      const permissions = permissionsForPath(node.path);
+      filtered.push(permissions ? { ...node, permissions } : { ...node });
+      continue;
+    }
+    const children = node.children
+      .filter((child) => canAccess(child.path))
+      .map((child) => {
+        const permissions = permissionsForPath(child.path);
+        return permissions ? { ...child, permissions } : { ...child };
+      });
+    if (children.length) filtered.push({ ...node, children });
+  }
+  return filtered;
 }
 
 /** @deprecated 旧分组 API，保留空实现避免外部误用 */

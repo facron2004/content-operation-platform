@@ -8,6 +8,7 @@ import { OverviewService } from '../overview/overview.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RefundService } from '../refund/refund.service';
 import { refreshGmvFromJeesite } from './gmv-refresh';
+import { getGmvRefreshJob, startGmvRefreshJob, type GmvRefreshJob } from './gmv-refresh-job';
 import {
   computeGmvTopMerchants,
   resolveGmvDistribution,
@@ -19,7 +20,6 @@ import { pageMerchants } from './gmv-metrics';
 import type {
   GmvDistributionDim,
   GmvDistributionPayload,
-  GmvDistributionRow,
   GmvHourlyPoint,
   GmvMerchantRow,
   GmvMerchantSort,
@@ -126,6 +126,25 @@ export function createGmvServiceOps(
         () => undefined
       );
       return run;
+    },
+    startRefreshJob(startDate: string, endDate: string): GmvRefreshJob {
+      return startGmvRefreshJob(
+        {
+          prisma,
+          autoLogin,
+          getMerchantSalesService: async () => merchantSales ?? null,
+          invalidateCache: () => {
+            ops.invalidateCache();
+            onMoneyWrite?.();
+          },
+          getKpis: (date: string) => ops.getKpis(date, false)
+        },
+        startDate,
+        endDate
+      );
+    },
+    getRefreshJob(jobId: string): GmvRefreshJob | undefined {
+      return getGmvRefreshJob(jobId);
     }
   };
 }
@@ -196,5 +215,13 @@ export class GmvService {
 
   refreshFromJeesite(startDate: string, endDate: string) {
     return this.ops.refreshFromJeesite(startDate, endDate);
+  }
+
+  startRefreshJob(startDate: string, endDate: string): GmvRefreshJob {
+    return this.ops.startRefreshJob(startDate, endDate);
+  }
+
+  getRefreshJob(jobId: string): GmvRefreshJob | undefined {
+    return this.ops.getRefreshJob(jobId);
   }
 }

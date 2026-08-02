@@ -7,6 +7,7 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   Query,
   Inject,
   Logger,
@@ -26,12 +27,19 @@ import { UpdateUserDto, UpdateUserRolesDto } from './dto/update-user.dto';
 import { JwtStrategy } from '../auth/jwt.strategy';
 import { safePathId } from '../common/path-id';
 import { createDtoPipe } from '../common/dto-pipe';
+import { IamAccessService } from './iam/iam-access.service';
+import { IamAdminService } from './iam/iam-admin.service';
+import { ReplaceUserAccessDto } from './iam/iam.dto';
+import { RequirePermissions } from './iam/require-permissions.decorator';
+import { RequireLogin } from './iam/route-auth.decorator';
 
 type AuthUser = {
   userId: string;
   username: string;
   roles?: string[];
   bindings?: Array<{ role: string; scopeType?: string; scopeId?: string }>;
+  tenantId?: string;
+  permissions?: string[];
 };
 
 function isAdmin(user: AuthUser | undefined): boolean {
@@ -75,17 +83,21 @@ class UserListQueryDto {
 }
 
 @ApiTags('users')
+@RequireLogin()
 @Controller('api/users')
 export class UserController {
   private readonly logger = new Logger(UserController.name);
 
   constructor(
     @Inject(UserService) private readonly userService: UserService,
-    @Optional() @Inject(JwtStrategy) private readonly jwtStrategy?: JwtStrategy
+    @Optional() @Inject(JwtStrategy) private readonly jwtStrategy?: JwtStrategy,
+    @Optional() @Inject(IamAccessService) private readonly iamAccessService?: IamAccessService,
+    @Optional() @Inject(IamAdminService) private readonly iamAdminService?: IamAdminService
   ) {}
 
   @Get()
   @Roles('admin', 'platform_operator')
+  @RequirePermissions('iam:user:read')
   @Throttle({ long: { limit: 30, ttl: 60000 } })
   @ApiOperation({ summary: 'List users with roles (admin only)' })
   async listUsers(@Query(createDtoPipe(UserListQueryDto)) query: UserListQueryDto) {
@@ -99,6 +111,7 @@ export class UserController {
 
   @Post()
   @Roles('admin', 'platform_operator')
+  @RequirePermissions('iam:user:create')
   @Throttle({ long: { limit: 20, ttl: 60000 } })
   @ApiOperation({ summary: 'Create user (admin only)' })
   async createUser(@Body(createDtoPipe(CreateUserDto)) body: CreateUserDto, @Req() req: Request) {
@@ -119,7 +132,19 @@ export class UserController {
     const authUser = req.user as AuthUser | undefined;
     if (!authUser?.userId) return null;
     const user = await this.userService.findById(authUser.userId);
-    if (user) return publicUser(user);
+    if (user) {
+      const access = await this.iamAccessService
+        ?.getUserAccess(authUser.userId, authUser.tenantId)
+        .catch(() => null);
+      return publicUser({
+        ...user,
+        tenantId: access?.tenantId ?? authUser.tenantId ?? 'tenant_default',
+        primaryOrgUnitId: access?.primaryOrgUnitId ?? null,
+        permissions: access?.permissions ?? authUser.permissions ?? [],
+        memberships: access?.memberships ?? [],
+        roleAssignments: access?.roleAssignments ?? []
+      });
+    }
     // Hardcoded-admin JWT (sub=admin) has no AppUser row until seeded.
     // Return a synthetic profile from the token so the SPA can hydrate roles.
     const roleSet = new Set<string>(USER_ROLES);
@@ -129,6 +154,11 @@ export class UserController {
       username: authUser.username,
       displayName: authUser.username,
       isActive: true,
+      tenantId: authUser.tenantId ?? 'tenant_default',
+      primaryOrgUnitId: null,
+      permissions: authUser.permissions ?? [],
+      memberships: [],
+      roleAssignments: [],
       roles: roles.map((role, index) => ({
         id: `jwt-role-${index}`,
         userId: authUser.userId,
@@ -138,8 +168,29 @@ export class UserController {
     };
   }
 
+  @Put(':id/access')
+  @RequirePermissions('iam:users:access')
+  async replaceUserAccess(
+    @Param('id') id: string,
+    @Body(createDtoPipe(ReplaceUserAccessDto)) body: ReplaceUserAccessDto,
+    @Req() req: Request
+  ) {
+    if (!this.iamAdminService) throw new ForbiddenException('IAM 服务未启用');
+    const actor = req.user as AuthUser | undefined;
+    const safeId = safePathId(id);
+    const result = await this.iamAdminService.replaceUserAccess(
+      actor?.tenantId ?? 'tenant_default',
+      safeId,
+      body,
+      actor?.userId
+    );
+    this.jwtStrategy?.invalidateStatus(safeId);
+    return result;
+  }
+
   @Get(':id')
   @Roles('admin', 'platform_operator')
+  @RequirePermissions('iam:user:read')
   @Throttle({ long: { limit: 60, ttl: 60000 } })
   @ApiOperation({ summary: 'User detail with role bindings' })
   async getUser(@Param('id') id: string) {
@@ -149,6 +200,7 @@ export class UserController {
 
   @Patch(':id')
   @Roles('admin', 'platform_operator')
+  @RequirePermissions('iam:user:update')
   @Throttle({ long: { limit: 30, ttl: 60000 } })
   @ApiOperation({ summary: 'Update user info' })
   async updateUser(
@@ -177,6 +229,7 @@ export class UserController {
 
   @Post(':id/deactivate')
   @Roles('admin')
+  @RequirePermissions('iam:user:disable')
   @Throttle({ long: { limit: 10, ttl: 60000 } })
   @ApiOperation({ summary: 'Deactivate user (isActive=false)' })
   async deactivateUser(@Param('id') id: string, @Req() req: Request) {
@@ -195,6 +248,7 @@ export class UserController {
 
   @Post(':id/roles')
   @Roles('admin', 'platform_operator')
+  @RequirePermissions('users:roles')
   @Throttle({ long: { limit: 20, ttl: 60000 } })
   @ApiOperation({ summary: 'Update role bindings' })
   async updateUserRoles(

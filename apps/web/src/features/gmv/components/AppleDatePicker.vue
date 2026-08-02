@@ -95,7 +95,9 @@ const props = withDefaults(
     disabledDate?: (date: Date) => boolean;
   }>(),
   {
-    placeholder: '选择日期'
+    modelValue: '',
+    placeholder: '选择日期',
+    disabledDate: () => false
   }
 );
 

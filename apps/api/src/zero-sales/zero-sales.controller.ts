@@ -15,6 +15,7 @@ import { CSV_EXPORT_MAX_ROWS } from '../common/sql-chunk';
 import { safePathId } from '../common/path-id';
 import { resolveScopedQuery } from '../user-access/data-scope';
 import { assertPackageInScope } from '../user-access/scope-guards';
+import { RequireLogin } from '../user-access/iam/route-auth.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 
 type AuthUser = {
@@ -25,6 +26,7 @@ type AuthUser = {
 };
 
 @ApiTags('zero-sales')
+@RequireLogin()
 @Controller('api/zero-sales')
 export class ZeroSalesController {
   constructor(

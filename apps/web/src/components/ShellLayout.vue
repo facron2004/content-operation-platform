@@ -53,4 +53,4 @@ const routeCacheMax = ROUTE_VIEW_CACHE_MAX;
 const viewCacheKey = routeViewCacheKey;
 </script>
 
-<style src="../styles/components/shell-layout.css" scoped></style>
+<style src="../styles/components/shell-layout.css"></style>

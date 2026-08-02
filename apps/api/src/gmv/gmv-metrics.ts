@@ -15,69 +15,103 @@ import {
 // --- gmv-daily-metrics-kpi.ts ---
 export type DailyMetricsKpiRow = {
   date: string;
-  totalGmv: number;
-  gmvOnline: number;
-  gmvWallet: number;
-  gmvBonus: number;
-  gmvCard: number;
-  totalRefund: number;
+  totalGmvFen: bigint | null;
+  gmvOnlineFen: bigint | null;
+  gmvWalletFen: bigint | null;
+  gmvBonusFen: bigint | null;
+  gmvCardFen: bigint | null;
+  totalRefundFen: bigint | null;
   refundRate: number;
-  totalVerify: number;
+  refundCount: number;
+  totalVerifyFen: bigint | null;
   verifyRate: number;
   paidOrderCount: number;
-  paidAmountBonus: number;
-  paidAmountWallet: number;
+  paidAmountBonusFen: bigint | null;
+  paidAmountWalletFen: bigint | null;
   updatedAt: Date;
 };
 
 export function mapDailyMetricsToKpi(
   dmRow: DailyMetricsKpiRow,
   extras?: {
-    monthGmv?: number;
-    monthGmvOnline?: number;
-    monthGmvWallet?: number;
+    monthGmvFen?: bigint | null;
+    monthGmvOnlineFen?: bigint | null;
+    monthGmvWalletFen?: bigint | null;
     prev?: DailyMetricsKpiRow | null;
   }
 ): GmvTodayPayload {
-  const totalGmv = Number(dmRow.totalGmv);
-  const paidOrderCount = dmRow.paidOrderCount;
-  const avgOrderValue = paidOrderCount > 0 ? totalGmv / paidOrderCount : 0;
-  const monthGmv = Number(extras?.monthGmv ?? totalGmv);
-  const monthGmvOnline = Number(extras?.monthGmvOnline ?? dmRow.gmvOnline);
-  const monthGmvWallet = Number(extras?.monthGmvWallet ?? dmRow.gmvWallet);
+  const grossGmvFen = BigInt(
+    Math.round(
+      Number(dmRow.totalGmvFen ?? (dmRow as unknown as { totalGmv?: number }).totalGmv ?? 0) *
+        (dmRow.totalGmvFen != null ? 1 : 100)
+    )
+  );
+  const totalRefundFen = BigInt(
+    Math.round(
+      Number(
+        dmRow.totalRefundFen ?? (dmRow as unknown as { totalRefund?: number }).totalRefund ?? 0
+      ) * (dmRow.totalRefundFen != null ? 1 : 100)
+    )
+  );
+  const totalGmvFen = grossGmvFen - totalRefundFen;
+  const paidOrderCount = dmRow.paidOrderCount ?? 0;
+  const avgOrderValue = paidOrderCount > 0 ? Number(totalGmvFen) / 100 / paidOrderCount : 0;
+  const monthGmvFen = extras?.monthGmvFen ?? totalGmvFen;
+  const monthGmvOnlineFen = extras?.monthGmvOnlineFen ?? dmRow.gmvOnlineFen ?? 0n;
+  const monthGmvWalletFen = extras?.monthGmvWalletFen ?? dmRow.gmvWalletFen ?? 0n;
 
   let compare: GmvTodayPayload['compare'];
   if (extras?.prev) {
-    const prevGmv = Number(extras.prev.totalGmv);
-    const prevOrders = extras.prev.paidOrderCount;
-    const prevAov = prevOrders > 0 ? prevGmv / prevOrders : 0;
+    const prevGrossGmvFen = BigInt(
+      Math.round(
+        Number(
+          extras.prev.totalGmvFen ?? (extras.prev as unknown as { totalGmv?: number }).totalGmv ?? 0
+        ) * (extras.prev.totalGmvFen != null ? 1 : 100)
+      )
+    );
+    const prevRefundFen = BigInt(
+      Math.round(
+        Number(
+          extras.prev.totalRefundFen ??
+            (extras.prev as unknown as { totalRefund?: number }).totalRefund ??
+            0
+        ) * (extras.prev.totalRefundFen != null ? 1 : 100)
+      )
+    );
+    const prevGmvFen = prevGrossGmvFen - prevRefundFen;
+    const prevOrders = extras.prev.paidOrderCount ?? 0;
+    const prevAov = prevOrders > 0 ? Number(prevGmvFen) / 100 / prevOrders : 0;
     compare = {
-      totalGmv: ratioDelta(totalGmv, prevGmv),
+      totalGmv: ratioDelta(Number(totalGmvFen) / 100, Number(prevGmvFen) / 100),
+      totalGmvFen: ratioDelta(Number(totalGmvFen) / 100, Number(prevGmvFen) / 100),
       paidOrderCount: ratioDelta(paidOrderCount, prevOrders),
       avgOrderValue: ratioDelta(avgOrderValue, prevAov),
-      refundRate: ratioDelta(Number(dmRow.refundRate), Number(extras.prev.refundRate)),
-      verifyRate: ratioDelta(Number(dmRow.verifyRate), Number(extras.prev.verifyRate))
+      refundRate: ratioDelta(Number(dmRow.refundRate ?? 0), Number(extras.prev.refundRate ?? 0)),
+      verifyRate: ratioDelta(Number(dmRow.verifyRate ?? 0), Number(extras.prev.verifyRate ?? 0))
     };
   }
 
   return {
     date: dmRow.date,
-    totalGmv,
-    gmvOnline: Number(dmRow.gmvOnline),
-    gmvWallet: Number(dmRow.gmvWallet),
-    gmvBonus: Number(dmRow.gmvBonus),
-    gmvCard: Number(dmRow.gmvCard),
-    totalRefund: Number(dmRow.totalRefund),
+    totalGmv: Number(totalGmvFen) / 100,
+    monthGmv: Number(monthGmvFen) / 100,
+    totalGmvFen,
+    gmvOnlineFen: dmRow.gmvOnlineFen,
+    gmvWalletFen: dmRow.gmvWalletFen,
+    gmvBonusFen: dmRow.gmvBonusFen,
+    gmvCardFen: dmRow.gmvCardFen,
+    totalRefundFen: dmRow.totalRefundFen,
     refundRate: Number(dmRow.refundRate),
-    totalVerify: Number(dmRow.totalVerify),
+    refundOrderCount: Number(dmRow.refundCount),
+    totalVerifyFen: dmRow.totalVerifyFen,
     verifyRate: Number(dmRow.verifyRate),
     paidOrderCount,
-    paidAmountBonus: Number(dmRow.paidAmountBonus),
-    paidAmountWallet: Number(dmRow.paidAmountWallet),
+    paidAmountBonusFen: dmRow.paidAmountBonusFen,
+    paidAmountWalletFen: dmRow.paidAmountWalletFen,
     avgOrderValue,
-    monthGmv,
-    monthGmvOnline,
-    monthGmvWallet,
+    monthGmvFen,
+    monthGmvOnlineFen,
+    monthGmvWalletFen,
     platformCommission: 0,
     compare,
     updatedAt: dmRow.updatedAt.toISOString(),
@@ -93,26 +127,40 @@ function ratioDelta(current: number, previous: number): number | null {
 // --- gmv-daily-metrics-trend-map.ts ---
 export type DailyMetricsTrendRow = {
   date: string;
-  totalGmv: number;
-  gmvOnline: number;
-  gmvWallet: number;
-  gmvBonus: number;
-  totalRefund: number;
+  totalGmvFen: bigint | null;
+  gmvOnlineFen: bigint | null;
+  gmvWalletFen: bigint | null;
+  gmvBonusFen: bigint | null;
+  totalRefundFen: bigint | null;
   refundRate: number;
   verifyRate: number;
   paidOrderCount: number;
 };
 export function mapDailyMetricsTrendRow(r: DailyMetricsTrendRow): GmvTrendPoint {
+  const grossGmvFen = BigInt(
+    Math.round(
+      Number(r.totalGmvFen ?? (r as unknown as { totalGmv?: number }).totalGmv ?? 0) *
+        (r.totalGmvFen != null ? 1 : 100)
+    )
+  );
+  const totalRefundFen = BigInt(
+    Math.round(
+      Number(r.totalRefundFen ?? (r as unknown as { totalRefund?: number }).totalRefund ?? 0) *
+        (r.totalRefundFen != null ? 1 : 100)
+    )
+  );
+  const totalGmvFen = grossGmvFen - totalRefundFen;
   return {
     date: r.date,
-    totalGmv: Number(r.totalGmv),
-    gmvOnline: Number(r.gmvOnline),
-    gmvWallet: Number(r.gmvWallet),
-    gmvBonus: Number(r.gmvBonus),
-    totalRefund: Number(r.totalRefund),
-    refundRate: Number(r.refundRate),
-    verifyRate: Number(r.verifyRate),
-    paidOrderCount: r.paidOrderCount
+    totalGmv: Number(totalGmvFen) / 100,
+    totalGmvFen,
+    gmvOnlineFen: r.gmvOnlineFen,
+    gmvWalletFen: r.gmvWalletFen,
+    gmvBonusFen: r.gmvBonusFen,
+    totalRefundFen: r.totalRefundFen,
+    refundRate: Number(r.refundRate ?? 0),
+    verifyRate: Number(r.verifyRate ?? 0),
+    paidOrderCount: r.paidOrderCount ?? 0
   };
 }
 
@@ -142,34 +190,54 @@ export function mapDailyMetricsTrend(
  * distinct keys. Share denominators stay platform totalGmv (not re-based on head).
  */
 export function mapDistributionRows(
-  rows: Array<{ key: string; gmv: number; gmvOnline: number; gmvWallet: number; gmvBonus: number }>,
-  totalGmv: number,
+  rows: Array<{
+    key: string;
+    gmvFen?: bigint | number | null;
+    gmvOnlineFen?: bigint | number | null;
+    gmvWalletFen?: bigint | number | null;
+    gmvBonusFen?: bigint | number | null;
+    gmv?: number;
+    gmvOnline?: number;
+    gmvWallet?: number;
+    gmvBonus?: number;
+  }>,
+  totalGmvFen: bigint | number,
   limit?: number
 ): GmvDistributionPayload {
   const safeLimit =
     typeof limit === 'number' && Number.isFinite(limit) && limit > 0
       ? Math.floor(limit)
       : rows.length;
-  const topGmv = rows.reduce((s, r) => s + Number(r.gmv), 0);
-  const items: GmvDistributionRow[] = rows.map((r) => ({
-    key: r.key,
-    totalGmv: Number(r.gmv),
-    gmvOnline: Number(r.gmvOnline),
-    gmvWallet: Number(r.gmvWallet),
-    gmvBonus: Number(r.gmvBonus),
-    share: totalGmv > 0 ? Number(r.gmv) / totalGmv : 0
-  }));
+  const safeTotalGmvFen = BigInt(Number(totalGmvFen ?? 0));
+  const getGmvNum = (r: (typeof rows)[number]) => Number(r.gmvFen ?? r.gmv ?? 0);
+  const topGmv = rows.reduce((s, r) => s + BigInt(getGmvNum(r)), 0n);
+  const items: (GmvDistributionRow & { totalGmv?: number })[] = rows.map((r) => {
+    const gmvVal = r.gmvFen ?? r.gmv ?? 0;
+    const onlineVal = r.gmvOnlineFen ?? r.gmvOnline ?? 0;
+    const walletVal = r.gmvWalletFen ?? r.gmvWallet ?? 0;
+    const bonusVal = r.gmvBonusFen ?? r.gmvBonus ?? 0;
+    return {
+      key: r.key,
+      totalGmv: Number(gmvVal),
+      totalGmvFen: BigInt(Number(gmvVal)),
+      gmvOnlineFen: BigInt(Number(onlineVal)),
+      gmvWalletFen: BigInt(Number(walletVal)),
+      gmvBonusFen: BigInt(Number(bonusVal)),
+      share: safeTotalGmvFen > 0n ? Number(gmvVal) / Number(safeTotalGmvFen) : 0
+    };
+  });
   // Residual #289: long-tail remainder means head was capped.
-  const truncated = totalGmv > 0 && topGmv < totalGmv - 1e-9;
+  const truncated = safeTotalGmvFen > 0n && topGmv < safeTotalGmvFen;
   if (truncated) {
-    const otherGmv = totalGmv - topGmv;
+    const otherGmv = safeTotalGmvFen - topGmv;
     items.push({
       key: '其他',
-      totalGmv: otherGmv,
-      gmvOnline: otherGmv,
-      gmvWallet: 0,
-      gmvBonus: 0,
-      share: otherGmv / totalGmv
+      totalGmv: Number(otherGmv),
+      totalGmvFen: otherGmv,
+      gmvOnlineFen: otherGmv,
+      gmvWalletFen: 0n,
+      gmvBonusFen: 0n,
+      share: Number(otherGmv) / Number(safeTotalGmvFen)
     });
   }
   return {
@@ -189,11 +257,19 @@ export function sortMerchants(
 ): GmvMerchantRow[] {
   const sorted = [...merchants];
   sorted.sort((a, b) => {
+    const aRefund = Number(a.gmvRefundFen ?? (a as any).gmvRefund ?? 0);
+    const bRefund = Number(b.gmvRefundFen ?? (b as any).gmvRefund ?? 0);
     if (sortBy === 'refundDesc')
-      return b.gmvRefund - a.gmvRefund || a.merchantName.localeCompare(b.merchantName);
+      return bRefund - aRefund || a.merchantName.localeCompare(b.merchantName);
     if (sortBy === 'verifyDesc')
-      return b.gmvVerify - a.gmvVerify || a.merchantName.localeCompare(b.merchantName);
-    return b.gmv - a.gmv || a.merchantName.localeCompare(b.merchantName);
+      return (
+        Number(b.gmvVerifyFen ?? (b as any).gmvVerify ?? 0) -
+          Number(a.gmvVerifyFen ?? (a as any).gmvVerify ?? 0) ||
+        a.merchantName.localeCompare(b.merchantName)
+      );
+    const aGmv = Number(a.gmvFen ?? (a as any).gmv ?? 0) - (a.gmvFen != null ? aRefund : 0);
+    const bGmv = Number(b.gmvFen ?? (b as any).gmv ?? 0) - (b.gmvFen != null ? bRefund : 0);
+    return bGmv - aGmv || a.merchantName.localeCompare(b.merchantName);
   });
   return sorted;
 }

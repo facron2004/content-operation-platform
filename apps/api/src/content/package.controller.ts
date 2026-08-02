@@ -28,6 +28,8 @@ import {
 } from './content.dto';
 import { Public } from '../auth';
 import { Roles } from '../user-access/role.decorator';
+import { RequireLogin } from '../user-access/iam/route-auth.decorator';
+import { RequirePermissions } from '../user-access/iam/require-permissions.decorator';
 import { resolveScopedQuery } from '../user-access/data-scope';
 import { assertPackageInScope } from '../user-access/scope-guards';
 import { nowISO } from '../common/format';
@@ -47,6 +49,7 @@ type AuthUser = {
 const toMB = (bytes: number): number => Math.round((bytes / (1024 * 1024)) * 100) / 100;
 
 @ApiTags('packages')
+@RequireLogin()
 @Controller('api/content')
 export class PackageController {
   constructor(
@@ -209,6 +212,7 @@ export class PackageController {
   }
 
   @Roles('admin', 'platform_operator')
+  @RequirePermissions('packages:refresh')
   @Throttle({ long: { limit: 5, ttl: 60000 } })
   @Post('packages/:packageId/detail/refresh')
   async refreshPackageDetail(@Param('packageId') packageId: string, @Req() req: Request) {
@@ -222,6 +226,7 @@ export class PackageController {
   }
 
   @Roles('admin', 'platform_operator')
+  @RequirePermissions('packages:read')
   @Throttle({ long: { limit: 30, ttl: 60000 } })
   @Get('packages/cache/stats')
   getPackageCacheStats() {
@@ -229,6 +234,7 @@ export class PackageController {
   }
 
   @Roles('admin', 'platform_operator')
+  @RequirePermissions('packages:refresh')
   @Throttle({ long: { limit: 10, ttl: 60000 } })
   @Post('packages/cache/clear')
   clearPackageCache(@Query('packageId') packageId?: string) {
@@ -243,6 +249,7 @@ export class PackageController {
   }
 
   @Roles('admin', 'platform_operator')
+  @RequirePermissions('packages:read')
   @Throttle({ long: { limit: 30, ttl: 60000 } })
   @Get('cookie/status')
   @ApiOperation({ summary: '获取 JeeSite Cookie 状态' })
@@ -253,6 +260,7 @@ export class PackageController {
   }
 
   @Roles('admin')
+  @RequirePermissions('packages:write')
   @Throttle({ long: { limit: 5, ttl: 60000 } })
   @Post('cookie/update')
   @ApiOperation({ summary: '更新 JeeSite Cookie' })
@@ -262,6 +270,7 @@ export class PackageController {
 
   /** AI provider config (masked key + baseURL) — not for every authenticated role. */
   @Roles('admin', 'platform_operator')
+  @RequirePermissions('packages:read')
   @Throttle({ long: { limit: 30, ttl: 60000 } })
   @Get('ai-copy/status')
   getAICopyStatus() {
@@ -269,6 +278,7 @@ export class PackageController {
   }
 
   @Roles('admin')
+  @RequirePermissions('packages:write')
   @Throttle({ long: { limit: 5, ttl: 60000 } })
   @Post('ai-copy/config')
   updateAICopyConfig(@Body(createDtoPipe(AICopyConfigDto)) body: AICopyConfigDto) {
@@ -276,6 +286,7 @@ export class PackageController {
   }
 
   @Roles('admin', 'platform_operator')
+  @RequirePermissions('packages:refresh')
   @Throttle({ long: { limit: 2, ttl: 60000 } })
   @Post('inventory/daily-crawl')
   crawlDailyInventory(@Query('date') date?: string) {
@@ -286,6 +297,7 @@ export class PackageController {
   }
 
   @Roles('admin')
+  @RequirePermissions('packages:write')
   @Throttle({ long: { limit: 2, ttl: 60000 } })
   @Post('sync-merchants')
   @ApiOperation({ summary: '从 JeeSite 拉取套餐数据并同步商家地址到 Merchant 表' })
@@ -294,6 +306,7 @@ export class PackageController {
   }
 
   @Roles('admin')
+  @RequirePermissions('packages:write')
   @Throttle({ long: { limit: 2, ttl: 60000 } })
   @Post('geocode-merchants')
   @ApiOperation({ summary: '从 JeeSite 合作商店铺表抓取 longitude/latitude 回填 Merchant 表' })
@@ -302,6 +315,7 @@ export class PackageController {
   }
 
   @Roles('admin')
+  @RequirePermissions('packages:write')
   @Throttle({ long: { limit: 2, ttl: 60000 } })
   @Post('geocode-from-partner-shop')
   @ApiOperation({ summary: '从 JeeSite 合作商店铺表抓取 longitude/latitude（别名）' })
@@ -310,6 +324,7 @@ export class PackageController {
   }
 
   @Roles('admin')
+  @RequirePermissions('packages:read')
   @Throttle({ long: { limit: 5, ttl: 60000 } })
   @Get('debug-raw/:packageId')
   @ApiOperation({ summary: '调试：返回套餐表单页的完整 HTML，检查坐标字段' })
@@ -319,6 +334,7 @@ export class PackageController {
   }
 
   @Roles('admin')
+  @RequirePermissions('packages:read')
   @Throttle({ long: { limit: 5, ttl: 60000 } })
   @Get('debug-partner-shop/:merchantId')
   @ApiOperation({ summary: '调试：抓取合作商店铺表单页，检查坐标字段' })
@@ -391,6 +407,7 @@ export class PackageController {
   }
 
   @Roles('admin', 'platform_operator')
+  @RequirePermissions('packages:write')
   @Throttle({ long: { limit: 20, ttl: 60000 } })
   @Post('battle-cards/generate')
   async generateBattleCard(
@@ -404,6 +421,7 @@ export class PackageController {
   // Same cost as generate (loads recommendations + builds card). Keep Roles+throttle
   // so any authenticated in-scope user cannot burn dataset load as a free GET.
   @Roles('admin', 'platform_operator')
+  @RequirePermissions('packages:read')
   @Throttle({ long: { limit: 30, ttl: 60000 } })
   @Get('battle-cards/:packageId')
   async getBattleCard(@Param('packageId') packageId: string, @Req() req: Request) {

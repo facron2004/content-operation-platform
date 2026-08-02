@@ -153,6 +153,14 @@ export async function connectPrismaOnInit(
       } catch (pragmaErr) {
         logger.warn(`PRAGMA foreign_keys=ON failed: ${describeError(pragmaErr)}`);
       }
+      // busy_timeout：并发写（多实例 / 重算 vs 拉单）时等待写锁而非立即失败。
+      // libsql 适配器把 SQLITE_BUSY 映射成 "unknown variant SocketTimeout" 抛错，
+      // 曾导致刷新时批量 upsert 大面积计为「写入失败」（2026-07-29 事故：189 单）。
+      try {
+        await prisma.$executeRawUnsafe('PRAGMA busy_timeout = 10000');
+      } catch (pragmaErr) {
+        logger.warn(`PRAGMA busy_timeout failed: ${describeError(pragmaErr)}`);
+      }
     }
     // 只读结构自检（DB-003）：不一致立即失败，绝不在启动路径修改结构。
     await assertRequiredTables(prisma, logger);

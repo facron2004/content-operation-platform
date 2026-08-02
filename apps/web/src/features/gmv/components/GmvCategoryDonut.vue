@@ -1,8 +1,9 @@
 <template>
   <section class="panel chart-card gmv-category-card">
     <header class="gmv-category-header">
-      <h3>品类GMV占比</h3>
+      <h3>交易结构（按品类）</h3>
       <span class="gmv-category-meta">{{ rows.length }} 个品类</span>
+      <a class="gmv-category-more" href="javascript:void(0)">查看全部 ›</a>
     </header>
     <EmptyState
       v-if="rows.length === 0"
@@ -18,10 +19,25 @@
         </div>
       </div>
       <ul class="gmv-category-legend">
+        <li class="legend-head">
+          <span>品类</span>
+          <span class="align-right">GMV（元）</span>
+          <span class="align-right">占比</span>
+        </li>
         <li v-for="row in rows" :key="row.name" class="gmv-category-legend-item">
-          <span class="legend-swatch" :style="{ background: row.color }" />
-          <span class="legend-name">{{ row.name }}</span>
-          <span class="legend-share">{{ formatPercentRaw(row.share * 100) }}</span>
+          <span class="legend-name-row">
+            <span class="legend-swatch" :style="{ background: row.color }" />
+            <span class="legend-name">{{ row.name }}</span>
+          </span>
+          <span class="legend-value align-right">{{ '¥ ' + formatNumber(row.value) }}</span>
+          <span class="legend-share align-right">{{ formatPercentRaw(row.share * 100) }}</span>
+        </li>
+        <li v-if="rows.length > 0" class="gmv-category-legend-item legend-total">
+          <span class="legend-name-row">
+            <span class="legend-name font-bold">合计</span>
+          </span>
+          <span class="legend-value align-right font-bold">{{ '¥ ' + totalText }}</span>
+          <span class="legend-share align-right font-bold">100%</span>
         </li>
       </ul>
     </div>
@@ -29,8 +45,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
-import { defineAsyncComponent } from 'vue';
+import { computed, defineAsyncComponent } from 'vue';
 import { formatNumber, formatPercentRaw } from '../../../utils/format';
 import EmptyState from '../../../components/EmptyState.vue';
 
@@ -48,7 +63,6 @@ const props = defineProps<{
   total: number;
 }>();
 
-// 优先用品类行求和（与图例一致）；无数据时回退外部 total
 const totalText = computed(() => {
   const sum = props.rows.reduce((s, r) => s + Number(r.value || 0), 0);
   return formatNumber(sum > 0 ? sum : props.total);
@@ -72,7 +86,7 @@ const donutOption = computed(() => {
     series: [
       {
         type: 'pie',
-        radius: ['62%', '86%'],
+        radius: ['58%', '84%'],
         avoidLabelOverlap: true,
         itemStyle: {
           borderColor: '#fff',
@@ -89,18 +103,19 @@ const donutOption = computed(() => {
 
 <style scoped>
 .gmv-category-card {
-  padding: 16px;
+  padding: 18px 20px 16px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
   min-width: 0;
 }
 
 .gmv-category-header {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 .gmv-category-header h3 {
@@ -115,23 +130,33 @@ const donutOption = computed(() => {
   font-size: 12px;
 }
 
+.gmv-category-more {
+  color: #667085;
+  font-size: 12px;
+  text-decoration: none;
+  margin-left: auto;
+}
+.gmv-category-more:hover {
+  color: #2e90fa;
+}
+
 .gmv-category-body {
   display: grid;
-  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
-  gap: 14px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+  gap: 16px;
   align-items: center;
 }
 
 .gmv-category-donut {
   position: relative;
-  min-height: 200px;
+  min-height: 180px;
   display: grid;
   place-items: center;
 }
 
 .gmv-category-donut-panel :deep(.chart-shell) {
-  height: 200px;
-  min-height: 200px;
+  height: 180px;
+  min-height: 180px;
 }
 
 .gmv-category-center {
@@ -147,12 +172,12 @@ const donutOption = computed(() => {
 
 .gmv-category-center-label {
   color: #98a2b3;
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .gmv-category-center-value {
   color: #101828;
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 800;
   letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
@@ -164,40 +189,74 @@ const donutOption = computed(() => {
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   min-width: 0;
+}
+
+.legend-head {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr 0.7fr;
+  gap: 8px;
+  color: #98a2b3;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 0 2px 4px;
+  border-bottom: 1px solid #f0f1f3;
 }
 
 .gmv-category-legend-item {
   display: grid;
-  grid-template-columns: 12px 1fr auto;
-  align-items: center;
+  grid-template-columns: 1.3fr 1fr 0.7fr;
   gap: 8px;
+  align-items: center;
   color: #475467;
-  font-size: 13px;
+  font-size: 12px;
+  padding: 4px 0;
+}
+
+.legend-name-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
 }
 
 .legend-swatch {
-  width: 10px;
-  height: 10px;
-  border-radius: 3px;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
   display: inline-block;
+  flex-shrink: 0;
 }
 
 .legend-name {
-  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
+.legend-value,
 .legend-share {
-  color: #101828;
-  font-weight: 600;
   font-variant-numeric: tabular-nums;
+  color: #101828;
+  font-weight: 500;
 }
 
-@media (max-width: 1280px) {
+.align-right {
+  text-align: right;
+}
+
+.font-bold {
+  font-weight: 700;
+}
+
+.legend-total {
+  border-top: 1px dashed #e4e7ec;
+  padding-top: 6px;
+  margin-top: 2px;
+}
+
+@media (max-width: 1100px) {
   .gmv-category-body {
     grid-template-columns: 1fr;
   }

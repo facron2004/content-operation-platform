@@ -18,6 +18,7 @@ import { toSqliteDateTime } from '../common/sqlite-datetime';
 import { likeContains } from '../common/like-escape';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto, UpdateUserRolesDto } from './dto/update-user.dto';
+import { syncIamProjection } from './iam/iam-projection';
 
 const ROLE_SET = new Set<string>(USER_ROLES);
 const SCOPE_TYPES = new Set(['area', 'merchant']);
@@ -218,6 +219,7 @@ export class UserService {
     username: string;
     isActive: boolean;
     tokenVersion: number;
+    tenantId: string;
     roles: Array<{ role: string; scopeType?: string; scopeId?: string }>;
   } | null> {
     // Residual #145: slim auth columns + passwordHash only (no PII / list columns).
@@ -287,6 +289,7 @@ export class UserService {
       username: row.username,
       isActive: true,
       tokenVersion: Number(row.tokenVersion ?? 0),
+      tenantId: await this.findTenantId(row.userId),
       roles: bindings.map((b) => ({
         role: b.role,
         scopeType: b.scopeType ?? undefined,
@@ -323,6 +326,7 @@ export class UserService {
     username: string;
     isActive: boolean;
     tokenVersion: number;
+    tenantId: string;
     roles: Array<{ role: string; scopeType?: string; scopeId?: string }>;
   } | null> {
     return this.loadAuthStatusByColumn('userId', userId);
@@ -337,6 +341,7 @@ export class UserService {
     username: string;
     isActive: boolean;
     tokenVersion: number;
+    tenantId: string;
     roles: Array<{ role: string; scopeType?: string; scopeId?: string }>;
   } | null> {
     return this.loadAuthStatusByColumn('username', username);
@@ -350,6 +355,7 @@ export class UserService {
     username: string;
     isActive: boolean;
     tokenVersion: number;
+    tenantId: string;
     roles: Array<{ role: string; scopeType?: string; scopeId?: string }>;
   } | null> {
     const col = column === 'userId' ? '"userId"' : '"username"';
@@ -379,12 +385,26 @@ export class UserService {
       username: row.username,
       isActive: Number(row.isActive) === 1,
       tokenVersion: Number(row.tokenVersion ?? 0),
+      tenantId: await this.findTenantId(row.userId),
       roles: bindings.map((b) => ({
         role: b.role,
         scopeType: b.scopeType ?? undefined,
         scopeId: b.scopeId ?? undefined
       }))
     };
+  }
+
+  /** Read the additive tenant column without breaking pre-0007 instances. */
+  private async findTenantId(userId: string): Promise<string> {
+    try {
+      const rows = await this.prisma.$queryRawUnsafe<Array<{ tenantId?: string | null }>>(
+        `SELECT "tenantId" FROM "AppUser" WHERE "userId" = ?`,
+        userId
+      );
+      return rows[0]?.tenantId ?? 'tenant_default';
+    } catch {
+      return 'tenant_default';
+    }
   }
 
   /**
@@ -566,6 +586,7 @@ export class UserService {
         if (dto.roles && dto.roles.length > 0) {
           await this.insertRoleBindings(tx, userId, dto.roles, now);
         }
+        await syncIamProjection(tx, userId, dto.roles ?? []);
       });
     } catch (err) {
       // Concurrent create of the same username races past the pre-check; unique wins.
@@ -778,6 +799,7 @@ export class UserService {
       // Insert new bindings (multi-row — residual #95).
       const now = toSqliteDateTime();
       await this.insertRoleBindings(tx, id, dto.roles ?? [], now);
+      await syncIamProjection(tx, id, dto.roles ?? []);
 
       // Bump session epoch so demotion/privilege changes hard-kill live JWTs
       // across instances (status cache alone is soft + TTL-bound).
@@ -913,6 +935,7 @@ export class UserService {
         'admin',
         now
       );
+      await syncIamProjection(this.prisma, 'admin', [{ role: 'admin' }]);
       this.logger.log(`Seeded env-admin AppUser row for username=${username}`);
     } catch (err) {
       this.logger.warn(

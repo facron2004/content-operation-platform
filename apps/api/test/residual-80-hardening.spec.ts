@@ -17,9 +17,13 @@ describe('residual #80 exclusive paidTime bounds on recompute paths', () => {
     expect(insertSql).toContain('date(datetime(replace(replace(oh."paidTime"');
     const expectedStart = beijingDayRangeSqlite('2026-07-01').start;
     const expectedEnd = beijingDayRangeSqlite('2026-07-03').end;
-    // params: now, paidStart, paidEnd
-    expect(execute.mock.calls[1][2]).toBe(expectedStart);
-    expect(execute.mock.calls[1][3]).toBe(expectedEnd);
+    // INSERT args after the SQL string: paidStart, paidEnd, paidStart, paidEnd, now
+    // (base paidTime range, then refundTime range, then updatedAt).
+    // calls[1][0] is the SQL; date bounds start at index 1.
+    expect(execute.mock.calls[1][1]).toBe(expectedStart); // base paidStart
+    expect(execute.mock.calls[1][2]).toBe(expectedEnd); // base paidEnd
+    expect(execute.mock.calls[1][3]).toBe(expectedStart); // refund paidStart
+    expect(execute.mock.calls[1][4]).toBe(expectedEnd); // refund paidEnd
   });
 
   it('recomputePackageSalesAmountRange uses exclusive paidTime on insert + coverage', async () => {

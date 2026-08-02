@@ -15,6 +15,7 @@
     <GmvCockpitBackfill
       :backfilling="backfilling"
       :backfill-label="backfillLabel"
+      :today-text="todayText"
       @backfill="$emit('backfill', $event)"
     />
     <AppleButton
@@ -35,6 +36,7 @@ import GmvCockpitBackfill from './GmvCockpitBackfill.vue';
 import AppleDatePicker from './AppleDatePicker.vue';
 defineProps<{
   kpiDate: string;
+  todayText: string;
   dataSource?: string;
   updatedAt?: string;
   backfilling: boolean;

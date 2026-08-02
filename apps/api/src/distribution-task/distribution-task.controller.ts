@@ -13,12 +13,16 @@ import {
   Post,
   Put,
   Query,
-  Req
+  Req,
+  UseGuards
 } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import type { Request } from 'express';
 import { DistributionTaskService } from './distribution-task.service';
+import { CreateTaskService } from './application/create-task.service';
+import { PublishTaskService } from './application/publish-task.service';
+import { CancelTaskService } from './application/cancel-task.service';
 import { BatchCreateTasksDto, CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { TaskQueryDto } from './dto/task-query.dto';
@@ -26,6 +30,8 @@ import { PublishTaskDto } from './dto/publish-task.dto';
 import { FailTaskDto } from './dto/fail-task.dto';
 import { CancelTaskDto, ReassignTaskDto, ScheduleTaskDto } from './dto/task-action.dto';
 import { Roles } from '../user-access/role.decorator';
+import { RequireLogin } from '../user-access/iam/route-auth.decorator';
+import { RequirePermissions } from '../user-access/iam/require-permissions.decorator';
 import { buildDataScope, isResourceInScope, resolveScopedQuery } from '../user-access/data-scope';
 import {
   assertPackageInScope,
@@ -33,6 +39,7 @@ import {
   assertUnrestrictedAnalytics
 } from '../user-access/scope-guards';
 import { PrismaService } from '../prisma/prisma.service';
+import { IdempotencyGuard } from '../idempotency/idempotency.guard';
 import { isHttpUrl, normalizeHttpUrl } from '../common/http-url';
 import { safePathId } from '../common/path-id';
 import { resolveInteractiveDateSpan } from '../common/list-date-span';
@@ -45,11 +52,15 @@ type AuthUser = {
 };
 
 @ApiTags('distribution-tasks')
+@RequireLogin()
 // Dual path: canonical /api/distribution-tasks + web client alias /api/tasks
 @Controller(['api/distribution-tasks', 'api/tasks'])
 export class DistributionTaskController {
   constructor(
     @Inject(DistributionTaskService) private readonly svc: DistributionTaskService,
+    @Inject(CreateTaskService) private readonly createSvc: CreateTaskService,
+    @Inject(PublishTaskService) private readonly publishSvc: PublishTaskService,
+    @Inject(CancelTaskService) private readonly cancelSvc: CancelTaskService,
     @Inject(PrismaService) private readonly prisma: PrismaService
   ) {}
 
@@ -83,6 +94,7 @@ export class DistributionTaskController {
   }
 
   @Roles('admin', 'platform_operator')
+  @RequirePermissions('tasks:write')
   @Throttle({ long: { limit: 30, ttl: 60000 } })
   @Post()
   @ApiOperation({ summary: 'Create distribution task' })
@@ -91,10 +103,12 @@ export class DistributionTaskController {
     if (body.fallbackPackageId) {
       await assertPackageInScope(this.prisma, body.fallbackPackageId, req);
     }
-    return this.svc.create(body);
+    return this.createSvc.create(body);
   }
 
   @Roles('admin', 'platform_operator')
+  @RequirePermissions('tasks:write')
+  @UseGuards(IdempotencyGuard)
   @Throttle({ long: { limit: 5, ttl: 60000 } })
   @Post('batch')
   @ApiOperation({ summary: 'Batch create distribution tasks' })
@@ -112,7 +126,7 @@ export class DistributionTaskController {
       if (item.fallbackPackageId) packageIds.push(item.fallbackPackageId);
     }
     await assertPackagesInScope(this.prisma, packageIds, req);
-    return this.svc.batchCreate(items);
+    return this.createSvc.batchCreate(items);
   }
 
   @Get(['kpi', 'kpis'])
@@ -156,6 +170,7 @@ export class DistributionTaskController {
   }
 
   @Roles('admin', 'platform_operator')
+  @RequirePermissions('tasks:write')
   @Throttle({ long: { limit: 40, ttl: 60000 } })
   @Patch(':id')
   @Put(':id')
@@ -179,6 +194,7 @@ export class DistributionTaskController {
   }
 
   @Roles('admin', 'platform_operator')
+  @RequirePermissions('tasks:write')
   @Throttle({ long: { limit: 20, ttl: 60000 } })
   @Delete(':id')
   @ApiOperation({ summary: 'Delete distribution task' })
@@ -191,6 +207,7 @@ export class DistributionTaskController {
   }
 
   @Roles('admin', 'platform_operator')
+  @RequirePermissions('tasks:manage')
   @Throttle({ long: { limit: 30, ttl: 60000 } })
   @Post(':id/schedule')
   @ApiOperation({
@@ -207,10 +224,11 @@ export class DistributionTaskController {
     // Residual #156/#167: full row for schedule re-check + package geo scope fold.
     const task = await this.svc.getTaskRow(safeId);
     await this.assertTaskAccess(task.packageId, req, task.packageGeo);
-    return this.svc.schedule(safeId, body.plannedAt, task);
+    return this.cancelSvc.schedule(safeId, body.plannedAt, task);
   }
 
   @Roles('admin', 'platform_operator')
+  @RequirePermissions('tasks:manage')
   @Throttle({ long: { limit: 30, ttl: 60000 } })
   @Post(':id/complete')
   @ApiOperation({
@@ -222,10 +240,12 @@ export class DistributionTaskController {
     // Residual #151/#160: packageId+status+geo probe (scope + transition gate).
     const access = await this.svc.getTaskAccessMeta(safeId);
     await this.assertTaskAccess(access.packageId, req, access.packageGeo);
-    return this.svc.complete(safeId, access.status);
+    return this.cancelSvc.complete(safeId, access.status);
   }
 
   @Roles('admin', 'platform_operator')
+  @RequirePermissions('tasks:publish')
+  @UseGuards(IdempotencyGuard)
   @Throttle({ long: { limit: 30, ttl: 60000 } })
   @Post(':id/publish')
   @ApiOperation({
@@ -243,12 +263,11 @@ export class DistributionTaskController {
     await this.assertTaskAccess(task.packageId, req, task.packageGeo);
     this.assertEvidenceUrl(body.evidenceUrl);
     const actor = req.user as AuthUser | undefined;
-    return this.svc.publish(
+    return this.publishSvc.publish(
       safeId,
       {
         ...body,
         evidenceUrl: normalizeHttpUrl(body.evidenceUrl),
-        // Stamp operator from JWT only; never accept free-form body.operatorId/Name.
         operatorId: actor?.userId,
         operatorName: actor?.username ?? actor?.userId
       },
@@ -257,6 +276,7 @@ export class DistributionTaskController {
   }
 
   @Roles('admin', 'platform_operator')
+  @RequirePermissions('tasks:manage')
   @Throttle({ long: { limit: 30, ttl: 60000 } })
   @Post(':id/fail')
   @ApiOperation({
@@ -274,7 +294,7 @@ export class DistributionTaskController {
     await this.assertTaskAccess(access.packageId, req, access.packageGeo);
     this.assertEvidenceUrl(body.evidenceUrl);
     const actor = req.user as AuthUser | undefined;
-    return this.svc.fail(
+    return this.publishSvc.fail(
       safeId,
       {
         ...body,
@@ -287,6 +307,7 @@ export class DistributionTaskController {
   }
 
   @Roles('admin', 'platform_operator')
+  @RequirePermissions('tasks:manage')
   @Throttle({ long: { limit: 30, ttl: 60000 } })
   @Post(':id/cancel')
   @ApiOperation({ summary: 'Cancel task', description: 'Cancel with optional reason' })
@@ -299,10 +320,11 @@ export class DistributionTaskController {
     // Residual #151/#160: packageId+status+geo probe (scope + transition gate).
     const access = await this.svc.getTaskAccessMeta(safeId);
     await this.assertTaskAccess(access.packageId, req, access.packageGeo);
-    return this.svc.cancel(safeId, body?.reason, access.status);
+    return this.cancelSvc.cancel(safeId, body?.reason, access.status);
   }
 
   @Roles('admin', 'platform_operator')
+  @RequirePermissions('tasks:manage')
   @Throttle({ long: { limit: 30, ttl: 60000 } })
   @Post(':id/reassign')
   @ApiOperation({ summary: 'Reassign task', description: 'Change assignee' })
@@ -315,7 +337,7 @@ export class DistributionTaskController {
     // Residual #151/#160: packageId+status+geo probe (scope + terminal gate).
     const access = await this.svc.getTaskAccessMeta(safeId);
     await this.assertTaskAccess(access.packageId, req, access.packageGeo);
-    return this.svc.reassign(safeId, body.assigneeId, body.assigneeName, access.status);
+    return this.cancelSvc.reassign(safeId, body.assigneeId, body.assigneeName, access.status);
   }
 
   @Get(':id/performance')

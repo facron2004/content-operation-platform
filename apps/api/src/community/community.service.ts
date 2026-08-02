@@ -585,8 +585,8 @@ export class CommunityService {
       createdEnd
     );
 
-    const gmvRow = await this.prisma.$queryRawUnsafe<[{ totalGmv: number }]>(
-      `SELECT COALESCE(SUM("gmv"), 0) as totalGmv
+    const gmvRow = await this.prisma.$queryRawUnsafe<[{ totalGmvFen: bigint | number | null }]>(
+      `SELECT COALESCE(SUM("gmvFen"), 0) as totalGmvFen
        FROM "TaskPerformanceDaily"
        WHERE "taskId" IN (
          SELECT "taskId" FROM "DistributionTask"
@@ -605,7 +605,7 @@ export class CommunityService {
       totalTasks: Number(rows[0].totalTasks),
       completedTasks: Number(rows[0].completedTasks),
       failedTasks: Number(rows[0].failedTasks),
-      totalGmv: Number(gmvRow[0].totalGmv),
+      totalGmv: Number(gmvRow[0]?.totalGmvFen ?? 0) / 100,
       dateFrom,
       dateTo
     };

@@ -171,6 +171,39 @@ export class AuditLogService {
     return this.mapRow(rows[0]);
   }
 
+  /**
+   * Get audit log trajectory history for a specific entity.
+   */
+  async listByEntity(objectType: string, objectId: string, page = 1, pageSize = 20) {
+    const p = clampListPage(page, 100);
+    const ps = clampListPageSize(pageSize);
+    const offset = (p - 1) * ps;
+
+    const countRows = await this.prisma.$queryRawUnsafe<[{ count: number }]>(
+      `SELECT COUNT(*) as count FROM "OperationAuditLog" WHERE "objectType" = ? AND "objectId" = ?`,
+      objectType,
+      objectId
+    );
+    const total = Number(countRows[0]?.count ?? 0);
+
+    const rows = await this.prisma.$queryRawUnsafe<AuditLogRow[]>(
+      `SELECT ${AUDIT_LOG_ROW_COLUMNS} FROM "OperationAuditLog"
+       WHERE "objectType" = ? AND "objectId" = ?
+       ORDER BY "createdAt" DESC LIMIT ? OFFSET ?`,
+      objectType,
+      objectId,
+      ps,
+      offset
+    );
+
+    return {
+      data: rows.map(this.mapRow),
+      total,
+      page: p,
+      pageSize: ps
+    };
+  }
+
   private mapRow(row: AuditLogRow) {
     return {
       logId: row.logId,

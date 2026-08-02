@@ -1,6 +1,6 @@
 {
   "name": "content-ops-ai-mvp",
-  "version": "0.10.0",
+  "version": "0.10.1",
   "description": "内容运营平台桌面客户端",
   "author": "Content Ops Team",
   "private": true,
@@ -8,7 +8,7 @@
     "node": ">=20.0.0 <23",
     "npm": ">=10.0.0"
   },
-  "main": "electron/main.js",
+  "main": "apps/desktop/dist/main.js",
   "workspaces": [
     "apps/*",
     "packages/*"
@@ -20,7 +20,14 @@
     "dev:clean": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/start-dev.ps1",
     "dev:api:keepalive": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/keepalive-api.ps1",
     "build": "npm run build -w @content/shared && npm run build -w @content/api && npm run build -w @content/web",
-    "build:exe": "npm run build && node scripts/package-exe.js",
+    "build:shared": "npm run build -w @content/shared",
+    "build:api": "npm run build -w @content/api",
+    "build:web": "npm run build -w @content/web",
+    "build:desktop": "tsc -p apps/desktop/tsconfig.json",
+    "build:exe": "node scripts/package-exe.js",
+    "package:prepare": "node scripts/prepare-api-runtime.js",
+    "package:verify": "node scripts/verify-package.js",
+    "package:exe": "node scripts/package-exe.js",
     "test": "npm run test -w @content/api && npm run test -w @content/web",
     "test:coverage": "npm run test -w @content/api -- --coverage && npm run test -w @content/web -- --coverage",
     "test:perf": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/test-performance.ps1",
@@ -33,6 +40,7 @@
     "db:purge-mock": "tsx scripts/purge-mock-data.ts",
     "db:reconcile": "tsx scripts/reconcile-money-fen.ts",
     "db:reconcile:fix": "tsx scripts/reconcile-money-fen.ts --fix",
+    "iam:backfill:report": "tsx scripts/iam-backfill-report.ts",
     "prepare:db": "npm run db:migrate",
     "check:schema": "tsx scripts/check-schema.ts",
     "check:integrity": "node scripts/check-source-integrity.mjs",
@@ -81,10 +89,7 @@
     "unplugin-auto-import": "^21.0.0",
     "unplugin-vue-components": "^32.1.0",
     "vitest": "^3.0.0",
-    "vue-eslint-parser": "^9.0.0"
-  },
-  "prisma": {},
-  "dependencies": {
+    "vue-eslint-parser": "^9.0.0",
     "@libsql/client": "0.17.4",
     "@prisma/adapter-libsql": "6.19.3",
     "@prisma/client": "6.19.3",

@@ -6,12 +6,12 @@
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 16px;
-  padding: 20px;
+  gap: 12px;
+  padding: 12px 14px;
   border-radius: var(--radius-lg);
   background:
-    radial-gradient(circle at top right, rgba(37, 99, 235, 0.08), transparent 30%),
-    linear-gradient(180deg, #ffffff 0%, #fbfcfe 100%);
+    radial-gradient(circle at top right, rgba(var(--accent-rgb), 0.07), transparent 30%),
+    var(--panel);
 }
 
 .hero-copy-block {

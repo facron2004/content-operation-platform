@@ -6,6 +6,7 @@ import { Roles } from '../user-access/role.decorator';
 import { AuditLogService } from './audit-log.service';
 import { AuditLogQueryDto } from './dto/audit-log-query.dto';
 import { safePathId } from '../common/path-id';
+import { RequirePermissions } from '../user-access/iam/require-permissions.decorator';
 
 @ApiTags('audit-logs')
 @Controller('api/audit-logs')
@@ -15,6 +16,7 @@ export class AuditLogController {
   constructor(@Inject(AuditLogService) private readonly auditLogService: AuditLogService) {}
 
   @Roles('admin', 'platform_operator', 'auditor')
+  @RequirePermissions('audit:read')
   // COUNT + ORDER BY over OperationAuditLog — throttle concurrent tab fans.
   @Throttle({ long: { limit: 30, ttl: 60000 } })
   @Get()
@@ -32,6 +34,26 @@ export class AuditLogController {
   }
 
   @Roles('admin', 'platform_operator', 'auditor')
+  @RequirePermissions('audit:read')
+  @Throttle({ long: { limit: 60, ttl: 60000 } })
+  @Get('entity/:objectType/:objectId')
+  @ApiOperation({ summary: 'Audit trajectory history for a specific entity' })
+  getEntityTrajectory(
+    @Param('objectType') objectType: string,
+    @Param('objectId') objectId: string,
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string
+  ) {
+    return this.auditLogService.listByEntity(
+      objectType,
+      safePathId(objectId),
+      page ? parseInt(page, 10) : 1,
+      pageSize ? parseInt(pageSize, 10) : 20
+    );
+  }
+
+  @Roles('admin', 'platform_operator', 'auditor')
+  @RequirePermissions('audit:read')
   @Throttle({ long: { limit: 60, ttl: 60000 } })
   @Get(':id')
   @ApiOperation({ summary: 'Single audit log detail' })

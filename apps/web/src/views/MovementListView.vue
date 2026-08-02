@@ -101,4 +101,5 @@ const {
   setDays: setTimelineDays
 } = useMovementTimeline();
 </script>
-<style src="../styles/views/movement-list.css" scoped></style>
+<!-- This page stylesheet is prefixed with .movement so it can reach child component internals. -->
+<style src="../styles/views/movement-list.css"></style>

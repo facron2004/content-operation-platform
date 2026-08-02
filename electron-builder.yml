@@ -1,0 +1,71 @@
+appId: com.contentoperations.desktop
+productName: 内容运营中台
+
+directories:
+  output: release
+  buildResources: resources
+
+files:
+  - apps/desktop/dist/**/*
+  - apps/desktop/package.json
+  - package.json
+  - "!**/*.map"
+  - "!**/*.ts"
+  - "!**/test/**"
+  - "!**/*.spec.*"
+
+extraResources:
+  - from: staging/api
+    to: api
+    filter:
+      - "**/*"
+
+  - from: apps/web/dist
+    to: web
+    filter:
+      - "**/*"
+
+  - from: prisma/migrations
+    to: prisma/migrations
+    filter:
+      - "**/*"
+
+  - from: prisma/schema.prisma
+    to: prisma/schema.prisma
+
+  - from: resources/loading.html
+    to: loading.html
+
+  - from: resources/error.html
+    to: error.html
+
+asar: true
+
+asarUnpack:
+  - "**/*.node"
+  - "**/.prisma/**"
+  - "**/@prisma/engines/**"
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: resources/icon.png
+  artifactName: "${productName}-Setup-${version}-${arch}.${ext}"
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowElevation: true
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: 内容运营中台
+  uninstallDisplayName: 内容运营中台
+  deleteAppDataOnUninstall: false
+  runAfterFinish: true
+
+compression: normal
+npmRebuild: false
+nodeGypRebuild: false

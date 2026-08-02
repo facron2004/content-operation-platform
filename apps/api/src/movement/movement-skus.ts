@@ -19,7 +19,7 @@ const ACTIVE_SKU_SELECT_SQL = `
   cp."merchantName" AS "merchantName",
   cp."areaName" AS "areaName",
   cp."category" AS "category",
-  cp."salePrice" AS "salePrice",
+  cp."salePriceFen" AS "salePriceFen",
   cp."stockLeft" AS "stockLeft",
   cp."stockTotal" AS "stockTotal"
 `;
@@ -173,14 +173,14 @@ export async function loadRecentSalesByPackage(prisma: PrismaService, filterPack
   const recentRows = await queryInChunks(filterPackageIds, async (chunk) => {
     const placeholders = chunk.map(() => '?').join(',');
     return (await prisma.$queryRawUnsafe(
-      `SELECT "packageId", COALESCE(SUM("salesQty"), 0) AS "salesQty", COALESCE(SUM("salesAmount"), 0) AS "salesAmount", MAX("date") AS "lastSalesDate" FROM "PackageSalesDaily" WHERE "salesQty" > 0 AND "date" >= ? AND "date" <= ? AND "packageId" IN (${placeholders}) GROUP BY "packageId"`,
+      `SELECT "packageId", COALESCE(SUM("salesQty"), 0) AS "salesQty", COALESCE(SUM("salesAmountFen"), 0) AS "salesAmountFen", MAX("date") AS "lastSalesDate" FROM "PackageSalesDaily" WHERE "salesQty" > 0 AND "date" >= ? AND "date" <= ? AND "packageId" IN (${placeholders}) GROUP BY "packageId"`,
       start,
       today,
       ...chunk
     )) as Array<{
       packageId: string;
       salesQty: number;
-      salesAmount: number;
+      salesAmountFen: bigint | null;
       lastSalesDate: string | null;
     }>;
   });
@@ -190,7 +190,10 @@ export async function loadRecentSalesByPackage(prisma: PrismaService, filterPack
 export function mapMovementSkuRows(
   filterPackageIds: string[],
   candidateMap: Map<string, ActiveSkuCandidate>,
-  recentMap: Map<string, { salesQty: number; salesAmount: number; lastSalesDate: string | null }>,
+  recentMap: Map<
+    string,
+    { salesQty: number; salesAmountFen: bigint | null; lastSalesDate: string | null }
+  >,
   today: string
 ): MovementSkuRow[] {
   return filterPackageIds.map((pkgId) => {
@@ -205,14 +208,14 @@ export function mapMovementSkuRows(
       merchantName: c.merchantName,
       areaName: c.areaName,
       category: c.category,
-      salePrice: Number(c.salePrice),
+      salePrice: Number(c.salePriceFen ?? 0) / 100,
       stockLeft: Number(c.stockLeft),
       stockTotal: Number(c.stockTotal),
       lastSalesDate: last,
       daysSinceLastSale: days,
       staleBucket: staleBucketFromDays(days),
       recent30dSalesQty: Number(r?.salesQty ?? 0),
-      recent30dSalesAmount: Number(r?.salesAmount ?? 0)
+      recent30dSalesAmount: Number(r?.salesAmountFen ?? 0) / 100
     };
   });
 }

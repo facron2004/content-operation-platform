@@ -4,7 +4,7 @@ export type MoneyDataSource = 'OrderHeader' | 'DailyMetrics' | 'empty';
 
 export type MoneyDayTotals = {
   date: string;
-  totalGmv: number;
+  totalGmvFen: bigint | null;
   paidOrderCount: number;
   dataSource: MoneyDataSource;
   emptyReason?: string;
@@ -16,18 +16,18 @@ export type MoneyPrisma = {
     findUnique: (args: {
       where: { date: string };
       select?: {
-        totalGmv?: boolean;
+        totalGmvFen?: boolean;
         paidOrderCount?: boolean;
         date?: boolean;
-        gmvOnline?: boolean;
-        gmvWallet?: boolean;
+        gmvOnlineFen?: boolean;
+        gmvWalletFen?: boolean;
       };
     }) => Promise<{
       date?: string;
-      totalGmv: number;
+      totalGmvFen: bigint | null;
       paidOrderCount: number;
-      gmvOnline?: number;
-      gmvWallet?: number;
+      gmvOnlineFen?: bigint | null;
+      gmvWalletFen?: bigint | null;
     } | null>;
   };
 };

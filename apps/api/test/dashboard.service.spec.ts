@@ -86,7 +86,7 @@ const mockPrisma = {
       clickCount: 0,
       orderCount: 0,
       verifyCount: 0,
-      gmv: 0
+      gmvFen: 0n
     }
   ])
 };
@@ -117,7 +117,7 @@ describe('DashboardService', () => {
     mockPrisma.generatedCopy.findMany.mockResolvedValue([]);
     mockPrisma.copyPerformance.findMany.mockResolvedValue([]);
     mockPrisma.$queryRawUnsafe.mockResolvedValue([
-      { exposureCount: 0, clickCount: 0, orderCount: 0, verifyCount: 0, gmv: 0 }
+      { exposureCount: 0, clickCount: 0, orderCount: 0, verifyCount: 0, gmvFen: 0n }
     ]);
 
     const module: TestingModule = await Test.createTestingModule({
@@ -281,7 +281,7 @@ describe('DashboardService', () => {
             clickCount: 800,
             orderCount: 200,
             verifyCount: 150,
-            gmv: 19800.5
+            gmvFen: 1_980_050n
           }
         ]);
 
@@ -300,11 +300,16 @@ describe('DashboardService', () => {
     });
 
     it('returns zero conversion rate when clickCount is zero', async () => {
-      mockPrisma.$queryRawUnsafe
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([
-          { rowCount: 0, exposureCount: 0, clickCount: 0, orderCount: 0, verifyCount: 0, gmv: 0 }
-        ]);
+      mockPrisma.$queryRawUnsafe.mockResolvedValueOnce([]).mockResolvedValueOnce([
+        {
+          rowCount: 0,
+          exposureCount: 0,
+          clickCount: 0,
+          orderCount: 0,
+          verifyCount: 0,
+          gmvFen: 0n
+        }
+      ]);
 
       const result = await service.getDashboardSummary(vi.fn().mockResolvedValue({ packages: [] }));
 
@@ -315,11 +320,16 @@ describe('DashboardService', () => {
     it('caps CopyPerformance SUM to trailing 90d (date params on createdAt)', async () => {
       vi.useFakeTimers();
       vi.setSystemTime(new Date('2026-07-18T12:00:00+08:00'));
-      mockPrisma.$queryRawUnsafe
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([
-          { rowCount: 1, exposureCount: 1, clickCount: 1, orderCount: 0, verifyCount: 0, gmv: 0 }
-        ]);
+      mockPrisma.$queryRawUnsafe.mockResolvedValueOnce([]).mockResolvedValueOnce([
+        {
+          rowCount: 1,
+          exposureCount: 1,
+          clickCount: 1,
+          orderCount: 0,
+          verifyCount: 0,
+          gmvFen: 0n
+        }
+      ]);
 
       await service.getDashboardSummary(vi.fn().mockResolvedValue({ packages: [] }));
 
@@ -338,11 +348,16 @@ describe('DashboardService', () => {
     it('scopes platform COUNTs to trailing 90d createdAt window', async () => {
       vi.useFakeTimers();
       vi.setSystemTime(new Date('2026-07-18T12:00:00+08:00'));
-      mockPrisma.$queryRawUnsafe
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([
-          { rowCount: 0, exposureCount: 0, clickCount: 0, orderCount: 0, verifyCount: 0, gmv: 0 }
-        ]);
+      mockPrisma.$queryRawUnsafe.mockResolvedValueOnce([]).mockResolvedValueOnce([
+        {
+          rowCount: 0,
+          exposureCount: 0,
+          clickCount: 0,
+          orderCount: 0,
+          verifyCount: 0,
+          gmvFen: 0n
+        }
+      ]);
 
       await service.getDashboardSummary(vi.fn().mockResolvedValue({ packages: [] }));
 

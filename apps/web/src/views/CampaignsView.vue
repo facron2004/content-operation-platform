@@ -65,7 +65,6 @@ const {
   handlePause,
   handleComplete,
   handleCancel,
-  updateFilter,
   // Residual #276
   windowLabel
 } = useCampaigns();
@@ -78,7 +77,7 @@ function handleSearch() {
   refresh();
 }
 
-function handleView(campaign: MarketingCampaign) {
+function handleView(_campaign: MarketingCampaign) {
   // Router navigation handled via router-link in the table
 }
 
@@ -89,7 +88,7 @@ function handleEdit(campaign: MarketingCampaign) {
 
 <style scoped>
 .campaigns-page {
-  padding: 20px;
+  padding: 0;
 }
 
 .page-header {

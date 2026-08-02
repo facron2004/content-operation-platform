@@ -36,6 +36,8 @@ export interface TaskRow {
   updatedAt: string;
 }
 
+// Residual #177: client idempotency keys are write-only (create path) and are
+// intentionally excluded from every detail projection.
 export function parseTask(row: TaskRow, opts?: { includeTrackingCode?: boolean }) {
   // Default OFF: list/read must not leak live tracking codes. Opt in only for
   // publish/owner responses that need the short link.
@@ -62,8 +64,6 @@ export function parseTask(row: TaskRow, opts?: { includeTrackingCode?: boolean }
     assigneeName: row.assigneeName ?? undefined,
     riskLevel: row.riskLevel ?? undefined,
     fallbackPackageId: row.fallbackPackageId ?? undefined,
-    // Residual #177: client idempotency keys are write-only (create path) —
-    // never emit on list/detail/status-mutate responses.
     createdAt: row.createdAt,
     updatedAt: row.updatedAt
   };
@@ -88,6 +88,22 @@ export const TASK_LIST_ROW_COLUMNS = `"taskId", "campaignId", "contentId", "grou
   "plannedAt", "publishedAt", "completedAt", "cancelReason", "assigneeId",
   "assigneeName", "riskLevel", "fallbackPackageId",
   "createdAt", "updatedAt"`;
+
+/** Full detail columns, excluding the write-only client idempotency key. */
+const TASK_ROW_COLUMNS = `"taskId", "campaignId", "contentId", "groupId", "packageId",
+  "channel", "title", "body", "cta", "trackingCode", "status", "priority",
+  "plannedAt", "publishedAt", "completedAt", "cancelReason", "assigneeId",
+  "assigneeName", "riskLevel", "fallbackPackageId",
+  "createdAt", "updatedAt"`;
+
+/** JOIN-safe full detail projection for the package geography probe. */
+const TASK_ROW_SELECT_T = `t."taskId", t."campaignId", t."contentId", t."groupId", t."packageId",
+  t."channel", t."title", t."body", t."cta", t."trackingCode", t."status", t."priority",
+  t."plannedAt", t."publishedAt", t."completedAt", t."cancelReason", t."assigneeId",
+  t."assigneeName", t."riskLevel", t."fallbackPackageId",
+  t."createdAt", t."updatedAt"`;
+
+export { TASK_ROW_COLUMNS };
 
 /**
  * Residual #146: status/assignee mutators only change status timestamps / assignee /
@@ -247,8 +263,8 @@ export async function getTaskKpi(prisma: PrismaQuery) {
     beijingDayRangeSqlite(today).end
   );
 
-  const gmvResult = await prisma.$queryRawUnsafe<[{ todayTaskGmv: number }]>(
-    `SELECT COALESCE(SUM("gmv"), 0) as todayTaskGmv
+  const gmvResult = await prisma.$queryRawUnsafe<[{ todayTaskGmvFen: bigint | number | null }]>(
+    `SELECT COALESCE(SUM("gmvFen"), 0) as todayTaskGmvFen
      FROM "TaskPerformanceDaily"
      WHERE "date" = ?`,
     today
@@ -260,7 +276,7 @@ export async function getTaskKpi(prisma: PrismaQuery) {
     completed: Number(results[0].completed),
     overdue: Number(results[0].overdue),
     failed: Number(results[0].failed),
-    todayTaskGmv: Number(gmvResult[0].todayTaskGmv)
+    todayTaskGmv: Number(gmvResult[0]?.todayTaskGmvFen ?? 0) / 100
   };
 }
 
@@ -275,7 +291,7 @@ export async function getTaskPerformance(prisma: PrismaQuery, taskId: string) {
       {
         visitCount: number;
         orderCount: number;
-        gmv: number;
+        gmvFen: bigint | number | null;
         verifyCount: number;
         refundCount: number;
         conversionRate: number;
@@ -285,7 +301,7 @@ export async function getTaskPerformance(prisma: PrismaQuery, taskId: string) {
     `SELECT
        COALESCE(SUM("visitCount"), 0) as visitCount,
        COALESCE(SUM("orderCount"), 0) as orderCount,
-       COALESCE(SUM("gmv"), 0) as gmv,
+       COALESCE(SUM("gmvFen"), 0) as gmvFen,
        COALESCE(SUM("verifyCount"), 0) as verifyCount,
        COALESCE(SUM("refundCount"), 0) as refundCount,
        COALESCE(AVG("conversionRate"), 0) as conversionRate
@@ -300,7 +316,7 @@ export async function getTaskPerformance(prisma: PrismaQuery, taskId: string) {
   const r = perfRows[0];
   const visits = Number(r.visitCount);
   const orders = Number(r.orderCount);
-  const gmv = Number(r.gmv);
+  const gmv = Number(r.gmvFen ?? 0) / 100;
   const verifyCount = Number(r.verifyCount);
   const refundCount = Number(r.refundCount);
 
@@ -316,58 +332,35 @@ export async function getTaskPerformance(prisma: PrismaQuery, taskId: string) {
   };
 }
 
-/**
- * Full row for detail/publish pre-load (includes free-form body/cta + trackingCode).
- * Residual #177: omit client idempotencyKey (write-only; not for GET responses).
- */
-const TASK_ROW_COLUMNS = `"taskId", "campaignId", "contentId", "groupId", "packageId",
-  "channel", "title", "body", "cta", "trackingCode", "status", "priority",
-  "plannedAt", "publishedAt", "completedAt", "cancelReason", "assigneeId",
-  "assigneeName", "riskLevel", "fallbackPackageId",
-  "createdAt", "updatedAt"`;
-
-/** Prefixed full-row columns for JOIN-safe detail SELECTs (Residual #167). */
-const TASK_ROW_SELECT_T = `t."taskId", t."campaignId", t."contentId", t."groupId", t."packageId",
-  t."channel", t."title", t."body", t."cta", t."trackingCode", t."status", t."priority",
-  t."plannedAt", t."publishedAt", t."completedAt", t."cancelReason", t."assigneeId",
-  t."assigneeName", t."riskLevel", t."fallbackPackageId",
-  t."createdAt", t."updatedAt"`;
-
-export { TASK_ROW_COLUMNS };
-
-export type TaskPackageGeo = { areaId: string | null; merchantId: string | null } | null;
-
-/**
- * Residual #167: full task row + package geo via LEFT JOIN so controller
- * assertTaskAccess skips a ContentPackage re-SELECT on detail/schedule/publish.
- * packageGeo === null means dangling package FK (parity with access meta probes).
- */
 export async function findTaskRow(
   prisma: PrismaQuery,
-  id: string
-): Promise<(TaskRow & { packageGeo: TaskPackageGeo }) | null> {
-  // Explicit columns — never SELECT * so future sensitive cols are opt-in.
+  taskId: string
+): Promise<
+  (TaskRow & { packageGeo?: { areaId: string | null; merchantId: string | null } | null }) | null
+> {
   const rows = await prisma.$queryRawUnsafe<
     Array<
       TaskRow & {
-        areaId: string | null;
-        merchantId: string | null;
         pkgKey: string | null;
+        packageAreaId: string | null;
+        packageMerchantId: string | null;
       }
     >
   >(
     `SELECT ${TASK_ROW_SELECT_T},
-            p."areaId" AS "areaId", p."merchantId" AS "merchantId", p."packageId" AS "pkgKey"
+            cp."packageId" AS "pkgKey",
+            cp."areaId" AS "packageAreaId",
+            cp."merchantId" AS "packageMerchantId"
      FROM "DistributionTask" t
-     LEFT JOIN "ContentPackage" p ON p."packageId" = t."packageId"
+     LEFT JOIN "ContentPackage" cp ON cp."packageId" = t."packageId"
      WHERE t."taskId" = ?`,
-    id
+    taskId
   );
   const row = rows[0];
   if (!row) return null;
-  const { areaId, merchantId, pkgKey, ...task } = row;
+  const { pkgKey, packageAreaId, packageMerchantId, ...task } = row;
   return {
-    ...(task as TaskRow),
-    packageGeo: pkgKey == null ? null : { areaId, merchantId }
+    ...task,
+    packageGeo: pkgKey ? { areaId: packageAreaId, merchantId: packageMerchantId } : null
   };
 }

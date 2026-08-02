@@ -147,8 +147,11 @@ const props = withDefaults(
     disabledDate?: (date: Date) => boolean;
   }>(),
   {
+    start: undefined,
+    end: undefined,
     placeholder: '开始日期  →  结束日期',
-    disabled: false
+    disabled: false,
+    disabledDate: () => false
   }
 );
 
@@ -427,10 +430,10 @@ onBeforeUnmount(() => {
   min-width: 240px;
   max-width: 100%;
   padding: 7px 12px 7px 12px;
-  border: 1px solid rgba(60, 60, 67, 0.12);
+  border: 1px solid var(--line);
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.92);
-  color: #1d1d1f;
+  background: var(--panel);
+  color: var(--ink);
   font-size: 13px;
   font-weight: 500;
   line-height: 1.35;
@@ -447,8 +450,8 @@ onBeforeUnmount(() => {
 }
 
 .apple-range-trigger:hover {
-  border-color: rgba(60, 60, 67, 0.22);
-  background: #fff;
+  border-color: var(--line-strong);
+  background: var(--soft-strong);
 }
 
 .apple-range-trigger:focus-visible {
@@ -458,19 +461,19 @@ onBeforeUnmount(() => {
 
 .apple-range-trigger:active {
   transform: scale(0.985);
-  background: #f5f5f7;
+  background: var(--soft);
 }
 
 .apple-range-icon {
   flex-shrink: 0;
-  color: #86868b;
+  color: var(--muted);
 }
 
 .apple-range-value {
   flex: 1;
   min-width: 0;
   text-align: left;
-  color: #1d1d1f;
+  color: var(--ink);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -479,13 +482,13 @@ onBeforeUnmount(() => {
 }
 
 .apple-range-value.is-placeholder {
-  color: #86868b;
+  color: var(--muted);
   font-weight: 400;
 }
 
 .apple-range-chevron {
   flex-shrink: 0;
-  color: #aeaeb2;
+  color: var(--muted-subtle);
 }
 
 .apple-range-overlay {
@@ -499,13 +502,13 @@ onBeforeUnmount(() => {
   z-index: 1000;
   width: 300px;
   padding: 14px 14px 12px;
-  background: rgba(255, 255, 255, 0.86);
-  border: 0.5px solid rgba(60, 60, 67, 0.1);
+  background: var(--panel-translucent);
+  border: 0.5px solid var(--line);
   border-radius: 18px;
   box-shadow:
     0 18px 48px rgba(0, 0, 0, 0.12),
     0 2px 8px rgba(0, 0, 0, 0.04),
-    inset 0 0 0 0.5px rgba(255, 255, 255, 0.7);
+    inset 0 0 0 0.5px color-mix(in srgb, var(--line) 50%, transparent);
   backdrop-filter: blur(40px) saturate(160%);
   -webkit-backdrop-filter: blur(40px) saturate(160%);
   animation: apple-range-in 0.18s cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -536,7 +539,7 @@ onBeforeUnmount(() => {
 .apple-range-title {
   font-size: 15px;
   font-weight: 600;
-  color: #1d1d1f;
+  color: var(--ink);
   letter-spacing: -0.01em;
 }
 
@@ -549,7 +552,7 @@ onBeforeUnmount(() => {
   border-radius: 999px;
   border: none;
   background: rgba(120, 120, 128, 0.1);
-  color: #1d1d1f;
+  color: var(--ink);
   cursor: pointer;
   transition:
     background 0.15s ease,
@@ -575,7 +578,7 @@ onBeforeUnmount(() => {
 .apple-range-weekdays span {
   font-size: 11px;
   font-weight: 600;
-  color: #86868b;
+  color: var(--muted);
   line-height: 28px;
   letter-spacing: 0.02em;
 }
@@ -616,7 +619,7 @@ onBeforeUnmount(() => {
   border-radius: 999px;
   font-size: 13px;
   font-weight: 400;
-  color: #1d1d1f;
+  color: var(--ink);
   line-height: 1;
   transition:
     background 0.12s ease,
@@ -687,7 +690,7 @@ onBeforeUnmount(() => {
 }
 
 .apple-range-cell.is-outside .apple-range-day-num {
-  color: #c7c7cc;
+  color: var(--muted-subtle);
 }
 
 .apple-range-cell.is-disabled {
@@ -709,13 +712,13 @@ onBeforeUnmount(() => {
   gap: 10px;
   margin-top: 12px;
   padding-top: 10px;
-  border-top: 0.5px solid rgba(60, 60, 67, 0.1);
+  border-top: 0.5px solid var(--line);
 }
 
 .apple-range-hint {
   min-width: 0;
   flex: 1;
-  color: #86868b;
+  color: var(--muted);
   font-size: 11px;
   font-weight: 500;
   line-height: 1.3;
@@ -749,7 +752,7 @@ onBeforeUnmount(() => {
 
 .apple-range-ghost {
   background: rgba(120, 120, 128, 0.12);
-  color: #1d1d1f;
+  color: var(--ink);
 }
 
 .apple-range-ghost:hover {

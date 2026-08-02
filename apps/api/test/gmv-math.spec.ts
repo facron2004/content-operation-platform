@@ -3,8 +3,8 @@ import { gmvFromParts, rateAgainstGmv, SQL_GMV_OH, SQL_GMV_SS } from '../src/com
 
 describe('gmv-math', () => {
   it('sums online + wallet only', () => {
-    expect(gmvFromParts(100, 20)).toBe(120);
-    expect(gmvFromParts(0, 0)).toBe(0);
+    expect(gmvFromParts(100n, 20n)).toBe(120n);
+    expect(gmvFromParts(0n, 0n)).toBe(0n);
   });
 
   it('rates amount against gmv via safeRatio', () => {

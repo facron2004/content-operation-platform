@@ -1,5 +1,5 @@
 .overview {
-  gap: 12px;
+  gap: var(--page-gap);
 }
 
 .overview-hero {
@@ -7,11 +7,11 @@
   align-items: stretch;
   justify-content: space-between;
   gap: 14px;
-  padding: 14px 16px;
+  padding: 12px 14px;
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
   background:
-    radial-gradient(circle at top right, rgba(37, 99, 235, 0.08), transparent 32%),
+    radial-gradient(circle at top right, rgba(var(--accent-rgb), 0.07), transparent 32%),
     linear-gradient(180deg, var(--panel) 0%, var(--soft) 100%);
   box-shadow: var(--shadow-soft);
 }
@@ -57,7 +57,7 @@
 }
 
 .chart-card {
-  padding: 14px 16px;
+  padding: 12px 14px;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -77,11 +77,11 @@
 }
 
 .chart-card :deep(.chart-shell) {
-  min-height: 240px;
+  min-height: 220px;
 }
 
 .top-offenders {
-  padding: 14px 16px;
+  padding: 12px 14px;
 }
 
 .top-offenders header {

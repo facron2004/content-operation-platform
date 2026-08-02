@@ -224,10 +224,7 @@ export class ContentService implements OnModuleInit, OnModuleDestroy {
     for (let i = 0; i < pkgs.length; i += BATCH) {
       const batch = pkgs.slice(i, i + BATCH);
       const vc = batch
-        .map(
-          () =>
-            '(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
-        )
+        .map(() => '(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
         .join(',');
       const now = toSqliteDateTime();
       const params = batch.flatMap((p) => [
@@ -239,14 +236,10 @@ export class ContentService implements OnModuleInit, OnModuleDestroy {
         p.areaId,
         p.areaName,
         p.category,
-        p.originalPrice,
         yuanToFen(p.originalPrice),
-        p.salePrice,
         yuanToFen(p.salePrice),
-        p.welfarePrice ?? null,
         yuanToFen(p.welfarePrice ?? null),
         p.commissionRate,
-        p.grossProfit,
         yuanToFen(p.grossProfit),
         p.stockTotal,
         p.stockLeft,
@@ -271,9 +264,9 @@ export class ContentService implements OnModuleInit, OnModuleDestroy {
           `INSERT INTO "ContentPackage" (
             "packageId","packageName","packageType","merchantId","merchantName",
             "areaId","areaName","category",
-            "originalPrice","originalPriceFen","salePrice","salePriceFen",
-            "welfarePrice","welfarePriceFen","commissionRate",
-            "grossProfit","grossProfitFen","stockTotal","stockLeft",
+            "originalPriceFen","salePriceFen",
+            "welfarePriceFen","commissionRate",
+            "grossProfitFen","stockTotal","stockLeft",
             "startTime","endTime","useRules","sellingPoints",
             "miniProgramPath","detailSummary","saleStatus","merchantCooperationScore",
             "areaMatchScore","timeMatchScore","historyScore",
@@ -309,7 +302,7 @@ export class ContentService implements OnModuleInit, OnModuleDestroy {
               ) THEN "ContentPackage"."areaName"
               ELSE excluded."areaName"
             END,
-            "category"=excluded."category","salePrice"=excluded."salePrice",
+            "category"=excluded."category","salePriceFen"=excluded."salePriceFen",
             "salePriceFen"=excluded."salePriceFen",
             "stockLeft"=excluded."stockLeft","saleStatus"=excluded."saleStatus",
             "shopId"=COALESCE(NULLIF(excluded."shopId",''),"ContentPackage"."shopId"),

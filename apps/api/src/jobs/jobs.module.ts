@@ -11,10 +11,15 @@ import { OverdueTaskJob } from './overdue-task.job';
 import { PerformanceAggregationJob } from './performance-aggregation.job';
 import { TaskPerformanceDailyRetentionJob } from './task-performance-daily-retention.job';
 import { TrackingVisitRetentionJob } from './tracking-visit-retention.job';
+import { JobRunnerService } from './job-runner.service';
+import { JobMonitoringController } from './job-monitoring.controller';
+import { DataIntegrityPatrolJob } from './data-integrity-patrol.job';
 
 @Module({
   imports: [ScheduleModule.forRoot()],
+  controllers: [JobMonitoringController],
   providers: [
+    JobRunnerService,
     OverdueTaskJob,
     PerformanceAggregationJob,
     TrackingVisitRetentionJob,
@@ -25,7 +30,9 @@ import { TrackingVisitRetentionJob } from './tracking-visit-retention.job';
     TaskPerformanceDailyRetentionJob,
     DailyMetricsRetentionJob,
     AlertResolutionRetentionJob,
-    CopyPerformanceRetentionJob
-  ]
+    CopyPerformanceRetentionJob,
+    DataIntegrityPatrolJob
+  ],
+  exports: [JobRunnerService]
 })
 export class JobsModule {}

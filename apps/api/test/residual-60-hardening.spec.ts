@@ -118,7 +118,7 @@ describe('residual #60 DailyMetrics findUnique select hygiene', () => {
     expect(refund).toMatch(/findUnique\(\{[\s\S]*select:\s*\{[\s\S]*totalRefund/);
     expect(refund).toMatch(/findUnique\(\{[\s\S]*select:\s*\{[\s\S]*totalVerify/);
     expect(money).toMatch(
-      /findUnique\(\{\s*where:\s*\{\s*date\s*\},\s*select:\s*\{\s*totalGmv:\s*true,\s*paidOrderCount:\s*true/
+      /findUnique\(\{\s*where:\s*\{\s*date\s*\},\s*select:\s*\{\s*totalGmv(Fen)?:\s*true,\s*paidOrderCount:\s*true/
     );
   });
 });

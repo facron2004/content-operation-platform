@@ -63,9 +63,8 @@ export async function assertPackagesInScope(
   for (const id of ids) {
     const row = byId.get(id);
     if (!row) throw new NotFoundException(`套餐不存在: ${id}`);
-    if (!isResourceInScope(actor, row)) {
-      throw new ForbiddenException('无权访问该套餐');
-    }
+    // Hide resource existence for scoped detail and mutation requests.
+    if (!isResourceInScope(actor, row)) throw new NotFoundException(`套餐不存在: ${id}`);
   }
 }
 

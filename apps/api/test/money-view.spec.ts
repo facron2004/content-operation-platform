@@ -80,7 +80,10 @@ describe('money-view (Phase 5/6 读路径)', () => {
 
   describe('applyMoneyView 递归', () => {
     it('数组逐元素增强，旧 Float 移除', () => {
-      const arr = [{ gmv: 1.0, gmvFen: 100n }, { gmv: 2.5, gmvFen: 250n }];
+      const arr = [
+        { gmv: 1.0, gmvFen: 100n },
+        { gmv: 2.5, gmvFen: 250n }
+      ];
       const out = applyMoneyView(arr) as Array<Record<string, unknown>>;
       expect(out[0].gmvFen).toBe('100');
       expect(out[0].gmvDisplay).toBe('1.00');

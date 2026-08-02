@@ -75,7 +75,7 @@ describe('assertPackageInScope', () => {
           bindings: [{ role: 'area_operator', scopeType: 'area', scopeId: 'A1' }]
         })
       )
-    ).rejects.toBeInstanceOf(ForbiddenException);
+    ).rejects.toBeInstanceOf(NotFoundException);
   });
 
   it('allows in-scope package', async () => {

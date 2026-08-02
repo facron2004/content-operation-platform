@@ -17,6 +17,7 @@ export function useGmvCockpit() {
     kpiDate: state.kpiDate,
     todayText: state.todayText,
     backfilling: state.backfilling,
+    backfillStatusText: state.backfillStatusText,
     trendMode: state.trendMode,
     trendGranularity: state.trendGranularity
   });
@@ -25,7 +26,9 @@ export function useGmvCockpit() {
   async function reload() {
     await refreshGmvCockpit({
       loading: state.loading,
+      statusText: state.backfillStatusText,
       loadError: state.loadError,
+      kpiDate: state.kpiDate,
       loadAll
     });
   }

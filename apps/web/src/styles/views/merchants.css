@@ -1,5 +1,5 @@
 .merchants-view {
-  gap: 12px;
+  gap: var(--page-gap);
 }
 
 .merchant-hero {
@@ -7,28 +7,27 @@
   align-items: stretch;
   justify-content: space-between;
   gap: 16px;
-  padding: 20px;
+  padding: 14px 16px;
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
   background:
-    radial-gradient(circle at top right, rgba(5, 150, 105, 0.08), transparent 32%),
-    linear-gradient(180deg, #ffffff 0%, #fbfcfe 100%);
+    radial-gradient(circle at top right, rgba(5, 150, 105, 0.08), transparent 32%), var(--panel);
   box-shadow: var(--shadow-soft);
 }
 
 .merchant-hero h2 {
-  margin: 8px 0 0;
-  font-size: 22px;
+  margin: 4px 0 0;
+  font-size: 18px;
   font-weight: 800;
   letter-spacing: -0.01em;
 }
 
 .hero-description {
   max-width: 62ch;
-  margin: 10px 0 0;
+  margin: 6px 0 0;
   color: var(--muted);
-  font-size: 13px;
-  line-height: 1.6;
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .hero-meta {
@@ -39,8 +38,8 @@
 
 .layout-grid {
   display: grid;
-  grid-template-columns: 320px 1fr;
-  gap: 12px;
+  grid-template-columns: minmax(360px, 0.72fr) minmax(0, 1.8fr);
+  gap: var(--page-gap);
   align-items: start;
 }
 
@@ -51,82 +50,99 @@
   overflow: hidden;
 }
 
-.list-header {
-  padding: 10px 12px;
+.layout-grid :deep(.list-header) {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+  gap: 6px;
+  padding: 8px 10px;
   border-bottom: 1px solid var(--line);
 }
 
-.merchant-scroll {
+.layout-grid :deep(.list-search) {
+  grid-column: 1 / -1;
+}
+
+.layout-grid :deep(.list-area),
+.layout-grid :deep(.list-sort) {
+  width: 100%;
+  margin: 0 !important;
+}
+
+.layout-grid :deep(.merchant-scroll) {
   flex: 1;
 }
 
-.merchant-list {
+.layout-grid :deep(.merchant-list) {
   list-style: none;
   padding: 0;
   margin: 0;
 }
 
-.merchant-list li {
-  padding: 10px 12px;
+.layout-grid :deep(.merchant-list li) {
+  padding: 8px 10px;
   border-bottom: 1px solid var(--line);
   cursor: pointer;
   transition: background 0.15s ease;
 }
 
-.merchant-list li:hover {
+.layout-grid :deep(.merchant-list li:hover) {
   background: var(--accent-soft);
 }
 
-.merchant-list li.active {
+.layout-grid :deep(.merchant-list li.active) {
   background: var(--accent-soft);
   border-left: 3px solid var(--accent);
-  padding-left: 9px;
+  padding-left: 7px;
 }
 
-.merchant-list-row {
+.layout-grid :deep(.merchant-list-row) {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
 }
 
-.merchant-list-row strong {
+.layout-grid :deep(.merchant-list-row strong) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 13px;
   color: var(--ink);
 }
 
-.merchant-list-meta {
+.layout-grid :deep(.merchant-list-meta) {
   display: flex;
-  gap: 12px;
+  gap: 8px;
   margin-top: 4px;
   font-size: 11px;
   color: var(--muted);
 }
 
-.list-pagination {
+.layout-grid :deep(.list-pagination) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 12px;
+  padding: 8px 10px;
   border-top: 1px solid var(--line);
   font-size: 12px;
 }
 
-.page-info {
+.layout-grid :deep(.page-info) {
   color: var(--muted);
 }
 
 .detail-panel {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 
 .detail-header {
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
-  padding: 14px 16px;
+  padding: 12px 14px;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -153,7 +169,7 @@
 
 .chart-section,
 .detail-panel > .panel {
-  padding: 14px 16px;
+  padding: 12px 14px;
 }
 
 .chart-section :deep(.chart-shell) {

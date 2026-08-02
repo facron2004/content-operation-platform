@@ -16,14 +16,17 @@ import type { TopMerchantRow } from './refund.dto';
 export type RawTopMerchant = {
   merchantName: string;
   merchantId: string;
-  gmv: number;
-  refund: number;
-  verify: number;
+  gmvFen: bigint | null;
+  refundFen: bigint | null;
+  verifyFen: bigint | null;
   paidOrderCount: number;
 };
 
 /**
- * Full sorted merchant ranking for the trailing 7d paid window (no page).
+ * Full sorted merchant ranking for the trailing 7d refund window (no page).
+ * Refunds are attributed to the order day (orderTime) — refund count is filtered by the
+ * day the order was placed, not the day the refund occurred. Same caliber as the refund
+ * dashboard / DailyMetrics (orderTime-based refund attribution).
  * Cap at GMV_TOP_MERCHANTS_LIMIT so TTL cache stays bounded; page flips slice
  * in memory (parity GMV top-merchants / merchant-sales ranking).
  */
@@ -34,9 +37,9 @@ export async function fetchTopMerchantsRaw(
   const dayKey = beijingDateKey(new Date());
   const { end: dayEnd } = beijingDayRangeSqlite(dayKey);
   const weekStart = beijingDayRangeSqlite(beijingDateKey(Date.now() - 6 * 86400000)).start;
-  const orderColumn = sortBy === 'verifyDesc' ? '"verify"' : '"refund"';
+  const orderColumn = sortBy === 'verifyDesc' ? '"verifyFen"' : '"refundFen"';
   return (await prisma.$queryRawUnsafe(
-    `SELECT COALESCE(NULLIF(oh."merchantName", ''), oh."merchantId") AS "merchantName", oh."merchantId", COALESCE(SUM(${SQL_GMV_OH}), 0) AS "gmv", COALESCE(SUM(CASE WHEN oh."refundTime" IS NOT NULL THEN oh."refundAmount" ELSE 0 END), 0) AS "refund", COALESCE(SUM(CASE WHEN oh."verifyTime" IS NOT NULL THEN oh."verifyAmount" ELSE 0 END), 0) AS "verify", COUNT(CASE WHEN oh."paidTime" IS NOT NULL THEN 1 END) AS "paidOrderCount" FROM "OrderHeader" oh WHERE ${sqlDatetimeExclusiveRange('oh."paidTime"')} AND oh."merchantId" IS NOT NULL GROUP BY oh."merchantId" ORDER BY ${orderColumn} DESC, oh."merchantId" ASC LIMIT ?`,
+    `SELECT COALESCE(NULLIF(oh."merchantName", ''), oh."merchantId") AS "merchantName", oh."merchantId", COALESCE(SUM(${SQL_GMV_OH}), 0) AS "gmvFen", COALESCE(SUM(oh."refundAmountFen"), 0) AS "refundFen", COALESCE(SUM(CASE WHEN oh."verifyTime" IS NOT NULL THEN oh."verifyAmountFen" ELSE 0 END), 0) AS "verifyFen", COUNT(CASE WHEN oh."paidTime" IS NOT NULL THEN 1 END) AS "paidOrderCount" FROM "OrderHeader" oh WHERE ${sqlDatetimeExclusiveRange('oh."orderTime"')} AND "refundAmountFen" > 0 AND oh."merchantId" IS NOT NULL GROUP BY oh."merchantId" ORDER BY ${orderColumn} DESC, oh."merchantId" ASC LIMIT ?`,
     weekStart,
     dayEnd,
     GMV_TOP_MERCHANTS_LIMIT
@@ -74,9 +77,9 @@ export function pageTopMerchants(
 
 // --- refund-top-merchants.ts ---
 function mapTopMerchant(row: RawTopMerchant): TopMerchantRow {
-  const gmv = Number(row.gmv),
-    refund = Number(row.refund),
-    verify = Number(row.verify);
+  const gmv = Number(row.gmvFen ?? 0) / 100,
+    refund = Number(row.refundFen ?? 0) / 100,
+    verify = Number(row.verifyFen ?? 0) / 100;
   return {
     merchantId: row.merchantId,
     merchantName: row.merchantName,

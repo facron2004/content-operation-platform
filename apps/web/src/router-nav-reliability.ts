@@ -96,6 +96,8 @@ export type SessionHydrateInput = {
     | {
         userId?: string;
         username?: string;
+        tenantId?: string;
+        permissions?: string[];
         roles?: Array<{ role: string; scopeType?: string; scopeId?: string } | string>;
       }
     | null
@@ -106,6 +108,8 @@ export type SessionHydrateInput = {
     username: string;
     roles: string[];
     bindings: Array<{ userId: string; role: string; scopeType?: string; scopeId?: string }>;
+    tenantId?: string;
+    permissions?: string[];
   }) => void;
   retries?: number;
   delayMs?: number;
@@ -142,7 +146,9 @@ export async function hydrateServerSession(
         userId: data.userId,
         username: data.username ?? '',
         roles,
-        bindings
+        bindings,
+        ...(data.tenantId ? { tenantId: data.tenantId } : {}),
+        ...(Array.isArray(data.permissions) ? { permissions: data.permissions } : {})
       });
       return 'ok';
     } catch {
@@ -170,4 +176,16 @@ export function resolveRoleAccess(params: {
   if (!params.hasServerSession) return 'session-unknown';
   const hasRole = params.effectiveRoles.some((r) => required.includes(r));
   return hasRole ? 'allow' : 'deny';
+}
+
+export function resolvePermissionAccess(params: {
+  requiredPermissions?: readonly string[] | undefined;
+  hasServerSession: boolean;
+  permissions: readonly string[];
+}): 'allow' | 'deny' | 'session-unknown' {
+  const required = params.requiredPermissions;
+  if (!required || required.length === 0) return 'allow';
+  if (!params.hasServerSession) return 'session-unknown';
+  const hasPermissions = required.every((permission) => params.permissions.includes(permission));
+  return hasPermissions ? 'allow' : 'deny';
 }

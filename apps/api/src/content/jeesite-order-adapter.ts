@@ -122,14 +122,40 @@ export function mapJeesiteOrderListToDataset(payload: unknown): {
     const verifiedTime = rowDateText(row, ['verificationTime', 'updateDate'], updatedTime);
 
     const isVerified = orderStatus === 30 || orderStatus === 40;
-    const isRefunded = orderStatus === -20 || orderStatus === -30;
-    const isPaid = orderStatus === 20 || isVerified || isRefunded;
-    const refundAmountRaw = rowNumber(row, ['refundPrice', 'refundAmount'], Number.NaN);
-    const refundAmount = isRefunded
-      ? Number.isFinite(refundAmountRaw)
-        ? refundAmountRaw
-        : settledAmount
-      : 0;
+    const refundAmountRaw = rowNumber(
+      row,
+      [
+        'refundPrice',
+        'refundAmount',
+        'realRefundAmount',
+        'actualRefundAmount',
+        'refundMoney',
+        '退款金额'
+      ],
+      Number.NaN
+    );
+    const hasRefundAmount = Number.isFinite(refundAmountRaw) && refundAmountRaw > 0;
+    const statusTextVal = rowText(row, ['orderStatusText', 'statusText', 'statusName', '状态']);
+    const textHasRefund = statusTextVal.includes('退款') || statusTextVal.includes('refund');
+    const isRefunded =
+      orderStatus < 0 ||
+      orderStatus === -10 ||
+      orderStatus === -20 ||
+      orderStatus === -30 ||
+      orderStatus === -40 ||
+      hasRefundAmount ||
+      textHasRefund;
+
+    // 只要有实付金额就算已支付（不依赖 JeeSite 状态码枚举，各版本可能不同）。
+    const isPaid = settledAmount > 0 || orderStatus === 20 || isVerified || isRefunded;
+    const orderTotalPrice = rowNumber(row, ['totalPrice', 'orderAmount'], 0);
+    const refundAmount = hasRefundAmount
+      ? refundAmountRaw
+      : isRefunded
+        ? settledAmount > 0
+          ? settledAmount
+          : orderTotalPrice
+        : 0;
 
     // 商家：corePartner.name 优先。不再把 businessUserName 当商家回退——
     // bargainOrder/listData 上 businessUserName 是业务员（见 SALESMAN_KEYS）。
@@ -161,11 +187,11 @@ export function mapJeesiteOrderListToDataset(payload: unknown): {
       verifyTime: isVerified ? verifiedTime : null,
       refundTime: isRefunded ? updatedTime : null,
       orderAmount: rowNumber(row, ['totalPrice'], settledAmount + paidAmountBonus),
-      // 退款单：钱已退回，paidAmount 归零，GMV 不计入；refundAmount 记录退款额供独立分析
-      paidAmount: isRefunded ? 0 : paidAmount,
-      paidAmountWallet: isRefunded ? 0 : paidAmountWallet,
-      paidAmountBonus: isRefunded ? 0 : paidAmountBonus,
-      paidAmountCard: isRefunded ? 0 : Math.max(0, paidAmount - paidAmountWallet),
+      // 退款单：保留原始支付金额，用于准确计算当天 GMV 分母与退款率
+      paidAmount,
+      paidAmountWallet,
+      paidAmountBonus,
+      paidAmountCard: Math.max(0, paidAmount - paidAmountWallet),
       refundAmount,
       verifyAmount: isVerified ? settledAmount : 0,
       pointEarned: 0,

@@ -376,7 +376,7 @@ export class DashboardService {
             clickCount: number | bigint | null;
             orderCount: number | bigint | null;
             verifyCount: number | bigint | null;
-            gmv: number | null;
+            gmvFen: number | bigint | null;
           }>
         >(
           `SELECT COUNT(*) as "rowCount",
@@ -384,7 +384,7 @@ export class DashboardService {
                   COALESCE(SUM("clickCount"), 0) as "clickCount",
                   COALESCE(SUM("orderCount"), 0) as "orderCount",
                   COALESCE(SUM("verifyCount"), 0) as "verifyCount",
-                  COALESCE(SUM("gmv"), 0) as "gmv"
+                  COALESCE(SUM("gmvFen"), 0) as "gmvFen"
            FROM "CopyPerformance"
            WHERE ${sqlDatetimeExclusiveRange('"createdAt"')}`,
           createdStart,
@@ -407,7 +407,7 @@ export class DashboardService {
       clickCount = Number(perf?.clickCount ?? 0);
       orderCount = Number(perf?.orderCount ?? 0);
       verifyCount = Number(perf?.verifyCount ?? 0);
-      gmv = Number(perf?.gmv ?? 0);
+      gmv = Number(perf?.gmvFen ?? 0) / 100;
     }
 
     // 通过回调获取推荐数据(ContentService 内部已有缓存,无需再关心)

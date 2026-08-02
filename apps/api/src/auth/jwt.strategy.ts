@@ -1,10 +1,17 @@
-import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
+import { Inject, Injectable, Optional, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { JWT_SECRET } from '../config/auth.config';
 import { UserService } from '../user-access/user.service';
+import { IamAccessService } from '../user-access/iam/iam-access.service';
 
-type JwtPayload = { sub: string; username: string; roles?: string[]; tv?: number };
+type JwtPayload = {
+  sub: string;
+  username: string;
+  roles?: string[];
+  tenantId?: string;
+  tv?: number;
+};
 
 const STATUS_TTL_MS = 15_000;
 
@@ -21,6 +28,8 @@ type CachedStatus = {
   roles: string[];
   bindings: CachedBinding[];
   tokenVersion: number;
+  tenantId: string;
+  permissions: string[];
 };
 
 /**
@@ -31,7 +40,10 @@ type CachedStatus = {
 export class JwtStrategy extends PassportStrategy(Strategy) {
   private readonly statusCache = new Map<string, CachedStatus>();
 
-  constructor(@Inject(UserService) private readonly userService: UserService) {
+  constructor(
+    @Inject(UserService) private readonly userService: UserService,
+    @Optional() @Inject(IamAccessService) private readonly iamAccessService?: IamAccessService
+  ) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
@@ -58,6 +70,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
           username: status.username || payload.username,
           roles: status.roles.length ? status.roles : ['admin'],
           bindings: status.bindings,
+          tenantId: status.tenantId,
+          permissions: status.permissions,
           // Propagate session epoch so /auth/refresh can re-sign with the same tv.
           tokenVersion: status.tokenVersion
         };
@@ -74,6 +88,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         username: payload.username,
         roles: payload.roles?.length ? payload.roles : ['admin'],
         bindings: [] as CachedBinding[],
+        tenantId: payload.tenantId ?? 'tenant_default',
+        permissions: [],
         tokenVersion: typeof payload.tv === 'number' ? payload.tv : 0
       };
     }
@@ -90,6 +106,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       // Prefer DB roles so deactivation/down-roll takes effect within TTL
       roles: status.roles,
       bindings: status.bindings,
+      tenantId: status.tenantId,
+      permissions: status.permissions,
       // Propagate session epoch so /auth/refresh can re-sign with the same tv.
       tokenVersion: status.tokenVersion
     };
@@ -118,17 +136,33 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       this.statusCache.delete(userId);
       return null;
     }
+    let roles = user.roles.map((r) => r.role);
+    let bindings: CachedBinding[] = user.roles.map((r) => ({
+      role: r.role,
+      scopeType: r.scopeType,
+      scopeId: r.scopeId
+    }));
+    let tenantId = user.tenantId ?? 'tenant_default';
+    let permissions: string[] = [];
+    const access = await this.iamAccessService?.getUserAccess(userId, tenantId).catch(() => null);
+    if (access) {
+      roles = access.roles;
+      tenantId = access.tenantId;
+      permissions = access.permissions;
+      const projectedBindings = await this.iamAccessService
+        ?.getLegacyBindings(userId, tenantId)
+        .catch(() => null);
+      if (projectedBindings) bindings = projectedBindings;
+    }
     const entry: CachedStatus = {
       expiresAt: now + STATUS_TTL_MS,
       isActive: user.isActive,
       username: user.username,
-      roles: user.roles.map((r) => r.role),
-      bindings: user.roles.map((r) => ({
-        role: r.role,
-        scopeType: r.scopeType,
-        scopeId: r.scopeId
-      })),
-      tokenVersion: Number(user.tokenVersion ?? 0)
+      roles,
+      bindings,
+      tokenVersion: Number(user.tokenVersion ?? 0),
+      tenantId,
+      permissions
     };
     this.statusCache.set(userId, entry);
     // Bound cache size for long-running processes: drop expired first, then FIFO.

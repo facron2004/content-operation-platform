@@ -7,6 +7,8 @@ import { AlertService } from './alert.service';
 import { ContentService } from './content.service';
 import { AlertResolveDto, AlertResolveBatchDto, AlertQueryDto } from './content.dto';
 import { Roles } from '../user-access/role.decorator';
+import { RequireLogin } from '../user-access/iam/route-auth.decorator';
+import { RequirePermissions } from '../user-access/iam/require-permissions.decorator';
 import { resolveScopedQuery } from '../user-access/data-scope';
 import { assertPackageInScope, assertPackagesInScope } from '../user-access/scope-guards';
 import { PrismaService } from '../prisma/prisma.service';
@@ -20,6 +22,7 @@ type AuthUser = {
 };
 
 @ApiTags('alerts')
+@RequireLogin()
 @Controller('api/content')
 export class AlertController {
   constructor(
@@ -106,6 +109,7 @@ export class AlertController {
   }
 
   @Roles('admin', 'platform_operator')
+  @RequirePermissions('content:write')
   @Throttle({ long: { limit: 30, ttl: 60000 } })
   @Post('alerts/:alertId/resolve')
   async resolveAlert(
@@ -125,6 +129,7 @@ export class AlertController {
   }
 
   @Roles('admin', 'platform_operator')
+  @RequirePermissions('content:write')
   @Throttle({ long: { limit: 10, ttl: 60000 } })
   @Post('alerts/resolve-batch')
   async resolveAlerts(

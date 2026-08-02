@@ -16,7 +16,11 @@
         :danger="profile.stale30Ratio >= 0.1"
       />
       <!-- Residual #235: GMV/转化 labels follow selected trend window. -->
-      <MetricTile :label="`${detailDays} 天 GMV`" :value="displayMoney(trendSummary, 'totalGmv')" info />
+      <MetricTile
+        :label="`${detailDays} 天 GMV`"
+        :value="displayMoney(trendSummary, 'totalGmv')"
+        info
+      />
       <MetricTile
         :label="`${detailDays} 天转化率`"
         :value="formatPercent(trendSummary.conversionRate)"

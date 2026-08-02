@@ -32,7 +32,7 @@ describe('recomputeDailyMetricsRange', () => {
     expect(String(execute.mock.calls[1][0])).toMatch(/INSERT OR REPLACE INTO "DailyMetrics"/);
   });
 
-  it('runs delete+insert inside $transaction when available', async () => {
+  it('keeps delete+insert on the adapter-safe direct execution path', async () => {
     const execute = vi
       .fn()
       .mockResolvedValueOnce(1) // DELETE
@@ -43,11 +43,11 @@ describe('recomputeDailyMetricsRange', () => {
         cb({ $executeRawUnsafe: execute })
       );
     const result = await recomputeDailyMetricsRange(
-      { $executeRawUnsafe: vi.fn(), $transaction: transaction },
+      { $executeRawUnsafe: execute, $transaction: transaction },
       '2026-07-01',
       '2026-07-01'
     );
-    expect(transaction).toHaveBeenCalledTimes(1);
+    expect(transaction).not.toHaveBeenCalled();
     expect(execute).toHaveBeenCalledTimes(2);
     expect(result.rowsAffected).toBe(1);
   });
@@ -84,13 +84,13 @@ describe('package-sales-amount', () => {
       '2026-07-01',
       '2026-07-02'
     );
-    expect(transaction).toHaveBeenCalledTimes(1);
+    expect(transaction).not.toHaveBeenCalled();
     expect(result.rowsUpserted).toBe(4);
     expect(result.joinableGmv).toBe(80);
     expect(result.unjoinableGmv).toBe(20);
     expect(result.coverageRatio).toBeCloseTo(0.8);
     expect(String(execute.mock.calls[0][0])).toMatch(/UPDATE "PackageSalesDaily"/);
-    expect(String(execute.mock.calls[0][0])).toMatch(/"salesAmount" = 0/);
+    expect(String(execute.mock.calls[0][0])).toMatch(/"salesAmountFen" = 0/);
     expect(String(execute.mock.calls[1][0])).toMatch(/PackageSalesDaily/);
     expect(String(execute.mock.calls[1][0])).toMatch(/salesAmount/);
   });
@@ -131,11 +131,8 @@ describe('paidAmountCard', () => {
 
   it('batchUpsertOrderHeaders SQL includes paidAmountCard in INSERT and UPDATE', async () => {
     const executeRaw = vi.fn().mockResolvedValue(undefined);
-    const transaction = vi.fn().mockImplementation(async (cb: (tx: any) => Promise<void>) => {
-      await cb({ $executeRawUnsafe: executeRaw });
-    });
     const result = await batchUpsertOrderHeaders(
-      { $transaction: transaction, $executeRawUnsafe: vi.fn() },
+      { $executeRawUnsafe: executeRaw },
       [
         {
           orderId: 'test-1',
@@ -157,18 +154,15 @@ describe('paidAmountCard', () => {
     );
     expect(result).toEqual({ upserted: 1, skipped: 0, errors: 0, errorSamples: [] });
     const sql = String(executeRaw.mock.calls[0][0]);
-    expect(sql).toMatch(/"paidAmountCard"/);
-    expect(sql).toMatch(/"paidAmountCard"=excluded\."paidAmountCard"/);
+    expect(sql).toMatch(/"paidAmountCardFen"/);
+    expect(sql).toMatch(/"paidAmountCardFen"=excluded\."paidAmountCardFen"/);
     expect(executeRaw.mock.calls[0][1]).toContain('test-1');
   });
 
   it('batchUpsertOrderHeaders skips orders without orderId', async () => {
     const executeRaw = vi.fn();
-    const transaction = vi.fn().mockImplementation(async (cb: (tx: any) => Promise<void>) => {
-      await cb({ $executeRawUnsafe: executeRaw });
-    });
     const result = await batchUpsertOrderHeaders(
-      { $transaction: transaction, $executeRawUnsafe: vi.fn() },
+      { $executeRawUnsafe: executeRaw },
       [
         {
           orderId: 'valid-1',
@@ -240,8 +234,8 @@ describe('jeesite-order-adapter paidAmountCard', () => {
       ]
     };
     const { orders } = mapJeesiteOrderListToDataset(payload);
-    expect(orders[0].paidAmountCard).toBe(0);
-    expect(orders[0].paidAmount).toBe(0);
+    expect(orders[0].paidAmountCard).toBe(70);
+    expect(orders[0].paidAmount).toBe(100);
   });
 
   it('handles negative card amount (rounded to 0)', () => {

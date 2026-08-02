@@ -9,8 +9,8 @@
    * (page keeps stretching until DevTools open forces a different reflow).
    * Global .chart-panel also sets height:240px; keep both in sync.
    */
-  height: 240px;
-  min-height: 240px;
+  height: var(--chart-height);
+  min-height: var(--chart-height);
   /* Contain echarts canvas so it cannot inflate the box */
   overflow: hidden;
   box-sizing: border-box;

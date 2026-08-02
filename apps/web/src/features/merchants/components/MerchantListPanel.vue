@@ -6,6 +6,7 @@
         placeholder="搜索商家名"
         clearable
         size="small"
+        class="list-search"
         @update:model-value="emit('update:search', $event)"
         @change="emit('filter-change')"
       />
@@ -15,7 +16,7 @@
         placeholder="areaId"
         clearable
         size="small"
-        style="margin-top: 6px"
+        class="list-area"
         @update:model-value="emit('update:areaId', String($event ?? ''))"
         @change="emit('filter-change')"
       />
@@ -23,7 +24,7 @@
       <el-select
         :model-value="sort"
         size="small"
-        style="width: 100%; margin-top: 6px"
+        class="list-sort"
         @update:model-value="emit('update:sort', String($event ?? 'stale30Desc'))"
         @change="emit('filter-change')"
       >
@@ -77,6 +78,7 @@ const props = withDefaults(
     limit?: number | null;
   }>(),
   {
+    selectedMerchantId: null,
     truncated: false,
     limit: null
   }

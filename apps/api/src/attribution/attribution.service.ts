@@ -368,13 +368,13 @@ export class AttributionService {
         orderId: string;
         memberId: string | null;
         packageId: string | null;
-        orderAmount: number;
-        paidAmount: number;
+        orderAmountFen: bigint | null;
+        paidAmountFen: bigint | null;
         orderTime: string;
         status: string;
       }>
     >(
-      `SELECT "orderId", "memberId", "packageId", "orderAmount", "paidAmount", "orderTime", "status"
+      `SELECT "orderId", "memberId", "packageId", "orderAmountFen", "paidAmountFen", "orderTime", "status"
        FROM "OrderHeader" oh
        WHERE NOT EXISTS (SELECT 1 FROM "OrderAttribution" oa WHERE oa."orderId" = oh."orderId")
          AND ${sqlDatetimeExclusiveRange('oh."orderTime"')}
@@ -433,11 +433,11 @@ export class AttributionService {
         orderId: string;
         packageId: string | null;
         orderTime: string | null;
-        paidAmount: number | null;
-        paidAmountWallet: number | null;
+        paidAmountFen: bigint | null;
+        paidAmountWalletFen: bigint | null;
       }>
     >(
-      `SELECT "orderId", "packageId", "orderTime", "paidAmount", "paidAmountWallet"
+      `SELECT "orderId", "packageId", "orderTime", "paidAmountFen", "paidAmountWalletFen"
        FROM "OrderHeader" WHERE "orderId" = ? LIMIT 1`,
       orderId
     );
@@ -454,7 +454,7 @@ export class AttributionService {
       );
     }
     // Zero-pay / unpaid rows inflate conversion without contributing GMV — refuse.
-    const paid = Number(order.paidAmount ?? 0) + Number(order.paidAmountWallet ?? 0);
+    const paid = Number(order.paidAmountFen ?? 0) + Number(order.paidAmountWalletFen ?? 0);
     if (!(paid > 0)) {
       throw new BadRequestException('订单实付金额为 0，无法绑定到任务');
     }

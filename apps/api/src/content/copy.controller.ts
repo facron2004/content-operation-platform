@@ -6,6 +6,8 @@ import { CopyService } from './copy.service';
 import { GenerateCopyDto, AuditCopyDto, ListCopiesQueryDto } from './content.dto';
 import { ForbiddenException } from '@nestjs/common';
 import { Roles } from '../user-access/role.decorator';
+import { RequireLogin } from '../user-access/iam/route-auth.decorator';
+import { RequirePermissions } from '../user-access/iam/require-permissions.decorator';
 import { buildDataScope, isResourceInScope, resolveScopedQuery } from '../user-access/data-scope';
 import { assertPackageInScope } from '../user-access/scope-guards';
 import { PrismaService } from '../prisma/prisma.service';
@@ -20,6 +22,7 @@ type AuthUser = {
 };
 
 @ApiTags('copy')
+@RequireLogin()
 @Controller('api/content')
 export class CopyController {
   constructor(
@@ -28,6 +31,7 @@ export class CopyController {
   ) {}
 
   @Roles('admin', 'platform_operator')
+  @RequirePermissions('content:write')
   @Throttle({ long: { limit: 10, ttl: 60000 } })
   @Post('generate')
   @ApiOperation({
@@ -99,6 +103,7 @@ export class CopyController {
   }
 
   @Roles('admin', 'platform_operator', 'auditor')
+  @RequirePermissions('content:publish')
   @Throttle({ long: { limit: 30, ttl: 60000 } })
   @Post('copies/:contentId/audit')
   async auditCopy(

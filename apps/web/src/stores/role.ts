@@ -7,6 +7,8 @@ export type ServerRoleInfo = {
   username: string;
   roles: UserRole[];
   bindings: Array<{ userId: string; role: UserRole; scopeType?: string; scopeId?: string }>;
+  tenantId?: string;
+  permissions?: string[];
 };
 
 const roleLabels: Record<UserRole, string> = {
@@ -50,6 +52,8 @@ export const useRoleStore = defineStore('role', () => {
   const isPlatformOperator = computed(() => effectiveRoles.value.includes('platform_operator'));
   const isAreaOperator = computed(() => effectiveRoles.value.includes('area_operator'));
   const isAuditor = computed(() => effectiveRoles.value.includes('auditor'));
+  const permissions = computed(() => serverInfo.value?.permissions ?? []);
+  const tenantId = computed(() => serverInfo.value?.tenantId ?? 'tenant_default');
   const hasServerSession = computed(() => sessionLoaded.value && serverInfo.value !== null);
 
   function setRole(role: UserRole) {
@@ -103,6 +107,8 @@ export const useRoleStore = defineStore('role', () => {
     isPlatformOperator,
     isAreaOperator,
     isAuditor,
+    permissions,
+    tenantId,
     hasServerSession,
     effectiveRoles,
     setRole,

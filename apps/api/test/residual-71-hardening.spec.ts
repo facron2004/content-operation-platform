@@ -14,9 +14,10 @@ describe('residual #71 MerchantDailyMetrics area CTE', () => {
     expect(src).toMatch(/PARTITION BY\s*"merchantName",\s*"dateKey"/);
     // No correlated re-scan of OrderHeader for areaName.
     expect(src).not.toMatch(/SELECT\s+oh2\."areaName"\s+FROM\s+"OrderHeader"\s+oh2/);
-    // recompute binds exclusive paidTime bounds then updatedAt (matches ? order in SQL).
+    // recompute binds exclusive paidTime bounds (base), then exclusive refundTime
+    // bounds (refundByMerchantDay), then updatedAt — 5 params total (matches ? order in SQL).
     expect(src).toMatch(
-      /\$executeRawUnsafe\(\s*MERCHANT_DAILY_METRICS_INSERT_SQL,\s*paidStart,\s*paidEnd,\s*now\s*\)/
+      /\$executeRawUnsafe\(\s*MERCHANT_DAILY_METRICS_INSERT_SQL,\s*paidStart,\s*paidEnd,\s*paidStart,\s*paidEnd,\s*now\s*\)/
     );
     expect(src).toContain('sqlDatetimeExclusiveRange');
     expect(src).toContain('beijingDayRangeSqlite');

@@ -15,6 +15,19 @@ defineProps<{ summary: ConsoleSummary }>();
 </script>
 <style scoped>
 .metric-summary-strip {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   margin-top: 2px;
+}
+
+@media (max-width: 1280px) {
+  .metric-summary-strip {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .metric-summary-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 </style>

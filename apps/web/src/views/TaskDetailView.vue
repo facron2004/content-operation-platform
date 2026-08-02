@@ -252,7 +252,7 @@ async function handleReassignClick() {
 
 <style scoped>
 .task-detail-page {
-  padding: 20px;
+  padding: 0;
 }
 
 .back-link {

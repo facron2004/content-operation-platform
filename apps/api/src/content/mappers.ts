@@ -6,7 +6,7 @@ import type {
   GeneratedCopy,
   StrategyType
 } from '@content/shared';
-import { PACKAGE_TYPES, SALE_STATUSES } from '@content/shared';
+import { PACKAGE_TYPES, SALE_STATUSES, yuanToFen } from '@content/shared';
 import type {
   ContentPackage as PrismaContentPackage,
   GeneratedCopy as PrismaGeneratedCopy,
@@ -39,12 +39,12 @@ export const PACKAGE_MAP_SELECT = {
   areaId: true,
   areaName: true,
   category: true,
-  originalPrice: true,
-  salePrice: true,
-  welfarePrice: true,
-  temporarySalePrice: true,
+  originalPriceFen: true,
+  salePriceFen: true,
+  welfarePriceFen: true,
+  temporarySalePriceFen: true,
   commissionRate: true,
-  grossProfit: true,
+  grossProfitFen: true,
   stockTotal: true,
   stockLeft: true,
   startTime: true,
@@ -66,24 +66,24 @@ export const PACKAGE_MAP_SELECT = {
  * Drops name/scores/detailSummary/sellingPoints/timestamps from the hot audit path.
  */
 export const PACKAGE_AUDIT_SELECT = {
-  originalPrice: true,
-  salePrice: true,
-  temporarySalePrice: true,
+  originalPriceFen: true,
+  salePriceFen: true,
+  temporarySalePriceFen: true,
   stockTotal: true,
   stockLeft: true,
   useRules: true
 } as const;
 
 export type PackageAuditRow = {
-  originalPrice: number;
-  salePrice: number;
-  temporarySalePrice: number | null;
+  originalPriceFen: bigint | null;
+  salePriceFen: bigint | null;
+  temporarySalePriceFen: bigint | null;
   stockTotal: number;
   stockLeft: number;
   useRules: string;
 };
 
-/** Fields auditCopyText actually reads. */
+/** Fields auditCopyText actually reads (converted from fen to yuan). */
 export type PackageAuditSlice = Pick<
   ContentPackage,
   'originalPrice' | 'salePrice' | 'temporarySalePrice' | 'stockTotal' | 'stockLeft' | 'useRules'
@@ -91,9 +91,9 @@ export type PackageAuditSlice = Pick<
 
 export function mapPackageForAudit(row: PackageAuditRow): PackageAuditSlice {
   return {
-    originalPrice: row.originalPrice,
-    salePrice: row.salePrice,
-    temporarySalePrice: row.temporarySalePrice,
+    originalPrice: Number(row.originalPriceFen ?? 0) / 100,
+    salePrice: Number(row.salePriceFen ?? 0) / 100,
+    temporarySalePrice: row.temporarySalePriceFen ? Number(row.temporarySalePriceFen) / 100 : null,
     stockTotal: row.stockTotal,
     stockLeft: row.stockLeft,
     useRules: splitList(row.useRules)
@@ -109,12 +109,12 @@ export type PackageMapRow = {
   areaId: string;
   areaName: string;
   category: string;
-  originalPrice: number;
-  salePrice: number;
-  welfarePrice: number | null;
-  temporarySalePrice: number | null;
+  originalPriceFen: bigint | null;
+  salePriceFen: bigint | null;
+  welfarePriceFen: bigint | null;
+  temporarySalePriceFen: bigint | null;
   commissionRate: number;
-  grossProfit: number;
+  grossProfitFen: bigint | null;
   stockTotal: number;
   stockLeft: number;
   startTime: Date;
@@ -141,12 +141,16 @@ export function mapPackage(row: PrismaContentPackage | PackageMapRow): ContentPa
     areaId: row.areaId,
     areaName: row.areaName,
     category: row.category,
-    originalPrice: row.originalPrice,
-    salePrice: row.salePrice,
-    welfarePrice: row.welfarePrice,
-    temporarySalePrice: row.temporarySalePrice,
+    originalPrice: Number('originalPriceFen' in row ? (row.originalPriceFen ?? 0n) : 0n) / 100,
+    salePrice: Number('salePriceFen' in row ? (row.salePriceFen ?? 0n) : 0n) / 100,
+    welfarePrice:
+      'welfarePriceFen' in row && row.welfarePriceFen ? Number(row.welfarePriceFen) / 100 : null,
+    temporarySalePrice:
+      'temporarySalePriceFen' in row && row.temporarySalePriceFen
+        ? Number(row.temporarySalePriceFen) / 100
+        : null,
     commissionRate: row.commissionRate,
-    grossProfit: row.grossProfit,
+    grossProfit: Number('grossProfitFen' in row ? (row.grossProfitFen ?? 0n) : 0n) / 100,
     stockTotal: row.stockTotal,
     stockLeft: row.stockLeft,
     startTime: row.startTime.toISOString(),
@@ -174,12 +178,13 @@ export function packageToDb(pkg: ContentPackage) {
     areaId: pkg.areaId,
     areaName: pkg.areaName,
     category: pkg.category,
-    originalPrice: pkg.originalPrice,
-    salePrice: pkg.salePrice,
-    welfarePrice: pkg.welfarePrice ?? null,
-    temporarySalePrice: pkg.temporarySalePrice ?? null,
+    originalPriceFen: yuanToFen(pkg.originalPrice),
+    salePriceFen: yuanToFen(pkg.salePrice),
+    welfarePriceFen: pkg.welfarePrice != null ? yuanToFen(pkg.welfarePrice) : null,
+    temporarySalePriceFen:
+      pkg.temporarySalePrice != null ? yuanToFen(pkg.temporarySalePrice) : null,
     commissionRate: pkg.commissionRate,
-    grossProfit: pkg.grossProfit,
+    grossProfitFen: yuanToFen(pkg.grossProfit),
     stockTotal: pkg.stockTotal,
     stockLeft: pkg.stockLeft,
     startTime: new Date(pkg.startTime),
@@ -275,7 +280,7 @@ export const PERF_LIST_SELECT = {
   paidOrderCount: true,
   verifyCount: true,
   refundCount: true,
-  gmv: true,
+  gmvFen: true,
   conversionRate: true,
   createdAt: true,
   updatedAt: true
@@ -294,7 +299,7 @@ type PerfListRow = {
   paidOrderCount: number;
   verifyCount: number;
   refundCount: number;
-  gmv: number;
+  gmvFen: bigint | null;
   conversionRate: number;
   createdAt: Date;
   updatedAt: Date;
@@ -315,7 +320,7 @@ export function mapPerformance(row: PrismaCopyPerformance | PerfListRow): CopyPe
     paidOrderCount: row.paidOrderCount,
     verifyCount: row.verifyCount,
     refundCount: row.refundCount,
-    gmv: row.gmv,
+    gmv: 'gmvFen' in row ? Number(row.gmvFen ?? 0n) / 100 : 0,
     conversionRate: row.conversionRate,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString()

@@ -104,7 +104,7 @@ export function mapHeatFromAreas(rows: GmvDistributionRow[]): GmvHeatPoint[] {
   const max = Math.max(...usable.map((r) => Number(readFen(r, 'totalGmv') ?? 0) / 100));
   const cols = Math.min(5, Math.max(3, Math.ceil(Math.sqrt(usable.length))));
   return usable.map((r, idx) => {
-    const intensity = max > 0 ? (Number(readFen(r, 'totalGmv') ?? 0) / 100) / max : 0;
+    const intensity = max > 0 ? Number(readFen(r, 'totalGmv') ?? 0) / 100 / max : 0;
     return {
       name: r.key,
       value: [idx % cols, Math.floor(idx / cols), intensity] as [number, number, number]

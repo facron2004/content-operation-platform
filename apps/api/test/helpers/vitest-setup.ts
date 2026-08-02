@@ -9,7 +9,7 @@
  * 2. 校验测试库 _prisma_migrations 与 prisma/migrations 目录是否一致；
  *    不一致（含全新/陈旧库）则用 SQL 清空全部对象后按序重放迁移
  *    （Windows 下 unlink 受文件句柄延迟释放影响，故不删文件）。
- * 3. vitest fileParallelism=false，串行执行，无并发建库竞争。
+ * 3. 每个测试文件使用独立临时库，集成测试可以安全并行执行。
  */
 import 'reflect-metadata';
 import { mkdirSync, readdirSync, readFileSync } from 'fs';
@@ -21,7 +21,7 @@ const ROOT = join(__dirname, '..', '..', '..', '..');
 const tmpDir = join(ROOT, '.tmp-test-db');
 mkdirSync(tmpDir, { recursive: true });
 
-const dbPath = join(tmpDir, 'test-run.db').replace(/\\/g, '/');
+const dbPath = join(tmpDir, `test-run-${randomUUID()}.db`).replace(/\\/g, '/');
 process.env.DATABASE_URL = `file:${dbPath}`;
 
 const migrationsDir = join(ROOT, 'prisma', 'migrations');

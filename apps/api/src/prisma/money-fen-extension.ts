@@ -18,11 +18,9 @@ function applyMoneyFen(model: string, data: unknown): unknown {
   return withMoneyFen(model, data as Record<string, unknown>);
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const moneyFenExtension: any = {
   query: {
     $allModels: {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       async $allOperations({ model, operation, args, query }: any) {
         if (!args || typeof args !== 'object') return query(args);
         if (!MONEY_FIELDS[model]) return query(args);

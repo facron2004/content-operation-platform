@@ -11,7 +11,8 @@ import {
   Post,
   Put,
   Query,
-  Req
+  Req,
+  UseGuards
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
@@ -22,6 +23,8 @@ import { UpdateCommunityDto } from './dto/update-community.dto';
 import { CommunityQueryDto } from './dto/community-query.dto';
 import { CommunityTasksQueryDto } from './dto/community-tasks-query.dto';
 import { Roles } from '../user-access/role.decorator';
+import { RequireLogin } from '../user-access/iam/route-auth.decorator';
+import { RequirePermissions } from '../user-access/iam/require-permissions.decorator';
 import { isResourceInScope, resolveScopedQuery } from '../user-access/data-scope';
 import { safePathId } from '../common/path-id';
 import { createDtoPipe } from '../common/dto-pipe';
@@ -29,6 +32,7 @@ import { normalizeCommunityImportList, parseCommunityImportPayload } from './com
 import { ImportCommunityRawDto } from './dto/import-community.dto';
 import { plainToInstance } from 'class-transformer';
 import { validateSync } from 'class-validator';
+import { IdempotencyGuard } from '../idempotency/idempotency.guard';
 
 type AuthUser = {
   userId: string;
@@ -39,6 +43,7 @@ type AuthUser = {
 
 @ApiTags('communities')
 // Dual path: canonical /api/communities + web client alias /api/community-library
+@RequireLogin()
 @Controller(['api/communities', 'api/community-library'])
 export class CommunityController {
   constructor(@Inject(CommunityService) private readonly svc: CommunityService) {}
@@ -81,6 +86,8 @@ export class CommunityController {
   }
 
   @Roles('admin', 'platform_operator')
+  @RequirePermissions('community:write')
+  @UseGuards(IdempotencyGuard)
   @Throttle({ long: { limit: 20, ttl: 60000 } })
   @Post()
   @ApiOperation({ summary: 'Create community group' })
@@ -91,6 +98,8 @@ export class CommunityController {
   }
 
   @Roles('admin', 'platform_operator')
+  @RequirePermissions('community:write')
+  @UseGuards(IdempotencyGuard)
   @Throttle({ long: { limit: 5, ttl: 60000 } })
   @Post('import')
   @ApiOperation({
@@ -134,6 +143,7 @@ export class CommunityController {
   }
 
   @Roles('admin', 'platform_operator')
+  @RequirePermissions('community:write')
   @Throttle({ long: { limit: 30, ttl: 60000 } })
   @Patch(':id')
   @Put(':id')
@@ -155,6 +165,7 @@ export class CommunityController {
   }
 
   @Roles('admin', 'platform_operator')
+  @RequirePermissions('community:write')
   @Throttle({ long: { limit: 20, ttl: 60000 } })
   @Delete(':id')
   @ApiOperation({ summary: 'Delete community group' })
@@ -166,6 +177,7 @@ export class CommunityController {
   }
 
   @Roles('admin', 'platform_operator')
+  @RequirePermissions('community:write')
   @Throttle({ long: { limit: 30, ttl: 60000 } })
   @Post(':id/disable')
   @ApiOperation({ summary: 'Soft-disable community group', description: 'Sets isActive=false' })
@@ -178,6 +190,7 @@ export class CommunityController {
 
   // Residual #199: re-enable after soft-disable (UpdateCommunityDto has no isActive).
   @Roles('admin', 'platform_operator')
+  @RequirePermissions('community:write')
   @Throttle({ long: { limit: 30, ttl: 60000 } })
   @Post(':id/enable')
   @ApiOperation({ summary: 'Re-enable community group', description: 'Sets isActive=true' })

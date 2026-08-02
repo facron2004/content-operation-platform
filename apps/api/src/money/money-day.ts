@@ -14,17 +14,17 @@ export async function loadDayGmvFromOrderHeader(
 ): Promise<MoneyDayTotals> {
   const { start, end } = beijingDayRangeSqlite(date);
   const [row] = (await prisma.$queryRawUnsafe(
-    `SELECT COALESCE(SUM(${SQL_GMV_OH}), 0) AS "totalGmv",
+    `SELECT COALESCE(SUM(${SQL_GMV_OH}), 0) AS "totalGmvFen",
             COUNT(*) AS "paidOrderCount"
      FROM "OrderHeader"
      WHERE ${sqlDatetimeExclusiveRange('"paidTime"')}`,
     start,
     end
-  )) as Array<{ totalGmv: number; paidOrderCount: number }>;
+  )) as Array<{ totalGmvFen: unknown; paidOrderCount: number }>;
 
   return {
     date,
-    totalGmv: Number(row?.totalGmv ?? 0),
+    totalGmvFen: BigInt(Number(row?.totalGmvFen ?? 0)),
     paidOrderCount: Number(row?.paidOrderCount ?? 0),
     dataSource: 'OrderHeader'
   };
@@ -37,12 +37,12 @@ export async function loadDayGmvFromDailyMetrics(
 ): Promise<MoneyDayTotals | null> {
   const dm = await prisma.dailyMetrics.findUnique({
     where: { date },
-    select: { totalGmv: true, paidOrderCount: true }
+    select: { totalGmvFen: true, paidOrderCount: true }
   });
   if (!dm) return null;
   return {
     date,
-    totalGmv: Number(dm.totalGmv),
+    totalGmvFen: dm.totalGmvFen,
     paidOrderCount: Number(dm.paidOrderCount),
     dataSource: 'DailyMetrics'
   };

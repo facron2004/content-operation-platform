@@ -8,8 +8,7 @@
 
 .review-hero {
   background:
-    radial-gradient(circle at top right, rgba(19, 78, 74, 0.08), transparent 30%),
-    linear-gradient(180deg, #ffffff 0%, #fbfcfe 100%);
+    radial-gradient(circle at top right, rgba(19, 78, 74, 0.08), transparent 30%), var(--panel);
 }
 
 .hero-head {
@@ -35,7 +34,7 @@
   flex-direction: column;
   gap: 8px;
   min-width: 0;
-  padding: 14px;
+  padding: 12px;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   background: var(--panel);
@@ -79,7 +78,7 @@
 }
 
 .charts-grid .panel {
-  min-height: 420px;
+  min-height: 360px;
 }
 
 .table-panel {

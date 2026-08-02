@@ -1,6 +1,6 @@
 .metric-tile {
-  min-height: 76px;
-  padding: 10px 12px;
+  min-height: 68px;
+  padding: 8px 10px;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   background: var(--panel);
@@ -12,8 +12,8 @@
 }
 
 .metric-tile:hover {
-  box-shadow: var(--shadow);
-  transform: translateY(-1px);
+  border-color: var(--line-strong);
+  box-shadow: var(--shadow-soft);
 }
 
 .metric-tile.clickable {
@@ -27,24 +27,25 @@
 
 .metric-tile span {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.015em;
 }
 
 .metric-tile strong {
   display: block;
-  margin-top: 4px;
+  margin-top: 3px;
   color: var(--ink);
-  font-size: 22px;
-  font-weight: 800;
+  font-size: 20px;
+  font-weight: 750;
   font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
 }
 
 .metric-hint {
   display: block;
-  margin-top: 4px;
+  margin-top: 3px;
   color: var(--muted);
   font-size: 11px;
   font-style: normal;
@@ -55,7 +56,7 @@
 
 .metric-delta {
   display: inline-block;
-  margin-top: 4px;
+  margin-top: 3px;
   font-size: 11px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;

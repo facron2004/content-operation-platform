@@ -45,60 +45,49 @@ export async function recomputePackageSalesAmountRange(
   const paidStart = beijingDayRangeSqlite(startDate).start;
   const paidEnd = beijingDayRangeSqlite(endDate).end;
 
-  const write = async (tx: PackageSalesAmountPrisma) => {
-    // Zero first so package/day rows that no longer have OrderHeader sales
-    // (refund-all, re-ETL, package reassignment) do not keep a stale salesAmount.
-    // Inventory-derived salesQty is preserved; only amount is recomputed from OH.
-    await tx.$executeRawUnsafe(
-      `UPDATE "PackageSalesDaily"
-       SET "salesAmount" = 0, "salesAmountFen" = 0, "updatedAt" = ?
-       WHERE "date" >= ? AND "date" <= ?`,
-      now,
-      startDate,
-      endDate
-    );
-    // Ensure target rows exist for package/day pairs with OH sales (qty may already exist from inventory).
-    return tx.$executeRawUnsafe(
-      `
-        INSERT INTO "PackageSalesDaily" (
-          "id", "packageId", "date", "salesQty", "salesAmount", "salesAmountFen", "refundQty",
-          "deltaSource", "computedAt", "createdAt", "updatedAt"
-        )
-        SELECT
-          oh."packageId" || '_' || ${sqlBeijingDate('oh."paidTime"')} AS "id",
-          oh."packageId" AS "packageId",
-          ${sqlBeijingDate('oh."paidTime"')} AS "date",
-          0 AS "salesQty",
-          COALESCE(SUM(${SQL_GMV_OH}), 0) AS "salesAmount",
-          CAST(ROUND(COALESCE(SUM(${SQL_GMV_OH}), 0) * 100) AS INTEGER) AS "salesAmountFen",
-          0 AS "refundQty",
-          'order_header' AS "deltaSource",
-          ? AS "computedAt",
-          ? AS "createdAt",
-          ? AS "updatedAt"
-        FROM "OrderHeader" oh
-        WHERE oh."paidTime" IS NOT NULL
-          AND oh."packageId" IS NOT NULL
-          AND oh."packageId" <> ''
-          AND ${sqlDatetimeExclusiveRange('oh."paidTime"')}
-        GROUP BY oh."packageId", ${sqlBeijingDate('oh."paidTime"')}
-        ON CONFLICT("packageId", "date") DO UPDATE SET
-          "salesAmount" = excluded."salesAmount",
-          "salesAmountFen" = excluded."salesAmountFen",
-          "computedAt" = excluded."computedAt",
-          "updatedAt" = excluded."updatedAt"
-      `,
-      now,
-      now,
-      now,
-      paidStart,
-      paidEnd
-    );
-  };
-
-  const rowsAffected = prisma.$transaction
-    ? await prisma.$transaction((tx) => write(tx))
-    : await write(prisma);
+  // Note: intentionally does NOT use callback-style $transaction — the libsql adapter throws
+  // "unknown variant SocketTimeout". Phase 6: legacy "salesAmount" column dropped.
+  await prisma.$executeRawUnsafe(
+    `UPDATE "PackageSalesDaily"
+     SET "salesAmountFen" = 0, "updatedAt" = ?
+     WHERE "date" >= ? AND "date" <= ?`,
+    now,
+    startDate,
+    endDate
+  );
+  const rowsAffected = await prisma.$executeRawUnsafe(
+    `INSERT INTO "PackageSalesDaily" (
+        "id", "packageId", "date", "salesQty", "salesAmountFen", "refundQty",
+        "deltaSource", "computedAt", "createdAt", "updatedAt"
+      )
+      SELECT
+        oh."packageId" || '_' || ${sqlBeijingDate('oh."paidTime"')} AS "id",
+        oh."packageId" AS "packageId",
+        ${sqlBeijingDate('oh."paidTime"')} AS "date",
+        0 AS "salesQty",
+        COALESCE(SUM(${SQL_GMV_OH}), 0) AS "salesAmountFen",
+        0 AS "refundQty",
+        'order_header' AS "deltaSource",
+        ? AS "computedAt",
+        ? AS "createdAt",
+        ? AS "updatedAt"
+      FROM "OrderHeader" oh
+      WHERE oh."paidTime" IS NOT NULL
+        AND oh."packageId" IS NOT NULL
+        AND oh."packageId" <> ''
+        AND ${sqlDatetimeExclusiveRange('oh."paidTime"')}
+      GROUP BY oh."packageId", ${sqlBeijingDate('oh."paidTime"')}
+      ON CONFLICT("packageId", "date") DO UPDATE SET
+        "salesAmountFen" = excluded."salesAmountFen",
+        "computedAt" = excluded."computedAt",
+        "updatedAt" = excluded."updatedAt"
+    `,
+    now,
+    now,
+    now,
+    paidStart,
+    paidEnd
+  );
 
   const [joinable] = (await prisma.$queryRawUnsafe(
     `SELECT COALESCE(SUM(${SQL_GMV_OH}), 0) AS "gmv"

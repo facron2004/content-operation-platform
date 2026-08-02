@@ -11,7 +11,6 @@ import {
   toSqliteDateTime
 } from './sqlite-datetime';
 import { queryInChunks } from './sql-chunk';
-import { yuanToFen } from '@content/shared';
 import type { PrismaService } from '../prisma/prisma.service';
 
 export type TpdUpsertRow = {
@@ -19,14 +18,15 @@ export type TpdUpsertRow = {
   date: string;
   visitCount: number;
   orderCount: number;
+  /** GMV in fen (from OrderHeader *Fen columns). */
   gmv: number;
   verifyCount: number;
   refundCount: number;
   conversionRate: number;
 };
 
-/** Columns per TPD upsert row (id + 10 payload fields incl. gmvFen). */
-const TPD_COLS = 11;
+/** Columns per TPD upsert row (id + 9 payload fields). */
+const TPD_COLS = 10;
 
 /**
  * Max rows per multi-row INSERT. 50 × 10 params = 500 — well under SQLite
@@ -42,12 +42,11 @@ function buildTpdUpsertSql(numRows: number): string {
     () => `(${Array.from({ length: TPD_COLS }, () => '?').join(',')})`
   ).join(',');
   return (
-    `INSERT INTO "TaskPerformanceDaily" ("id", "taskId", "date", "visitCount", "orderCount", "gmv", "gmvFen", "verifyCount", "refundCount", "conversionRate", "computedAt") ` +
+    `INSERT INTO "TaskPerformanceDaily" ("id", "taskId", "date", "visitCount", "orderCount", "gmvFen", "verifyCount", "refundCount", "conversionRate", "computedAt") ` +
     `VALUES ${values} ` +
     `ON CONFLICT("taskId", "date") DO UPDATE SET ` +
     `"visitCount" = excluded."visitCount", ` +
     `"orderCount" = excluded."orderCount", ` +
-    `"gmv" = excluded."gmv", ` +
     `"gmvFen" = excluded."gmvFen", ` +
     `"verifyCount" = excluded."verifyCount", ` +
     `"refundCount" = excluded."refundCount", ` +
@@ -79,7 +78,6 @@ export async function batchUpsertTaskPerformanceDaily(
         r.visitCount,
         r.orderCount,
         r.gmv,
-        yuanToFen(r.gmv),
         r.verifyCount,
         r.refundCount,
         r.conversionRate,
@@ -148,7 +146,7 @@ export async function loadTpdAttrAggregatesByTask(
          COUNT(DISTINCT oa."orderId") as orderCount,
          COALESCE(SUM(${SQL_GMV_OH}), 0) as gmv,
          COALESCE(SUM(CASE WHEN oh."verifyTime" IS NOT NULL THEN 1 ELSE 0 END), 0) as verifyCount,
-         COALESCE(SUM(CASE WHEN oh."refundAmount" > 0 THEN 1 ELSE 0 END), 0) as refundCount
+         COALESCE(SUM(CASE WHEN oh."refundAmountFen" > 0 THEN 1 ELSE 0 END), 0) as refundCount
        FROM "OrderAttribution" oa
        INNER JOIN "OrderHeader" oh ON oh."orderId" = oa."orderId"
        WHERE oa."taskId" IN (${chunk.map(() => '?').join(',')})

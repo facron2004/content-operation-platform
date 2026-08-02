@@ -10,6 +10,7 @@ import { DashboardService } from './dashboard.service';
 import { OpsTodayQueryDto } from './content.dto';
 import { resolveScopedQuery } from '../user-access/data-scope';
 import { assertUnrestrictedAnalytics } from '../user-access/scope-guards';
+import { RequireLogin } from '../user-access/iam/route-auth.decorator';
 
 type AuthUser = {
   userId: string;
@@ -57,6 +58,7 @@ function opsScopeFromReq(req: Request) {
 }
 
 @ApiTags('dashboard')
+@RequireLogin()
 @Controller('api/content')
 export class DashboardController {
   constructor(

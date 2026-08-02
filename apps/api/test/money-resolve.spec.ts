@@ -20,14 +20,16 @@ describe('money-resolve policy', () => {
 
   it('today always uses OrderHeader even when zeros', async () => {
     const prisma = {
-      $queryRawUnsafe: vi.fn().mockResolvedValue([{ totalGmv: 0, paidOrderCount: 0 }]),
-      dailyMetrics: { findUnique: vi.fn().mockResolvedValue({ totalGmv: 999, paidOrderCount: 9 }) }
+      $queryRawUnsafe: vi.fn().mockResolvedValue([{ totalGmvFen: 0n, paidOrderCount: 0 }]),
+      dailyMetrics: {
+        findUnique: vi.fn().mockResolvedValue({ totalGmvFen: 99_900n, paidOrderCount: 9 })
+      }
     } as unknown as MoneyPrisma;
 
     const result = await resolveDayGmvMoney(prisma, '2026-07-13');
     expect(result).toEqual({
       date: '2026-07-13',
-      totalGmv: 0,
+      totalGmvFen: 0n,
       paidOrderCount: 0,
       dataSource: 'OrderHeader'
     });
@@ -36,11 +38,11 @@ describe('money-resolve policy', () => {
 
   it('history prefers DailyMetrics when present', async () => {
     const prisma = {
-      $queryRawUnsafe: vi.fn().mockResolvedValue([{ totalGmv: 1, paidOrderCount: 1 }]),
+      $queryRawUnsafe: vi.fn().mockResolvedValue([{ totalGmvFen: 100n, paidOrderCount: 1 }]),
       dailyMetrics: {
         findUnique: vi.fn().mockResolvedValue({
           date: '2026-07-01',
-          totalGmv: 5000,
+          totalGmvFen: 500_000n,
           paidOrderCount: 40
         })
       }
@@ -48,20 +50,20 @@ describe('money-resolve policy', () => {
 
     const result = await resolveDayGmvMoney(prisma, '2026-07-01');
     expect(result.dataSource).toBe('DailyMetrics');
-    expect(result.totalGmv).toBe(5000);
+    expect(result.totalGmvFen).toBe(500_000n);
     expect(prisma.$queryRawUnsafe).not.toHaveBeenCalled();
   });
 
   it('history falls back to OrderHeader when DailyMetrics missing', async () => {
     const prisma = {
-      $queryRawUnsafe: vi.fn().mockResolvedValue([{ totalGmv: 321, paidOrderCount: 7 }]),
+      $queryRawUnsafe: vi.fn().mockResolvedValue([{ totalGmvFen: 32_100n, paidOrderCount: 7 }]),
       dailyMetrics: { findUnique: vi.fn().mockResolvedValue(null) }
     } as unknown as MoneyPrisma;
 
     const result = await resolveDayGmvMoney(prisma, '2026-06-15');
     expect(result).toMatchObject({
       date: '2026-06-15',
-      totalGmv: 321,
+      totalGmvFen: 32_100n,
       paidOrderCount: 7,
       dataSource: 'OrderHeader'
     });

@@ -7,7 +7,6 @@ import { mapDistributionRows } from './gmv-metrics';
 import {
   emptyTrendPoint,
   type GmvDistributionPayload,
-  type GmvDistributionRow,
   type GmvHourlyPoint,
   type GmvTodayPayload,
   type GmvTrendPoint
@@ -40,66 +39,125 @@ type PrismaLike = Pick<PrismaService, '$queryRawUnsafe'>;
 export function buildOrderHeaderTodayPayload(
   date: string,
   gmvRow: OrderHeaderGmvRow,
-  totalRefund: number,
+  totalRefundFen: bigint | null,
+  refundOrderCount: number,
   extras?: {
-    monthGmv?: number;
-    monthGmvOnline?: number;
-    monthGmvWallet?: number;
+    monthGmvFen?: bigint | null;
+    monthGmvOnlineFen?: bigint | null;
+    monthGmvWalletFen?: bigint | null;
     prev?: OrderHeaderGmvRow | null;
-    prevRefund?: number;
+    prevRefundFen?: bigint | null;
   }
 ): GmvTodayPayload {
-  const online = Number(gmvRow.paidAmount);
-  const wallet = Number(gmvRow.paidAmountWallet);
-  const bonus = Number(gmvRow.paidAmountBonus);
-  const card = Number(gmvRow.paidAmountCard);
-  const verify = Number(gmvRow.verifyAmount);
-  const totalGmv = gmvFromParts(online, wallet);
-  const paidOrderCount = Number(gmvRow.orderCount);
-  const avgOrderValue = paidOrderCount > 0 ? totalGmv / paidOrderCount : 0;
-  const monthGmv = Number(extras?.monthGmv ?? totalGmv);
-  const monthGmvOnline = Number(extras?.monthGmvOnline ?? online);
-  const monthGmvWallet = Number(extras?.monthGmvWallet ?? wallet);
+  const isFen = gmvRow.paidAmountFen != null;
+  const onlineFen = BigInt(
+    Math.round(Number(gmvRow.paidAmountFen ?? (gmvRow as any).paidAmount ?? 0) * (isFen ? 1 : 100))
+  );
+  const walletFen = BigInt(
+    Math.round(
+      Number(gmvRow.paidAmountWalletFen ?? (gmvRow as any).paidAmountWallet ?? 0) *
+        (isFen ? 1 : 100)
+    )
+  );
+  const bonusFen = BigInt(
+    Math.round(
+      Number(gmvRow.paidAmountBonusFen ?? (gmvRow as any).paidAmountBonus ?? 0) * (isFen ? 1 : 100)
+    )
+  );
+  const cardFen = BigInt(
+    Math.round(
+      Number(gmvRow.paidAmountCardFen ?? (gmvRow as any).paidAmountCard ?? 0) * (isFen ? 1 : 100)
+    )
+  );
+  const verifyFen = BigInt(
+    Math.round(
+      Number(gmvRow.verifyAmountFen ?? (gmvRow as any).verifyAmount ?? 0) * (isFen ? 1 : 100)
+    )
+  );
+  const refundFen = BigInt(
+    Math.round(
+      Number(totalRefundFen ?? 0) *
+        (typeof totalRefundFen === 'bigint' || typeof totalRefundFen === 'number' ? 1 : 100)
+    )
+  );
+  const grossGmvFen = gmvFromParts(onlineFen, walletFen);
+  const totalGmvFen = grossGmvFen - refundFen;
+  const paidOrderCount = Number(gmvRow.orderCount ?? 0);
+  const avgOrderValue = paidOrderCount > 0 ? Number(totalGmvFen) / 100 / paidOrderCount : 0;
+  const monthGmvFen = extras?.monthGmvFen ?? totalGmvFen;
+  const monthGmvOnlineFen = extras?.monthGmvOnlineFen ?? onlineFen;
+  const monthGmvWalletFen = extras?.monthGmvWalletFen ?? walletFen;
 
   let compare: GmvTodayPayload['compare'];
   if (extras?.prev) {
-    const prevOnline = Number(extras.prev.paidAmount);
-    const prevWallet = Number(extras.prev.paidAmountWallet);
-    const prevGmv = gmvFromParts(prevOnline, prevWallet);
-    const prevOrders = Number(extras.prev.orderCount);
-    const prevRefund = Number(extras.prevRefund ?? 0);
-    const prevVerify = Number(extras.prev.verifyAmount);
-    const prevAov = prevOrders > 0 ? prevGmv / prevOrders : 0;
+    const prevIsFen = extras.prev.paidAmountFen != null;
+    const prevOnlineFen = BigInt(
+      Math.round(
+        Number(extras.prev.paidAmountFen ?? (extras.prev as any).paidAmount ?? 0) *
+          (prevIsFen ? 1 : 100)
+      )
+    );
+    const prevWalletFen = BigInt(
+      Math.round(
+        Number(extras.prev.paidAmountWalletFen ?? (extras.prev as any).paidAmountWallet ?? 0) *
+          (prevIsFen ? 1 : 100)
+      )
+    );
+    const prevGrossGmvFen = gmvFromParts(prevOnlineFen, prevWalletFen);
+    const prevRefundFen = BigInt(
+      Math.round(
+        Number(extras.prevRefundFen ?? 0) *
+          (typeof extras.prevRefundFen === 'bigint' || typeof extras.prevRefundFen === 'number'
+            ? 1
+            : 100)
+      )
+    );
+    const prevGmvFen = prevGrossGmvFen - prevRefundFen;
+    const prevOrders = Number(extras.prev.orderCount ?? 0);
+    const prevVerifyFen = BigInt(
+      Math.round(
+        Number(extras.prev.verifyAmountFen ?? (extras.prev as any).verifyAmount ?? 0) *
+          (prevIsFen ? 1 : 100)
+      )
+    );
+    const prevAov = prevOrders > 0 ? Number(prevGmvFen) / 100 / prevOrders : 0;
     compare = {
-      totalGmv: ratioDelta(totalGmv, prevGmv),
+      totalGmv: ratioDelta(Number(totalGmvFen) / 100, Number(prevGmvFen) / 100),
+      totalGmvFen: ratioDelta(Number(totalGmvFen) / 100, Number(prevGmvFen) / 100),
       paidOrderCount: ratioDelta(paidOrderCount, prevOrders),
       avgOrderValue: ratioDelta(avgOrderValue, prevAov),
       refundRate: ratioDelta(
-        rateAgainstGmv(totalRefund, totalGmv),
-        rateAgainstGmv(prevRefund, prevGmv)
+        rateAgainstGmv(Number(totalRefundFen ?? 0n) / 100, Number(totalGmvFen) / 100),
+        rateAgainstGmv(Number(prevRefundFen) / 100, Number(prevGmvFen) / 100)
       ),
-      verifyRate: ratioDelta(rateAgainstGmv(verify, totalGmv), rateAgainstGmv(prevVerify, prevGmv))
+      verifyRate: ratioDelta(
+        rateAgainstGmv(Number(verifyFen) / 100, Number(totalGmvFen) / 100),
+        rateAgainstGmv(Number(prevVerifyFen) / 100, Number(prevGmvFen) / 100)
+      )
     };
   }
 
   return {
     date,
-    totalGmv,
-    gmvOnline: online,
-    gmvWallet: wallet,
-    gmvBonus: bonus,
-    gmvCard: card,
-    totalRefund,
-    refundRate: rateAgainstGmv(totalRefund, totalGmv),
-    totalVerify: verify,
-    verifyRate: rateAgainstGmv(verify, totalGmv),
+    totalGmv: Number(totalGmvFen) / 100,
+    monthGmv: Number(monthGmvFen) / 100,
+    totalGmvFen,
+    gmvOnlineFen: onlineFen,
+    gmvWalletFen: walletFen,
+    gmvBonusFen: bonusFen,
+    gmvCardFen: cardFen,
+    totalRefundFen,
+    refundRate: rateAgainstGmv(Number(totalRefundFen ?? 0n) / 100, Number(totalGmvFen) / 100),
+    refundOrderCount,
+    totalVerifyFen: verifyFen,
+    verifyRate: rateAgainstGmv(Number(verifyFen) / 100, Number(totalGmvFen) / 100),
     paidOrderCount,
-    paidAmountBonus: bonus,
-    paidAmountWallet: wallet,
+    paidAmountBonusFen: bonusFen,
+    paidAmountWalletFen: walletFen,
     avgOrderValue,
-    monthGmv,
-    monthGmvOnline,
-    monthGmvWallet,
+    monthGmvFen,
+    monthGmvOnlineFen,
+    monthGmvWalletFen,
     platformCommission: 0,
     compare,
     updatedAt: new Date().toISOString(),
@@ -145,17 +203,28 @@ export async function computeFromOrderHeader(
 
   const gmvRow = gmvRows[0] ?? EMPTY_ORDER_HEADER_GMV_ROW;
   const monthRow = monthRows[0] ?? EMPTY_ORDER_HEADER_GMV_ROW;
-  const monthGmv = gmvFromParts(Number(monthRow.paidAmount), Number(monthRow.paidAmountWallet));
-  const monthGmvOnline = Number(monthRow.paidAmount);
-  const monthGmvWallet = Number(monthRow.paidAmountWallet);
+  const monthGrossGmvFen = gmvFromParts(
+    BigInt(Number(monthRow.paidAmountFen ?? 0)),
+    BigInt(Number(monthRow.paidAmountWalletFen ?? 0))
+  );
+  const monthRefundFen = BigInt(Number(monthRow.refundAmountFen ?? 0));
+  const monthGmvFen = monthGrossGmvFen - monthRefundFen;
+  const monthGmvOnlineFen = BigInt(Number(monthRow.paidAmountFen ?? 0));
+  const monthGmvWalletFen = BigInt(Number(monthRow.paidAmountWalletFen ?? 0));
 
-  return buildOrderHeaderTodayPayload(date, gmvRow, Number(refundRows[0]?.totalRefund ?? 0), {
-    monthGmv,
-    monthGmvOnline,
-    monthGmvWallet,
-    prev: prevGmvRows[0] ?? null,
-    prevRefund: Number(prevRefundRows[0]?.totalRefund ?? 0)
-  });
+  return buildOrderHeaderTodayPayload(
+    date,
+    gmvRow,
+    BigInt(Number(refundRows[0]?.totalRefundFen ?? 0)),
+    Number(refundRows[0]?.refundOrderCount ?? 0),
+    {
+      monthGmvFen,
+      monthGmvOnlineFen,
+      monthGmvWalletFen,
+      prev: prevGmvRows[0] ?? null,
+      prevRefundFen: BigInt(Number(prevRefundRows[0]?.totalRefundFen ?? 0))
+    }
+  );
 }
 
 export async function computeHourlyFromOrderHeader(
@@ -189,16 +258,22 @@ export function mapOrderHeaderTrendRows(
       result.push(emptyTrendPoint(d));
       continue;
     }
-    const gmv = gmvFromParts(Number(b.paidAmount), Number(b.paidAmountWallet));
+    const grossGmvFen = gmvFromParts(
+      BigInt(Number(b.paidAmountFen ?? 0n)),
+      BigInt(Number(b.paidAmountWalletFen ?? 0n))
+    );
+    const refundFen = BigInt(Number(b.refundAmountFen ?? 0n));
+    const totalGmvFen = grossGmvFen - refundFen;
     result.push({
       date: d,
-      totalGmv: gmv,
-      gmvOnline: Number(b.paidAmount),
-      gmvWallet: Number(b.paidAmountWallet),
-      gmvBonus: Number(b.paidAmountBonus),
-      totalRefund: Number(b.refundAmount),
-      refundRate: rateAgainstGmv(Number(b.refundAmount), gmv),
-      verifyRate: rateAgainstGmv(Number(b.verifyAmount), gmv),
+      totalGmv: Number(totalGmvFen) / 100,
+      totalGmvFen,
+      gmvOnlineFen: BigInt(Number(b.paidAmountFen ?? 0n)),
+      gmvWalletFen: BigInt(Number(b.paidAmountWalletFen ?? 0n)),
+      gmvBonusFen: BigInt(Number(b.paidAmountBonusFen ?? 0n)),
+      totalRefundFen: refundFen,
+      refundRate: rateAgainstGmv(Number(b.refundAmountFen ?? 0n) / 100, Number(grossGmvFen) / 100),
+      verifyRate: rateAgainstGmv(Number(b.verifyAmountFen ?? 0n) / 100, Number(grossGmvFen) / 100),
       paidOrderCount: Number(b.orderCount)
     });
   }
@@ -242,12 +317,13 @@ export async function computeDistributionFromOrderHeader(
   if (dim !== 'area' && dim !== 'category') return empty;
 
   const { startBound, endBound } = weekWindowBounds();
-  const { totalGmv, rows } =
+  const { totalGmvFen, rows } =
     dim === 'area'
       ? await loadOrderHeaderAreaDistribution(prisma, startBound, endBound, safeLimit)
       : await loadOrderHeaderCategoryDistribution(prisma, startBound, endBound, safeLimit);
 
-  if (totalGmv <= 0) return empty;
+  if (totalGmvFen <= 0n) return empty;
   // Residual #289: pass limit so payload projects honesty even when head is full.
+  const totalGmv = totalGmvFen;
   return mapDistributionRows(rows, totalGmv, safeLimit);
 }

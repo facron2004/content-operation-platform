@@ -68,7 +68,7 @@ const {
 
 <style scoped>
 .campaign-detail-page {
-  padding: 20px;
+  padding: 0;
 }
 
 .back-link {

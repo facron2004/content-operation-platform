@@ -14,7 +14,7 @@ const { visible, notifications, unreadCount, markAllAsRead, remove, handleClick,
       </template>
     </AppleButton>
   </el-badge>
-  <el-drawer v-model="visible" title="通知中心" size="400px" direction="rtl">
+  <el-drawer v-model="visible" title="通知中心" size="400px" direction="rtl" append-to-body>
     <div class="notification-header">
       <div>
         <strong>运营提醒</strong>

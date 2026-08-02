@@ -42,6 +42,7 @@
       :heat-points="heatPoints"
       :heat-city="heatCity"
       :alerts="alerts"
+      :hourly="hourly"
       @trend-change="loadTrend"
       @dist-change="loadDistribution"
       @merchants-change="loadTopMerchants"
@@ -100,7 +101,8 @@ const {
   activities,
   heatPoints,
   heatCity,
-  alerts
+  alerts,
+  hourly
 } = useGmvCockpit();
 </script>
 

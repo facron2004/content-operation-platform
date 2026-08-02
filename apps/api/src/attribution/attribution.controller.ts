@@ -8,6 +8,8 @@ import { ManualBindDto } from './dto/manual-bind.dto';
 import { Roles } from '../user-access/role.decorator';
 import { safePathId } from '../common/path-id';
 import { createDtoPipe } from '../common/dto-pipe';
+import { RequireLogin } from '../user-access/iam/route-auth.decorator';
+import { RequirePermissions } from '../user-access/iam/require-permissions.decorator';
 
 class UnmatchedOrdersQueryDto {
   @IsOptional()
@@ -26,11 +28,13 @@ class UnmatchedOrdersQueryDto {
 }
 
 @ApiTags('attribution')
+@RequireLogin()
 @Controller('api/attribution')
 export class AttributionController {
   constructor(@Inject(AttributionService) private readonly svc: AttributionService) {}
 
   @Roles('admin', 'platform_operator')
+  @RequirePermissions('attribution:manage')
   @Throttle({ long: { limit: 3, ttl: 60000 } })
   @Post('recompute')
   @ApiOperation({ summary: 'Trigger attribution matching for all active tasks' })
@@ -39,6 +43,7 @@ export class AttributionController {
   }
 
   @Roles('admin', 'platform_operator', 'auditor')
+  @RequirePermissions('attribution:read')
   // Full-table COUNT + NOT EXISTS scan — throttle so concurrent tabs cannot pin SQLite.
   @Throttle({ long: { limit: 20, ttl: 60000 } })
   @Get('unmatched-orders')
@@ -50,6 +55,7 @@ export class AttributionController {
   }
 
   @Roles('admin', 'platform_operator')
+  @RequirePermissions('attribution:manage')
   @Throttle({ long: { limit: 20, ttl: 60000 } })
   @Post('manual-bind')
   @ApiOperation({ summary: 'Manually bind an order to a task' })
@@ -58,6 +64,7 @@ export class AttributionController {
   }
 
   @Roles('admin', 'platform_operator')
+  @RequirePermissions('attribution:manage')
   @Throttle({ long: { limit: 20, ttl: 60000 } })
   @Post(':id/revoke')
   @ApiOperation({ summary: 'Revoke an attribution by id' })

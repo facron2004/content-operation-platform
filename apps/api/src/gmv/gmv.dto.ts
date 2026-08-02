@@ -95,36 +95,44 @@ export class GmvRefreshBodyDto {
 
 // --- gmv.types.ts ---
 export interface GmvCompareDelta {
+  /** 相对前一日的环比（兼容层，前端依赖 Float 字段） */
   totalGmv?: number | null;
+  totalGmvFen?: number | null;
   paidOrderCount?: number | null;
   avgOrderValue?: number | null;
   refundRate?: number | null;
   verifyRate?: number | null;
   monthGmv?: number | null;
+  monthGmvFen?: number | null;
 }
 
 export interface GmvTodayPayload {
   date: string;
+  /** 今日 GMV（元，兼容层，前端依赖 Float 字段） */
   totalGmv: number;
-  gmvOnline: number;
-  gmvWallet: number;
-  gmvBonus: number;
-  gmvCard: number;
-  totalRefund: number;
+  /** 本月累计 GMV（元，兼容层） */
+  monthGmv: number;
+  totalGmvFen: bigint | null;
+  gmvOnlineFen: bigint | null;
+  gmvWalletFen: bigint | null;
+  gmvBonusFen: bigint | null;
+  gmvCardFen: bigint | null;
+  totalRefundFen: bigint | null;
   refundRate: number;
-  totalVerify: number;
+  refundOrderCount: number;
+  totalVerifyFen: bigint | null;
   verifyRate: number;
   paidOrderCount: number;
-  paidAmountBonus: number;
-  paidAmountWallet: number;
+  paidAmountBonusFen: bigint | null;
+  paidAmountWalletFen: bigint | null;
   /** 客单价 = totalGmv / paidOrderCount */
   avgOrderValue: number;
   /** 本月累计 GMV（月初至 date，含当天） */
-  monthGmv: number;
+  monthGmvFen: bigint | null;
   /** 本月累计 现金/在线支付金额 */
-  monthGmvOnline: number;
+  monthGmvOnlineFen: bigint | null;
   /** 本月累计 余额支付金额 */
-  monthGmvWallet: number;
+  monthGmvWalletFen: bigint | null;
   /** 平台佣金收入（暂无订单级佣金，固定 0 并披露） */
   platformCommission: number;
   /** 相对前一日（或上月同期）的环比 */
@@ -135,11 +143,13 @@ export interface GmvTodayPayload {
 
 export interface GmvTrendPoint {
   date: string;
+  /** 当日 GMV（元，兼容层） */
   totalGmv: number;
-  gmvOnline: number;
-  gmvWallet: number;
-  gmvBonus: number;
-  totalRefund: number;
+  totalGmvFen: bigint | null;
+  gmvOnlineFen: bigint | null;
+  gmvWalletFen: bigint | null;
+  gmvBonusFen: bigint | null;
+  totalRefundFen: bigint | null;
   refundRate: number;
   verifyRate: number;
   paidOrderCount: number;
@@ -148,16 +158,16 @@ export interface GmvTrendPoint {
 export interface GmvHourlyPoint {
   hour: number;
   label: string;
-  totalGmv: number;
+  totalGmvFen: bigint | null;
   paidOrderCount: number;
 }
 
 export interface GmvDistributionRow {
   key: string;
-  totalGmv: number;
-  gmvOnline: number;
-  gmvWallet: number;
-  gmvBonus: number;
+  totalGmvFen: bigint | null;
+  gmvOnlineFen: bigint | null;
+  gmvWalletFen: bigint | null;
+  gmvBonusFen: bigint | null;
   share: number;
 }
 
@@ -179,10 +189,11 @@ export interface GmvDistributionPayload {
 export const emptyTrendPoint = (date = ''): GmvTrendPoint => ({
   date,
   totalGmv: 0,
-  gmvOnline: 0,
-  gmvWallet: 0,
-  gmvBonus: 0,
-  totalRefund: 0,
+  totalGmvFen: 0n,
+  gmvOnlineFen: 0n,
+  gmvWalletFen: 0n,
+  gmvBonusFen: 0n,
+  totalRefundFen: 0n,
   refundRate: 0,
   verifyRate: 0,
   paidOrderCount: 0
@@ -194,21 +205,24 @@ export const emptyTodayPayload = (
 ): GmvTodayPayload => ({
   date,
   totalGmv: 0,
-  gmvOnline: 0,
-  gmvWallet: 0,
-  gmvBonus: 0,
-  gmvCard: 0,
-  totalRefund: 0,
+  monthGmv: 0,
+  totalGmvFen: 0n,
+  gmvOnlineFen: 0n,
+  gmvWalletFen: 0n,
+  gmvBonusFen: 0n,
+  gmvCardFen: 0n,
+  totalRefundFen: 0n,
   refundRate: 0,
-  totalVerify: 0,
+  refundOrderCount: 0,
+  totalVerifyFen: 0n,
   verifyRate: 0,
   paidOrderCount: 0,
-  paidAmountBonus: 0,
-  paidAmountWallet: 0,
+  paidAmountBonusFen: 0n,
+  paidAmountWalletFen: 0n,
   avgOrderValue: 0,
-  monthGmv: 0,
-  monthGmvOnline: 0,
-  monthGmvWallet: 0,
+  monthGmvFen: 0n,
+  monthGmvOnlineFen: 0n,
+  monthGmvWalletFen: 0n,
   platformCommission: 0,
   updatedAt: new Date().toISOString(),
   dataSource
@@ -218,7 +232,7 @@ export const emptyHourlyPoints = (): GmvHourlyPoint[] =>
   Array.from({ length: 24 }, (_, hour) => ({
     hour,
     label: `${String(hour).padStart(2, '0')}:00`,
-    totalGmv: 0,
+    totalGmvFen: 0n,
     paidOrderCount: 0
   }));
 
@@ -227,9 +241,9 @@ export interface GmvMerchantRow {
   merchantId: string;
   merchantName: string;
   areaName: string | null;
-  gmv: number;
-  gmvRefund: number;
-  gmvVerify: number;
+  gmvFen: bigint | null;
+  gmvRefundFen: bigint | null;
+  gmvVerifyFen: bigint | null;
   refundRate: number;
   verifyRate: number;
   paidOrderCount: number;

@@ -103,6 +103,7 @@ export class AuthService {
     username: string;
     roles?: { role: string }[];
     tokenVersion?: number;
+    tenantId?: string;
   }) {
     const roles = user.roles?.map((r) => r.role) ?? [];
     return {
@@ -110,6 +111,7 @@ export class AuthService {
         sub: user.userId,
         username: user.username,
         roles,
+        tenantId: user.tenantId ?? 'tenant_default',
         tv: Number(user.tokenVersion ?? 0)
       }),
       username: user.username
@@ -123,6 +125,7 @@ export class AuthService {
         sub: 'admin',
         username,
         roles: ['admin'],
+        tenantId: 'tenant_default',
         tv: 0
       }),
       username

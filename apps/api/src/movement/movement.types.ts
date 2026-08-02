@@ -7,7 +7,7 @@ export type ActiveSkuCandidate = {
   merchantName: string;
   areaName: string | null;
   category: string;
-  salePrice: number;
+  salePriceFen: bigint | null;
   stockLeft: number;
   stockTotal: number;
 };

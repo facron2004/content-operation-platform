@@ -14,7 +14,10 @@ export function buildFeedFacts(
   if (!pkg) return [];
   return [
     { label: '原价', value: displayMoney(pkg, 'originalPrice') },
-    { label: '当前售价', value: displayMoney(pkg, pkg.temporarySalePrice != null ? 'temporarySalePrice' : 'salePrice') },
+    {
+      label: '当前售价',
+      value: displayMoney(pkg, pkg.temporarySalePrice != null ? 'temporarySalePrice' : 'salePrice')
+    },
     { label: '今日库存', value: `${pkg.stockLeft} / ${pkg.stockTotal}` },
     { label: '销售判断', value: pkg.inventorySalesLabel },
     {
@@ -35,7 +38,10 @@ export function buildFeedChecks(
     {
       label: '价格',
       ok: price > 0,
-      text: price > 0 ? `当前售价 ${displayMoney(pkg, pkg.temporarySalePrice != null ? 'temporarySalePrice' : 'salePrice')}` : '缺少有效价格'
+      text:
+        price > 0
+          ? `当前售价 ${displayMoney(pkg, pkg.temporarySalePrice != null ? 'temporarySalePrice' : 'salePrice')}`
+          : '缺少有效价格'
     },
     {
       label: '套餐明细',

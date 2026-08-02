@@ -67,7 +67,6 @@ describe('reconcileRow — Float ↔ *Fen 一致性', () => {
   });
 
   it('未知模型返回空数组', () => {
-    // @ts-expect-error 故意传入不存在的模型名
     expect(reconcileRow('NoSuchModel', { a: 1, aFen: 100n }, 1)).toHaveLength(0);
   });
 
@@ -85,7 +84,11 @@ describe('reconcileRow — Float ↔ *Fen 一致性', () => {
 
   it('原生 SQL 可能返回 number 类型的 Fen，也能正确比对', () => {
     // 模拟 $queryRawUnsafe 返回 number 而非 bigint
-    const mis = reconcileRow('OrderHeader', { orderAmount: 39.9, orderAmountFen: 3990 as unknown as bigint }, 1);
+    const mis = reconcileRow(
+      'OrderHeader',
+      { orderAmount: 39.9, orderAmountFen: 3990 as unknown as bigint },
+      1
+    );
     expect(mis).toHaveLength(0);
   });
 });
@@ -93,9 +96,39 @@ describe('reconcileRow — Float ↔ *Fen 一致性', () => {
 describe('summarizeMismatches — 汇总', () => {
   it('按类型 / 模型 / 字段聚合', () => {
     const mis: FenMismatch[] = [
-      { model: 'OrderHeader', rowId: 1, floatField: 'paidAmount', fenField: 'paidAmountFen', floatValue: 1, computedFen: 100n, storedFen: null, kind: 'missing', diff: 100n },
-      { model: 'OrderHeader', rowId: 2, floatField: 'paidAmount', fenField: 'paidAmountFen', floatValue: 2, computedFen: 200n, storedFen: 201n, kind: 'value', diff: -1n },
-      { model: 'MerchantDailyMetrics', rowId: 3, floatField: 'refundAmount', fenField: 'refundAmountFen', floatValue: null, computedFen: null, storedFen: 50n, kind: 'orphan', diff: -50n }
+      {
+        model: 'OrderHeader',
+        rowId: 1,
+        floatField: 'paidAmount',
+        fenField: 'paidAmountFen',
+        floatValue: 1,
+        computedFen: 100n,
+        storedFen: null,
+        kind: 'missing',
+        diff: 100n
+      },
+      {
+        model: 'OrderHeader',
+        rowId: 2,
+        floatField: 'paidAmount',
+        fenField: 'paidAmountFen',
+        floatValue: 2,
+        computedFen: 200n,
+        storedFen: 201n,
+        kind: 'value',
+        diff: -1n
+      },
+      {
+        model: 'MerchantDailyMetrics',
+        rowId: 3,
+        floatField: 'refundAmount',
+        fenField: 'refundAmountFen',
+        floatValue: null,
+        computedFen: null,
+        storedFen: 50n,
+        kind: 'orphan',
+        diff: -50n
+      }
     ];
     const s = summarizeMismatches(mis);
     expect(s.mismatches).toBe(3);

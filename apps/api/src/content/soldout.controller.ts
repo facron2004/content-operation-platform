@@ -16,10 +16,13 @@ import { Throttle } from '@nestjs/throttler';
 import { Public } from '../auth';
 import { SoldoutService } from './soldout.service';
 import { Roles } from '../user-access/role.decorator';
+import { RequireLogin } from '../user-access/iam/route-auth.decorator';
+import { RequirePermissions } from '../user-access/iam/require-permissions.decorator';
 
 const INVALID_INTERNAL_TOKEN_MESSAGE = 'Missing or invalid x-internal-token header.';
 
 @ApiTags('soldout')
+@RequireLogin()
 @Controller('api/content')
 export class SoldoutController {
   constructor(@Inject(SoldoutService) private readonly soldoutService: SoldoutService) {}
@@ -30,6 +33,7 @@ export class SoldoutController {
    * 平台目录（价格/商家），限制平台角色；force refresh 仅允许 POST collect。
    */
   @Roles('admin', 'platform_operator', 'auditor')
+  @RequirePermissions('content:read')
   @Throttle({ long: { limit: 20, ttl: 60000 } })
   @Get('soldout-links')
   @ApiOperation({ summary: '查询当前售罄套餐链接列表(JSON)' })
@@ -96,6 +100,7 @@ export class SoldoutController {
    * 平台角色；始终走缓存,不强制外网刷新。
    */
   @Roles('admin', 'platform_operator', 'auditor')
+  @RequirePermissions('content:read')
   @Throttle({ long: { limit: 10, ttl: 60000 } })
   @Get('soldout-links/markdown')
   @ApiOperation({ summary: '下载售罄套餐 markdown 报告' })

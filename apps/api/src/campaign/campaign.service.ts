@@ -34,7 +34,7 @@ interface CampaignRow {
 }
 
 const CAMPAIGN_ROW_COLUMNS = `"campaignId", "name", "description", "campaignType", "status",
-  "startDate", "endDate", "areaIds", "merchantIds", "budget", "targetGmv",
+  "startDate", "endDate", "areaIds", "merchantIds",
   "targetOrders", "kpiJson", "ownerId", "createdAt", "updatedAt"`;
 
 function safeJsonArray(raw: string | null): string[] {
@@ -246,8 +246,8 @@ export class CampaignService {
     // ownerId only from controller JWT stamp (not free-form DTO field).
     const ownerId = dto.ownerId ?? null;
     await this.prisma.$executeRawUnsafe(
-      `INSERT INTO "MarketingCampaign" ("campaignId", "name", "description", "campaignType", "status", "startDate", "endDate", "areaIds", "merchantIds", "budget", "targetGmv", "budgetFen", "targetGmvFen", "targetOrders", "ownerId", "createdAt", "updatedAt")
-       VALUES (?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO "MarketingCampaign" ("campaignId", "name", "description", "campaignType", "status", "startDate", "endDate", "areaIds", "merchantIds", "budgetFen", "targetGmvFen", "targetOrders", "ownerId", "createdAt", "updatedAt")
+       VALUES (?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       campaignId,
       dto.name,
       description,
@@ -256,8 +256,6 @@ export class CampaignService {
       dto.endDate,
       areaIdsJson,
       merchantIdsJson,
-      budget,
-      targetGmv,
       yuanToFen(budget),
       yuanToFen(targetGmv),
       targetOrders,
@@ -369,14 +367,10 @@ export class CampaignService {
       params.push(JSON.stringify(dto.merchantIds));
     }
     if (dto.budget !== undefined) {
-      sets.push('"budget" = ?');
-      params.push(dto.budget);
       sets.push('"budgetFen" = ?');
       params.push(yuanToFen(dto.budget));
     }
     if (dto.targetGmv !== undefined) {
-      sets.push('"targetGmv" = ?');
-      params.push(dto.targetGmv);
       sets.push('"targetGmvFen" = ?');
       params.push(yuanToFen(dto.targetGmv));
     }
@@ -572,10 +566,12 @@ export class CampaignService {
     );
 
     // GMV + orderCount live on TaskPerformanceDaily, not DistributionTask.
-    const perfRow = await this.prisma.$queryRawUnsafe<[{ totalGmv: number; totalOrders: number }]>(
+    const perfRow = await this.prisma.$queryRawUnsafe<
+      [{ totalGmvFen: bigint | null; totalOrders: number }]
+    >(
       `SELECT
-         COALESCE(SUM("gmv"), 0) as totalGmv,
-         COALESCE(SUM("orderCount"), 0) as totalOrders
+         COALESCE(SUM("gmvFen"), 0) as "totalGmvFen",
+         COALESCE(SUM("orderCount"), 0) as "totalOrders"
        FROM "TaskPerformanceDaily"
        WHERE "taskId" IN (
          SELECT "taskId" FROM "DistributionTask"
@@ -595,7 +591,7 @@ export class CampaignService {
       totalTasks: Number(r.totalTasks),
       completedTasks: Number(r.completedTasks),
       failedTasks: Number(r.failedTasks),
-      totalGmv: Number(perfRow[0].totalGmv),
+      totalGmv: Number(perfRow[0].totalGmvFen ?? 0) / 100,
       totalOrders: Number(perfRow[0].totalOrders),
       dateFrom,
       dateTo

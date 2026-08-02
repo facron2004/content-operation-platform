@@ -2,7 +2,7 @@
   gap: 12px;
 }
 
-.zs-hero {
+.zero-sales :deep(.zs-hero) {
   display: flex;
   align-items: stretch;
   justify-content: space-between;
@@ -11,19 +11,19 @@
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
   background:
-    radial-gradient(circle at top right, rgba(239, 68, 68, 0.08), transparent 32%),
+    radial-gradient(circle at top right, rgba(215, 0, 21, 0.07), transparent 32%),
     linear-gradient(180deg, var(--panel) 0%, var(--soft) 100%);
   box-shadow: var(--shadow-soft);
 }
 
-.zs-hero h2 {
+.zero-sales :deep(.zs-hero h2) {
   margin: 4px 0 0;
   font-size: 18px;
   font-weight: 800;
   letter-spacing: -0.01em;
 }
 
-.hero-description {
+.zero-sales :deep(.hero-description) {
   max-width: 62ch;
   margin: 6px 0 0;
   color: var(--muted);
@@ -31,55 +31,55 @@
   line-height: 1.45;
 }
 
-.kpi-row {
+.zero-sales :deep(.kpi-row) {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
 }
 
-.chart-row {
+.zero-sales :deep(.chart-row) {
   display: grid;
   grid-template-columns: 1.2fr 1fr;
   gap: 12px;
 }
 
-.chart-card {
+.zero-sales :deep(.chart-card) {
   padding: 14px 16px;
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
-.chart-card header {
+.zero-sales :deep(.chart-card header) {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
 }
 
-.chart-card h3 {
+.zero-sales :deep(.chart-card h3) {
   margin: 0;
   font-size: 14px;
   font-weight: 800;
 }
 
-.chart-card :deep(.chart-shell) {
+.zero-sales :deep(.chart-card .chart-shell) {
   min-height: 240px;
 }
 
-.scope-note {
+.zero-sales :deep(.scope-note) {
   margin: 0;
   color: var(--muted);
   font-size: 11px;
 }
 
-.cell-primary {
+.zero-sales :deep(.cell-primary) {
   display: block;
   font-variant-numeric: tabular-nums;
   font-weight: 700;
 }
 
-.cell-secondary {
+.zero-sales :deep(.cell-secondary) {
   display: block;
   margin-top: 2px;
   color: var(--muted);
@@ -87,29 +87,29 @@
   font-variant-numeric: tabular-nums;
 }
 
-.hero-meta {
+.zero-sales :deep(.hero-meta) {
   display: flex;
   align-items: center;
   gap: 12px;
 }
 
-.filters {
+.zero-sales :deep(.filters) {
   padding: 12px 16px;
 }
 
-.filters :deep(.el-form-item) {
+.zero-sales :deep(.filters .el-form-item) {
   margin-bottom: 0;
 }
 
-.zs-tabs {
+.zero-sales :deep(.zs-tabs) {
   background: transparent;
 }
 
-.zs-tabs :deep(.el-tabs__nav-wrap::after) {
+.zero-sales :deep(.zs-tabs .el-tabs__nav-wrap::after) {
   height: 1px;
 }
 
-.pagination-row {
+.zero-sales :deep(.pagination-row) {
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -119,37 +119,37 @@
   color: var(--muted);
 }
 
-.page-info {
+.zero-sales :deep(.page-info) {
   min-width: 80px;
   text-align: center;
   font-variant-numeric: tabular-nums;
 }
 
-.zs-tabs :deep(.is-danger) {
+.zero-sales :deep(.zs-tabs .is-danger) {
   background: var(--danger-soft);
 }
 
-.zs-tabs :deep(.is-warning) {
+.zero-sales :deep(.zs-tabs .is-warning) {
   background: #fff7ed;
 }
 
 @media (max-width: 1280px) {
-  .zs-hero {
+  .zero-sales :deep(.zs-hero) {
     flex-direction: column;
   }
-  .hero-meta {
+  .zero-sales :deep(.hero-meta) {
     align-self: flex-start;
   }
-  .kpi-row {
+  .zero-sales :deep(.kpi-row) {
     grid-template-columns: repeat(2, 1fr);
   }
-  .chart-row {
+  .zero-sales :deep(.chart-row) {
     grid-template-columns: 1fr;
   }
 }
 
 @media (max-width: 768px) {
-  .kpi-row {
+  .zero-sales :deep(.kpi-row) {
     grid-template-columns: 1fr;
   }
 }

@@ -27,7 +27,7 @@ export async function loadMerchantTrendRows(
 ) {
   return (await prisma.$queryRawUnsafe(
     `SELECT mdm."date" AS "date",
-            COALESCE(SUM(mdm."paidAmountOnline" + mdm."paidAmountWallet"), 0) AS "gmv",
+            COALESCE(SUM(mdm."paidAmountOnlineFen" + mdm."paidAmountWalletFen"), 0) / 100.0 AS "gmv",
             COALESCE(SUM(mdm."paidOrderCount"), 0) AS "paidOrderCount",
             COALESCE(SUM(mdm."orderCount"), 0) AS "orderCount",
             0 AS "exposureCount",

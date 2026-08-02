@@ -873,7 +873,7 @@ export class DistributionTaskService {
       });
       // Residual #142: machine audit only needs price/stock/useRules (parity with #133).
       const pkgs = await this.prisma.$queryRawUnsafe<PackageAuditRow[]>(
-        `SELECT "originalPrice", "salePrice", "temporarySalePrice",
+        `SELECT "originalPriceFen", "salePriceFen", "temporarySalePriceFen",
                 "stockTotal", "stockLeft", "useRules"
          FROM "ContentPackage" WHERE "packageId" = ? LIMIT 1`,
         task.packageId

@@ -5,6 +5,7 @@ import type { Request, Response } from 'express';
 import { safePathId } from '../common/path-id';
 import { resolveScopedQuery } from '../user-access/data-scope';
 import { assertPackageInScope, assertUnrestrictedAnalytics } from '../user-access/scope-guards';
+import { RequireLogin } from '../user-access/iam/route-auth.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 import { MovementService } from './movement.service';
 import {
@@ -94,6 +95,7 @@ async function exportStagnantCsv(service: MovementService, q: MovementSkusQueryD
 }
 
 @ApiTags('movement')
+@RequireLogin()
 @Controller('api/movement')
 export class MovementController {
   constructor(

@@ -97,7 +97,7 @@ describe('residual #156 DT update/publish/schedule preload fold', () => {
       const fn = src.slice(fnStart, candidates.length ? Math.min(...candidates) : fnStart + 800);
       expect(fn).toMatch(/getTaskRow\(safeId\)/);
       expect(fn).toMatch(/assertTaskAccess\(task\.packageId,\s*req,\s*task\.packageGeo\)/);
-      expect(fn).toMatch(/this\.svc\.schedule\(safeId, body\.plannedAt, task\)/);
+      expect(fn).toMatch(/this\.cancelSvc\.schedule\(safeId, body\.plannedAt, task\)/);
       expect(fn).not.toMatch(/getTaskPackageId/);
       expect(fn).not.toMatch(/getById\(safeId\)/);
     }
@@ -114,7 +114,7 @@ describe('residual #156 DT update/publish/schedule preload fold', () => {
       expect(fn).toMatch(/getTaskRow\(safeId\)/);
       expect(fn).toMatch(/assertTaskAccess\(task\.packageId,\s*req,\s*task\.packageGeo\)/);
       // Third arg is the preloaded task.
-      expect(fn).toMatch(/this\.svc\.publish\([\s\S]*?,\s*task\s*\)/);
+      expect(fn).toMatch(/this\.publishSvc\.publish\([\s\S]*?,\s*task\s*\)/);
       expect(fn).not.toMatch(/getTaskPackageId/);
       expect(fn).not.toMatch(/getById\(safeId\)/);
     }

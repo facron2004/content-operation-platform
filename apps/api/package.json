@@ -1,6 +1,6 @@
 {
   "name": "@content/api",
-  "version": "0.10.0",
+  "version": "0.10.1",
   "private": true,
   "bin": "dist/main.js",
   "scripts": {
@@ -8,7 +8,9 @@
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/main.js",
     "pretest": "npm run build -w @content/shared",
-    "test": "vitest run",
+    "test": "npm run test:unit && npm run test:integration",
+    "test:unit": "vitest run --config vitest.unit.config.ts",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:watch": "vitest"
   },
   "pkg": {

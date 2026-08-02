@@ -22,9 +22,14 @@ import { AttributionModule } from './attribution/attribution.module';
 import { JobsModule } from './jobs/jobs.module';
 import { UserAccessModule } from './user-access/user-access.module';
 import { AuditLogModule } from './audit-log/audit-log.module';
+import { IdempotencyModule } from './idempotency/idempotency.module';
+import { OutboxModule } from './outbox/outbox.module';
 import { AuditLogInterceptor } from './audit-log/audit-log.interceptor';
 import { RolesGuard } from './user-access/role.guard';
+import { PermissionGuard } from './user-access/iam';
 import { appThrottlerConfig } from './app-throttler.config';
+import { SystemVersionController } from './common/system-version.controller';
+import { HealthController } from './common/health.controller';
 
 @Module({
   imports: [
@@ -46,8 +51,11 @@ import { appThrottlerConfig } from './app-throttler.config';
     JobsModule,
     UserAccessModule,
     AuditLogModule,
+    IdempotencyModule,
+    OutboxModule,
     ThrottlerModule.forRoot(appThrottlerConfig)
   ],
+  controllers: [SystemVersionController, HealthController],
   providers: [
     { provide: APP_FILTER, useClass: GlobalExceptionFilter },
     { provide: APP_INTERCEPTOR, useClass: BigIntSerializerInterceptor },
@@ -57,7 +65,8 @@ import { appThrottlerConfig } from './app-throttler.config';
     { provide: APP_INTERCEPTOR, useClass: AuditLogInterceptor },
     { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
-    { provide: APP_GUARD, useClass: RolesGuard }
+    { provide: APP_GUARD, useClass: RolesGuard },
+    { provide: APP_GUARD, useClass: PermissionGuard }
   ]
 })
 export class AppModule {}

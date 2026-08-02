@@ -122,7 +122,7 @@ describe('residual #58 select hygiene', () => {
       'utf8'
     );
     expect(gmv).toMatch(/dailyMetrics\.findMany\(\{[\s\S]*?select:\s*\{/);
-    expect(gmv).toContain('gmvBonus: true');
+    expect(gmv).toContain('gmvBonusFen: true');
     expect(refund).toMatch(/refundTrendFromDailyMetrics[\s\S]*?select:\s*\{/);
     expect(refund).toMatch(/verifyTrendFromDailyMetrics[\s\S]*?select:\s*\{/);
   });

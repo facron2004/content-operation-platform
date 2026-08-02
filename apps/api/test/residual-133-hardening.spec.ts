@@ -12,9 +12,9 @@ describe('residual #133 PACKAGE_AUDIT_SELECT for machine audit', () => {
     const selectStart = mappers.indexOf('export const PACKAGE_AUDIT_SELECT');
     expect(selectStart).toBeGreaterThan(0);
     const selectSlice = mappers.slice(selectStart, selectStart + 400);
-    expect(selectSlice).toMatch(/originalPrice:\s*true/);
-    expect(selectSlice).toMatch(/salePrice:\s*true/);
-    expect(selectSlice).toMatch(/temporarySalePrice:\s*true/);
+    expect(selectSlice).toMatch(/originalPriceFen:\s*true/);
+    expect(selectSlice).toMatch(/salePriceFen:\s*true/);
+    expect(selectSlice).toMatch(/temporarySalePriceFen:\s*true/);
     expect(selectSlice).toMatch(/stockTotal:\s*true/);
     expect(selectSlice).toMatch(/stockLeft:\s*true/);
     expect(selectSlice).toMatch(/useRules:\s*true/);

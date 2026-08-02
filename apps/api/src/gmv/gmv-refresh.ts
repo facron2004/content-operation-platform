@@ -204,32 +204,45 @@ export async function pullJeesiteOrderPage(params: GmvRefreshPageParams) {
 }
 
 // --- gmv-refresh-pull.ts ---
+export interface JeesitePullProgress {
+  pagesFetched: number;
+  fetched: number;
+  upserted: number;
+  skipped: number;
+  errors: number;
+}
+
 export async function pullJeesiteOrders(params: {
   prisma: PrismaService;
   autoLogin?: AutoLoginService;
   startDate: string;
   endDate: string;
   logger: Logger;
+  onProgress?: (p: JeesitePullProgress) => void;
 }): Promise<{
   fetched: number;
   upserted: number;
   skipped: number;
   errors: number;
   pagesFetched: number;
+  truncated: boolean;
 }> {
-  const { prisma, autoLogin, startDate, endDate, logger } = params;
+  const { prisma, autoLogin, startDate, endDate, logger, onProgress } = params;
   const rawBaseUrl = process.env.EXTERNAL_API_BASE_URL;
   if (!rawBaseUrl) throw new Error('EXTERNAL_API_BASE_URL 未配置');
   // SSRF guard: same private/loopback rejection used by data-source/auto-login.
   const baseUrl = await normalizeJeesiteBaseUrl(rawBaseUrl);
   let cookieHeader: string | null | undefined = await resolveCookie(autoLogin, logger);
+  // 异步 job 模式下没有 HTTP 超时压力，上限主要用于防御 JeeSite 翻页异常死循环。
+  // 默认 1000 页 = 5 万单，可覆盖 30 天以上的正常回填量（此前 200 页会截断 30 天数据）。
   const PAGE_SIZE = 50,
-    MAX_PAGES = Number(process.env.ETL_MAX_PAGES ?? '200');
+    MAX_PAGES = Number(process.env.ETL_MAX_PAGES ?? '1000');
   let pageNo = 1,
     fetched = 0,
     upserted = 0,
     skipped = 0,
-    errors = 0;
+    errors = 0,
+    truncated = true;
   for (let i = 0; i < MAX_PAGES; i++) {
     const page = await pullJeesiteOrderPage({
       prisma,
@@ -243,14 +256,23 @@ export async function pullJeesiteOrders(params: {
       logger
     });
     cookieHeader = page.cookieHeader;
-    if (page.done) break;
+    if (page.done) {
+      truncated = false;
+      break;
+    }
     fetched += page.rows.length;
     upserted += page.upserted;
     skipped += page.skipped;
     errors += page.errors;
     pageNo++;
+    onProgress?.({ pagesFetched: pageNo, fetched, upserted, skipped, errors });
   }
-  return { fetched, upserted, skipped, errors, pagesFetched: pageNo };
+  if (truncated) {
+    logger.warn(
+      `JeSite 拉单达到 MAX_PAGES=${MAX_PAGES} 上限（已抓 ${fetched} 单），[${startDate}→${endDate}] 数据可能不完整，可调大 ETL_MAX_PAGES 或缩小日期范围`
+    );
+  }
+  return { fetched, upserted, skipped, errors, pagesFetched: pageNo, truncated };
 }
 
 // --- gmv-refresh.ts ---
@@ -263,6 +285,7 @@ export interface GmvRefreshResult {
   skipped: number;
   errors: number;
   pagesFetched: number;
+  truncated?: boolean;
   recomputeWarnings: string[];
 }
 export async function refreshGmvFromJeesite(params: {
@@ -272,14 +295,38 @@ export async function refreshGmvFromJeesite(params: {
   invalidateCache: () => void;
   startDate: string;
   endDate: string;
+  onProgress?: (p: JeesitePullProgress) => void;
+  onPhase?: (phase: 'pull' | 'recompute') => void;
 }): Promise<GmvRefreshResult> {
-  const { prisma, autoLogin, getMerchantSalesService, invalidateCache, startDate, endDate } =
-    params;
-  // Pull is network-bound (serialized via refreshTail). Recompute/write is the
-  // SQLite-heavy phase — share the process-wide heavy gate so interactive GMV /
-  // overview / refund cold aggregates queue instead of contending for the lock
-  // (residual #85; deferred from #84 stampede package).
-  const pull = await pullJeesiteOrders({ prisma, autoLogin, startDate, endDate, logger });
+  const {
+    prisma,
+    autoLogin,
+    getMerchantSalesService,
+    invalidateCache,
+    startDate,
+    endDate,
+    onProgress,
+    onPhase
+  } = params;
+
+  let pull = { fetched: 0, upserted: 0, skipped: 0, errors: 0, pagesFetched: 0, truncated: false };
+  try {
+    onPhase?.('pull');
+    pull = await pullJeesiteOrders({
+      prisma,
+      autoLogin,
+      startDate,
+      endDate,
+      logger,
+      onProgress
+    });
+  } catch (err: unknown) {
+    logger.warn(
+      `JeSite 外部拉单未能完成 (${(err as Error).message})，将使用本地已有 OrderHeader 记录重算`
+    );
+  }
+
+  onPhase?.('recompute');
   const recomputeWarnings = await withHeavyAggregateGate(() =>
     runMoneyRecomputes({
       prisma,
@@ -289,6 +336,11 @@ export async function refreshGmvFromJeesite(params: {
       endDate
     })
   );
+  if (pull.truncated) {
+    recomputeWarnings.push(
+      `拉单达到页数上限（${pull.pagesFetched} 页 / ${pull.fetched} 单），该日期范围数据可能不完整，建议缩小范围后重试`
+    );
+  }
   logger.log(
     `JeSite refresh [${startDate} → ${endDate}] pages=${pull.pagesFetched} fetched=${pull.fetched} upserted=${pull.upserted} errors=${pull.errors}${recomputeWarnings.length ? ` recomputeWarnings=${recomputeWarnings.join('; ')}` : ''}`
   );

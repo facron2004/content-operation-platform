@@ -1,6 +1,6 @@
 /** Consolidated GMV module — money resolve: OH today, DM history, never SalesSnapshot. */
 import { beijingDateKey, shiftDateKey } from '@content/shared';
-import { rateAgainstGmv } from '../common';
+import { rateAgainstGmv, SQL_GMV_SS } from '../common';
 import { GMV_TOP_MERCHANTS_LIMIT } from '../common/sql-chunk';
 import { shouldPreferOrderHeaderForKpi } from '../money';
 import { PrismaService } from '../prisma/prisma.service';
@@ -20,7 +20,6 @@ import {
   emptyHourlyPoints,
   type GmvDistributionDim,
   type GmvDistributionPayload,
-  type GmvDistributionRow,
   type GmvHourlyPoint,
   type GmvMerchantRow,
   type GmvMerchantSort,
@@ -37,52 +36,69 @@ type PrismaLike = Pick<
 
 /**
  * Today: always OrderHeader (even if zeros).
- * History: prefer DailyMetrics row, else OrderHeader.
+ * History: prefer DailyMetrics row, else OrderHeader for the same date.
+ * Never redirect to another date — showing yesterday's data as today is worse than zeros.
  * Never SalesSnapshot.
  */
 export async function resolveGmvKpis(prisma: PrismaLike, date?: string): Promise<GmvTodayPayload> {
   const targetDate = date ?? beijingDateKey(new Date());
 
+  // Today always uses OrderHeader — no fallback to yesterday.
   if (shouldPreferOrderHeaderForKpi(targetDate)) {
     return computeFromOrderHeader(prisma, targetDate);
   }
 
-  const prevDate = shiftDateKey(targetDate, -1);
-  const monthStart = `${targetDate.slice(0, 7)}-01`;
-  // Explicit KPI columns only — DailyMetrics also holds stagnant/moving SKU counts.
+  // History: prefer DailyMetrics, else OrderHeader.
   const kpiSelect = {
     date: true,
-    totalGmv: true,
-    gmvOnline: true,
-    gmvWallet: true,
-    gmvBonus: true,
-    gmvCard: true,
-    totalRefund: true,
+    totalGmvFen: true,
+    gmvOnlineFen: true,
+    gmvWalletFen: true,
+    gmvBonusFen: true,
+    gmvCardFen: true,
+    totalRefundFen: true,
     refundRate: true,
-    totalVerify: true,
+    refundCount: true,
+    totalVerifyFen: true,
     verifyRate: true,
     paidOrderCount: true,
-    paidAmountBonus: true,
-    paidAmountWallet: true,
+    paidAmountBonusFen: true,
+    paidAmountWalletFen: true,
     updatedAt: true
   } as const;
-  const [dmRow, prevDm, monthRows] = await Promise.all([
-    prisma.dailyMetrics.findUnique({ where: { date: targetDate }, select: kpiSelect }),
-    prisma.dailyMetrics.findUnique({ where: { date: prevDate }, select: kpiSelect }),
-    prisma.dailyMetrics.findMany({
-      where: { date: { gte: monthStart, lte: targetDate } },
-      select: { totalGmv: true, gmvOnline: true, gmvWallet: true }
-    })
-  ]);
 
+  const dmRow = await prisma.dailyMetrics.findUnique({
+    where: { date: targetDate },
+    select: kpiSelect
+  });
   if (dmRow) {
-    const monthGmv = monthRows.reduce((sum, row) => sum + Number(row.totalGmv), 0);
-    const monthGmvOnline = monthRows.reduce((sum, row) => sum + Number(row.gmvOnline ?? 0), 0);
-    const monthGmvWallet = monthRows.reduce((sum, row) => sum + Number(row.gmvWallet ?? 0), 0);
+    const prevDate = shiftDateKey(targetDate, -1);
+    const monthStart = `${targetDate.slice(0, 7)}-01`;
+    const [prevDm, monthRows] = await Promise.all([
+      prisma.dailyMetrics.findUnique({ where: { date: prevDate }, select: kpiSelect }),
+      prisma.dailyMetrics.findMany({
+        where: { date: { gte: monthStart, lte: targetDate } },
+        select: { totalGmvFen: true, totalRefundFen: true, gmvOnlineFen: true, gmvWalletFen: true }
+      })
+    ]);
+
+    const monthGmvFen = monthRows.reduce(
+      (sum, row) =>
+        sum + (BigInt(Number(row.totalGmvFen ?? 0)) - BigInt(Number(row.totalRefundFen ?? 0))),
+      0n
+    );
+    const monthGmvOnlineFen = monthRows.reduce(
+      (sum, row) => sum + BigInt(Number(row.gmvOnlineFen ?? 0)),
+      0n
+    );
+    const monthGmvWalletFen = monthRows.reduce(
+      (sum, row) => sum + BigInt(Number(row.gmvWalletFen ?? 0)),
+      0n
+    );
     return mapDailyMetricsToKpi(dmRow, {
-      monthGmv,
-      monthGmvOnline,
-      monthGmvWallet,
+      monthGmvFen,
+      monthGmvOnlineFen,
+      monthGmvWalletFen,
       prev: prevDm
     });
   }
@@ -96,7 +112,15 @@ export async function resolveGmvTrend(
   endDate?: string,
   granularity: TrendGranularity = 'day'
 ): Promise<GmvTrendPoint[]> {
-  const end = endDate ?? beijingDateKey(new Date());
+  let end = endDate;
+  if (!end) {
+    const latestActive = await prisma.dailyMetrics.findFirst({
+      where: { paidOrderCount: { gt: 0 } },
+      orderBy: { date: 'desc' },
+      select: { date: true }
+    });
+    end = latestActive?.date ?? beijingDateKey(new Date());
+  }
   // Cap interactive fan-out at 90d even when week/month floors push dayCount up.
   // Month used to floor at 365 (full-year OH fallback when DailyMetrics empty).
   const INTERACTIVE_TREND_MAX_DAYS = 90;
@@ -111,11 +135,11 @@ export async function resolveGmvTrend(
     orderBy: { date: 'asc' },
     select: {
       date: true,
-      totalGmv: true,
-      gmvOnline: true,
-      gmvWallet: true,
-      gmvBonus: true,
-      totalRefund: true,
+      totalGmvFen: true,
+      gmvOnlineFen: true,
+      gmvWalletFen: true,
+      gmvBonusFen: true,
+      totalRefundFen: true,
       refundRate: true,
       verifyRate: true,
       paidOrderCount: true
@@ -139,7 +163,15 @@ export async function resolveGmvHourly(
   prisma: PrismaLike,
   date?: string
 ): Promise<GmvHourlyPoint[]> {
-  const targetDate = date ?? beijingDateKey(new Date());
+  let targetDate = date;
+  if (!targetDate) {
+    const latestActive = await prisma.dailyMetrics.findFirst({
+      where: { paidOrderCount: { gt: 0 } },
+      orderBy: { date: 'desc' },
+      select: { date: true }
+    });
+    targetDate = latestActive?.date ?? beijingDateKey(new Date());
+  }
   try {
     return await computeHourlyFromOrderHeader(prisma, targetDate);
   } catch {
@@ -156,10 +188,11 @@ function aggregateTrend(daily: GmvTrendPoint[], granularity: 'week' | 'month'): 
       buckets.set(key, {
         date: key,
         totalGmv: point.totalGmv,
-        gmvOnline: point.gmvOnline,
-        gmvWallet: point.gmvWallet,
-        gmvBonus: point.gmvBonus,
-        totalRefund: point.totalRefund,
+        totalGmvFen: point.totalGmvFen,
+        gmvOnlineFen: point.gmvOnlineFen,
+        gmvWalletFen: point.gmvWalletFen,
+        gmvBonusFen: point.gmvBonusFen,
+        totalRefundFen: point.totalRefundFen,
         refundRate: 0,
         verifyRate: 0,
         paidOrderCount: point.paidOrderCount,
@@ -168,10 +201,11 @@ function aggregateTrend(daily: GmvTrendPoint[], granularity: 'week' | 'month'): 
       continue;
     }
     existing.totalGmv += point.totalGmv;
-    existing.gmvOnline += point.gmvOnline;
-    existing.gmvWallet += point.gmvWallet;
-    existing.gmvBonus += point.gmvBonus;
-    existing.totalRefund += point.totalRefund;
+    existing.totalGmvFen = (existing.totalGmvFen ?? 0n) + (point.totalGmvFen ?? 0n);
+    existing.gmvOnlineFen = (existing.gmvOnlineFen ?? 0n) + (point.gmvOnlineFen ?? 0n);
+    existing.gmvWalletFen = (existing.gmvWalletFen ?? 0n) + (point.gmvWalletFen ?? 0n);
+    existing.gmvBonusFen = (existing.gmvBonusFen ?? 0n) + (point.gmvBonusFen ?? 0n);
+    existing.totalRefundFen = (existing.totalRefundFen ?? 0n) + (point.totalRefundFen ?? 0n);
     existing.paidOrderCount += point.paidOrderCount;
     existing._count += 1;
   }
@@ -180,7 +214,10 @@ function aggregateTrend(daily: GmvTrendPoint[], granularity: 'week' | 'month'): 
     .sort((a, b) => a.date.localeCompare(b.date))
     .map(({ _count, ...point }) => ({
       ...point,
-      refundRate: point.totalGmv > 0 ? point.totalRefund / point.totalGmv : 0,
+      refundRate:
+        (point.totalGmvFen ?? 0n) > 0n
+          ? Number(point.totalRefundFen ?? 0n) / Number(point.totalGmvFen)
+          : 0,
       verifyRate: 0
     }));
 }
@@ -213,9 +250,10 @@ export async function computeMerchantsFromMdMetrics(prisma: PrismaLike): Promise
   // re-sort the capped set in memory (still bounded).
   const rows = (await prisma.$queryRawUnsafe(
     `SELECT "merchantName", MAX("areaName") AS "areaName",
-     COALESCE(SUM("paidAmountOnline" + "paidAmountWallet"), 0) AS "gmv",
-     COALESCE(SUM("refundAmount"), 0) AS "gmvRefund",
-     COALESCE(SUM("verifyAmount"), 0) AS "gmvVerify",
+     COALESCE(SUM(${SQL_GMV_SS}), 0) AS "gmv",
+     COALESCE(SUM(${SQL_GMV_SS}), 0) AS "gmvFen",
+     COALESCE(SUM("refundAmountFen"), 0) AS "gmvRefundFen",
+     COALESCE(SUM("verifyAmountFen"), 0) AS "gmvVerifyFen",
      COALESCE(SUM("paidOrderCount"), 0) AS "paidOrderCount"
      FROM "MerchantDailyMetrics"
      WHERE "date" >= ? AND "date" <= ?
@@ -228,20 +266,20 @@ export async function computeMerchantsFromMdMetrics(prisma: PrismaLike): Promise
   )) as Array<{
     merchantName: string;
     areaName: string | null;
-    gmv: number;
-    gmvRefund: number;
-    gmvVerify: number;
+    gmvFen: bigint | null;
+    gmvRefundFen: bigint | null;
+    gmvVerifyFen: bigint | null;
     paidOrderCount: number;
   }>;
   return rows.map((r) => ({
     merchantId: r.merchantName,
     merchantName: r.merchantName,
     areaName: r.areaName,
-    gmv: Number(r.gmv),
-    gmvRefund: Number(r.gmvRefund),
-    gmvVerify: Number(r.gmvVerify),
-    refundRate: rateAgainstGmv(Number(r.gmvRefund), Number(r.gmv)),
-    verifyRate: rateAgainstGmv(Number(r.gmvVerify), Number(r.gmv)),
+    gmvFen: BigInt(Number(r.gmvFen ?? 0)),
+    gmvRefundFen: BigInt(Number(r.gmvRefundFen ?? 0)),
+    gmvVerifyFen: BigInt(Number(r.gmvVerifyFen ?? 0)),
+    refundRate: rateAgainstGmv(Number(r.gmvRefundFen ?? 0) / 100, Number(r.gmvFen ?? 0) / 100),
+    verifyRate: rateAgainstGmv(Number(r.gmvVerifyFen ?? 0) / 100, Number(r.gmvFen ?? 0) / 100),
     paidOrderCount: Number(r.paidOrderCount)
   }));
 }

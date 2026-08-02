@@ -16,7 +16,7 @@
 
 .da-hero h2 {
   margin: 0;
-  font-size: 22px;
+  font-size: 18px;
   font-weight: 800;
   letter-spacing: -0.01em;
   color: var(--ink);
@@ -24,10 +24,10 @@
 
 .hero-description {
   max-width: 68ch;
-  margin: 6px 0 0;
+  margin: 4px 0 0;
   color: var(--muted);
-  font-size: 13px;
-  line-height: 1.55;
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .hero-meta {
@@ -44,7 +44,7 @@
   padding: 3px 9px;
   border-radius: 999px;
   background: rgba(120, 120, 128, 0.12);
-  color: #3a3a3c;
+  color: var(--ink-soft);
   font-size: 11px;
   font-weight: 600;
   letter-spacing: -0.01em;
@@ -96,10 +96,10 @@
   justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
-  padding: 10px 14px;
+  padding: 8px 12px;
   border: 1px solid var(--line);
   border-radius: 14px;
-  background: #fff;
+  background: var(--panel);
   box-shadow: var(--shadow-soft);
 }
 
@@ -124,7 +124,7 @@
   appearance: none;
   border: 0;
   background: transparent;
-  color: #3a3a3c;
+  color: var(--ink-soft);
   font-size: 13px;
   font-weight: 560;
   padding: 6px 13px;
@@ -140,13 +140,13 @@
 }
 
 .da-preset:hover:not(:disabled):not(.is-active) {
-  color: #1d1d1f;
-  background: rgba(255, 255, 255, 0.45);
+  color: var(--ink);
+  background: var(--soft-strong);
 }
 
 .da-preset.is-active {
-  background: #fff;
-  color: #007aff;
+  background: var(--panel);
+  color: var(--accent);
   box-shadow:
     0 1px 2px rgba(15, 23, 42, 0.06),
     0 0 0 0.5px rgba(60, 60, 67, 0.06);
@@ -177,7 +177,7 @@
   padding: 4px 10px;
   border-radius: 999px;
   background: rgba(120, 120, 128, 0.1);
-  color: #3a3a3c;
+  color: var(--ink-soft);
   font-weight: 560;
   letter-spacing: -0.01em;
 }
@@ -195,11 +195,11 @@
 
 .da-kpi-card {
   position: relative;
-  min-height: 112px;
-  padding: 16px 14px 14px;
+  min-height: 96px;
+  padding: 12px 14px 10px;
   border: 1px solid var(--line);
   border-radius: 14px;
-  background: #fff;
+  background: var(--panel);
   box-shadow: var(--shadow-soft);
   overflow: hidden;
 }
@@ -220,15 +220,15 @@
 }
 
 .da-kpi-label {
-  color: #667085;
+  color: var(--muted);
   font-size: 13px;
   font-weight: 600;
   line-height: 1.2;
 }
 
 .da-kpi-value {
-  color: #101828;
-  font-size: 22px;
+  color: var(--ink);
+  font-size: 20px;
   font-weight: 800;
   line-height: 1.15;
   font-variant-numeric: tabular-nums;
@@ -289,15 +289,15 @@
 .da-mid-row {
   display: grid;
   grid-template-columns: 1.35fr 1fr 0.9fr;
-  gap: 12px;
+  gap: 10px;
   align-items: stretch;
 }
 
 .da-chart-card {
-  padding: 14px 16px;
+  padding: 12px 14px;
   border: 1px solid var(--line);
   border-radius: 14px;
-  background: #fff;
+  background: var(--panel);
   box-shadow: var(--shadow-soft);
   display: flex;
   flex-direction: column;
@@ -316,12 +316,12 @@
   margin: 0;
   font-size: 14px;
   font-weight: 800;
-  color: #101828;
+  color: var(--ink);
 }
 
 .da-trend :deep(.chart-shell) {
-  height: 280px;
-  min-height: 280px;
+  height: 240px;
+  min-height: 240px;
 }
 
 .da-channel-body {
@@ -361,7 +361,7 @@
 }
 
 .da-channel-center strong {
-  color: #101828;
+  color: var(--ink);
   font-size: 15px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
@@ -441,7 +441,7 @@
   place-items: center;
   font-size: 14px;
   font-weight: 700;
-  background: #fff;
+  background: var(--panel);
   border: 1px solid var(--line);
 }
 
@@ -472,7 +472,7 @@
 }
 
 .da-key-copy strong {
-  color: #101828;
+  color: var(--ink);
   font-size: 18px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
@@ -499,7 +499,7 @@
 .da-bottom-row {
   display: grid;
   grid-template-columns: 1.4fr 1fr;
-  gap: 12px;
+  gap: 10px;
 }
 
 .da-matrix,
@@ -507,10 +507,10 @@
 .top-offenders,
 .da-verify,
 .da-notes {
-  padding: 14px 16px;
+  padding: 12px 14px;
   border: 1px solid var(--line);
   border-radius: 14px;
-  background: #fff;
+  background: var(--panel);
   box-shadow: var(--shadow-soft);
 }
 
@@ -534,7 +534,7 @@
   margin: 0;
   font-size: 14px;
   font-weight: 800;
-  color: #101828;
+  color: var(--ink);
 }
 
 .panel-hint {
@@ -564,7 +564,7 @@
   border-radius: 999px;
   font-size: 12px;
   font-weight: 800;
-  color: #667085;
+  color: var(--muted);
   background: var(--soft);
 }
 

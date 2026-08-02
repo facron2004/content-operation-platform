@@ -138,7 +138,7 @@ recent AS (
 ),
 gmv AS (
   SELECT s."packageId" AS "packageId",
-         COALESCE(SUM(s."salesAmount"), 0) AS "gmv30d"
+         COALESCE(SUM(s."salesAmountFen"), 0) AS "gmv30d"
   FROM "PackageSalesDaily" s
   INNER JOIN pkgs p ON p."packageId" = s."packageId"
   WHERE s."date" >= ? AND s."salesQty" > 0
@@ -233,7 +233,7 @@ export async function collectMerchantMetricMaps(params: {
        ),
        gmv AS (
          SELECT s."packageId" AS "packageId",
-                COALESCE(SUM(s."salesAmount"), 0) AS "gmv30d"
+                COALESCE(SUM(s."salesAmountFen"), 0) AS "gmv30d"
          FROM "PackageSalesDaily" s
          INNER JOIN pkgs p ON p."packageId" = s."packageId"
          WHERE s."date" >= ? AND s."salesQty" > 0

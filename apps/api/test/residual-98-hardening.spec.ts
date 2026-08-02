@@ -52,16 +52,8 @@ describe('residual #98 GMV batchUpsert binary-split fallback', () => {
       if (orderId === 'bad-1') throw new Error('bad row');
       return 1;
     });
-    const transaction = vi
-      .fn()
-      .mockImplementation(
-        async (cb: (tx: { $executeRawUnsafe: typeof executeRaw }) => Promise<void>) => {
-          await cb({ $executeRawUnsafe: executeRaw });
-        }
-      );
-
     const result = await batchUpsertOrderHeaders(
-      { $transaction: transaction, $executeRawUnsafe: executeRaw },
+      { $executeRawUnsafe: executeRaw },
       [makeOrder('ok-1'), makeOrder('bad-1'), makeOrder('ok-2'), makeOrder('ok-3')],
       40
     );

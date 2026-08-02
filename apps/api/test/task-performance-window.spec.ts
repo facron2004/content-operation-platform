@@ -15,7 +15,7 @@ describe('getTaskPerformance trailing window', () => {
       {
         visitCount: 10,
         orderCount: 2,
-        gmv: 99.5,
+        gmvFen: 9950n,
         verifyCount: 1,
         refundCount: 0,
         conversionRate: 0.2
@@ -47,7 +47,7 @@ describe('getTaskPerformance trailing window', () => {
       {
         visitCount: 3,
         orderCount: 0,
-        gmv: 0,
+        gmvFen: 0n,
         verifyCount: 0,
         refundCount: 0,
         conversionRate: 0

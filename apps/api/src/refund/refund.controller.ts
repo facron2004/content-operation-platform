@@ -6,9 +6,11 @@ import type { Request } from 'express';
 import { RefundTodayQueryDto, RefundTopMerchantsQueryDto, RefundTrendQueryDto } from './refund.dto';
 import { RefundService } from './refund.service';
 import { assertUnrestrictedAnalytics } from '../user-access/scope-guards';
+import { RequireLogin } from '../user-access/iam/route-auth.decorator';
 import { createDtoPipe } from '../common/dto-pipe';
 
 @ApiTags('refund-verify')
+@RequireLogin()
 @Controller('api')
 export class RefundController {
   constructor(@Inject(RefundService) private readonly service: RefundService) {}

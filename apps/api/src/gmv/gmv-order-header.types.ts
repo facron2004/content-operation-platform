@@ -34,20 +34,22 @@ export type OrderLike = {
 };
 
 export type OrderHeaderGmvRow = {
-  paidAmount: number;
-  paidAmountWallet: number;
-  paidAmountBonus: number;
-  paidAmountCard: number;
-  verifyAmount: number;
+  paidAmountFen: bigint;
+  paidAmountWalletFen: bigint;
+  paidAmountBonusFen: bigint;
+  paidAmountCardFen: bigint;
+  verifyAmountFen: bigint;
+  refundAmountFen?: bigint;
   orderCount: number;
 };
 
 export const EMPTY_ORDER_HEADER_GMV_ROW: OrderHeaderGmvRow = {
-  paidAmount: 0,
-  paidAmountWallet: 0,
-  paidAmountBonus: 0,
-  paidAmountCard: 0,
-  verifyAmount: 0,
+  paidAmountFen: 0n,
+  paidAmountWalletFen: 0n,
+  paidAmountBonusFen: 0n,
+  paidAmountCardFen: 0n,
+  verifyAmountFen: 0n,
+  refundAmountFen: 0n,
   orderCount: 0
 };
 

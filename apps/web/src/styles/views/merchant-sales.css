@@ -7,28 +7,28 @@
   align-items: stretch;
   justify-content: space-between;
   gap: 16px;
-  padding: 20px;
+  padding: 14px 16px;
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
   background:
-    radial-gradient(circle at top right, rgba(37, 99, 235, 0.1), transparent 32%),
-    linear-gradient(180deg, #ffffff 0%, #fbfcfe 100%);
+    radial-gradient(circle at top right, rgba(var(--accent-rgb), 0.07), transparent 32%),
+    var(--panel);
   box-shadow: var(--shadow-soft);
 }
 
 .ms-hero h2 {
-  margin: 8px 0 0;
-  font-size: 22px;
+  margin: 4px 0 0;
+  font-size: 18px;
   font-weight: 800;
   letter-spacing: -0.01em;
 }
 
 .hero-description {
   max-width: 62ch;
-  margin: 10px 0 0;
+  margin: 6px 0 0;
   color: var(--muted);
-  font-size: 13px;
-  line-height: 1.6;
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .hero-meta {
@@ -42,7 +42,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 10px 14px;
+  padding: 8px 12px;
 }
 
 .window-tabs__hint {
@@ -50,19 +50,19 @@
   font-size: 12px;
 }
 
-.kpi-row {
+.ms-view :deep(.kpi-row) {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
 }
 
-.chart-card,
-.top-offenders {
-  padding: 14px 16px;
+.ms-view :deep(.chart-card),
+.ms-view :deep(.top-offenders) {
+  padding: 12px 14px;
 }
 
-.chart-card header,
-.top-offenders header {
+.ms-view :deep(.chart-card header),
+.ms-view :deep(.top-offenders header) {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -70,35 +70,35 @@
   gap: 12px;
 }
 
-.chart-card h3,
-.top-offenders h3 {
+.ms-view :deep(.chart-card h3),
+.ms-view :deep(.top-offenders h3) {
   margin: 0;
   font-size: 14px;
   font-weight: 800;
 }
 
-.chart-card :deep(.chart-shell) {
-  height: 280px;
-  min-height: 280px;
+.ms-view :deep(.chart-card .chart-shell) {
+  height: 240px;
+  min-height: 240px;
 }
 
-.pagination-footer {
+.ms-view :deep(.pagination-footer) {
   margin-top: 12px;
   display: flex;
   justify-content: flex-end;
 }
 
-.rate-danger {
+.ms-view :deep(.rate-danger) {
   color: #ef4444;
   font-weight: 700;
 }
 
-.rate-warning {
+.ms-view :deep(.rate-warning) {
   color: #f59e0b;
   font-weight: 700;
 }
 
-.rate-ok {
+.ms-view :deep(.rate-ok) {
   color: var(--ink);
 }
 
@@ -111,13 +111,13 @@
 }
 
 @media (max-width: 1280px) {
-  .kpi-row {
+  .ms-view :deep(.kpi-row) {
     grid-template-columns: repeat(2, 1fr);
   }
 }
 
 @media (max-width: 768px) {
-  .kpi-row {
+  .ms-view :deep(.kpi-row) {
     grid-template-columns: 1fr;
   }
   .ms-hero {

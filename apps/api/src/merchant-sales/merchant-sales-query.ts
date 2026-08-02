@@ -1,5 +1,4 @@
 /** Consolidated merchant-sales module. */
-import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CSV_EXPORT_MAX_ROWS, GMV_TOP_MERCHANTS_LIMIT } from '../common/sql-chunk';
 import {
@@ -138,7 +137,7 @@ export async function querySummary(
   // Money + merchantCount from day grain; packageCount from OrderHeader DISTINCT.
   const [moneyRows, packageCount] = await Promise.all([
     prisma.$queryRawUnsafe(
-      `SELECT COALESCE(SUM("paidAmountOnline" + "paidAmountWallet"), 0) AS "totalGmv", COALESCE(SUM("refundAmount"), 0) AS "totalRefund", COALESCE(SUM("verifyAmount"), 0) AS "totalVerify", COALESCE(SUM("paidOrderCount"), 0) AS "paidOrderCount", COUNT(DISTINCT "merchantName") AS "merchantCount", 0 AS "packageCount" FROM "MerchantDailyMetrics" WHERE ${whereClause}`,
+      `SELECT COALESCE(SUM("paidAmountOnlineFen" + "paidAmountWalletFen"), 0) / 100.0 AS "totalGmv", COALESCE(SUM("refundAmountFen"), 0) / 100.0 AS "totalRefund", COALESCE(SUM("verifyAmountFen"), 0) / 100.0 AS "totalVerify", COALESCE(SUM("paidOrderCount"), 0) AS "paidOrderCount", COUNT(DISTINCT "merchantName") AS "merchantCount", 0 AS "packageCount" FROM "MerchantDailyMetrics" WHERE ${whereClause}`,
       ...whereArgs
     ) as Promise<AggregateRow[]>,
     queryDistinctPackageCount(prisma, start, end)
@@ -201,7 +200,7 @@ export async function queryAllRankingRows(
   // Residual #253: packageCount via OrderHeader DISTINCT (not SUM of daily counts).
   const [moneyRows, packageCounts] = await Promise.all([
     prisma.$queryRawUnsafe(
-      `SELECT "merchantName", MAX("areaName") AS "areaName", COALESCE(SUM("paidAmountOnline" + "paidAmountWallet"), 0) AS "gmv", COALESCE(SUM("refundAmount"), 0) AS "gmvRefund", COALESCE(SUM("verifyAmount"), 0) AS "gmvVerify", COALESCE(SUM("paidOrderCount"), 0) AS "paidOrderCount", COALESCE(SUM("orderCount"), 0) AS "orderCount", 0 AS "packageCount" FROM "MerchantDailyMetrics" WHERE ${whereClause} GROUP BY "merchantName" ORDER BY ${orderColumn} DESC, "merchantName" ASC LIMIT ?`,
+      `SELECT "merchantName", MAX("areaName") AS "areaName", COALESCE(SUM("paidAmountOnlineFen" + "paidAmountWalletFen" - "refundAmountFen") / 100.0, 0) AS "gmv", COALESCE(SUM("refundAmountFen") / 100.0, 0) AS "gmvRefund", COALESCE(SUM("verifyAmountFen") / 100.0, 0) AS "gmvVerify", COALESCE(SUM("paidOrderCount"), 0) AS "paidOrderCount", COALESCE(SUM("orderCount"), 0) AS "orderCount", 0 AS "packageCount" FROM "MerchantDailyMetrics" WHERE ${whereClause} GROUP BY "merchantName" ORDER BY ${orderColumn} DESC, "merchantName" ASC LIMIT ?`,
       ...whereArgs,
       GMV_TOP_MERCHANTS_LIMIT
     ) as Promise<RankingSqlRow[]>,
@@ -320,7 +319,7 @@ export async function queryTrendRows(
     whereClause = whereClauseForWindow(window),
     whereArgs = whereArgsForWindow(window, start, end);
   const rows = (await prisma.$queryRawUnsafe(
-    `SELECT ${bucketExpr} AS "bucket", COALESCE(SUM("paidAmountOnline" + "paidAmountWallet"), 0) AS "totalGmv", COALESCE(SUM("refundAmount"), 0) AS "totalRefund", COALESCE(SUM("verifyAmount"), 0) AS "totalVerify", COALESCE(SUM("paidOrderCount"), 0) AS "paidOrderCount" FROM "MerchantDailyMetrics" WHERE ${whereClause} GROUP BY "bucket" ORDER BY "bucket" ASC`,
+    `SELECT ${bucketExpr} AS "bucket", COALESCE(SUM("paidAmountOnlineFen" + "paidAmountWalletFen") / 100.0, 0) AS "totalGmv", COALESCE(SUM("refundAmountFen") / 100.0, 0) AS "totalRefund", COALESCE(SUM("verifyAmountFen") / 100.0, 0) AS "totalVerify", COALESCE(SUM("paidOrderCount"), 0) AS "paidOrderCount" FROM "MerchantDailyMetrics" WHERE ${whereClause} GROUP BY "bucket" ORDER BY "bucket" ASC`,
     ...whereArgs
   )) as Array<{
     bucket: string;
@@ -411,7 +410,7 @@ export async function loadMerchantSalesExportRows(
   // Residual #253: packageCount via OrderHeader DISTINCT (not SUM of daily counts).
   const [moneyRows, packageCounts] = await Promise.all([
     prisma.$queryRawUnsafe(
-      `SELECT "merchantName", MAX("areaName") AS "areaName", COALESCE(SUM("paidAmountOnline" + "paidAmountWallet"), 0) AS "gmv", COALESCE(SUM("refundAmount"), 0) AS "gmvRefund", COALESCE(SUM("verifyAmount"), 0) AS "gmvVerify", COALESCE(SUM("paidOrderCount"), 0) AS "paidOrderCount", COALESCE(SUM("orderCount"), 0) AS "orderCount", 0 AS "packageCount" FROM "MerchantDailyMetrics" WHERE ${whereClause} GROUP BY "merchantName" ORDER BY ${orderColumn} DESC, "merchantName" ASC LIMIT ?`,
+      `SELECT "merchantName", MAX("areaName") AS "areaName", COALESCE(SUM("paidAmountOnlineFen" + "paidAmountWalletFen") / 100.0, 0) AS "gmv", COALESCE(SUM("refundAmountFen") / 100.0, 0) AS "gmvRefund", COALESCE(SUM("verifyAmountFen") / 100.0, 0) AS "gmvVerify", COALESCE(SUM("paidOrderCount"), 0) AS "paidOrderCount", COALESCE(SUM("orderCount"), 0) AS "orderCount", 0 AS "packageCount" FROM "MerchantDailyMetrics" WHERE ${whereClause} GROUP BY "merchantName" ORDER BY ${orderColumn} DESC, "merchantName" ASC LIMIT ?`,
       ...whereArgs,
       CSV_EXPORT_MAX_ROWS
     ) as Promise<RankingSqlRow[]>,
@@ -466,12 +465,12 @@ INSERT OR REPLACE INTO "MerchantDailyMetrics" (
   "date",
   "areaName",
   "paidOrderCount",
-  "paidAmountOnline",
-  "paidAmountWallet",
-  "paidAmountBonus",
-  "paidAmountCard",
-  "refundAmount",
-  "verifyAmount",
+  "paidAmountOnlineFen",
+  "paidAmountWalletFen",
+  "paidAmountBonusFen",
+  "paidAmountCardFen",
+  "refundAmountFen",
+  "verifyAmountFen",
   "orderCount",
   "packageCount",
   "updatedAt"
@@ -482,16 +481,46 @@ WITH base AS (
     ${sqlBeijingDate('oh."paidTime"')} AS "dateKey",
     oh."areaName" AS "areaName",
     oh."paidTime" AS "paidTime",
-    oh."paidAmount" AS "paidAmount",
-    oh."paidAmountWallet" AS "paidAmountWallet",
-    oh."paidAmountBonus" AS "paidAmountBonus",
-    oh."paidAmountCard" AS "paidAmountCard",
-    oh."refundAmount" AS "refundAmount",
-    oh."verifyAmount" AS "verifyAmount",
+    oh."paidAmountFen" AS "paidAmountFen",
+    oh."paidAmountWalletFen" AS "paidAmountWalletFen",
+    oh."paidAmountBonusFen" AS "paidAmountBonusFen",
+    oh."paidAmountCardFen" AS "paidAmountCardFen",
+    oh."verifyAmountFen" AS "verifyAmountFen",
     oh."packageId" AS "packageId"
   FROM "OrderHeader" oh
   WHERE oh."paidTime" IS NOT NULL
     AND ${sqlDatetimeExclusiveRange('oh."paidTime"')}
+),
+refundByMerchantDay AS (
+  SELECT
+    COALESCE(NULLIF(oh."merchantName", ''), '(未知)') AS "merchantName",
+    ${sqlBeijingDate('oh."paidTime"')} AS "dateKey",
+    SUM(oh."refundAmountFen") AS "refundAmountFen"
+  FROM "OrderHeader" oh
+  WHERE oh."paidTime" IS NOT NULL
+    AND ${sqlDatetimeExclusiveRange('oh."paidTime"')}
+    AND oh."refundAmountFen" > 0
+  GROUP BY "merchantName", "dateKey"
+),
+base_agg AS (
+  SELECT
+    "merchantName",
+    "dateKey",
+    COUNT(*) AS "paidOrderCount",
+    COALESCE(SUM("paidAmountFen"), 0) AS "paidAmountOnlineFen",
+    COALESCE(SUM("paidAmountWalletFen"), 0) AS "paidAmountWalletFen",
+    COALESCE(SUM("paidAmountBonusFen"), 0) AS "paidAmountBonusFen",
+    COALESCE(SUM("paidAmountCardFen"), 0) AS "paidAmountCardFen",
+    COALESCE(SUM("verifyAmountFen"), 0) AS "verifyAmountFen",
+    COUNT(*) AS "orderCount",
+    COUNT(DISTINCT b."packageId") AS "packageCount"
+  FROM base b
+  GROUP BY b."merchantName", b."dateKey"
+),
+spine AS (
+  SELECT "merchantName", "dateKey" FROM base_agg
+  UNION
+  SELECT "merchantName", "dateKey" FROM refundByMerchantDay
 ),
 area_pick AS (
   SELECT
@@ -507,29 +536,28 @@ area_pick AS (
     AND "areaName" <> ''
 )
 SELECT
-  b."merchantName",
-  b."dateKey" AS "date",
+  s."merchantName",
+  s."dateKey" AS "date",
   (
     SELECT a."areaName"
     FROM area_pick a
-    WHERE a."merchantName" = b."merchantName"
-      AND a."dateKey" = b."dateKey"
+    WHERE a."merchantName" = s."merchantName"
+      AND a."dateKey" = s."dateKey"
       AND a."rn" = 1
   ) AS "areaName",
-  COUNT(*) AS "paidOrderCount",
-  COALESCE(SUM(b."paidAmount"), 0) AS "paidAmountOnline",
-  COALESCE(SUM(b."paidAmountWallet"), 0) AS "paidAmountWallet",
-  COALESCE(SUM(b."paidAmountBonus"), 0) AS "paidAmountBonus",
-  COALESCE(SUM(b."paidAmountCard"), 0) AS "paidAmountCard",
-  COALESCE(SUM(b."refundAmount"), 0) AS "refundAmount",
-  COALESCE(SUM(b."verifyAmount"), 0) AS "verifyAmount",
-  COUNT(*) AS "orderCount",
-  COUNT(DISTINCT b."packageId") AS "packageCount",
+  COALESCE(b."paidOrderCount", 0) AS "paidOrderCount",
+  COALESCE(b."paidAmountOnlineFen", 0) AS "paidAmountOnlineFen",
+  COALESCE(b."paidAmountWalletFen", 0) AS "paidAmountWalletFen",
+  COALESCE(b."paidAmountBonusFen", 0) AS "paidAmountBonusFen",
+  COALESCE(b."paidAmountCardFen", 0) AS "paidAmountCardFen",
+  COALESCE(r."refundAmountFen", 0) AS "refundAmountFen",
+  COALESCE(b."verifyAmountFen", 0) AS "verifyAmountFen",
+  COALESCE(b."orderCount", 0) AS "orderCount",
+  COALESCE(b."packageCount", 0) AS "packageCount",
   ? AS "updatedAt"
-FROM base b
-GROUP BY
-  b."merchantName",
-  b."dateKey";
+FROM spine s
+LEFT JOIN base_agg b ON b."merchantName" = s."merchantName" AND b."dateKey" = s."dateKey"
+LEFT JOIN refundByMerchantDay r ON r."merchantName" = s."merchantName" AND r."dateKey" = s."dateKey";
 `;
 
 // --- merchant-sales-metrics-recompute.ts ---
@@ -542,14 +570,22 @@ export async function recomputeMerchantDailyMetrics(
   // Exclusive half-open paidTime bounds so OrderHeader_paidTime_idx can seek.
   const paidStart = beijingDayRangeSqlite(startDate).start;
   const paidEnd = beijingDayRangeSqlite(endDate).end;
-  const inserted = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-    await tx.$executeRawUnsafe(
-      `DELETE FROM "MerchantDailyMetrics" WHERE "date" >= ? AND "date" <= ?`,
-      startDate,
-      endDate
-    );
-    // Param order matches SQL `?` appearance: exclusive paidTime window then updatedAt.
-    return tx.$executeRawUnsafe(MERCHANT_DAILY_METRICS_INSERT_SQL, paidStart, paidEnd, now);
-  });
+  // Note: intentionally does NOT wrap in $transaction — the libsql adapter throws
+  // "unknown variant SocketTimeout" on $executeRawUnsafe inside callback-style
+  // $transaction. DELETE+INSERT pair is safe since the range would be rerun on the
+  // next refresh if a crash occurs between the two statements.
+  await prisma.$executeRawUnsafe(
+    `DELETE FROM "MerchantDailyMetrics" WHERE "date" >= ? AND "date" <= ?`,
+    startDate,
+    endDate
+  );
+  const inserted = await prisma.$executeRawUnsafe(
+    MERCHANT_DAILY_METRICS_INSERT_SQL,
+    paidStart,
+    paidEnd,
+    paidStart,
+    paidEnd,
+    now
+  );
   return Number(inserted ?? 0);
 }

@@ -1,4 +1,11 @@
-import { CHART_COLORS, CHART_GRID, CHART_TOOLTIP } from './chart-theme';
+import {
+  CHART_CATEGORY_AXIS,
+  CHART_COLORS,
+  CHART_GRID,
+  CHART_LEGEND,
+  CHART_TOOLTIP,
+  CHART_VALUE_AXIS
+} from './chart-theme';
 export type DualAxisLineSeries = {
   name: string;
   data: number[];
@@ -16,18 +23,29 @@ export function buildDualAxisLine(params: {
   if (params.categories.length === 0) return {};
   return {
     tooltip: CHART_TOOLTIP.axis,
-    legend: { top: 0, textStyle: { fontSize: 11 } },
+    legend: CHART_LEGEND,
     grid: CHART_GRID.dualAxis,
-    xAxis: { type: 'category', data: params.categories, axisLabel: { fontSize: 11 } },
+    xAxis: { type: 'category', data: params.categories, ...CHART_CATEGORY_AXIS },
     yAxis: [
-      { type: 'value', name: params.leftName, position: 'left' },
+      {
+        type: 'value',
+        name: params.leftName,
+        position: 'left',
+        scale: true,
+        ...CHART_VALUE_AXIS
+      },
       {
         type: 'value',
         name: params.rightName,
         position: 'right',
+        scale: true,
+        ...CHART_VALUE_AXIS,
         axisLabel: params.percentRight
-          ? { formatter: (v: number) => `${(v * 100).toFixed(0)}%` }
-          : undefined
+          ? {
+              ...CHART_VALUE_AXIS.axisLabel,
+              formatter: (v: number) => `${(v * 100).toFixed(0)}%`
+            }
+          : CHART_VALUE_AXIS.axisLabel
       }
     ],
     series: params.series.map((s, i) => {
@@ -36,6 +54,9 @@ export function buildDualAxisLine(params: {
         name: s.name,
         type: 'line',
         smooth: true,
+        showSymbol: false,
+        lineStyle: { width: 2 },
+        emphasis: { focus: 'series', scale: 1.2 },
         yAxisIndex: s.yAxisIndex ?? (i === 0 ? 0 : 1),
         data: s.data,
         itemStyle: { color },

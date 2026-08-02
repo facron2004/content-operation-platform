@@ -26,7 +26,7 @@ describe('throttler named-bucket binding', () => {
     // long is the 60s bucket that route overrides bind to
     const long = appThrottlerConfig.find((t) => t.name === 'long')!;
     expect(long.ttl).toBe(60000);
-    expect(long.limit).toBe(200);
+    expect(long.limit).toBe(400);
   });
 
   it('every @Throttle decorator keys a registered bucket (not default)', () => {

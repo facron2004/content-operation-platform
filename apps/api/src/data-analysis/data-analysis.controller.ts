@@ -1,4 +1,4 @@
-/** Data-analysis HTTP surface: summary + Excel export (砍价订单模板). */
+/** Data-analysis HTTP surface: summary + Excel export (砍价订单模板) + Freshness monitoring. */
 import { Controller, Get, Inject, Query, Req, Res } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
@@ -7,11 +7,28 @@ import { createDtoPipe } from '../common/dto-pipe';
 import { assertUnrestrictedAnalytics } from '../user-access/scope-guards';
 import { DataAnalysisQueryDto } from './data-analysis.dto';
 import { DataAnalysisService } from './data-analysis.service';
+import { DataFreshnessService } from './data-freshness.service';
+import { RequireLogin } from '../user-access/iam/route-auth.decorator';
 
 @ApiTags('data-analysis')
+@RequireLogin()
 @Controller('api/data-analysis')
 export class DataAnalysisController {
-  constructor(@Inject(DataAnalysisService) private readonly service: DataAnalysisService) {}
+  constructor(
+    @Inject(DataAnalysisService) private readonly service: DataAnalysisService,
+    @Inject(DataFreshnessService) private readonly freshnessSvc: DataFreshnessService
+  ) {}
+
+  @Get('freshness')
+  @Throttle({ long: { limit: 30, ttl: 60000 } })
+  @ApiOperation({
+    summary: '数据分析 — 数据新鲜度评估',
+    description: '获取底层指标/归因/定时任务表的更新延迟与新鲜度报告'
+  })
+  freshness(@Req() req: Request) {
+    assertUnrestrictedAnalytics(req);
+    return this.freshnessSvc.getFreshnessReport();
+  }
 
   @Get('summary')
   @Throttle({ long: { limit: 10, ttl: 60000 } })

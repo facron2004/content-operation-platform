@@ -1,6 +1,7 @@
 import type { RouteRecordRaw } from 'vue-router';
 import type { UserRole } from '@content/shared';
 import { withImportRetry } from './router-nav-reliability';
+import { permissionsForRoute } from './route-permissions';
 
 /** 侧栏/路由分组键（与原型导航树对齐） */
 export type NavGroup =
@@ -26,6 +27,7 @@ declare module 'vue-router' {
     group?: NavGroup;
     order?: number;
     roles?: readonly UserRole[];
+    permissions?: readonly string[];
   }
 }
 
@@ -53,7 +55,8 @@ function route(
     props,
     meta: {
       ...(icon ? { title, icon, group, order } : { title, group, order }),
-      ...(roles ? { roles } : {})
+      ...(roles ? { roles } : {}),
+      ...(permissionsForRoute(name) ? { permissions: permissionsForRoute(name) } : {})
     }
   };
 }
@@ -66,49 +69,95 @@ const contentLegacyRoutes: RouteRecordRaw[] = [
     path: 'dashboard',
     name: 'dashboard',
     component: lazyView(() => import('./views/DashboardView.vue')),
-    meta: { title: '首页', icon: 'HomeFilled', group: 'home', order: 10 }
+    meta: {
+      title: '首页',
+      icon: 'HomeFilled',
+      group: 'home',
+      order: 10,
+      permissions: permissionsForRoute('dashboard')
+    }
   },
   {
     path: 'campaigns',
     name: 'campaigns',
     component: lazyView(() => import('./views/CampaignsView.vue')),
-    meta: { title: '运营活动', icon: 'Present', group: 'campaigns', order: 5 }
+    meta: {
+      title: '运营活动',
+      icon: 'Present',
+      group: 'campaigns',
+      order: 5,
+      permissions: permissionsForRoute('campaigns')
+    }
   },
   {
     path: 'campaigns/:campaignId',
     name: 'campaign-detail',
     component: lazyView(() => import('./views/CampaignDetailView.vue')),
-    meta: { title: '活动详情', group: 'campaigns', order: 99 }
+    meta: {
+      title: '活动详情',
+      group: 'campaigns',
+      order: 99,
+      permissions: permissionsForRoute('campaign-detail')
+    }
   },
   {
     path: 'tasks',
     name: 'tasks',
     component: lazyView(() => import('./views/TaskCenterView.vue')),
-    meta: { title: '任务中心', icon: 'List', group: 'campaigns', order: 25 }
+    meta: {
+      title: '任务中心',
+      icon: 'List',
+      group: 'campaigns',
+      order: 25,
+      permissions: permissionsForRoute('tasks')
+    }
   },
   {
     path: 'tasks/:taskId',
     name: 'task-detail',
     component: lazyView(() => import('./views/TaskDetailView.vue')),
-    meta: { title: '任务详情', group: 'campaigns', order: 99 }
+    meta: {
+      title: '任务详情',
+      group: 'campaigns',
+      order: 99,
+      permissions: permissionsForRoute('task-detail')
+    }
   },
   {
     path: 'community-library',
     name: 'community-library',
     component: lazyView(() => import('./views/CommunityLibraryView.vue')),
-    meta: { title: '社群库', icon: 'ChatLineRound', group: 'campaigns', order: 8 }
+    meta: {
+      title: '社群库',
+      icon: 'ChatLineRound',
+      group: 'campaigns',
+      order: 8,
+      permissions: permissionsForRoute('community-library')
+    }
   },
   {
     path: 'recommendations',
     name: 'recommendations',
     component: lazyView(() => import('./views/RecommendationsView.vue')),
-    meta: { title: '套餐推荐', icon: 'Goods', group: 'growth', order: 10 }
+    meta: {
+      title: '套餐推荐',
+      icon: 'Goods',
+      group: 'growth',
+      order: 10,
+      permissions: permissionsForRoute('recommendations')
+    }
   },
   {
     path: 'generate',
     name: 'generate',
     component: lazyView(() => import('./views/GenerateView.vue')),
-    meta: { title: '文案生成', icon: 'EditPen', group: 'campaigns', order: 20 }
+    meta: {
+      title: '文案生成',
+      icon: 'EditPen',
+      group: 'campaigns',
+      order: 20,
+      permissions: permissionsForRoute('generate')
+    }
   },
   {
     path: 'audit',
@@ -119,14 +168,21 @@ const contentLegacyRoutes: RouteRecordRaw[] = [
       icon: 'Checked',
       group: 'campaigns',
       order: 30,
-      roles: ['admin', 'auditor', 'platform_operator']
+      roles: ['admin', 'auditor', 'platform_operator'],
+      permissions: permissionsForRoute('audit')
     }
   },
   {
     path: 'communities',
     name: 'communities',
     component: lazyView(() => import('./views/CommunitiesView.vue')),
-    meta: { title: '社群运营', icon: 'ChatLineRound', group: 'campaigns', order: 10 }
+    meta: {
+      title: '社群运营',
+      icon: 'ChatLineRound',
+      group: 'campaigns',
+      order: 10,
+      permissions: permissionsForRoute('communities')
+    }
   }
 ];
 
@@ -142,7 +198,8 @@ const cockpitRoutes: RouteRecordRaw[] = [
       icon: 'DataAnalysis',
       group: 'reports',
       order: 10,
-      roles: [...PLATFORM_ROLES]
+      roles: [...PLATFORM_ROLES],
+      permissions: permissionsForRoute('overview')
     }
   },
   {
@@ -154,7 +211,8 @@ const cockpitRoutes: RouteRecordRaw[] = [
       icon: 'DataBoard',
       group: 'reports',
       order: 15,
-      roles: [...PLATFORM_ROLES]
+      roles: [...PLATFORM_ROLES],
+      permissions: permissionsForRoute('data-analysis')
     }
   },
   {
@@ -166,14 +224,21 @@ const cockpitRoutes: RouteRecordRaw[] = [
       icon: 'DataLine',
       group: 'home',
       order: 20,
-      roles: [...PLATFORM_ROLES]
+      roles: [...PLATFORM_ROLES],
+      permissions: permissionsForRoute('gmv-cockpit')
     }
   },
   {
     path: 'movement',
     name: 'movement',
     component: lazyView(() => import('./views/MovementListView.vue')),
-    meta: { title: '动销 / 不动销', icon: 'TrendCharts', group: 'orders', order: 10 }
+    meta: {
+      title: '动销 / 不动销',
+      icon: 'TrendCharts',
+      group: 'orders',
+      order: 10,
+      permissions: permissionsForRoute('movement')
+    }
   },
   {
     path: 'refund-verify',
@@ -184,7 +249,8 @@ const cockpitRoutes: RouteRecordRaw[] = [
       icon: 'Wallet',
       group: 'orders',
       order: 20,
-      roles: [...PLATFORM_ROLES]
+      roles: [...PLATFORM_ROLES],
+      permissions: permissionsForRoute('refund-verify')
     }
   },
   {
@@ -196,7 +262,8 @@ const cockpitRoutes: RouteRecordRaw[] = [
       icon: 'DataAnalysis',
       group: 'merchants',
       order: 10,
-      roles: [...PLATFORM_ROLES]
+      roles: [...PLATFORM_ROLES],
+      permissions: permissionsForRoute('merchant-sales')
     }
   }
 ];
@@ -250,6 +317,17 @@ const operationsDataRoutes: RouteRecordRaw[] = [
     () => import('./views/UserManagementView.vue'),
     false,
     ['admin']
+  ),
+  route(
+    'permission-center',
+    'permission-center',
+    '权限中心',
+    'SetUp',
+    'settings',
+    6,
+    () => import('./views/PermissionCenterView.vue'),
+    false,
+    ['admin', 'platform_operator']
   ),
   route(
     'audit-logs',

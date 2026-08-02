@@ -1,66 +1,74 @@
 /* 主题变量基线 */
 :root {
   --bg-primary: #ffffff;
-  --bg-secondary: #f4f6fa;
-  --bg-tertiary: #f8fafc;
+  --bg-secondary: #f5f5f7;
+  --bg-tertiary: #f8f8fa;
 
-  --text-primary: #142033;
-  --text-secondary: #667085;
-  --text-tertiary: #8896a6;
+  --text-primary: #1d1d1f;
+  --text-secondary: #6e6e73;
+  --text-tertiary: #8e8e93;
 
-  --border-color: #e4e8ef;
-  --shadow: 0 1px 3px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
-  --shadow-soft: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --border-color: #dedee3;
 
   --panel-bg: #ffffff;
-  --hover-bg: #f4f6fa;
+  --hover-bg: #f5f5f7;
 }
 
-[data-theme='dark'] {
+html[data-theme='dark'] {
   color-scheme: dark;
 
-  --bg-primary: #0d1117;
-  --bg-secondary: #131826;
-  --bg-tertiary: #181e2c;
+  --bg-primary: #1c1c1e;
+  --bg-secondary: #111113;
+  --bg-tertiary: #242426;
 
-  --text-primary: #e6e8ef;
-  --text-secondary: #a0a8bb;
-  --text-tertiary: #6f7890;
+  --text-primary: #f5f5f7;
+  --text-secondary: #aeaeb2;
+  --text-tertiary: #8e8e93;
 
-  --border-color: #273043;
-  --shadow: 0 10px 24px rgba(0, 0, 0, 0.24);
-  --shadow-soft: 0 4px 14px rgba(0, 0, 0, 0.18);
+  --border-color: #3a3a3c;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.22), 0 10px 30px rgba(0, 0, 0, 0.3);
+  --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.2), 0 4px 16px rgba(0, 0, 0, 0.2);
+  --shadow-elevated: 0 18px 60px rgba(0, 0, 0, 0.48);
 
-  --panel-bg: #131826;
-  --hover-bg: #1b2232;
+  --panel-bg: #1c1c1e;
+  --hover-bg: #2c2c2e;
 
   /* Element Plus 暗黑模式变量 */
-  --el-bg-color: #0d1117;
-  --el-bg-color-page: #0a0d14;
-  --el-text-color-primary: #e6e8ef;
-  --el-text-color-regular: #a0a8bb;
-  --el-text-color-secondary: #6f7890;
-  --el-border-color: #273043;
-  --el-fill-color: #131826;
-  --el-fill-color-light: #1b2232;
-  --el-fill-color-lighter: #212838;
-  --el-mask-color: rgba(6, 10, 18, 0.72);
+  --el-bg-color: #1c1c1e;
+  --el-bg-color-page: #111113;
+  --el-text-color-primary: #f5f5f7;
+  --el-text-color-regular: #d1d1d6;
+  --el-text-color-secondary: #8e8e93;
+  --el-border-color: #3a3a3c;
+  --el-fill-color: #2c2c2e;
+  --el-fill-color-light: #323234;
+  --el-fill-color-lighter: #3a3a3c;
+  --el-fill-color-blank: #1c1c1e;
+  --el-mask-color: rgba(0, 0, 0, 0.64);
 
   /* 自定义组件适配 */
-  --ink: #e6e8ef;
-  --ink-soft: #c7cce0;
-  --muted: #a0a8bb;
-  --line: #273043;
-  --line-strong: #344057;
-  --panel: #131826;
-  --soft: #0d1117;
-  --soft-strong: #1b2232;
-  --accent-soft: #16233e;
-  --accent-line: #24406f;
+  --ink: #f5f5f7;
+  --ink-soft: #d1d1d6;
+  --muted: #aeaeb2;
+  --muted-subtle: #8e8e93;
+  --line: #3a3a3c;
+  --line-strong: #545458;
+  --panel: #1c1c1e;
+  --panel-translucent: rgba(28, 28, 30, 0.84);
+  --soft: #111113;
+  --soft-strong: #2c2c2e;
+  --accent: #0a84ff;
+  --accent-rgb: 10, 132, 255;
+  --accent-hover: #409cff;
+  --accent-soft: #102a43;
+  --accent-line: #1f4f7a;
+  --success: #30d158;
+  --warning: #ff9f0a;
+  --danger: #ff453a;
 
-  --danger-soft: #2b1418;
-  --warning-soft: #2a2312;
-  --success-soft: #0f2819;
+  --danger-soft: #351518;
+  --warning-soft: #36250b;
+  --success-soft: #102d18;
 }
 
 body,
@@ -117,7 +125,11 @@ body,
 }
 
 [data-theme='dark'] .el-table {
+  --el-table-bg-color: var(--panel);
+  --el-table-tr-bg-color: var(--panel);
   --el-table-header-bg-color: #151c29;
+  --el-table-text-color: var(--ink-soft);
+  --el-table-header-text-color: var(--muted);
   --el-table-row-hover-bg-color: #18243a;
   --el-table-border-color: var(--line);
   --el-table-current-row-bg-color: #1b2232;
@@ -125,8 +137,8 @@ body,
 
 [data-theme='dark'] .sidebar {
   background:
-    radial-gradient(circle at top left, rgba(37, 99, 235, 0.12), transparent 28%),
-    linear-gradient(180deg, #131826 0%, #0f1420 100%);
+    radial-gradient(circle at top left, rgba(10, 132, 255, 0.11), transparent 30%),
+    linear-gradient(180deg, #1c1c1e 0%, #171719 100%);
   border-right-color: var(--line);
 }
 
@@ -178,70 +190,70 @@ body,
 }
 
 /* AppleButton dark adaptations — avoid washed-out fills / low-contrast labels */
-[data-theme='dark'] .apple-btn--secondary {
+html[data-theme='dark'] .apple-btn.apple-btn--secondary {
   --apple-btn-bg: rgba(255, 255, 255, 0.1);
   --apple-btn-bg-hover: rgba(255, 255, 255, 0.16);
   --apple-btn-bg-active: rgba(255, 255, 255, 0.22);
   --apple-btn-fg: #f5f5f7;
 }
 
-[data-theme='dark'] .apple-btn--ghost {
+html[data-theme='dark'] .apple-btn.apple-btn--ghost {
   --apple-btn-bg: transparent;
   --apple-btn-bg-hover: rgba(10, 132, 255, 0.16);
   --apple-btn-bg-active: rgba(10, 132, 255, 0.24);
   --apple-btn-fg: #0a84ff;
 }
 
-[data-theme='dark'] .apple-btn--quiet {
+html[data-theme='dark'] .apple-btn.apple-btn--quiet {
   --apple-btn-bg: transparent;
   --apple-btn-bg-hover: rgba(255, 255, 255, 0.1);
   --apple-btn-bg-active: rgba(255, 255, 255, 0.16);
   --apple-btn-fg: #d1d1d6;
 }
 
-[data-theme='dark'] .apple-btn--tinted {
+html[data-theme='dark'] .apple-btn.apple-btn--tinted {
   --apple-btn-bg: rgba(10, 132, 255, 0.18);
   --apple-btn-bg-hover: rgba(10, 132, 255, 0.26);
   --apple-btn-bg-active: rgba(10, 132, 255, 0.34);
   --apple-btn-fg: #64b5ff;
 }
 
-[data-theme='dark'] .apple-btn[data-tone='danger'].apple-btn--ghost,
-[data-theme='dark'] .apple-btn[data-tone='danger'].apple-btn--quiet {
+html[data-theme='dark'] .apple-btn[data-tone='danger'].apple-btn--ghost,
+html[data-theme='dark'] .apple-btn[data-tone='danger'].apple-btn--quiet {
   --apple-btn-fg: #ff6961;
   --apple-btn-bg-hover: rgba(255, 69, 58, 0.16);
   --apple-btn-bg-active: rgba(255, 69, 58, 0.24);
 }
 
-[data-theme='dark'] .apple-btn[data-tone='warning'].apple-btn--ghost,
-[data-theme='dark'] .apple-btn[data-tone='warning'].apple-btn--quiet {
+html[data-theme='dark'] .apple-btn[data-tone='warning'].apple-btn--ghost,
+html[data-theme='dark'] .apple-btn[data-tone='warning'].apple-btn--quiet {
   --apple-btn-fg: #ffb340;
   --apple-btn-bg-hover: rgba(255, 159, 10, 0.16);
   --apple-btn-bg-active: rgba(255, 159, 10, 0.24);
 }
 
-[data-theme='dark'] .apple-btn[data-tone='success'].apple-btn--ghost,
-[data-theme='dark'] .apple-btn[data-tone='success'].apple-btn--quiet {
+html[data-theme='dark'] .apple-btn[data-tone='success'].apple-btn--ghost,
+html[data-theme='dark'] .apple-btn[data-tone='success'].apple-btn--quiet {
   --apple-btn-fg: #30d158;
   --apple-btn-bg-hover: rgba(48, 209, 88, 0.16);
   --apple-btn-bg-active: rgba(48, 209, 88, 0.24);
 }
 
-[data-theme='dark'] .apple-btn[data-tone='danger'].apple-btn--tinted {
+html[data-theme='dark'] .apple-btn[data-tone='danger'].apple-btn--tinted {
   --apple-btn-bg: rgba(255, 69, 58, 0.18);
   --apple-btn-bg-hover: rgba(255, 69, 58, 0.26);
   --apple-btn-bg-active: rgba(255, 69, 58, 0.34);
   --apple-btn-fg: #ff6961;
 }
 
-[data-theme='dark'] .apple-btn[data-tone='warning'].apple-btn--tinted {
+html[data-theme='dark'] .apple-btn[data-tone='warning'].apple-btn--tinted {
   --apple-btn-bg: rgba(255, 159, 10, 0.18);
   --apple-btn-bg-hover: rgba(255, 159, 10, 0.26);
   --apple-btn-bg-active: rgba(255, 159, 10, 0.34);
   --apple-btn-fg: #ffb340;
 }
 
-[data-theme='dark'] .apple-btn[data-tone='success'].apple-btn--tinted {
+html[data-theme='dark'] .apple-btn[data-tone='success'].apple-btn--tinted {
   --apple-btn-bg: rgba(48, 209, 88, 0.18);
   --apple-btn-bg-hover: rgba(48, 209, 88, 0.26);
   --apple-btn-bg-active: rgba(48, 209, 88, 0.34);

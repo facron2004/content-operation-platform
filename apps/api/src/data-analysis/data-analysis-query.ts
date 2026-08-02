@@ -1,7 +1,6 @@
 /** OrderHeader-based aggregates for 砍价订单 data-analysis export. */
 import { shiftDateKey } from '@content/shared';
 import { maskPhone as maskPhonePii, sqlDatetimeExclusiveRange } from '../common';
-import type { PrismaService } from '../prisma/prisma.service';
 import {
   DATA_ANALYSIS_TARGET_AMOUNT,
   type DataAnalysisChannelSlice,
@@ -18,22 +17,34 @@ import {
 } from './data-analysis.dto';
 import { paidTimeBounds } from './data-analysis-window';
 
-type PrismaLike = Pick<PrismaService, '$queryRawUnsafe'>;
+type PrismaLike = {
+  $queryRawUnsafe<T = unknown>(query: string, ...values: unknown[]): Promise<T>;
+};
 
 const PAID_WHERE = sqlDatetimeExclusiveRange('"paidTime"');
 const BEIJING_HOUR = `CAST(strftime('%H', datetime(replace(replace("paidTime", 'T', ' '), 'Z', ''), '+8 hours')) AS INTEGER)`;
 
 /** Verified if status is verified OR verifyTime is present. */
 const IS_VERIFIED = `("status" = 'verified' OR "verifyTime" IS NOT NULL)`;
-const IS_REFUNDED = `("status" = 'refunded' OR COALESCE("refundAmount", 0) > 0)`;
 /** Best-effort: cancelled without refund treated as expired-like. */
-const IS_EXPIRED = `("status" = 'cancelled' AND COALESCE("refundAmount", 0) = 0 AND "verifyTime" IS NULL)`;
+const IS_EXPIRED = `("status" = 'cancelled' AND COALESCE("refundAmountFen", 0) = 0 AND "verifyTime" IS NULL)`;
 
 const SALESMAN_NAME = `COALESCE(NULLIF(TRIM("salesman"), ''), '（未命名业务员）')`;
 const MERCHANT_NAME = `COALESCE(NULLIF(TRIM("merchantName"), ''), '（未命名商家）')`;
 /** Beijing calendar date from paidTime (space or ISO form). */
 const BEIJING_DATE = `date(datetime(replace(replace("paidTime", 'T', ' '), 'Z', ''), '+8 hours'))`;
+/** Qualified paidTime range for the refund subquery in queryOverview. */
+const REFUND_PAID_WHERE = sqlDatetimeExclusiveRange('r."paidTime"');
 const CHANNEL_KEY = `COALESCE(NULLIF(TRIM("channel"), ''), 'other')`;
+
+/**
+ * Refund money is the refunded paid components: paid amount + balance.
+ * refundAmountFen is a raw source total that can disagree with these
+ * components, while the refund count still uses refundAmountFen > 0 so the
+ * order count is preserved.
+ */
+const REFUND_COMPONENTS_FEN = (alias = '') =>
+  `COALESCE(${alias}"paidAmountFen", 0) + COALESCE(${alias}"paidAmountWalletFen", 0)`;
 
 /** Map stored channel keys → display labels used by the dashboard donut. */
 const CHANNEL_LABELS: Record<string, string> = {
@@ -63,6 +74,11 @@ const TIME_SLOTS: Array<{ label: string; startH: number; endH: number }> = [
 
 function n(v: number | null | undefined): number {
   return Number(v ?? 0);
+}
+
+/** Convert fen (bigint from *Fen column) to yuan number. */
+function y(v: bigint | number | null | undefined): number {
+  return Number(v ?? 0) / 100;
 }
 
 function rate(num: number, den: number): number {
@@ -106,17 +122,19 @@ export async function queryOverview(
   const rows = (await prisma.$queryRawUnsafe(
     `SELECT
        COUNT(*) AS "orderCount",
-       COALESCE(SUM("paidAmount"), 0) AS "salesAmount",
-       COALESCE(SUM("paidAmountWallet"), 0) AS "walletAmount",
-       COALESCE(SUM("orderAmount"), 0) AS "faceAmount",
-       COALESCE(SUM("refundAmount"), 0) AS "refundAmount",
-       COALESCE(SUM("verifyAmount"), 0) AS "verifyAmount",
+       COALESCE(SUM("paidAmountFen") / 100.0, 0) AS "salesAmount",
+       COALESCE(SUM("paidAmountWalletFen") / 100.0, 0) AS "walletAmount",
+       COALESCE(SUM("orderAmountFen") / 100.0, 0) AS "faceAmount",
+       (SELECT COALESCE(SUM(${REFUND_COMPONENTS_FEN('r.')}) / 100.0, 0) FROM "OrderHeader" r WHERE ${REFUND_PAID_WHERE} AND r."refundAmountFen" > 0) AS "refundAmount",
+       COALESCE(SUM("verifyAmountFen") / 100.0, 0) AS "verifyAmount",
        COALESCE(SUM(CASE WHEN ${IS_VERIFIED} THEN 1 ELSE 0 END), 0) AS "verifiedCount",
        COALESCE(SUM(CASE WHEN ${IS_EXPIRED} THEN 1 ELSE 0 END), 0) AS "expiredCount",
        COUNT(DISTINCT NULLIF(TRIM("merchantName"), '')) AS "merchantCount",
        COUNT(DISTINCT NULLIF(TRIM("salesman"), '')) AS "salesmanCount"
      FROM "OrderHeader"
      WHERE ${PAID_WHERE}`,
+    startBound,
+    endBound,
     startBound,
     endBound
   )) as Array<{
@@ -178,16 +196,41 @@ export async function queryDailyTrend(
 ): Promise<DataAnalysisDailyPoint[]> {
   const { startBound, endBound } = paidTimeBounds(startDate, endDate);
   const rows = (await prisma.$queryRawUnsafe(
-    `SELECT
-       ${BEIJING_DATE} AS "date",
-       COUNT(*) AS "orderCount",
-       COALESCE(SUM("paidAmount"), 0) AS "salesAmount",
-       COALESCE(SUM("paidAmountWallet"), 0) AS "walletAmount",
-       COALESCE(SUM("refundAmount"), 0) AS "refundAmount"
-     FROM "OrderHeader"
-     WHERE ${PAID_WHERE}
-     GROUP BY ${BEIJING_DATE}
-     ORDER BY "date" ASC`,
+    `WITH base AS (
+       SELECT
+         ${BEIJING_DATE} AS "date",
+         COUNT(*) AS "orderCount",
+         COALESCE(SUM("paidAmountFen") / 100.0, 0) AS "salesAmount",
+         COALESCE(SUM("paidAmountWalletFen") / 100.0, 0) AS "walletAmount"
+       FROM "OrderHeader"
+       WHERE ${PAID_WHERE}
+       GROUP BY ${BEIJING_DATE}
+     ),
+     refundByDay AS (
+       SELECT
+         ${BEIJING_DATE} AS "date",
+         COALESCE(SUM(${REFUND_COMPONENTS_FEN()}) / 100.0, 0) AS "refundAmount"
+       FROM "OrderHeader"
+       WHERE ${PAID_WHERE} AND "refundAmountFen" > 0
+       GROUP BY ${BEIJING_DATE}
+     ),
+     alldates AS (
+       SELECT "date" FROM base
+       UNION
+       SELECT "date" FROM refundByDay
+     )
+     SELECT
+       a."date",
+       COALESCE(b."orderCount", 0) AS "orderCount",
+       COALESCE(b."salesAmount", 0) AS "salesAmount",
+       COALESCE(b."walletAmount", 0) AS "walletAmount",
+       COALESCE(r."refundAmount", 0) AS "refundAmount"
+     FROM alldates a
+     LEFT JOIN base b ON b."date" = a."date"
+     LEFT JOIN refundByDay r ON r."date" = a."date"
+     ORDER BY a."date" ASC`,
+    startBound,
+    endBound,
     startBound,
     endBound
   )) as Array<{
@@ -248,7 +291,7 @@ export async function queryChannelBreakdown(
     `SELECT
        ${CHANNEL_KEY} AS "channel",
        COUNT(*) AS "orderCount",
-       COALESCE(SUM("paidAmount"), 0) AS "salesAmount"
+       COALESCE(SUM("paidAmountFen") / 100.0, 0) AS "salesAmount"
      FROM "OrderHeader"
      WHERE ${PAID_WHERE}
      GROUP BY ${CHANNEL_KEY}
@@ -434,7 +477,7 @@ export async function queryPackageRanking(
        NULLIF(TRIM(cp."packageName"), '') AS "packageName",
        NULLIF(TRIM(MAX(oh."merchantName")), '') AS "merchantName",
        COUNT(*) AS "orderCount",
-       COALESCE(SUM(oh."paidAmount"), 0) AS "salesAmount"
+       COALESCE(SUM(oh."paidAmountFen") / 100.0, 0) AS "salesAmount"
      FROM "OrderHeader" oh
      LEFT JOIN "ContentPackage" cp ON cp."packageId" = oh."packageId"
      WHERE ${sqlDatetimeExclusiveRange('oh."paidTime"')}
@@ -459,7 +502,7 @@ export async function queryTimeSlots(
     `SELECT
        ${BEIJING_HOUR} AS "hour",
        COUNT(*) AS "orderCount",
-       COALESCE(SUM("paidAmount"), 0) AS "salesAmount",
+       COALESCE(SUM("paidAmountFen") / 100.0, 0) AS "salesAmount",
        COALESCE(SUM(CASE WHEN ${IS_VERIFIED} THEN 1 ELSE 0 END), 0) AS "verifiedCount"
      FROM "OrderHeader"
      WHERE ${PAID_WHERE}
@@ -518,7 +561,7 @@ export async function queryHourly(
     `SELECT
        ${BEIJING_HOUR} AS "hour",
        COUNT(*) AS "orderCount",
-       COALESCE(SUM("paidAmount"), 0) AS "salesAmount"
+       COALESCE(SUM("paidAmountFen") / 100.0, 0) AS "salesAmount"
      FROM "OrderHeader"
      WHERE ${PAID_WHERE}
      GROUP BY ${BEIJING_HOUR}
@@ -582,19 +625,30 @@ async function queryRankingBy(
     ? `AND NULLIF(TRIM(COALESCE("salesman", '')), '') IS NOT NULL`
     : '';
   const rows = (await prisma.$queryRawUnsafe(
-    `SELECT
+    `WITH refundByGroup AS (
+       SELECT
+         ${groupExpr} AS "name",
+         COALESCE(SUM(${REFUND_COMPONENTS_FEN()}) / 100.0, 0) AS "refundAmount"
+       FROM "OrderHeader"
+       WHERE ${PAID_WHERE} AND "refundAmountFen" > 0
+       GROUP BY ${groupExpr}
+     )
+     SELECT
        ${groupExpr} AS "name",
        COUNT(*) AS "orderCount",
-       COALESCE(SUM("paidAmount"), 0) AS "salesAmount",
-       COALESCE(SUM("orderAmount"), 0) AS "faceAmount",
-       COALESCE(SUM("paidAmountWallet"), 0) AS "walletAmount",
-       COALESCE(SUM("refundAmount"), 0) AS "refundAmount",
+       COALESCE(SUM("paidAmountFen") / 100.0, 0) AS "salesAmount",
+       COALESCE(SUM("orderAmountFen") / 100.0, 0) AS "faceAmount",
+       COALESCE(SUM("paidAmountWalletFen") / 100.0, 0) AS "walletAmount",
+       COALESCE(rb."refundAmount", 0) AS "refundAmount",
        COALESCE(SUM(CASE WHEN ${IS_VERIFIED} THEN 1 ELSE 0 END), 0) AS "verifiedCount"
      FROM "OrderHeader"
+     LEFT JOIN refundByGroup rb ON rb."name" = ${groupExpr}
      WHERE ${PAID_WHERE} ${namedFilter}
      GROUP BY ${groupExpr}
      ORDER BY "salesAmount" DESC, "orderCount" DESC, "name" ASC
      LIMIT ?`,
+    startBound,
+    endBound,
     startBound,
     endBound,
     limit
@@ -703,10 +757,10 @@ async function queryRefundsBy(
     `SELECT
        ${groupExpr} AS "name",
        COUNT(*) AS "orderCount",
-       COALESCE(SUM("refundAmount"), 0) AS "refundAmount",
+       COALESCE(SUM(${REFUND_COMPONENTS_FEN()}) / 100.0, 0) AS "refundAmount",
        CAST(SUM(CASE WHEN ${IS_VERIFIED} THEN 1 ELSE 0 END) AS REAL) / COUNT(*) AS "verifyRate"
      FROM "OrderHeader"
-     WHERE ${PAID_WHERE} AND COALESCE("refundAmount", 0) > 0 ${namedFilter}
+     WHERE ${PAID_WHERE} AND "refundAmountFen" > 0 ${namedFilter}
      GROUP BY ${groupExpr}
      ORDER BY "refundAmount" DESC, "orderCount" DESC, "name" ASC
      LIMIT ?`,
@@ -753,11 +807,11 @@ type DetailSqlRow = {
   packageName: string | null;
   memberNickname: string | null;
   memberPhone: string | null;
-  paidAmount: number | null;
-  orderAmount: number | null;
-  walletAmount: number | null;
+  paidAmountFen: bigint | null;
+  orderAmountFen: bigint | null;
+  walletAmountFen: bigint | null;
   pointUsed: number | null;
-  refundAmount: number | null;
+  refundAmountFen: bigint | null;
   coupon: string | null;
   salesman: string | null;
   parentSalesman: string | null;
@@ -811,11 +865,12 @@ export async function queryOrderDetails(
        cp."packageName" AS "packageName",
        m."nickname" AS "memberNickname",
        m."phone" AS "memberPhone",
-       oh."paidAmount" AS "paidAmount",
-       oh."orderAmount" AS "orderAmount",
-       oh."paidAmountWallet" AS "walletAmount",
+       oh."paidAmountFen" AS "paidAmountFen",
+       oh."orderAmountFen" AS "orderAmountFen",
+       oh."paidAmountWalletFen" AS "walletAmountFen",
        oh."pointUsed" AS "pointUsed",
-       oh."refundAmount" AS "refundAmount",
+       CASE WHEN COALESCE(oh."refundAmountFen", 0) > 0
+         THEN ${REFUND_COMPONENTS_FEN('oh.')} ELSE 0 END AS "refundAmountFen",
        oh."coupon" AS "coupon",
        oh."salesman" AS "salesman",
        oh."parentSalesman" AS "parentSalesman",
@@ -846,11 +901,11 @@ export async function queryOrderDetails(
       // Prefer masked phone; never fall back to raw nickname when phone is present-but-short.
       // Nickname alone is still exported (ops matching) — no phone digits.
       memberLabel: maskMemberPhone(r.memberPhone) || (r.memberNickname?.trim() ?? ''),
-      paidAmount: n(r.paidAmount),
-      orderAmount: n(r.orderAmount),
-      walletAmount: n(r.walletAmount),
+      paidAmount: y(r.paidAmountFen),
+      orderAmount: y(r.orderAmountFen),
+      walletAmount: y(r.walletAmountFen),
       pointUsed: n(r.pointUsed),
-      refundAmount: n(r.refundAmount),
+      refundAmount: y(r.refundAmountFen),
       coupon: r.coupon?.trim() || '',
       salesman: r.salesman?.trim() || '',
       parentSalesman: r.parentSalesman?.trim() || '',

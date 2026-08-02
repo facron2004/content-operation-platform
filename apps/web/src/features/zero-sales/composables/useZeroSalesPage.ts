@@ -6,6 +6,7 @@ import {
   type OverviewKpi
 } from '../../../services/api/overview.api';
 import type { StaleBucket } from '../../../services/api/zero-sales.api';
+import { isRequestCanceled } from '../../../services/http-client-utils';
 import { buildCategoryBar } from '../../../utils/chart-options';
 import { STALE_BUCKET_CHART_COLORS, STALE_BUCKET_CHART_LABELS } from '../../../utils/chart-theme';
 import { STALE_BUCKET_LABELS, useZeroSales } from './useZeroSales';
@@ -61,7 +62,8 @@ function useZeroSalesSummary(params: { onBucketSelect: (bucket: string) => void 
       staleDistribution.value = stale.items ?? [];
       dimDistribution.value = dimRows.items ?? [];
     } catch (err) {
-      summaryError.value = err instanceof Error ? err.message : '加载零动销总览失败';
+      if (!isRequestCanceled(err))
+        summaryError.value = err instanceof Error ? err.message : '加载零动销总览失败';
     } finally {
       summaryLoading.value = false;
     }

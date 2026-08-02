@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import type { Component } from 'vue';
+import { CreditCard, DataLine, Money, RefreshLeft, ShoppingBag } from '@element-plus/icons-vue';
 import type {
   DataAnalysisDeltas,
   DataAnalysisOverview
@@ -18,42 +20,42 @@ const cards: Array<{
   label: string;
   tone: Tone;
   value: (o: DataAnalysisOverview | null) => string;
-  icon: string;
+  icon: Component;
 }> = [
   {
     key: 'salesAmount',
     label: '总销售额（实付）',
     tone: 'blue',
     value: (o) => displayMoney(o, 'salesAmount'),
-    icon: 'bag'
+    icon: ShoppingBag
   },
   {
     key: 'tradeAmount',
     label: '交易额（含余额）',
     tone: 'cyan',
     value: (o) => displayMoney(o, 'tradeAmount'),
-    icon: 'card'
+    icon: CreditCard
   },
   {
     key: 'netSales',
     label: '净销售额',
     tone: 'indigo',
     value: (o) => displayMoney(o, 'netSales'),
-    icon: 'yen'
+    icon: Money
   },
   {
     key: 'refundAmount',
     label: '退款金额',
     tone: 'orange',
     value: (o) => displayMoney(o, 'refundAmount'),
-    icon: 'refund'
+    icon: RefreshLeft
   },
   {
     key: 'settlementRate',
     label: '整体结算率',
     tone: 'rose',
     value: (o) => formatPercent(o?.settlementRate),
-    icon: 'rate'
+    icon: DataLine
   }
 ];
 
@@ -74,11 +76,7 @@ function deltaOf(key: keyof DataAnalysisDeltas) {
           </span>
         </div>
         <div class="da-kpi-icon" aria-hidden="true">
-          <span v-if="card.icon === 'bag'">🛍</span>
-          <span v-else-if="card.icon === 'card'">💳</span>
-          <span v-else-if="card.icon === 'yen'">¥</span>
-          <span v-else-if="card.icon === 'refund'">↩</span>
-          <span v-else>%</span>
+          <el-icon><component :is="card.icon" /></el-icon>
         </div>
       </div>
     </article>

@@ -203,8 +203,8 @@ async function main() {
 
   try {
     log(`[dev] 等待 API 监听 ${apiPort}...`);
-    await waitForPort(apiPort, '127.0.0.1', 90000);
-    await waitForHttpOk(`http://127.0.0.1:${apiPort}/api/content/health`, 90000);
+    await waitForPort(apiPort, '127.0.0.1', 180000);
+    await waitForHttpOk(`http://127.0.0.1:${apiPort}/api/system/version`, 180000);
     log('[dev] API 已就绪');
   } catch (err) {
     fail(err.message || String(err));
@@ -220,7 +220,7 @@ async function main() {
 
   try {
     log(`[dev] 等待前端监听 ${publicPort}...`);
-    await waitForPort(publicPort, '127.0.0.1', 90000);
+    await waitForPort(publicPort, '127.0.0.1', 180000);
     log('[dev] 前端已就绪');
   } catch (err) {
     fail(err.message || String(err));

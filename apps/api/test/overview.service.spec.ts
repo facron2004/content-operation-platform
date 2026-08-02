@@ -35,7 +35,13 @@ const buildPrisma = (
     $queryRawUnsafe: vi.fn().mockImplementation((sql: string) => {
       // Shared money-day: SUM(GMV) + COUNT(*) in one OrderHeader query
       if (/OrderHeader/i.test(sql) && /totalGmv/i.test(sql) && /paidOrderCount/i.test(sql)) {
-        return [{ totalGmv: v.todayGmv, paidOrderCount: v.todayOrderCount }];
+        return [
+          {
+            totalGmv: Math.round(v.todayGmv * 100),
+            totalGmvFen: Math.round(v.todayGmv * 100),
+            paidOrderCount: v.todayOrderCount
+          }
+        ];
       }
       if (
         /OrderHeader/i.test(sql) &&
@@ -83,7 +89,7 @@ describe('OverviewService.getKpis', () => {
       totalSkus: 500,
       zeroSalesSkuCount: 42,
       zeroSalesMerchants: 12,
-      todayGmv: 12345.67,
+      todayGmvFen: 1234567n,
       todayOrderCount: 78,
       dataSource: 'OrderHeader'
     });

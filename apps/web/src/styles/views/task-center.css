@@ -1,18 +1,18 @@
 .task-center-page {
-  padding: 20px;
+  gap: 10px;
 }
 
 .page-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 20px;
+  margin-bottom: 2px;
 }
 
 .page-header h2 {
   margin: 0;
-  font-size: 20px;
-  font-weight: 600;
+  font-size: 18px;
+  font-weight: 750;
 }
 
 /* Residual #212: batch + single create CTAs share the header. */

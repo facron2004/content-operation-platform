@@ -1,0 +1,14 @@
+{
+  "name": "@content/desktop",
+  "version": "1.0.0",
+  "private": true,
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json --watch"
+  },
+  "devDependencies": {
+    "electron": "43.2.0",
+    "typescript": "^5.7.2"
+  }
+}

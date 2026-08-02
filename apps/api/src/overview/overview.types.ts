@@ -5,7 +5,7 @@ export interface OverviewKpiPayload {
   zeroSalesMerchants: number;
   zeroSalesSkuCount: number;
   zeroSalesSkuRatio: number;
-  todayGmv: number;
+  todayGmvFen: bigint | null;
   todayOrderCount: number;
   updatedAt: string;
   /** Money fields use OrderHeader/DailyMetrics; inventory stale is separate. */

@@ -7,11 +7,13 @@ import { createDtoPipe } from '../common/dto-pipe';
 import { AuthService } from './auth.service';
 import { Public } from './public.decorator';
 import { assertLocalSessionAllowed } from './auth-local-session';
+import { RequireLogin } from '../user-access/iam/route-auth.decorator';
 class LoginDto {
   @IsNotEmpty() @IsString() @MinLength(1) @MaxLength(64) username!: string;
   @IsNotEmpty() @IsString() @MinLength(1) @MaxLength(128) password!: string;
 }
 @ApiTags('auth')
+@RequireLogin()
 @Controller('api/auth')
 export class AuthController {
   private readonly logger = new Logger(AuthController.name);

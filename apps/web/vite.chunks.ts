@@ -9,6 +9,7 @@ export function createVitePlugins(): PluginOption[] {
   return [
     vue(),
     Components({
+      dts: false,
       resolvers: [ElementPlusResolver({ importStyle: 'css' })]
     }),
     AutoImport({

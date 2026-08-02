@@ -3,7 +3,12 @@ import type { RouteLocationNormalizedLoaded, Router } from 'vue-router';
 import type { MerchantTrendResponse } from '../../../services/api/merchant.api';
 import type { StaleBucket } from '../../../services/api/zero-sales.api';
 import { STALE_BUCKET_COLORS, STALE_BUCKET_LABELS } from '../../../services/api/zero-sales.api';
-import { formatGmv as formatGmvShared, formatPercent, readFen, sumMoneyFen } from '../../../utils/format';
+import {
+  formatGmv as formatGmvShared,
+  formatPercent,
+  readFen,
+  sumMoneyFen
+} from '../../../utils/format';
 import { type createMerchantState } from './merchant-core';
 
 type MerchantState = ReturnType<typeof createMerchantState>;

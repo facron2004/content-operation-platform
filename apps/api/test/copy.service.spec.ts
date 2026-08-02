@@ -1,6 +1,5 @@
 import { Test, type TestingModule } from '@nestjs/testing';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
-import type { Prisma } from '@prisma/client';
 import type { ContentPackage, SalesSnapshot } from '@content/shared';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { CopyService } from '../src/content/copy.service';

@@ -7,15 +7,19 @@ import type { RuleConfig, RuleType } from '@content/shared';
 import { RuleConfigService } from './rule-config.service';
 import { CreateRuleDto, ListRulesQueryDto } from './rule-config.dto';
 import { Roles } from '../user-access/role.decorator';
+import { RequireLogin } from '../user-access/iam/route-auth.decorator';
+import { RequirePermissions } from '../user-access/iam/require-permissions.decorator';
 import { safePathId } from '../common/path-id';
 
 @ApiTags('rule-config')
+@RequireLogin()
 @Controller('api/content/rules')
 export class RuleConfigController {
   constructor(@Inject(RuleConfigService) private readonly svc: RuleConfigService) {}
 
   /** Full rule inventory is platform-admin only (contains merchant-level strategy). */
   @Roles('admin', 'platform_operator')
+  @RequirePermissions('content:read')
   @Throttle({ long: { limit: 30, ttl: 60000 } })
   @Get()
   @ApiOperation({
@@ -28,6 +32,7 @@ export class RuleConfigController {
 
   /** Code defaults only, but still platform-role gated to keep the surface consistent. */
   @Roles('admin', 'platform_operator', 'auditor')
+  @RequirePermissions('content:read')
   @Throttle({ long: { limit: 30, ttl: 60000 } })
   @Get('defaults')
   @ApiOperation({ summary: '平台默认规则', description: '返回代码基线默认配置,供前端表单展示基线' })
@@ -36,6 +41,7 @@ export class RuleConfigController {
   }
 
   @Roles('admin', 'platform_operator')
+  @RequirePermissions('content:read')
   @Throttle({ long: { limit: 60, ttl: 60000 } })
   @Get(':id')
   @ApiOperation({ summary: '规则配置详情' })
@@ -44,6 +50,7 @@ export class RuleConfigController {
   }
 
   @Roles('admin')
+  @RequirePermissions('content:write')
   @Throttle({ long: { limit: 10, ttl: 60000 } })
   @Post()
   @ApiOperation({
@@ -67,6 +74,7 @@ export class RuleConfigController {
   }
 
   @Roles('admin')
+  @RequirePermissions('content:write')
   @Throttle({ long: { limit: 20, ttl: 60000 } })
   @Post(':id/activate')
   @ApiOperation({ summary: '激活规则配置', description: '设为生效版本,并停用同范围其它生效版本' })
@@ -75,6 +83,7 @@ export class RuleConfigController {
   }
 
   @Roles('admin')
+  @RequirePermissions('content:write')
   @Throttle({ long: { limit: 20, ttl: 60000 } })
   @Delete(':id')
   @ApiOperation({ summary: '删除规则配置' })

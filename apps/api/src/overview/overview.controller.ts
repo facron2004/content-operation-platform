@@ -4,6 +4,7 @@ import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import type { Request } from 'express';
 import { assertUnrestrictedAnalytics } from '../user-access/scope-guards';
+import { RequireLogin } from '../user-access/iam/route-auth.decorator';
 import { OverviewService } from './overview.service';
 import {
   OverviewDistributionQueryDto,
@@ -13,6 +14,7 @@ import {
 } from './overview.dto';
 
 @ApiTags('overview')
+@RequireLogin()
 @Controller('api/overview')
 export class OverviewController {
   constructor(@Inject(OverviewService) private readonly overview: OverviewService) {}

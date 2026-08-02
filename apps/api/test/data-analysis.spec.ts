@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { createClient, type InValue } from '@libsql/client';
 import {
   fixedSnapshotWindows,
   paidTimeBounds,
@@ -13,7 +14,12 @@ import {
   buildDeltas,
   deltaRatio,
   mergePackageRankingByName,
-  resolvePackageDisplayName
+  resolvePackageDisplayName,
+  queryDailyTrend,
+  queryMerchantRanking,
+  queryMerchantRefunds,
+  queryOverview,
+  querySalesmanRefunds
 } from '../src/data-analysis/data-analysis-query';
 import type { DataAnalysisReport } from '../src/data-analysis/data-analysis.dto';
 
@@ -127,6 +133,147 @@ describe('data-analysis window', () => {
       start: '2026-07-17',
       end: '2026-07-23'
     });
+  });
+});
+
+describe('data-analysis refund paidTime attribution', () => {
+  it('uses paidTime and sums paid plus balance components regardless of refundTime', async () => {
+    const client = createClient({ url: 'file::memory:?cache=shared' });
+    await client.execute(`
+      CREATE TABLE "OrderHeader" (
+        "orderId" TEXT PRIMARY KEY,
+        "orderTime" TEXT,
+        "paidTime" TEXT,
+        "refundTime" TEXT,
+        "status" TEXT,
+        "paidAmountFen" INTEGER,
+        "paidAmountWalletFen" INTEGER,
+        "orderAmountFen" INTEGER,
+        "refundAmountFen" INTEGER,
+        "verifyAmountFen" INTEGER,
+        "verifyTime" TEXT,
+        "merchantName" TEXT,
+        "salesman" TEXT,
+        "channel" TEXT,
+        "packageId" TEXT
+      )
+    `);
+    await client.execute({
+      sql: `INSERT INTO "OrderHeader" (
+        "orderId", "orderTime", "paidTime", "refundTime", "status",
+        "paidAmountFen", "paidAmountWalletFen", "orderAmountFen", "refundAmountFen",
+        "verifyAmountFen", "verifyTime", "merchantName", "salesman", "channel", "packageId"
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: [
+        'paid-in-range',
+        '2026-07-01 15:59:00',
+        '2026-07-01 16:01:00',
+        '2026-07-02 01:00:00',
+        'refunded',
+        9500,
+        500,
+        12000,
+        12000,
+        0,
+        null,
+        '商家A',
+        '业务员A',
+        'jeesite',
+        'package-a'
+      ]
+    });
+    await client.execute({
+      sql: `INSERT INTO "OrderHeader" (
+        "orderId", "orderTime", "paidTime", "refundTime", "status",
+        "paidAmountFen", "paidAmountWalletFen", "orderAmountFen", "refundAmountFen",
+        "verifyAmountFen", "verifyTime", "merchantName", "salesman", "channel", "packageId"
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: [
+        'order-in-range-paid-out',
+        '2026-07-01 16:01:00',
+        '2026-07-02 16:01:00',
+        '2026-07-02 02:00:00',
+        'refunded',
+        20000,
+        0,
+        22000,
+        5000,
+        0,
+        null,
+        '商家B',
+        '业务员B',
+        'jeesite',
+        'package-b'
+      ]
+    });
+    await client.execute({
+      sql: `INSERT INTO "OrderHeader" (
+        "orderId", "orderTime", "paidTime", "refundTime", "status",
+        "paidAmountFen", "paidAmountWalletFen", "orderAmountFen", "refundAmountFen",
+        "verifyAmountFen", "verifyTime", "merchantName", "salesman", "channel", "packageId"
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: [
+        'paid-in-range-refund-out',
+        '2026-07-01 16:02:00',
+        '2026-07-01 16:02:00',
+        '2026-07-03 00:00:00',
+        'refunded',
+        700,
+        0,
+        8000,
+        700,
+        0,
+        null,
+        '商家C',
+        '业务员C',
+        'jeesite',
+        'package-c'
+      ]
+    });
+
+    const prisma = {
+      $queryRawUnsafe: async <T = unknown>(sql: string, ...args: InValue[]) =>
+        (await client.execute({ sql, args })).rows as T
+    };
+
+    try {
+      const overview = await queryOverview(prisma, '2026-07-02', '2026-07-02');
+      expect(overview).toMatchObject({
+        orderCount: 2,
+        salesAmount: 102,
+        walletAmount: 5,
+        tradeAmount: 107,
+        refundAmount: 107,
+        netSales: -5
+      });
+
+      await expect(queryDailyTrend(prisma, '2026-07-02', '2026-07-02')).resolves.toEqual([
+        {
+          date: '2026-07-02',
+          salesAmount: 102,
+          tradeAmount: 107,
+          netSales: -5,
+          orderCount: 2,
+          refundAmount: 107
+        }
+      ]);
+
+      await expect(queryMerchantRefunds(prisma, '2026-07-02', '2026-07-02', 10)).resolves.toEqual([
+        { name: '商家A', orderCount: 1, refundAmount: 100, verifyRate: 0 },
+        { name: '商家C', orderCount: 1, refundAmount: 7, verifyRate: 0 }
+      ]);
+      await expect(querySalesmanRefunds(prisma, '2026-07-02', '2026-07-02', 10)).resolves.toEqual([
+        { name: '业务员A', orderCount: 1, refundAmount: 100, verifyRate: 0 },
+        { name: '业务员C', orderCount: 1, refundAmount: 7, verifyRate: 0 }
+      ]);
+
+      await expect(queryMerchantRanking(prisma, '2026-07-02', '2026-07-02', 10)).resolves.toEqual([
+        expect.objectContaining({ name: '商家A', refundAmount: 100 }),
+        expect.objectContaining({ name: '商家C', refundAmount: 7 })
+      ]);
+    } finally {
+      await client.close();
+    }
   });
 });
 

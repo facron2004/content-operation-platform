@@ -21,7 +21,7 @@ describe('residual #142 DT publish free-form PACKAGE_AUDIT slim', () => {
 
     // Residual #142: free-form audit SELECT is price/stock/useRules only.
     expect(fn).toMatch(
-      /SELECT "originalPrice", "salePrice", "temporarySalePrice",\s*"stockTotal", "stockLeft", "useRules"/
+      /SELECT "originalPriceFen", "salePriceFen", "temporarySalePriceFen",\s*"stockTotal", "stockLeft", "useRules"/
     );
     expect(fn).toMatch(/mapPackageForAudit/);
     // Must not pull full package map columns or mapPackage coerce.

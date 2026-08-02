@@ -4,7 +4,7 @@ import { SQL_GMV_OH, beijingDayRangeSqlite, sqlDatetimeExclusiveRange } from '..
 
 describe('money-day OrderHeader aggregate', () => {
   it('uses SQL_GMV_OH (online + wallet) and format-agnostic Beijing day bounds', async () => {
-    const queryRawUnsafe = vi.fn().mockResolvedValue([{ totalGmv: 100.5, paidOrderCount: 3 }]);
+    const queryRawUnsafe = vi.fn().mockResolvedValue([{ totalGmvFen: 10050n, paidOrderCount: 3 }]);
     const result = await loadDayGmvFromOrderHeader(
       { $queryRawUnsafe: queryRawUnsafe },
       '2026-07-10'
@@ -12,7 +12,7 @@ describe('money-day OrderHeader aggregate', () => {
 
     expect(result).toEqual({
       date: '2026-07-10',
-      totalGmv: 100.5,
+      totalGmvFen: 10050n,
       paidOrderCount: 3,
       dataSource: 'OrderHeader'
     });

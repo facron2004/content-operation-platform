@@ -2,13 +2,17 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 import { sqlDatetime, toSqliteDateTime } from '../common/sqlite-datetime';
+import { JobRunnerService } from './job-runner.service';
 
 @Injectable()
 export class OverdueTaskJob {
   private readonly logger = new Logger(OverdueTaskJob.name);
   private running = false;
 
-  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(JobRunnerService) private readonly jobRunner: JobRunnerService
+  ) {}
 
   /**
    * Run every 30 minutes.
@@ -21,29 +25,33 @@ export class OverdueTaskJob {
       return;
     }
     this.running = true;
-    this.logger.log('Checking for overdue tasks...');
-    // Normalize timestamps so mixed ISO/space storage cannot break lexicographic <=.
-    const thirtyMinutesAgo = toSqliteDateTime(Date.now() - 30 * 60 * 1000);
-    const now = toSqliteDateTime();
 
-    try {
-      const result = await this.prisma.$executeRawUnsafe(
-        `UPDATE "DistributionTask"
-         SET "status" = 'overdue', "updatedAt" = ?
-         WHERE "status" = 'scheduled'
-           AND "plannedAt" IS NOT NULL
-           AND ${sqlDatetime('"plannedAt"')} <= datetime(?)`,
-        now,
-        thirtyMinutesAgo
-      );
+    await this.jobRunner
+      .runJob('overdue-task', async (setMeta) => {
+        this.logger.log('Checking for overdue tasks...');
+        const thirtyMinutesAgo = toSqliteDateTime(Date.now() - 30 * 60 * 1000);
+        const now = toSqliteDateTime();
 
-      if (result > 0) {
-        this.logger.log(`Marked ${result} tasks as overdue`);
-      }
-    } catch (err) {
-      this.logger.warn(`Failed to mark overdue tasks: ${err}`);
-    } finally {
-      this.running = false;
-    }
+        const result = Number(
+          (await this.prisma.$executeRawUnsafe(
+            `UPDATE "DistributionTask"
+           SET "status" = 'overdue', "updatedAt" = ?
+           WHERE "status" = 'scheduled'
+             AND "plannedAt" IS NOT NULL
+             AND ${sqlDatetime('"plannedAt"')} <= datetime(?)`,
+            now,
+            thirtyMinutesAgo
+          )) ?? 0
+        );
+
+        setMeta({ updatedCount: result });
+        if (result > 0) {
+          this.logger.log(`Marked ${result} tasks as overdue`);
+        }
+        return result;
+      })
+      .finally(() => {
+        this.running = false;
+      });
   }
 }

@@ -40,9 +40,9 @@ describe('residual #87 TPD multi-row upsert helpers', () => {
     // Multi-row: first chunk has 49 tuple separators; remainder has 2.
     expect((sqls[0].match(/\),\(/g) ?? []).length).toBe(TPD_UPSERT_CHUNK - 1);
     expect((sqls[1].match(/\),\(/g) ?? []).length).toBe(2);
-    // 50 rows × 11 cols (10 + gmvFen dual-write, PRD §7.4 Phase 3), then 3 × 11.
-    expect(paramLens[0]).toBe(TPD_UPSERT_CHUNK * 11);
-    expect(paramLens[1]).toBe(3 * 11);
+    // 50 rows × 10 columns (id + 9 payload fields), then 3 × 10.
+    expect(paramLens[0]).toBe(TPD_UPSERT_CHUNK * 10);
+    expect(paramLens[1]).toBe(3 * 10);
   });
 
   it('buildTpdRowsForDay derives conversionRate and zero-fills missing maps', () => {

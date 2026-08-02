@@ -140,7 +140,7 @@ describe('mapJeesiteOrderListToDataset', () => {
           bargainCommodityId: 'p-open',
           corePartnerId: 'merchant-open',
           createDate: '2026-07-18 12:00',
-          payPrice: 10,
+          payPrice: 0,
           orderStatus: 10
         }
       ]

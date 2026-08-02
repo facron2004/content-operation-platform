@@ -8,6 +8,171 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum OrganizationUnitType {
+  HEADQUARTERS
+  REGION
+  MERCHANT
+}
+
+enum RoleScopeType {
+  ALL
+  ORG_TREE
+  ORG_ONLY
+  NONE
+}
+
+// ── Tenant / organization / permission center (V0.11) ────────────────
+
+model Tenant {
+  tenantId    String   @id
+  tenantKey   String   @unique
+  name        String
+  status      String   @default("active")
+  createdBy   String?
+  updatedBy   String?
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  organizationUnits OrganizationUnit[]
+  roles             Role[]
+  memberships       UserOrganizationMembership[]
+  roleAssignments   UserRoleAssignment[]
+
+  @@index([status])
+}
+
+model OrganizationUnit {
+  unitId      String               @id
+  tenantId    String
+  parentId    String?
+  code        String
+  name        String
+  unitType    OrganizationUnitType
+  areaId      String?
+  merchantId  String?
+  isActive    Int                  @default(1)
+  createdBy   String?
+  updatedBy   String?
+  deletedAt   DateTime?
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  tenant      Tenant                    @relation(fields: [tenantId], references: [tenantId], onDelete: Cascade)
+  parent      OrganizationUnit?         @relation("OrganizationUnitTree", fields: [parentId], references: [unitId], onDelete: Restrict)
+  children    OrganizationUnit[]        @relation("OrganizationUnitTree")
+  memberships UserOrganizationMembership[]
+  assignments UserRoleAssignment[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId, parentId])
+  @@index([tenantId, unitType, isActive])
+  @@index([areaId])
+  @@index([merchantId])
+}
+
+model Permission {
+  permissionId String   @id
+  code         String   @unique
+  name         String
+  description  String?
+  isSystem     Int      @default(1)
+  createdBy    String?
+  updatedBy    String?
+  deletedAt    DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  rolePermissions RolePermission[]
+
+  @@index([isSystem])
+}
+
+model Role {
+  roleId           String   @id
+  tenantId         String
+  code             String
+  name             String
+  description      String?
+  isSystemTemplate Int      @default(0)
+  isActive         Int      @default(1)
+  createdBy        String?
+  updatedBy        String?
+  deletedAt        DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  tenant       Tenant              @relation(fields: [tenantId], references: [tenantId], onDelete: Cascade)
+  permissions  RolePermission[]
+  assignments  UserRoleAssignment[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId, isActive])
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  granted      Int      @default(1)
+  createdBy    String?
+  updatedBy    String?
+  deletedAt    DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  role       Role       @relation(fields: [roleId], references: [roleId], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [permissionId], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@index([permissionId])
+}
+
+model UserOrganizationMembership {
+  membershipId String   @id
+  tenantId     String
+  userId       String
+  orgUnitId    String
+  isPrimary    Int      @default(0)
+  isActive     Int      @default(1)
+  createdBy    String?
+  updatedBy    String?
+  deletedAt    DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tenant  Tenant           @relation(fields: [tenantId], references: [tenantId], onDelete: Cascade)
+  user    AppUser          @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  orgUnit OrganizationUnit @relation(fields: [orgUnitId], references: [unitId], onDelete: Cascade)
+
+  @@unique([tenantId, userId, orgUnitId])
+  @@index([userId, isActive])
+  @@index([orgUnitId, isActive])
+}
+
+model UserRoleAssignment {
+  assignmentId String        @id
+  tenantId     String
+  userId       String
+  roleId       String
+  scopeType    RoleScopeType @default(NONE)
+  orgUnitId    String?
+  isActive     Int           @default(1)
+  createdBy    String?
+  updatedBy    String?
+  deletedAt    DateTime?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  tenant  Tenant            @relation(fields: [tenantId], references: [tenantId], onDelete: Cascade)
+  user    AppUser           @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  role    Role              @relation(fields: [roleId], references: [roleId], onDelete: Cascade)
+  orgUnit OrganizationUnit? @relation(fields: [orgUnitId], references: [unitId], onDelete: SetNull)
+
+  @@index([tenantId, userId, isActive])
+  @@index([roleId, isActive])
+  @@index([orgUnitId, scopeType])
+}
+
 model ContentPackage {
   packageId                String            @id
   packageName              String
@@ -17,12 +182,7 @@ model ContentPackage {
   areaId                   String
   areaName                 String
   category                 String
-  originalPrice            Float
-  salePrice                Float
-  welfarePrice             Float?
-  temporarySalePrice       Float?
   commissionRate           Float
-  grossProfit              Float
   // ── VNext 金额精度治理（PRD §7.4）：分整数影子字段，Phase 1 新增 / Phase 2 回填 ──
   originalPriceFen         BigInt?
   salePriceFen             BigInt?
@@ -82,25 +242,17 @@ model Merchant {
 }
 
 model SalesSnapshot {
-  id               String         @id @default(cuid())
-  packageId        String
-  areaId           String
-  merchantId       String
-  snapshotTime     DateTime
-  exposureCount    Int
-  clickCount       Int
-  orderCount       Int
-  paidOrderCount   Int
-  refundCount      Int
-  verifyCount      Int
-  gmv              Float
-  paidAmount       Float
-  paidAmountOnline Float          @default(0)
-  paidAmountWallet Float          @default(0)
-  paidAmountBonus  Float          @default(0)
-  paidAmountCard   Float          @default(0)
-  refundAmount     Float
-  verifyAmount     Float          @default(0)
+  id                  String         @id @default(cuid())
+  packageId           String
+  areaId              String
+  merchantId          String
+  snapshotTime        DateTime
+  exposureCount       Int
+  clickCount          Int
+  orderCount          Int
+  paidOrderCount      Int
+  refundCount         Int
+  verifyCount         Int
   // ── VNext 金额精度治理（PRD §7.4）：分整数影子字段 ──
   gmvFen              BigInt?
   paidAmountFen       BigInt?
@@ -110,14 +262,14 @@ model SalesSnapshot {
   paidAmountCardFen   BigInt?
   refundAmountFen     BigInt?
   verifyAmountFen     BigInt?
-  conversionRate   Float
-  verifyRate       Float
-  refundRate       Float
-  sellThroughRate  Float
-  remainingStock   Int
-  salesSpeed       Float
-  createdAt        DateTime       @default(now())
-  package          ContentPackage @relation(fields: [packageId], references: [packageId], onDelete: Cascade)
+  conversionRate      Float
+  verifyRate          Float
+  refundRate          Float
+  sellThroughRate     Float
+  remainingStock      Int
+  salesSpeed          Float
+  createdAt           DateTime       @default(now())
+  package             ContentPackage @relation(fields: [packageId], references: [packageId], onDelete: Cascade)
 
   @@index([packageId, snapshotTime])
   @@index([areaId])
@@ -193,7 +345,6 @@ model CopyPerformance {
   paidOrderCount Int
   verifyCount    Int
   refundCount    Int
-  gmv            Float
   // ── VNext 金额精度治理（PRD §7.4）：分整数影子字段 ──
   gmvFen         BigInt?
   conversionRate Float
@@ -241,26 +392,17 @@ model OperationAlertResolution {
 }
 
 model DailyMetrics {
-  date             String   @id
-  totalGmv         Float    @default(0)
-  gmvOnline        Float    @default(0)
-  gmvWallet        Float    @default(0)
-  gmvBonus         Float    @default(0)
-  gmvCard          Float    @default(0)
-  totalRefund      Float    @default(0)
-  refundRate       Float    @default(0)
-  totalVerify      Float    @default(0)
-  verifyRate       Float    @default(0)
-  totalOrders      Int      @default(0)
-  paidOrderCount   Int      @default(0)
-  verifyCount      Int      @default(0)
-  refundCount      Int      @default(0)
-  activeMerchants  Int      @default(0)
-  activeMembers    Int      @default(0)
-  movingSkus       Int      @default(0)
-  stagnantSkus     Int      @default(0)
-  paidAmountBonus  Float    @default(0)
-  paidAmountWallet Float    @default(0)
+  date                String   @id
+  refundRate          Float    @default(0)
+  verifyRate          Float    @default(0)
+  totalOrders         Int      @default(0)
+  paidOrderCount      Int      @default(0)
+  verifyCount         Int      @default(0)
+  refundCount         Int      @default(0)
+  activeMerchants     Int      @default(0)
+  activeMembers       Int      @default(0)
+  movingSkus          Int      @default(0)
+  stagnantSkus        Int      @default(0)
   // ── VNext 金额精度治理（PRD §7.4）：分整数影子字段 ──
   totalGmvFen         BigInt?
   gmvOnlineFen        BigInt?
@@ -271,36 +413,29 @@ model DailyMetrics {
   totalVerifyFen      BigInt?
   paidAmountBonusFen  BigInt?
   paidAmountWalletFen BigInt?
-  updatedAt        DateTime @updatedAt
+  updatedAt           DateTime @updatedAt
 }
 
 model OrderHeader {
-  orderId          String    @id
+  orderId             String    @id
   /// JeSite 展示单号（导出「订单编号」，形如 K2026…）；主键仍是雪花 id
-  orderCode        String?
-  memberId         String?
-  packageId        String?
-  merchantId       String?
-  merchantName     String?
-  areaId           String?
-  areaName         String?
+  orderCode           String?
+  memberId            String?
+  packageId           String?
+  merchantId          String?
+  merchantName        String?
+  areaId              String?
+  areaName            String?
   /// 业务员姓名（JeSite 砍价订单导出「业务员」）
-  salesman         String?
+  salesman            String?
   /// 上级业务员姓名（导出「上级业务员」）
-  parentSalesman   String?
+  parentSalesman      String?
   /// 优惠券文案（导出「优惠券」）
-  coupon           String?
-  orderTime        DateTime
-  paidTime         DateTime?
-  verifyTime       DateTime?
-  refundTime       DateTime?
-  orderAmount      Float
-  paidAmount       Float     @default(0)
-  paidAmountWallet Float     @default(0)
-  paidAmountBonus  Float     @default(0)
-  paidAmountCard   Float     @default(0)
-  refundAmount     Float     @default(0)
-  verifyAmount     Float     @default(0)
+  coupon              String?
+  orderTime           DateTime
+  paidTime            DateTime?
+  verifyTime          DateTime?
+  refundTime          DateTime?
   // ── VNext 金额精度治理（PRD §7.4）：分整数影子字段 ──
   orderAmountFen      BigInt?
   paidAmountFen       BigInt?
@@ -309,12 +444,12 @@ model OrderHeader {
   paidAmountCardFen   BigInt?
   refundAmountFen     BigInt?
   verifyAmountFen     BigInt?
-  pointEarned      Int       @default(0)
-  pointUsed        Int       @default(0)
-  status           String
-  channel          String?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  pointEarned         Int       @default(0)
+  pointUsed           Int       @default(0)
+  status              String
+  channel             String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   @@index([memberId, orderTime])
   @@index([packageId])
@@ -336,29 +471,26 @@ model OrderHeader {
 }
 
 model Member {
-  memberId      String    @id
-  nickname      String?
-  phone         String?
-  level         String?
-  pointsBalance Int       @default(0)
-  walletBalance Float     @default(0)
+  memberId         String    @id
+  nickname         String?
+  phone            String?
+  level            String?
+  pointsBalance    Int       @default(0)
   // ── VNext 金额精度治理（PRD §7.4）：分整数影子字段 ──
   walletBalanceFen BigInt?
   totalGmvFen      BigInt?
-  firstOrderAt  DateTime?
-  lastOrderAt   DateTime?
-  totalGmv      Float     @default(0)
-  totalOrders   Int       @default(0)
-  tags          String?
-  firstSeenAt   DateTime  @default(now())
-  lastSeenAt    DateTime  @updatedAt
+  firstOrderAt     DateTime?
+  lastOrderAt      DateTime?
+  totalOrders      Int       @default(0)
+  tags             String?
+  firstSeenAt      DateTime  @default(now())
+  lastSeenAt       DateTime  @updatedAt
 
   pointLedgers MemberPointLedger[]
   orderPoints  OrderPoint[]
 
   @@index([phone])
   @@index([lastOrderAt])
-  @@index([totalGmv])
   @@index([level])
 }
 
@@ -403,16 +535,10 @@ model RepurchaseCohort {
 }
 
 model MerchantDailyMetrics {
-  merchantName     String
-  date             String
-  areaName         String?
-  paidOrderCount   Int      @default(0)
-  paidAmountOnline Float    @default(0)
-  paidAmountWallet Float    @default(0)
-  paidAmountBonus  Float    @default(0)
-  paidAmountCard   Float    @default(0)
-  refundAmount     Float    @default(0)
-  verifyAmount     Float    @default(0)
+  merchantName        String
+  date                String
+  areaName            String?
+  paidOrderCount      Int      @default(0)
   // ── VNext 金额精度治理（PRD §7.4）：分整数影子字段 ──
   paidAmountOnlineFen BigInt?
   paidAmountWalletFen BigInt?
@@ -420,9 +546,9 @@ model MerchantDailyMetrics {
   paidAmountCardFen   BigInt?
   refundAmountFen     BigInt?
   verifyAmountFen     BigInt?
-  orderCount       Int      @default(0)
-  packageCount     Int      @default(0)
-  updatedAt        DateTime @updatedAt
+  orderCount          Int      @default(0)
+  packageCount        Int      @default(0)
+  updatedAt           DateTime @updatedAt
 
   @@id([merchantName, date])
   @@index([date])
@@ -432,18 +558,17 @@ model MerchantDailyMetrics {
 // Daily package sales derived from inventory diffs / order ETL.
 // Live DBs may still carry a legacy "revenue" column; readers prefer salesAmount.
 model PackageSalesDaily {
-  id          String   @id @default(cuid())
-  packageId   String
-  date        String
-  salesQty    Int      @default(0)
-  salesAmount Float    @default(0)
+  id             String   @id @default(cuid())
+  packageId      String
+  date           String
+  salesQty       Int      @default(0)
   // ── VNext 金额精度治理（PRD §7.4）：分整数影子字段 ──
   salesAmountFen BigInt?
-  refundQty   Int      @default(0)
-  deltaSource String?
-  computedAt  DateTime @default(now())
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  refundQty      Int      @default(0)
+  deltaSource    String?
+  computedAt     DateTime @default(now())
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   @@unique([packageId, date])
   @@index([date])
@@ -483,12 +608,16 @@ model AppUser {
   isActive     Int      @default(1)
   /// Bumped on password reset so live JWTs / refresh are refused.
   tokenVersion Int      @default(0)
+  tenantId     String   @default("tenant_default")
+  primaryOrgUnitId String?
   lastLoginAt  String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
   bindings  UserRoleBinding[]
   auditLogs OperationAuditLog[]
+  organizationMemberships UserOrganizationMembership[]
+  roleAssignments        UserRoleAssignment[]
 
   @@index([username])
   @@index([createdAt])
@@ -520,8 +649,6 @@ model MarketingCampaign {
   endDate      DateTime
   areaIds      String?
   merchantIds  String?
-  budget       Float    @default(0)
-  targetGmv    Float    @default(0)
   // ── VNext 金额精度治理（PRD §7.4）：分整数影子字段 ──
   budgetFen    BigInt?
   targetGmvFen BigInt?
@@ -682,23 +809,20 @@ model OrderAttribution {
 }
 
 model TaskPerformanceDaily {
-  id             String   @id @default(cuid())
-  taskId         String
-  date           String
-  visitCount     Int      @default(0)
-  uniqueVisitors Int      @default(0)
-  orderCount     Int      @default(0)
-  verifyCount    Int      @default(0)
-  refundCount    Int      @default(0)
-  gmv            Float    @default(0)
-  verifyAmount   Float    @default(0)
-  refundAmount   Float    @default(0)
+  id              String   @id @default(cuid())
+  taskId          String
+  date            String
+  visitCount      Int      @default(0)
+  uniqueVisitors  Int      @default(0)
+  orderCount      Int      @default(0)
+  verifyCount     Int      @default(0)
+  refundCount     Int      @default(0)
   // ── VNext 金额精度治理（PRD §7.4）：分整数影子字段 ──
   gmvFen          BigInt?
   verifyAmountFen BigInt?
   refundAmountFen BigInt?
-  conversionRate Float    @default(0)
-  computedAt     DateTime @default(now())
+  conversionRate  Float    @default(0)
+  computedAt      DateTime @default(now())
 
   task DistributionTask @relation(fields: [taskId], references: [taskId], onDelete: Cascade)
 
@@ -730,4 +854,55 @@ model OperationAuditLog {
   // Filtered list ORDER BY createdAt DESC (userId / objectType windows).
   @@index([userId, createdAt])
   @@index([objectType, createdAt])
+}
+
+// ── 幂等记录（PRD §7.8 / §8.2）─────────────────────────────────
+model IdempotencyRecord {
+  id             String   @id
+  idempotencyKey String
+  operationType  String
+  requestHash    String
+  status         String   @default("pending") // pending, completed, failed
+  responseData   String?
+  expiresAt      DateTime
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([idempotencyKey, operationType])
+  @@index([expiresAt])
+}
+
+// ── 任务运行记录（PRD §7.9 / §8.2）─────────────────────────────────
+model JobRun {
+  id             String    @id
+  jobName        String
+  status         String    @default("running") // running, success, failed
+  startedAt      DateTime  @default(now())
+  finishedAt     DateTime?
+  durationMs     Int?
+  itemsProcessed Int       @default(0)
+  errorMessage   String?
+  metaJson       String?
+  createdAt      DateTime  @default(now())
+
+  @@index([jobName, startedAt])
+  @@index([status])
+  @@index([createdAt])
+}
+
+// ── Outbox 异步事件解耦（PRD §7.11 / §8.2）───────────────────────────
+model OutboxEvent {
+  id            String    @id
+  aggregateType String
+  aggregateId   String
+  eventType     String
+  payloadJson   String
+  status        String    @default("pending") // pending, processed, failed
+  retryCount    Int       @default(0)
+  errorMessage  String?
+  createdAt     DateTime  @default(now())
+  processedAt   DateTime?
+
+  @@index([status, createdAt])
+  @@index([aggregateType, aggregateId])
 }

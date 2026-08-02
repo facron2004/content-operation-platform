@@ -9,6 +9,12 @@ export interface AppUser {
   lastLoginAt?: string;
   roles: UserRoleBinding[];
   createdAt: string;
+  /** V0.11 tenant context returned by /users/me when IAM is available. */
+  tenantId?: string;
+  primaryOrgUnitId?: string | null;
+  permissions?: string[];
+  memberships?: Array<Record<string, unknown>>;
+  roleAssignments?: Array<Record<string, unknown>>;
   /** Server session epoch — bumped on password reset; not required by clients. */
   tokenVersion?: number;
 }

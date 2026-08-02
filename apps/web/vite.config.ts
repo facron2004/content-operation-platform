@@ -9,7 +9,7 @@ const sharedSrc = path.resolve(rootDir, '../../packages/shared/src/index.ts');
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   const devPort = Number(env.VITE_DEV_SERVER_PORT || 3100);
-  const proxyTarget = env.VITE_API_PROXY_TARGET || 'http://localhost:3101';
+  const proxyTarget = env.VITE_API_PROXY_TARGET || 'http://127.0.0.1:3101';
   const isDev = mode === 'development';
 
   return {
@@ -22,9 +22,12 @@ export default defineConfig(({ mode }) => {
     },
     optimizeDeps: { exclude: ['@content/shared'] },
     server: {
-      host: env.VITE_DEV_SERVER_HOST || '127.0.0.1',
+      host: env.VITE_DEV_SERVER_HOST || '0.0.0.0',
       port: devPort,
       strictPort: true,
+      hmr: {
+        port: devPort
+      },
       proxy: {
         '/api': { target: proxyTarget, changeOrigin: true }
       }

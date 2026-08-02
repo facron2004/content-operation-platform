@@ -21,8 +21,8 @@ describe('AttributionService schema + pagination', () => {
         orderId: 'o1',
         memberId: null,
         packageId: 'p1',
-        orderAmount: 10,
-        paidAmount: 10,
+        orderAmountFen: 1000n,
+        paidAmountFen: 1000n,
         orderTime: '2026-07-01',
         status: 'paid'
       }
@@ -69,8 +69,8 @@ describe('AttributionService schema + pagination', () => {
           orderId: 'ord_1',
           packageId: 'pkg_1',
           orderTime,
-          paidAmount: 10,
-          paidAmountWallet: 0
+          paidAmountFen: 1000n,
+          paidAmountWalletFen: 0n
         }
       ])
       .mockResolvedValueOnce([]) // prior owners
@@ -162,8 +162,8 @@ describe('AttributionService schema + pagination', () => {
           orderId: 'ord_1',
           packageId: 'pkg_OTHER',
           orderTime: new Date().toISOString(),
-          paidAmount: 10,
-          paidAmountWallet: 0
+          paidAmountFen: 1000n,
+          paidAmountWalletFen: 0n
         }
       ]);
     await expect(svc.manualBind({ taskId: 'task_1', orderId: 'ord_1' })).rejects.toThrow(
@@ -186,8 +186,8 @@ describe('AttributionService schema + pagination', () => {
           orderId: 'ord_1',
           packageId: null,
           orderTime: new Date().toISOString(),
-          paidAmount: 10,
-          paidAmountWallet: 0
+          paidAmountFen: 1000n,
+          paidAmountWalletFen: 0n
         }
       ]);
     await expect(svc.manualBind({ taskId: 'task_1', orderId: 'ord_1' })).rejects.toThrow(
@@ -212,8 +212,8 @@ describe('AttributionService schema + pagination', () => {
           orderId: 'ord_1',
           packageId: 'pkg_1',
           orderTime: new Date().toISOString(),
-          paidAmount: 0,
-          paidAmountWallet: 0
+          paidAmountFen: 0n,
+          paidAmountWalletFen: 0n
         }
       ]);
     await expect(svc.manualBind({ taskId: 'task_1', orderId: 'ord_1' })).rejects.toThrow(
@@ -236,8 +236,8 @@ describe('AttributionService schema + pagination', () => {
           orderId: 'ord_2',
           packageId: 'pkg_1',
           orderTime: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(),
-          paidAmount: 99,
-          paidAmountWallet: 0
+          paidAmountFen: 9900n,
+          paidAmountWalletFen: 0n
         }
       ]);
     await expect(svc.manualBind({ taskId: 'task_1', orderId: 'ord_2' })).rejects.toThrow(
@@ -289,8 +289,8 @@ describe('AttributionService schema + pagination', () => {
           orderId: 'ord_1',
           packageId: 'pkg_1',
           orderTime,
-          paidAmount: 10,
-          paidAmountWallet: 0
+          paidAmountFen: 1000n,
+          paidAmountWalletFen: 0n
         }
       ])
       // Prior owner on a historical Beijing day — ghost GMV must be recomputed.

@@ -132,7 +132,7 @@ describe('residual #78 ZS SKU movement-style candidate path', () => {
         merchantName: 'M1',
         areaName: 'A',
         category: 'food',
-        salePrice: 12.5,
+        salePriceFen: 1_250n,
         stockLeft: 3,
         stockTotal: 20
       },
@@ -143,7 +143,7 @@ describe('residual #78 ZS SKU movement-style candidate path', () => {
         merchantName: 'M1',
         areaName: 'A',
         category: 'food',
-        salePrice: 8,
+        salePriceFen: 800n,
         stockLeft: 1,
         stockTotal: 5
       }

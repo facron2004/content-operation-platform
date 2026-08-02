@@ -177,6 +177,35 @@ try {
       console.warn('  [警告] 未找到根目录 .env，打包应用将无法加载外部数据源配置');
     }
 
+    // 回填必须发生在安装器生成之前。electron-builder 在直接构建 NSIS 时
+    // 可能裁剪 extraResources 中的 node_modules；使用已校正的解包目录重新
+    // 打包，确保真正安装后的 API 仍包含 Prisma、bcrypt 等运行时依赖。
+    const repackagedDir = path.join(ROOT, 'release_repackaged');
+    cleanDir(repackagedDir);
+    console.log('  [提示] 基于完整 win-unpacked 目录重新生成 NSIS 安装器...');
+    run(npxCmd, [
+      'electron-builder',
+      '--prepackaged',
+      path.relative(ROOT, path.join(releaseDir, 'win-unpacked')),
+      '--win',
+      'nsis',
+      '--x64',
+      '--config',
+      'electron-builder.yml',
+      `-c.directories.output=${path.relative(ROOT, repackagedDir)}`,
+    ]);
+
+    // 只把重新生成的发布文件覆盖回 release，保留已经校正过的 win-unpacked。
+    if (fs.existsSync(repackagedDir)) {
+      for (const file of fs.readdirSync(repackagedDir)) {
+        if (file.endsWith('.tmp') || file.startsWith('.')) continue;
+        copyRecursive(path.join(repackagedDir, file), path.join(releaseDir, file));
+      }
+      try {
+        fs.rmSync(repackagedDir, { recursive: true, force: true });
+      } catch (_) {}
+    }
+
     try {
       fs.rmSync(tempReleaseDir, { recursive: true, force: true });
     } catch (_) {}

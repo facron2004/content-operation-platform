@@ -41,7 +41,9 @@ export function useShellLayout() {
   const sidebarCollapsed = ref(false);
   type CookieStatus = Awaited<ReturnType<typeof api.getCookieStatus>>;
   const cookieStatus = ref<CookieStatus | null>(null);
-  const navTree = computed(() => buildNavTree());
+  const navTree = computed(() =>
+    buildNavTree(roleStore.hasServerSession ? roleStore.permissions : undefined)
+  );
 
   const fetchCookieStatus = async () => {
     try {

@@ -128,7 +128,6 @@ const {
   isEdit,
   form: taskForm,
   open: openFormDialog,
-  close: closeForm,
   submit: submitForm
 } = useTaskForm(undefined, {
   onSaved: refreshAfterSave

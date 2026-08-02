@@ -19,6 +19,7 @@ import * as taskApi from './task.api';
 import * as communityLibraryApi from './community-library.api';
 import * as userApi from './user.api';
 import * as auditLogApi from './audit-log.api';
+import * as iamApi from './iam.api';
 import { clearCache } from '../cache.service';
 export const api = {
   ...rulesApi,
@@ -42,5 +43,6 @@ export const api = {
   ...communityLibraryApi,
   ...userApi,
   ...auditLogApi,
+  ...iamApi,
   clearCache
 };

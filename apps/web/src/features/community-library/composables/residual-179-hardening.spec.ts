@@ -55,7 +55,9 @@ describe('residual #179 community detail performance + view wire-up', () => {
     );
     for (const field of ['totalTasks', 'completedTasks', 'failedTasks', 'totalGmv']) {
       // VNext §7.4.5：允许迁移后的 displayMoney(performance, '<field>') 形态。
-      expect(src).toMatch(new RegExp(`(performance\\.${field}|displayMoney\\(performance, '${field}'\\))`));
+      expect(src).toMatch(
+        new RegExp(`(performance\\.${field}|displayMoney\\(performance, '${field}'\\))`)
+      );
     }
   });
 

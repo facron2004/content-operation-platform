@@ -33,6 +33,15 @@ describe('buildDataScope', () => {
     expect(scope.merchantIds).toEqual(['M1']);
   });
 
+  it('honors explicit scopes projected for custom IAM roles', () => {
+    const scope = buildDataScope({
+      roles: ['regional_content_reviewer'],
+      bindings: [{ role: 'regional_content_reviewer', scopeType: 'area', scopeId: 'A9' }]
+    });
+    expect(scope.unrestricted).toBe(false);
+    expect(scope.areaIds).toEqual(['A9']);
+  });
+
   it('deny-all when scoped role has no bindings', () => {
     const scope = buildDataScope({ roles: ['area_operator'], bindings: [] });
     expect(scope.unrestricted).toBe(false);
@@ -61,10 +70,9 @@ describe('resolveScopedQuery', () => {
       ]
     };
     expect(resolveScopedQuery(user, { areaId: 'A2' }).areaId).toBe('A2');
-    // Outside scope → fall back to multi list, not the free client value
+    // Outside scope → return an empty intersection, never the full scope.
     const outside = resolveScopedQuery(user, { areaId: 'ZZ' });
-    expect(outside.areaId).toBeUndefined();
-    expect(outside.areaIds?.sort()).toEqual(['A1', 'A2']);
+    expect(outside.emptyScope).toBe(true);
   });
 
   it('returns emptyScope when scoped role has no bindings', () => {

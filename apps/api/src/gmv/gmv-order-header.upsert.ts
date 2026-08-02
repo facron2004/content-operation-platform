@@ -19,19 +19,12 @@ const ALL_COLS = [
   'paidTime',
   'verifyTime',
   'refundTime',
-  'orderAmount',
   'orderAmountFen',
-  'paidAmount',
   'paidAmountFen',
-  'paidAmountWallet',
   'paidAmountWalletFen',
-  'paidAmountBonus',
   'paidAmountBonusFen',
-  'paidAmountCard',
   'paidAmountCardFen',
-  'refundAmount',
   'refundAmountFen',
-  'verifyAmount',
   'verifyAmountFen',
   'pointEarned',
   'pointUsed',
@@ -97,19 +90,12 @@ function makeRowParams(
     fields.paidTime,
     fields.verifyTime,
     fields.refundTime,
-    fields.orderAmount,
     yuanToFen(fields.orderAmount),
-    fields.paidAmount,
     yuanToFen(fields.paidAmount),
-    fields.paidAmountWallet,
     yuanToFen(fields.paidAmountWallet),
-    fields.paidAmountBonus,
     yuanToFen(fields.paidAmountBonus),
-    fields.paidAmountCard,
     yuanToFen(fields.paidAmountCard),
-    fields.refundAmount,
     yuanToFen(fields.refundAmount),
-    fields.verifyAmount,
     yuanToFen(fields.verifyAmount),
     pointEarned,
     pointUsed,
@@ -121,6 +107,18 @@ function makeRowParams(
 }
 
 const MAX_ERROR_SAMPLES = 5;
+
+/** Transient SQLite lock/busy errors (libsql adapter maps SQLITE_BUSY to "unknown variant SocketTimeout"). */
+function isTransientLockError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return /SocketTimeout|database is locked|SQLITE_BUSY|database table is locked/i.test(msg);
+}
+
+const LOCK_RETRY_DELAYS_MS = [200, 500, 1500];
+
+async function sleep(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 export type BatchUpsertResult = {
   upserted: number;
@@ -138,7 +136,7 @@ export type BatchUpsertResult = {
  * upserts) so a one-bad-row batch still finishes in O(log n) multi-row writes.
  */
 export async function batchUpsertOrderHeaders(
-  prisma: Pick<PrismaService, '$transaction' | '$executeRawUnsafe'>,
+  prisma: Pick<PrismaService, '$executeRawUnsafe'>,
   orders: OrderLike[],
   batchSize = 35
 ): Promise<BatchUpsertResult> {
@@ -153,15 +151,31 @@ export async function batchUpsertOrderHeaders(
   /**
    * Attempt multi-row upsert; on failure binary-split until size-1, then record error.
    * Avoids N serial single-row writes when only one row in a batch is bad.
+   * Note: intentionally does NOT wrap in $transaction — the libsql adapter throws
+   * "unknown variant SocketTimeout" on $executeRawUnsafe inside callback-style
+   * $transaction, and the batch is already a single atomic SQL statement.
    */
   async function upsertRows(batch: OrderLike[], rows: unknown[][]): Promise<void> {
     if (!batch.length) return;
     try {
-      await prisma.$transaction(async (tx) => {
-        await tx.$executeRawUnsafe(buildUpsertSql(batch.length), ...rows.flat());
-      });
+      await prisma.$executeRawUnsafe(buildUpsertSql(batch.length), ...rows.flat());
       upserted += batch.length;
-    } catch {
+    } catch (err) {
+      // 2026-07-29 事故：重算/多实例并发持有写锁时，SQLITE_BUSY 被 libsql 映射为
+      // "unknown variant SocketTimeout"，瞬时锁被当成坏行二分到底 → 189 单计为失败。
+      // 瞬时锁错误：退避重试整批，而不是二分（二分只对真正的坏行有意义）。
+      if (isTransientLockError(err)) {
+        for (const delayMs of LOCK_RETRY_DELAYS_MS) {
+          await sleep(delayMs);
+          try {
+            await prisma.$executeRawUnsafe(buildUpsertSql(batch.length), ...rows.flat());
+            upserted += batch.length;
+            return;
+          } catch (retryErr) {
+            if (!isTransientLockError(retryErr)) break;
+          }
+        }
+      }
       if (batch.length <= 1) {
         errors++;
         const orderId = batch[0]?.orderId;

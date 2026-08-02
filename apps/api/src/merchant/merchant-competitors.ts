@@ -39,7 +39,7 @@ export async function queryCompetitorRows(
   fetchLimit: number = MERCHANT_COMPETITORS_LIMIT + 1
 ): Promise<CompetitorSqlRow[]> {
   return (await prisma.$queryRawUnsafe(
-    `SELECT cp."merchantId", MIN(cp."merchantName") AS "merchantName", MIN(cp."areaName") AS "areaName", cp."category", COUNT(*) AS "skuCount", COALESCE(SUM(cp."salePrice"), 0) AS "totalPrice" FROM "ContentPackage" cp WHERE cp."merchantId" != ? AND cp."category" IN (SELECT DISTINCT "category" FROM "ContentPackage" WHERE "merchantId" = ?) AND cp."areaId" = ? GROUP BY cp."merchantId", cp."category" ORDER BY "skuCount" DESC LIMIT ?`,
+    `SELECT cp."merchantId", MIN(cp."merchantName") AS "merchantName", MIN(cp."areaName") AS "areaName", cp."category", COUNT(*) AS "skuCount", COALESCE(SUM(cp."salePriceFen") / 100.0, 0) AS "totalPrice" FROM "ContentPackage" cp WHERE cp."merchantId" != ? AND cp."category" IN (SELECT DISTINCT "category" FROM "ContentPackage" WHERE "merchantId" = ?) AND cp."areaId" = ? GROUP BY cp."merchantId", cp."category" ORDER BY "skuCount" DESC LIMIT ?`,
     merchantId,
     merchantId,
     areaId,

@@ -9,6 +9,7 @@ import {
   hydrateServerSession,
   isChunkLoadError,
   markChunkReloadPending,
+  resolvePermissionAccess,
   resolveRoleAccess
 } from './router-nav-reliability';
 
@@ -48,7 +49,9 @@ export function installRouterGuards(
                 role: UserRole;
                 scopeType?: string;
                 scopeId?: string;
-              }>
+              }>,
+              ...(info.tenantId ? { tenantId: info.tenantId } : {}),
+              ...(info.permissions ? { permissions: info.permissions } : {})
             }),
           retries: 1,
           delayMs: 200
@@ -75,8 +78,24 @@ export function installRouterGuards(
         return;
       }
 
+      const permissionAccess = resolvePermissionAccess({
+        requiredPermissions: to.meta.permissions as readonly string[] | undefined,
+        hasServerSession: roleStore.hasServerSession,
+        permissions: roleStore.permissions
+      });
+      if (permissionAccess === 'deny') {
+        next({ path: '/' });
+        return;
+      }
+      if (permissionAccess === 'session-unknown') {
+        ElMessage.warning('权限信息加载失败，请刷新后重试');
+        progress.done();
+        next(false);
+        return;
+      }
+
       next();
-    } catch (err) {
+    } catch {
       progress.done();
       ElMessage.error('页面导航失败，请重试');
       next(false);

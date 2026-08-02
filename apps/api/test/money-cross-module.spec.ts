@@ -17,7 +17,7 @@ describe('money cross-module same-day totals', () => {
 
   it('same fixture day yields identical totalGmv for three consumers of resolveDayGmvMoney', async () => {
     const prisma = {
-      $queryRawUnsafe: vi.fn().mockResolvedValue([{ totalGmv: 8888.8, paidOrderCount: 66 }]),
+      $queryRawUnsafe: vi.fn().mockResolvedValue([{ totalGmvFen: 888_880n, paidOrderCount: 66 }]),
       dailyMetrics: { findUnique: vi.fn().mockResolvedValue(null) }
     } as unknown as MoneyPrisma;
 
@@ -27,9 +27,9 @@ describe('money cross-module same-day totals', () => {
       resolveDayGmvMoney(prisma, '2026-07-13')
     ]);
 
-    expect(overview.totalGmv).toBe(8888.8);
-    expect(gmvDenom.totalGmv).toBe(overview.totalGmv);
-    expect(refundDenom.totalGmv).toBe(overview.totalGmv);
+    expect(overview.totalGmvFen).toBe(888_880n);
+    expect(gmvDenom.totalGmvFen).toBe(overview.totalGmvFen);
+    expect(refundDenom.totalGmvFen).toBe(overview.totalGmvFen);
     expect(overview.dataSource).toBe('OrderHeader');
     expect(gmvDenom.dataSource).toBe('OrderHeader');
     expect(refundDenom.dataSource).toBe('OrderHeader');

@@ -223,28 +223,37 @@ function shortId(id: string): string {
 .task-filter-bar {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin-bottom: 16px;
+  flex-wrap: nowrap;
+  gap: 6px;
+  margin-bottom: 8px;
+  overflow-x: auto;
+  padding-bottom: 2px;
 }
 
 .filter-keyword {
-  width: 240px;
+  width: 200px;
 }
 
 .filter-select {
-  width: 150px;
+  width: 120px;
 }
 
 .filter-assignee {
-  width: 160px;
+  width: 120px;
 }
 
 .filter-date {
-  width: 150px;
+  width: 132px !important;
 }
 
 .filter-scope-tag {
   max-width: 180px;
+}
+
+@media (max-width: 1200px) {
+  .task-filter-bar {
+    flex-wrap: wrap;
+    overflow-x: visible;
+  }
 }
 </style>

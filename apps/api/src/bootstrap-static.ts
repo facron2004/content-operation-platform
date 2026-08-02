@@ -4,6 +4,9 @@ import type { Logger } from '@nestjs/common';
 import type { Request, Response, NextFunction } from 'express';
 
 export function resolvePublicDir(): string {
+  // 桌面模式：Electron 通过环境变量指定 Vue dist 路径
+  const envWebDist = process.env.WEB_DIST_PATH;
+  if (envWebDist && existsSync(envWebDist)) return envWebDist;
   const relativeWebDist = join(__dirname, '..', '..', 'web', 'dist');
   if (existsSync(relativeWebDist)) return relativeWebDist;
   const electronAppWebDist = join(

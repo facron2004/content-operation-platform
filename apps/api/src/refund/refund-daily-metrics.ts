@@ -12,7 +12,8 @@ import type {
 // --- refund-trend-points.ts ---
 type RefundTrendRow = {
   date: string;
-  totalRefund: number;
+  totalRefundFen: bigint | null;
+  totalGmvFen: bigint | null;
   refundRate: number;
   refundCount: number;
   paidOrderCount: number;
@@ -29,7 +30,7 @@ export function buildRefundTrendPoints(
       r = map.get(d);
     result.push({
       date: d,
-      totalRefund: Number(r?.totalRefund ?? 0),
+      totalRefund: Number(r?.totalRefundFen ?? 0) / 100,
       refundRate: Number(r?.refundRate ?? 0),
       refundCount: Number(r?.refundCount ?? 0),
       paidOrderCount: Number(r?.paidOrderCount ?? 0)
@@ -41,7 +42,8 @@ export function buildRefundTrendPoints(
 // --- verify-trend-points.ts ---
 type VerifyTrendRow = {
   date: string;
-  totalVerify: number;
+  totalVerifyFen: bigint | null;
+  totalGmvFen: bigint | null;
   verifyRate: number;
   verifyCount: number;
   paidOrderCount: number;
@@ -58,7 +60,7 @@ export function buildVerifyTrendPoints(
       r = map.get(d);
     result.push({
       date: d,
-      totalVerify: Number(r?.totalVerify ?? 0),
+      totalVerify: Number(r?.totalVerifyFen ?? 0) / 100,
       verifyRate: Number(r?.verifyRate ?? 0),
       verifyCount: Number(r?.verifyCount ?? 0),
       paidOrderCount: Number(r?.paidOrderCount ?? 0)
@@ -76,8 +78,8 @@ export async function refundTodayFromDailyMetrics(
     where: { date: target },
     select: {
       date: true,
-      totalRefund: true,
-      totalGmv: true,
+      totalRefundFen: true,
+      totalGmvFen: true,
       refundRate: true,
       refundCount: true,
       paidOrderCount: true,
@@ -87,8 +89,8 @@ export async function refundTodayFromDailyMetrics(
   if (!dm) return null;
   return {
     date: dm.date,
-    totalRefund: Number(dm.totalRefund),
-    totalGmv: Number(dm.totalGmv),
+    totalRefund: Number(dm.totalRefundFen ?? 0) / 100,
+    totalGmv: Number(dm.totalGmvFen ?? 0) / 100,
     refundRate: Number(dm.refundRate),
     refundCount: dm.refundCount,
     paidOrderCount: dm.paidOrderCount,
@@ -102,17 +104,18 @@ export async function refundTrendFromDailyMetrics(
   days: number
 ): Promise<RefundTrendPoint[] | null> {
   const end = shiftDateKey(start, days - 1);
-  const dm = (await prisma.dailyMetrics.findMany({
+  const dm = await prisma.dailyMetrics.findMany({
     where: { date: { gte: start, lte: end } },
     orderBy: { date: 'asc' },
     select: {
       date: true,
-      totalRefund: true,
+      totalRefundFen: true,
+      totalGmvFen: true,
       refundRate: true,
       refundCount: true,
       paidOrderCount: true
     }
-  })) as RefundTrendRow[];
+  });
   return dm.length ? buildRefundTrendPoints(dm, start, days) : null;
 }
 
@@ -125,8 +128,8 @@ export async function verifyTodayFromDailyMetrics(
     where: { date: target },
     select: {
       date: true,
-      totalVerify: true,
-      totalGmv: true,
+      totalVerifyFen: true,
+      totalGmvFen: true,
       verifyRate: true,
       verifyCount: true,
       paidOrderCount: true,
@@ -136,8 +139,8 @@ export async function verifyTodayFromDailyMetrics(
   if (!dm) return null;
   return {
     date: dm.date,
-    totalVerify: Number(dm.totalVerify),
-    totalGmv: Number(dm.totalGmv),
+    totalVerify: Number(dm.totalVerifyFen ?? 0) / 100,
+    totalGmv: Number(dm.totalGmvFen ?? 0) / 100,
     verifyRate: Number(dm.verifyRate),
     verifyCount: dm.verifyCount,
     paidOrderCount: dm.paidOrderCount,
@@ -151,16 +154,17 @@ export async function verifyTrendFromDailyMetrics(
   days: number
 ): Promise<VerifyTrendPoint[] | null> {
   const end = shiftDateKey(start, days - 1);
-  const dm = (await prisma.dailyMetrics.findMany({
+  const dm = await prisma.dailyMetrics.findMany({
     where: { date: { gte: start, lte: end } },
     orderBy: { date: 'asc' },
     select: {
       date: true,
-      totalVerify: true,
+      totalVerifyFen: true,
+      totalGmvFen: true,
       verifyRate: true,
       verifyCount: true,
       paidOrderCount: true
     }
-  })) as VerifyTrendRow[];
+  });
   return dm.length ? buildVerifyTrendPoints(dm, start, days) : null;
 }

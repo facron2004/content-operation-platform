@@ -17,6 +17,8 @@ import { MerchantService } from './merchant.service';
 import { MerchantTrendQueryDto, MerchantsListQueryDto } from './merchant.dto';
 import { safePathId } from '../common/path-id';
 import { Roles } from '../user-access/role.decorator';
+import { RequireLogin } from '../user-access/iam/route-auth.decorator';
+import { RequirePermissions } from '../user-access/iam/require-permissions.decorator';
 import { resolveScopedQuery } from '../user-access/data-scope';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -28,6 +30,7 @@ type AuthUser = {
 };
 
 @ApiTags('merchants')
+@RequireLogin()
 @Controller('api/merchants')
 export class MerchantController {
   constructor(
@@ -87,6 +90,7 @@ export class MerchantController {
 
   @Post('refresh-addresses')
   @Roles('admin', 'platform_operator')
+  @RequirePermissions('merchant:manage')
   @Throttle({ long: { limit: 2, ttl: 60000 } })
   @ApiOperation({ summary: '从 ContentPackage 抽取商家地址刷新 Merchant 表' })
   refreshAddresses() {

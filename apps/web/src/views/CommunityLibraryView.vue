@@ -271,7 +271,7 @@ async function submitImport(data: { source: 'csv' | 'json'; rawData: string }) {
 
 <style scoped>
 .community-library-page {
-  padding: 20px;
+  padding: 0;
 }
 
 .page-header {
