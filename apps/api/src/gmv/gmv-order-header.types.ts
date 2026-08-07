@@ -41,6 +41,8 @@ export type OrderHeaderGmvRow = {
   verifyAmountFen: bigint;
   refundAmountFen?: bigint;
   orderCount: number;
+  refundOrderCount: number;
+  verifyCount: number;
 };
 
 export const EMPTY_ORDER_HEADER_GMV_ROW: OrderHeaderGmvRow = {
@@ -50,7 +52,9 @@ export const EMPTY_ORDER_HEADER_GMV_ROW: OrderHeaderGmvRow = {
   paidAmountCardFen: 0n,
   verifyAmountFen: 0n,
   refundAmountFen: 0n,
-  orderCount: 0
+  orderCount: 0,
+  refundOrderCount: 0,
+  verifyCount: 0
 };
 
 // Residual #121: removed dead toIsoText alias — writers use toSqliteDateTimeOrNull.

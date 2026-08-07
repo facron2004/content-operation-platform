@@ -9,6 +9,7 @@ import { DataAnalysisQueryDto } from './data-analysis.dto';
 import { DataAnalysisService } from './data-analysis.service';
 import { DataFreshnessService } from './data-freshness.service';
 import { RequireLogin } from '../user-access/iam/route-auth.decorator';
+import { RequirePermissions } from '../user-access/iam/require-permissions.decorator';
 
 @ApiTags('data-analysis')
 @RequireLogin()
@@ -20,6 +21,7 @@ export class DataAnalysisController {
   ) {}
 
   @Get('freshness')
+  @RequirePermissions('analytics:read')
   @Throttle({ long: { limit: 30, ttl: 60000 } })
   @ApiOperation({
     summary: '数据分析 — 数据新鲜度评估',
@@ -31,6 +33,7 @@ export class DataAnalysisController {
   }
 
   @Get('summary')
+  @RequirePermissions('analytics:read')
   @Throttle({ long: { limit: 10, ttl: 60000 } })
   @ApiOperation({
     summary: '数据分析 — 汇总预览',
@@ -46,6 +49,7 @@ export class DataAnalysisController {
   }
 
   @Get('export')
+  @RequirePermissions('analytics:export')
   @Throttle({ long: { limit: 3, ttl: 60000 } })
   @ApiOperation({
     summary: '数据分析 — 导出 Excel',

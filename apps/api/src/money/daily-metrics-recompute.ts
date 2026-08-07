@@ -101,14 +101,15 @@ export async function recomputeDailyMetricsRange(
         COALESCE(b."verifyCount", 0) AS "verifyCount",
         COALESCE(r."refundCount", 0) AS "refundCount",
         COALESCE(b."activeMerchants", 0) AS "activeMerchants",
+        -- Unified 单数口径: 退款率 = 退款单数 / 支付单数, 核销率 = 核销单数 / 支付单数.
         CASE
-          WHEN COALESCE(b."totalGmvFen", 0) > 0
-          THEN CAST(COALESCE(r."totalRefundFen", 0) AS REAL) * 1.0 / CAST(b."totalGmvFen" AS REAL)
+          WHEN COALESCE(b."paidOrderCount", 0) > 0
+          THEN CAST(COALESCE(r."refundCount", 0) AS REAL) * 1.0 / CAST(b."paidOrderCount" AS REAL)
           ELSE 0
         END AS "refundRate",
         CASE
-          WHEN COALESCE(b."totalGmvFen", 0) > 0
-          THEN CAST(COALESCE(b."totalVerifyFen", 0) AS REAL) * 1.0 / CAST(b."totalGmvFen" AS REAL)
+          WHEN COALESCE(b."paidOrderCount", 0) > 0
+          THEN CAST(COALESCE(b."verifyCount", 0) AS REAL) * 1.0 / CAST(b."paidOrderCount" AS REAL)
           ELSE 0
         END AS "verifyRate",
         ? AS "updatedAt"

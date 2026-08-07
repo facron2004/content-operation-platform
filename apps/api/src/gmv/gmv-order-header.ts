@@ -1,6 +1,12 @@
 /** Consolidated GMV module — compute, trend, distribution (queries in gmv-order-header.query). */
 import { beijingDateKey, shiftDateKey } from '@content/shared';
-import { beijingDayRangeSqlite, gmvFromParts, rateAgainstGmv } from '../common';
+import {
+  beijingDayRangeSqlite,
+  gmvFromParts,
+  netGmvParts,
+  rateByCount,
+  toFenBigInt
+} from '../common';
 import { DATA_ANALYSIS_OH_CONCURRENCY, mapPool } from '../common/sql-chunk';
 import { PrismaService } from '../prisma/prisma.service';
 import { mapDistributionRows } from './gmv-metrics';
@@ -40,7 +46,6 @@ export function buildOrderHeaderTodayPayload(
   date: string,
   gmvRow: OrderHeaderGmvRow,
   totalRefundFen: bigint | null,
-  refundOrderCount: number,
   extras?: {
     monthGmvFen?: bigint | null;
     monthGmvOnlineFen?: bigint | null;
@@ -50,90 +55,68 @@ export function buildOrderHeaderTodayPayload(
   }
 ): GmvTodayPayload {
   const isFen = gmvRow.paidAmountFen != null;
-  const onlineFen = BigInt(
-    Math.round(Number(gmvRow.paidAmountFen ?? (gmvRow as any).paidAmount ?? 0) * (isFen ? 1 : 100))
+  const onlineFen = toFenBigInt(
+    gmvRow.paidAmountFen ?? (gmvRow as unknown as { paidAmount?: number }).paidAmount,
+    isFen ? 1 : 100
   );
-  const walletFen = BigInt(
-    Math.round(
-      Number(gmvRow.paidAmountWalletFen ?? (gmvRow as any).paidAmountWallet ?? 0) *
-        (isFen ? 1 : 100)
-    )
+  const walletFen = toFenBigInt(
+    gmvRow.paidAmountWalletFen ?? (gmvRow as unknown as { paidAmountWallet?: number }).paidAmountWallet,
+    isFen ? 1 : 100
   );
-  const bonusFen = BigInt(
-    Math.round(
-      Number(gmvRow.paidAmountBonusFen ?? (gmvRow as any).paidAmountBonus ?? 0) * (isFen ? 1 : 100)
-    )
+  const bonusFen = toFenBigInt(
+    gmvRow.paidAmountBonusFen ?? (gmvRow as unknown as { paidAmountBonus?: number }).paidAmountBonus,
+    isFen ? 1 : 100
   );
-  const cardFen = BigInt(
-    Math.round(
-      Number(gmvRow.paidAmountCardFen ?? (gmvRow as any).paidAmountCard ?? 0) * (isFen ? 1 : 100)
-    )
+  const cardFen = toFenBigInt(
+    gmvRow.paidAmountCardFen ?? (gmvRow as unknown as { paidAmountCard?: number }).paidAmountCard,
+    isFen ? 1 : 100
   );
-  const verifyFen = BigInt(
-    Math.round(
-      Number(gmvRow.verifyAmountFen ?? (gmvRow as any).verifyAmount ?? 0) * (isFen ? 1 : 100)
-    )
+  const verifyFen = toFenBigInt(
+    gmvRow.verifyAmountFen ?? (gmvRow as unknown as { verifyAmount?: number }).verifyAmount,
+    isFen ? 1 : 100
   );
-  const refundFen = BigInt(
-    Math.round(
-      Number(totalRefundFen ?? 0) *
-        (typeof totalRefundFen === 'bigint' || typeof totalRefundFen === 'number' ? 1 : 100)
-    )
-  );
+  const refundFen = toFenBigInt(totalRefundFen);
   const grossGmvFen = gmvFromParts(onlineFen, walletFen);
   const totalGmvFen = grossGmvFen - refundFen;
+  const netParts = netGmvParts(onlineFen, walletFen, refundFen);
   const paidOrderCount = Number(gmvRow.orderCount ?? 0);
+  const refundOrderCount = Number(gmvRow.refundOrderCount ?? 0);
+  const verifyOrderCount = Number(gmvRow.verifyCount ?? 0);
   const avgOrderValue = paidOrderCount > 0 ? Number(totalGmvFen) / 100 / paidOrderCount : 0;
   const monthGmvFen = extras?.monthGmvFen ?? totalGmvFen;
-  const monthGmvOnlineFen = extras?.monthGmvOnlineFen ?? onlineFen;
-  const monthGmvWalletFen = extras?.monthGmvWalletFen ?? walletFen;
+  const monthGmvOnlineFen = extras?.monthGmvOnlineFen ?? netParts.onlineFen;
+  const monthGmvWalletFen = extras?.monthGmvWalletFen ?? monthGmwWalletFenOr(netParts.walletFen);
+
+  // Unified 单数口径: 退款率 = 退款单数 / 支付单数, 核销率 = 核销单数 / 支付单数.
+  const refundRate = rateByCount(refundOrderCount, paidOrderCount);
+  const verifyRate = rateByCount(verifyOrderCount, paidOrderCount);
 
   let compare: GmvTodayPayload['compare'];
   if (extras?.prev) {
     const prevIsFen = extras.prev.paidAmountFen != null;
-    const prevOnlineFen = BigInt(
-      Math.round(
-        Number(extras.prev.paidAmountFen ?? (extras.prev as any).paidAmount ?? 0) *
-          (prevIsFen ? 1 : 100)
-      )
+    const prevOnlineFen = toFenBigInt(
+      extras.prev.paidAmountFen ?? (extras.prev as unknown as { paidAmount?: number }).paidAmount,
+      prevIsFen ? 1 : 100
     );
-    const prevWalletFen = BigInt(
-      Math.round(
-        Number(extras.prev.paidAmountWalletFen ?? (extras.prev as any).paidAmountWallet ?? 0) *
-          (prevIsFen ? 1 : 100)
-      )
+    const prevWalletFen = toFenBigInt(
+      extras.prev.paidAmountWalletFen ??
+        (extras.prev as unknown as { paidAmountWallet?: number }).paidAmountWallet,
+      prevIsFen ? 1 : 100
     );
     const prevGrossGmvFen = gmvFromParts(prevOnlineFen, prevWalletFen);
-    const prevRefundFen = BigInt(
-      Math.round(
-        Number(extras.prevRefundFen ?? 0) *
-          (typeof extras.prevRefundFen === 'bigint' || typeof extras.prevRefundFen === 'number'
-            ? 1
-            : 100)
-      )
-    );
+    const prevRefundFen = toFenBigInt(extras.prevRefundFen);
     const prevGmvFen = prevGrossGmvFen - prevRefundFen;
     const prevOrders = Number(extras.prev.orderCount ?? 0);
-    const prevVerifyFen = BigInt(
-      Math.round(
-        Number(extras.prev.verifyAmountFen ?? (extras.prev as any).verifyAmount ?? 0) *
-          (prevIsFen ? 1 : 100)
-      )
-    );
     const prevAov = prevOrders > 0 ? Number(prevGmvFen) / 100 / prevOrders : 0;
+    const prevRefundRate = rateByCount(Number(extras.prev.refundOrderCount ?? 0), prevOrders);
+    const prevVerifyRate = rateByCount(Number(extras.prev.verifyCount ?? 0), prevOrders);
     compare = {
       totalGmv: ratioDelta(Number(totalGmvFen) / 100, Number(prevGmvFen) / 100),
       totalGmvFen: ratioDelta(Number(totalGmvFen) / 100, Number(prevGmvFen) / 100),
       paidOrderCount: ratioDelta(paidOrderCount, prevOrders),
       avgOrderValue: ratioDelta(avgOrderValue, prevAov),
-      refundRate: ratioDelta(
-        rateAgainstGmv(Number(totalRefundFen ?? 0n) / 100, Number(totalGmvFen) / 100),
-        rateAgainstGmv(Number(prevRefundFen) / 100, Number(prevGmvFen) / 100)
-      ),
-      verifyRate: ratioDelta(
-        rateAgainstGmv(Number(verifyFen) / 100, Number(totalGmvFen) / 100),
-        rateAgainstGmv(Number(prevVerifyFen) / 100, Number(prevGmvFen) / 100)
-      )
+      refundRate: ratioDelta(refundRate, prevRefundRate),
+      verifyRate: ratioDelta(verifyRate, prevVerifyRate)
     };
   }
 
@@ -142,15 +125,16 @@ export function buildOrderHeaderTodayPayload(
     totalGmv: Number(totalGmvFen) / 100,
     monthGmv: Number(monthGmvFen) / 100,
     totalGmvFen,
-    gmvOnlineFen: onlineFen,
-    gmvWalletFen: walletFen,
+    gmvOnlineFen: netParts.onlineFen,
+    gmvWalletFen: netParts.walletFen,
     gmvBonusFen: bonusFen,
     gmvCardFen: cardFen,
-    totalRefundFen,
-    refundRate: rateAgainstGmv(Number(totalRefundFen ?? 0n) / 100, Number(totalGmvFen) / 100),
+    totalRefundFen: refundFen,
+    refundRate,
     refundOrderCount,
+    verifyOrderCount,
     totalVerifyFen: verifyFen,
-    verifyRate: rateAgainstGmv(Number(verifyFen) / 100, Number(totalGmvFen) / 100),
+    verifyRate,
     paidOrderCount,
     paidAmountBonusFen: bonusFen,
     paidAmountWalletFen: walletFen,
@@ -163,6 +147,11 @@ export function buildOrderHeaderTodayPayload(
     updatedAt: new Date().toISOString(),
     dataSource: 'OrderHeader'
   };
+}
+
+// Small helper to keep the month wallet assignment readable and typo-safe.
+function monthGmwWalletFenOr(walletFen: bigint): bigint {
+  return walletFen;
 }
 
 function ratioDelta(current: number, previous: number): number | null {
@@ -204,25 +193,29 @@ export async function computeFromOrderHeader(
   const gmvRow = gmvRows[0] ?? EMPTY_ORDER_HEADER_GMV_ROW;
   const monthRow = monthRows[0] ?? EMPTY_ORDER_HEADER_GMV_ROW;
   const monthGrossGmvFen = gmvFromParts(
-    BigInt(Number(monthRow.paidAmountFen ?? 0)),
-    BigInt(Number(monthRow.paidAmountWalletFen ?? 0))
+    toFenBigInt(monthRow.paidAmountFen),
+    toFenBigInt(monthRow.paidAmountWalletFen)
   );
-  const monthRefundFen = BigInt(Number(monthRow.refundAmountFen ?? 0));
+  const monthRefundFen = toFenBigInt(monthRow.refundAmountFen);
   const monthGmvFen = monthGrossGmvFen - monthRefundFen;
-  const monthGmvOnlineFen = BigInt(Number(monthRow.paidAmountFen ?? 0));
-  const monthGmvWalletFen = BigInt(Number(monthRow.paidAmountWalletFen ?? 0));
+  const monthParts = netGmvParts(
+    toFenBigInt(monthRow.paidAmountFen),
+    toFenBigInt(monthRow.paidAmountWalletFen),
+    monthRefundFen
+  );
+  const monthGmvOnlineFen = monthParts.onlineFen;
+  const monthGmvWalletFen = monthParts.walletFen;
 
   return buildOrderHeaderTodayPayload(
     date,
     gmvRow,
-    BigInt(Number(refundRows[0]?.totalRefundFen ?? 0)),
-    Number(refundRows[0]?.refundOrderCount ?? 0),
+    toFenBigInt(refundRows[0]?.totalRefundFen),
     {
       monthGmvFen,
       monthGmvOnlineFen,
       monthGmvWalletFen,
       prev: prevGmvRows[0] ?? null,
-      prevRefundFen: BigInt(Number(prevRefundRows[0]?.totalRefundFen ?? 0))
+      prevRefundFen: toFenBigInt(prevRefundRows[0]?.totalRefundFen)
     }
   );
 }
@@ -259,22 +252,31 @@ export function mapOrderHeaderTrendRows(
       continue;
     }
     const grossGmvFen = gmvFromParts(
-      BigInt(Number(b.paidAmountFen ?? 0n)),
-      BigInt(Number(b.paidAmountWalletFen ?? 0n))
+      toFenBigInt(b.paidAmountFen),
+      toFenBigInt(b.paidAmountWalletFen)
     );
-    const refundFen = BigInt(Number(b.refundAmountFen ?? 0n));
+    const refundFen = toFenBigInt(b.refundAmountFen);
     const totalGmvFen = grossGmvFen - refundFen;
+    const netParts = netGmvParts(
+      toFenBigInt(b.paidAmountFen),
+      toFenBigInt(b.paidAmountWalletFen),
+      refundFen
+    );
+    const paidOrderCount = Number(b.orderCount);
+    // Unified 单数口径: 退款率 = 退款单数 / 支付单数, 核销率 = 核销单数 / 支付单数.
     result.push({
       date: d,
       totalGmv: Number(totalGmvFen) / 100,
       totalGmvFen,
-      gmvOnlineFen: BigInt(Number(b.paidAmountFen ?? 0n)),
-      gmvWalletFen: BigInt(Number(b.paidAmountWalletFen ?? 0n)),
-      gmvBonusFen: BigInt(Number(b.paidAmountBonusFen ?? 0n)),
+      gmvOnlineFen: netParts.onlineFen,
+      gmvWalletFen: netParts.walletFen,
+      gmvBonusFen: toFenBigInt(b.paidAmountBonusFen),
       totalRefundFen: refundFen,
-      refundRate: rateAgainstGmv(Number(b.refundAmountFen ?? 0n) / 100, Number(grossGmvFen) / 100),
-      verifyRate: rateAgainstGmv(Number(b.verifyAmountFen ?? 0n) / 100, Number(grossGmvFen) / 100),
-      paidOrderCount: Number(b.orderCount)
+      refundRate: rateByCount(Number(b.refundOrderCount ?? 0), paidOrderCount),
+      verifyRate: rateByCount(Number(b.verifyCount ?? 0), paidOrderCount),
+      paidOrderCount,
+      refundCount: Number(b.refundOrderCount ?? 0),
+      verifyCount: Number(b.verifyCount ?? 0)
     });
   }
   return result;

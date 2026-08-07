@@ -1,17 +1,32 @@
 <script setup lang="ts">
 import AppleButton from '../../../components/AppleButton.vue';
-const props = defineProps<{ loading: boolean; kpiDate: string }>();
+import type { RefundWindow } from '../../../services/api/refund.api';
+const props = defineProps<{ loading: boolean; kpiDate: string; kpiWindow: RefundWindow }>();
 const emit = defineEmits<{
   reload: [];
   'update:kpiDate': [value: string];
   'date-change': [];
+  'update:kpiWindow': [value: RefundWindow];
+  'window-change': [];
 }>();
+
+const WINDOWS: { label: string; value: RefundWindow }[] = [
+  { label: '今日', value: 'day' },
+  { label: '本周', value: 'week' },
+  { label: '本月', value: 'month' },
+  { label: '本年', value: 'year' }
+];
 
 function onDateUpdate(value: string | null | undefined) {
   const next = value ? String(value) : '';
   if (next === props.kpiDate) return;
   emit('update:kpiDate', next);
   emit('date-change');
+}
+
+function onWindowUpdate(value: string | number | boolean) {
+  emit('update:kpiWindow', value as RefundWindow);
+  emit('window-change');
 }
 </script>
 <template>
@@ -34,6 +49,13 @@ function onDateUpdate(value: string | null | undefined) {
           style="width: 170px"
           @update:model-value="onDateUpdate"
         />
+      </div>
+      <!-- 周期口径: 今日/本周/本月/本年 (day/week/month/year). -->
+      <div class="hero-controls">
+        <span class="control-label">周期</span>
+        <el-radio-group :model-value="kpiWindow" size="small" @update:model-value="onWindowUpdate">
+          <el-radio-button v-for="w in WINDOWS" :key="w.value" :value="w.value">{{ w.label }}</el-radio-button>
+        </el-radio-group>
       </div>
       <AppleButton size="sm" variant="secondary" :loading="loading" @click="$emit('reload')">
         刷新

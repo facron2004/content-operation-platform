@@ -43,8 +43,10 @@ export interface DataAnalysisOverview {
   salesAmount: number;
   /** 余额抵扣 = SUM(paidAmountWallet) */
   walletAmount: number;
-  /** 交易额(含余额) = sales + wallet */
+  /** 毛 GMV = sales + wallet；保留用于结算率分母和兼容旧接口。 */
   tradeAmount: number;
+  /** 净 GMV = 毛 GMV − 退款金额。 */
+  netGmv: number;
   /** 净销售额 = sales − refund */
   netSales: number;
   /** 券面额合计 = SUM(orderAmount) */
@@ -52,18 +54,23 @@ export interface DataAnalysisOverview {
   refundAmount: number;
   /** 已核销金额 = SUM(verifyAmount) */
   verifyAmount: number;
-  /** 核销率 = verifiedCount / orderCount */
+  /** 核销率 = 核销单数 / 总订单数 (单数口径) */
   verifyRate: number;
-  /** 退款率 = refundAmount / salesAmount */
+  /** 退款率 = 退款单数 / 总订单数 (单数口径，不再用金额) */
   refundRate: number;
+  /** 退款单数 = refundAmountFen>0 的订单数 (退款率分子) */
+  refundCount: number;
   /** 整体结算率 = verifyAmount / tradeAmount（核销金额含余额，分母须用含余额交易额） */
   settlementRate: number;
   /** 客单价 = sales / orderCount */
   avgOrderValue: number;
   /** 目标达成比 = sales / TARGET */
   targetRatio: number;
-  /** 目标达成(含余额) = trade / TARGET */
+  /** 旧版毛 GMV 目标达成比 = trade / TARGET；保留兼容旧接口。 */
   targetRatioWithWallet: number;
+  /** 净 GMV 目标达成比 = netGmv / TARGET。 */
+  netGmvTargetRatio: number;
+  /** 核销单数 (核销率分子) */
   verifiedCount: number;
   pendingVerifyCount: number;
   expiredCount: number;
@@ -76,6 +83,7 @@ export interface DataAnalysisDeltas {
   orderCount: number | null;
   salesAmount: number | null;
   tradeAmount: number | null;
+  netGmv: number | null;
   netSales: number | null;
   refundAmount: number | null;
   verifyRate: number | null;
@@ -89,6 +97,7 @@ export interface DataAnalysisDailyPoint {
   date: string;
   salesAmount: number;
   tradeAmount: number;
+  netGmv: number;
   netSales: number;
   orderCount: number;
   refundAmount: number;

@@ -127,6 +127,7 @@ export class GmvController {
   constructor(@Inject(GmvService) private readonly service: GmvService) {}
 
   @Get('today')
+  @RequirePermissions('analytics:read')
   @Throttle({ long: { limit: 40, ttl: 60000 } })
   @ApiOperation({
     summary: '今日 GMV KPI',
@@ -138,6 +139,7 @@ export class GmvController {
   }
 
   @Get('trend')
+  @RequirePermissions('analytics:read')
   @Throttle({ long: { limit: 40, ttl: 60000 } })
   @ApiOperation({ summary: 'GMV 趋势（按日/周/月）' })
   trend(@Query(createDtoPipe(GmvTrendQueryDto)) q: GmvTrendQueryDto, @Req() req: Request) {
@@ -146,6 +148,7 @@ export class GmvController {
   }
 
   @Get('hourly')
+  @RequirePermissions('analytics:read')
   @Throttle({ long: { limit: 40, ttl: 60000 } })
   @ApiOperation({ summary: '分时段成交趋势（按支付小时，北京时间）' })
   hourly(@Query(createDtoPipe(GmvHourlyQueryDto)) q: GmvHourlyQueryDto, @Req() req: Request) {
@@ -189,6 +192,7 @@ export class GmvController {
   }
 
   @Get('distribution')
+  @RequirePermissions('analytics:read')
   @Throttle({ long: { limit: 40, ttl: 60000 } })
   @ApiOperation({ summary: '区域/品类/渠道 GMV 分布' })
   distribution(
@@ -200,6 +204,7 @@ export class GmvController {
   }
 
   @Get('by-merchant')
+  @RequirePermissions('analytics:read')
   @Throttle({ long: { limit: 40, ttl: 60000 } })
   @ApiOperation({ summary: '商家 GMV / 退款率 / 核销率排行' })
   byMerchant(

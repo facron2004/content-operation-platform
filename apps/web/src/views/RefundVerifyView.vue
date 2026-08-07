@@ -15,6 +15,8 @@ const ChartPanel = defineAsyncComponent(() => import('../components/ChartPanel.v
     trendDays,
     sortBy,
     kpiDate,
+    kpiWindow,
+    trendBucket,
     merchantPage,
     merchantHasMore,
     merchantTruncated,
@@ -40,9 +42,11 @@ const ChartPanel = defineAsyncComponent(() => import('../components/ChartPanel.v
   <section v-loading="loading" class="page-stack refund-view">
     <RefundVerifyHero
       v-model:kpi-date="kpiDate"
+      v-model:kpi-window="kpiWindow"
       :loading="loading"
       @reload="reload"
       @date-change="reload"
+      @window-change="reload"
     />
     <ErrorAlert :message="loadError" />
     <el-tabs v-model="activeTab" @tab-change="reload">
@@ -59,8 +63,10 @@ const ChartPanel = defineAsyncComponent(() => import('../components/ChartPanel.v
     <RefundVerifyTrend
       :active-tab="activeTab"
       :trend-days="trendDays"
+      :trend-bucket="trendBucket"
       :trend-option="trendOption"
       @update:trend-days="trendDays = $event === 30 ? 30 : 7"
+      @update:trend-bucket="trendBucket = $event"
       @change="loadTrend"
     >
       <ChartPanel :option="trendOption" />

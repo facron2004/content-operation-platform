@@ -1,6 +1,6 @@
 /** Consolidated GMV module — money resolve: OH today, DM history, never SalesSnapshot. */
 import { beijingDateKey, shiftDateKey } from '@content/shared';
-import { rateAgainstGmv, SQL_GMV_SS } from '../common';
+import { netGmvParts, rateByCount, SQL_GMV_SS, toFenBigInt } from '../common';
 import { GMV_TOP_MERCHANTS_LIMIT } from '../common/sql-chunk';
 import { shouldPreferOrderHeaderForKpi } from '../money';
 import { PrismaService } from '../prisma/prisma.service';
@@ -59,6 +59,7 @@ export async function resolveGmvKpis(prisma: PrismaLike, date?: string): Promise
     totalRefundFen: true,
     refundRate: true,
     refundCount: true,
+    verifyCount: true,
     totalVerifyFen: true,
     verifyRate: true,
     paidOrderCount: true,
@@ -83,22 +84,26 @@ export async function resolveGmvKpis(prisma: PrismaLike, date?: string): Promise
     ]);
 
     const monthGmvFen = monthRows.reduce(
-      (sum, row) =>
-        sum + (BigInt(Number(row.totalGmvFen ?? 0)) - BigInt(Number(row.totalRefundFen ?? 0))),
+      (sum, row) => sum + (toFenBigInt(row.totalGmvFen) - toFenBigInt(row.totalRefundFen)),
       0n
     );
-    const monthGmvOnlineFen = monthRows.reduce(
-      (sum, row) => sum + BigInt(Number(row.gmvOnlineFen ?? 0)),
+    const monthGrossOnlineFen = monthRows.reduce(
+      (sum, row) => sum + toFenBigInt(row.gmvOnlineFen),
       0n
     );
-    const monthGmvWalletFen = monthRows.reduce(
-      (sum, row) => sum + BigInt(Number(row.gmvWalletFen ?? 0)),
+    const monthGrossWalletFen = monthRows.reduce(
+      (sum, row) => sum + toFenBigInt(row.gmvWalletFen),
       0n
     );
+    const monthRefundFen = monthRows.reduce(
+      (sum, row) => sum + toFenBigInt(row.totalRefundFen),
+      0n
+    );
+    const monthParts = netGmvParts(monthGrossOnlineFen, monthGrossWalletFen, monthRefundFen);
     return mapDailyMetricsToKpi(dmRow, {
       monthGmvFen,
-      monthGmvOnlineFen,
-      monthGmvWalletFen,
+      monthGmvOnlineFen: monthParts.onlineFen,
+      monthGmvWalletFen: monthParts.walletFen,
       prev: prevDm
     });
   }
@@ -140,8 +145,11 @@ export async function resolveGmvTrend(
       gmvWalletFen: true,
       gmvBonusFen: true,
       totalRefundFen: true,
+      totalVerifyFen: true,
       refundRate: true,
       verifyRate: true,
+      refundCount: true,
+      verifyCount: true,
       paidOrderCount: true
     }
   });
@@ -179,10 +187,15 @@ export async function resolveGmvHourly(
   }
 }
 
-function aggregateTrend(daily: GmvTrendPoint[], granularity: 'week' | 'month'): GmvTrendPoint[] {
-  const buckets = new Map<string, GmvTrendPoint & { _count: number }>();
+export function aggregateTrend(
+  daily: GmvTrendPoint[],
+  granularity: 'week' | 'month'
+): GmvTrendPoint[] {
+  const buckets = new Map<string, GmvTrendPoint & { refundCount: number; verifyCount: number }>();
   for (const point of daily) {
     const key = granularity === 'week' ? weekKey(point.date) : point.date.slice(0, 7);
+    const rCount = Number(point.refundCount ?? 0);
+    const vCount = Number(point.verifyCount ?? 0);
     const existing = buckets.get(key);
     if (!existing) {
       buckets.set(key, {
@@ -196,7 +209,8 @@ function aggregateTrend(daily: GmvTrendPoint[], granularity: 'week' | 'month'): 
         refundRate: 0,
         verifyRate: 0,
         paidOrderCount: point.paidOrderCount,
-        _count: 1
+        refundCount: rCount,
+        verifyCount: vCount
       });
       continue;
     }
@@ -207,18 +221,18 @@ function aggregateTrend(daily: GmvTrendPoint[], granularity: 'week' | 'month'): 
     existing.gmvBonusFen = (existing.gmvBonusFen ?? 0n) + (point.gmvBonusFen ?? 0n);
     existing.totalRefundFen = (existing.totalRefundFen ?? 0n) + (point.totalRefundFen ?? 0n);
     existing.paidOrderCount += point.paidOrderCount;
-    existing._count += 1;
+    existing.refundCount += rCount;
+    existing.verifyCount += vCount;
   }
 
   return [...buckets.values()]
     .sort((a, b) => a.date.localeCompare(b.date))
-    .map(({ _count, ...point }) => ({
+    .map(({ refundCount, verifyCount, ...point }) => ({
       ...point,
-      refundRate:
-        (point.totalGmvFen ?? 0n) > 0n
-          ? Number(point.totalRefundFen ?? 0n) / Number(point.totalGmvFen)
-          : 0,
-      verifyRate: 0
+      refundCount,
+      verifyCount,
+      refundRate: rateByCount(refundCount, point.paidOrderCount),
+      verifyRate: rateByCount(verifyCount, point.paidOrderCount)
     }));
 }
 
@@ -254,7 +268,9 @@ export async function computeMerchantsFromMdMetrics(prisma: PrismaLike): Promise
      COALESCE(SUM(${SQL_GMV_SS}), 0) AS "gmvFen",
      COALESCE(SUM("refundAmountFen"), 0) AS "gmvRefundFen",
      COALESCE(SUM("verifyAmountFen"), 0) AS "gmvVerifyFen",
-     COALESCE(SUM("paidOrderCount"), 0) AS "paidOrderCount"
+     COALESCE(SUM("paidOrderCount"), 0) AS "paidOrderCount",
+     COALESCE(SUM("refundCount"), 0) AS "refundCount",
+     COALESCE(SUM("verifyCount"), 0) AS "verifyCount"
      FROM "MerchantDailyMetrics"
      WHERE "date" >= ? AND "date" <= ?
      GROUP BY "merchantName"
@@ -270,18 +286,27 @@ export async function computeMerchantsFromMdMetrics(prisma: PrismaLike): Promise
     gmvRefundFen: bigint | null;
     gmvVerifyFen: bigint | null;
     paidOrderCount: number;
+    refundCount: number;
+    verifyCount: number;
   }>;
-  return rows.map((r) => ({
-    merchantId: r.merchantName,
-    merchantName: r.merchantName,
-    areaName: r.areaName,
-    gmvFen: BigInt(Number(r.gmvFen ?? 0)),
-    gmvRefundFen: BigInt(Number(r.gmvRefundFen ?? 0)),
-    gmvVerifyFen: BigInt(Number(r.gmvVerifyFen ?? 0)),
-    refundRate: rateAgainstGmv(Number(r.gmvRefundFen ?? 0) / 100, Number(r.gmvFen ?? 0) / 100),
-    verifyRate: rateAgainstGmv(Number(r.gmvVerifyFen ?? 0) / 100, Number(r.gmvFen ?? 0) / 100),
-    paidOrderCount: Number(r.paidOrderCount)
-  }));
+  return rows.map((r) => {
+    const gmvFen = toFenBigInt(r.gmvFen);
+    const gmvRefundFen = toFenBigInt(r.gmvRefundFen);
+    const gmvVerifyFen = toFenBigInt(r.gmvVerifyFen);
+    const paidOrderCount = Number(r.paidOrderCount);
+    return {
+      merchantId: r.merchantName,
+      merchantName: r.merchantName,
+      areaName: r.areaName,
+      gmvFen,
+      gmvRefundFen,
+      gmvVerifyFen,
+      // 单数口径: 退款/核销率 = 单数 / 支付单数.
+      refundRate: rateByCount(Number(r.refundCount), paidOrderCount),
+      verifyRate: rateByCount(Number(r.verifyCount), paidOrderCount),
+      paidOrderCount
+    };
+  });
 }
 
 /** Full sorted merchant aggregate (no page) — cache across page flips. */

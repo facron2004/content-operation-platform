@@ -1,7 +1,7 @@
 /** Consolidated merchant-sales module. */
 import { Type } from 'class-transformer';
 import { IsIn, IsInt, IsOptional, Max, Min } from 'class-validator';
-import { optionalDateKey } from '../content/dto-decorators';
+import { optionalDateKey, optionalString } from '../content/dto-decorators';
 
 // --- dto/merchant-sales-query.dto.ts ---
 export const MERCHANT_SALES_WINDOWS = ['day', 'week', 'month', 'year'] as const;
@@ -20,7 +20,9 @@ export class MerchantSalesQueryDto {
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100) page: number = 1;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100) pageSize: number = 20;
   @IsOptional() @IsIn([...MERCHANT_SALES_SORTS]) sortBy: MerchantSalesSort = 'gmvDesc';
-  @IsOptional() force?: boolean | string;
+  @optionalString(5) force?: boolean | string;
+  @optionalString(40) _?: string;
+  @optionalString(40) _t?: string;
 }
 /** Strict YYYY-MM-DD only — see GmvRefreshBodyDto for why not IsDateString. */
 export class MerchantSalesRefreshDto {

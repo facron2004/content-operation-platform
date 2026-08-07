@@ -1,5 +1,5 @@
 /** GMV OrderHeader raw SQL queries (aggregates / hourly / distribution loaders). */
-import { SQL_GMV_OH, sqlBeijingDate, sqlDatetimeExclusiveRange } from '../common';
+import { SQL_GMV_OH, sqlBeijingDate, sqlDatetimeExclusiveRange, toFenBigInt } from '../common';
 import { PrismaService } from '../prisma/prisma.service';
 import { emptyHourlyPoints, type GmvHourlyPoint } from './gmv.dto';
 import { type OrderHeaderGmvRow } from './gmv-order-header.types';
@@ -18,7 +18,9 @@ export async function queryOrderHeaderGmv(
             COALESCE(SUM("paidAmountCardFen"), 0) AS "paidAmountCardFen",
             COALESCE(SUM("verifyAmountFen"), 0) AS "verifyAmountFen",
             COALESCE(SUM("refundAmountFen"), 0) AS "refundAmountFen",
-            COUNT(*) AS "orderCount"
+            COUNT(*) AS "orderCount",
+            COUNT(CASE WHEN "refundAmountFen" > 0 THEN 1 END) AS "refundOrderCount",
+            COUNT(CASE WHEN "verifyTime" IS NOT NULL THEN 1 END) AS "verifyCount"
      FROM "OrderHeader"
      WHERE ${sqlDatetimeExclusiveRange('"paidTime"')}`,
     startBound,
@@ -66,7 +68,7 @@ export async function queryOrderHeaderHourly(
       base[hour] = {
         hour,
         label: `${String(hour).padStart(2, '0')}:00`,
-        totalGmvFen: BigInt(Number(row.totalGmvFen ?? 0)),
+        totalGmvFen: toFenBigInt(row.totalGmvFen),
         paidOrderCount: Number(row.paidOrderCount)
       };
     }
@@ -80,6 +82,7 @@ export type DistSqlRow = {
   gmvOnlineFen: bigint | null;
   gmvWalletFen: bigint | null;
   gmvBonusFen: bigint | null;
+  refundFen: bigint | null;
 };
 
 export async function loadOrderHeaderAreaDistribution(
@@ -95,7 +98,7 @@ export async function loadOrderHeaderAreaDistribution(
     startBound,
     endBound
   )) as Array<{ totalGmvFen: bigint | null }>;
-  const totalGmvFen = BigInt(Number(totalRow[0]?.totalGmvFen ?? 0));
+  const totalGmvFen = toFenBigInt(totalRow[0]?.totalGmvFen);
 
   const rows = (await prisma.$queryRawUnsafe(
     `SELECT COALESCE(
@@ -106,7 +109,8 @@ export async function loadOrderHeaderAreaDistribution(
             COALESCE(SUM(${SQL_GMV_OH}), 0) AS "gmvFen",
             COALESCE(SUM(oh."paidAmountFen"), 0) AS "gmvOnlineFen",
             COALESCE(SUM(oh."paidAmountWalletFen"), 0) AS "gmvWalletFen",
-            COALESCE(SUM(oh."paidAmountBonusFen"), 0) AS "gmvBonusFen"
+            COALESCE(SUM(oh."paidAmountBonusFen"), 0) AS "gmvBonusFen",
+            COALESCE(SUM(oh."refundAmountFen"), 0) AS "refundFen"
      FROM "OrderHeader" oh
      LEFT JOIN "ContentPackage" cp ON cp."packageId" = oh."packageId"
      WHERE ${sqlDatetimeExclusiveRange('oh."paidTime"')}
@@ -125,7 +129,8 @@ export async function loadOrderHeaderAreaDistribution(
               COALESCE(SUM(${SQL_GMV_OH}), 0) AS "gmvFen",
               COALESCE(SUM(oh."paidAmountFen"), 0) AS "gmvOnlineFen",
               COALESCE(SUM(oh."paidAmountWalletFen"), 0) AS "gmvWalletFen",
-              COALESCE(SUM(oh."paidAmountBonusFen"), 0) AS "gmvBonusFen"
+              COALESCE(SUM(oh."paidAmountBonusFen"), 0) AS "gmvBonusFen",
+              COALESCE(SUM(oh."refundAmountFen"), 0) AS "refundFen"
        FROM "OrderHeader" oh
        WHERE ${sqlDatetimeExclusiveRange('oh."paidTime"')}
        GROUP BY COALESCE(NULLIF(oh."merchantName", ''), '未知商家')
@@ -154,14 +159,15 @@ export async function loadOrderHeaderCategoryDistribution(
     startBound,
     endBound
   )) as Array<{ totalGmvFen: bigint | null }>;
-  const totalGmvFen = BigInt(Number(totalRow[0]?.totalGmvFen ?? 0));
+  const totalGmvFen = toFenBigInt(totalRow[0]?.totalGmvFen);
 
   const rows = (await prisma.$queryRawUnsafe(
     `SELECT COALESCE(NULLIF(cp."category", ''), '未分类') AS "key",
             COALESCE(SUM(${SQL_GMV_OH}), 0) AS "gmvFen",
             COALESCE(SUM(oh."paidAmountFen"), 0) AS "gmvOnlineFen",
             COALESCE(SUM(oh."paidAmountWalletFen"), 0) AS "gmvWalletFen",
-            COALESCE(SUM(oh."paidAmountBonusFen"), 0) AS "gmvBonusFen"
+            COALESCE(SUM(oh."paidAmountBonusFen"), 0) AS "gmvBonusFen",
+            COALESCE(SUM(oh."refundAmountFen"), 0) AS "refundFen"
      FROM "OrderHeader" oh
      LEFT JOIN "ContentPackage" cp ON cp."packageId" = oh."packageId"
      WHERE ${sqlDatetimeExclusiveRange('oh."paidTime"')}
@@ -184,6 +190,8 @@ export type TrendAggRow = {
   refundAmountFen: bigint | null;
   verifyAmountFen: bigint | null;
   orderCount: number;
+  refundOrderCount: number;
+  verifyCount: number;
 };
 
 export async function queryOrderHeaderTrendAgg(
@@ -198,7 +206,9 @@ export async function queryOrderHeaderTrendAgg(
             COALESCE(SUM("paidAmountBonusFen"), 0) AS "paidAmountBonusFen",
             COALESCE(SUM("refundAmountFen"), 0) AS "refundAmountFen",
             COALESCE(SUM("verifyAmountFen"), 0) AS "verifyAmountFen",
-            COUNT(*) AS "orderCount"
+            COUNT(*) AS "orderCount",
+            COUNT(CASE WHEN "refundAmountFen" > 0 THEN 1 END) AS "refundOrderCount",
+            COUNT(CASE WHEN "verifyTime" IS NOT NULL THEN 1 END) AS "verifyCount"
      FROM "OrderHeader"
      WHERE ${sqlDatetimeExclusiveRange('"paidTime"')} AND "paidTime" IS NOT NULL
      GROUP BY ${sqlBeijingDate('"paidTime"')}

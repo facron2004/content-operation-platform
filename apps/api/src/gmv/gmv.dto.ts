@@ -1,7 +1,7 @@
 /** Consolidated GMV module. */
 import { Type } from 'class-transformer';
 import { IsIn, IsInt, IsOptional, IsString, Matches, Max, Min } from 'class-validator';
-import { optionalDateKey } from '../content/dto-decorators';
+import { optionalDateKey, optionalString } from '../content/dto-decorators';
 
 // --- dto/gmv-query.types.ts ---
 // Interactive money reads share the 90d cap with merchant-sales / data-analysis.
@@ -34,8 +34,14 @@ export class GmvTodayQueryDto {
   @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'date 必须为 YYYY-MM-DD 格式' })
   date?: string;
 
-  @IsOptional()
+  @optionalString(5)
   force?: boolean | string;
+
+  @optionalString(40)
+  _?: string;
+
+  @optionalString(40)
+  _t?: string;
 }
 
 export class GmvTrendQueryDto {
@@ -55,8 +61,14 @@ export class GmvTrendQueryDto {
   @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'endDate 必须为 YYYY-MM-DD 格式' })
   endDate?: string;
 
-  @IsOptional()
+  @optionalString(5)
   force?: boolean | string;
+
+  @optionalString(40)
+  _?: string;
+
+  @optionalString(40)
+  _t?: string;
 }
 
 export class GmvHourlyQueryDto {
@@ -65,21 +77,31 @@ export class GmvHourlyQueryDto {
   @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'date 必须为 YYYY-MM-DD 格式' })
   date?: string;
 
-  @IsOptional()
+  @optionalString(5)
   force?: boolean | string;
+
+  @optionalString(40)
+  _?: string;
+
+  @optionalString(40)
+  _t?: string;
 }
 
 // --- dto/gmv-query-extra.dto.ts ---
 export class GmvDistributionQueryDto {
   @IsOptional() @IsIn([...GMV_DISTRIBUTION_DIMS]) dim: GmvDistributionDim = 'area';
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(50) limit: number = 20;
-  @IsOptional() force?: boolean | string;
+  @optionalString(5) force?: boolean | string;
+  @optionalString(40) _?: string;
+  @optionalString(40) _t?: string;
 }
 export class GmvByMerchantQueryDto {
   @IsOptional() @IsIn([...GMV_MERCHANT_SORTS]) sortBy: GmvMerchantSort = 'gmvDesc';
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100) page: number = 1;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100) pageSize: number = 20;
-  @IsOptional() force?: boolean | string;
+  @optionalString(5) force?: boolean | string;
+  @optionalString(40) _?: string;
+  @optionalString(40) _t?: string;
 }
 
 // --- dto/gmv-refresh.dto.ts ---
@@ -120,6 +142,7 @@ export interface GmvTodayPayload {
   totalRefundFen: bigint | null;
   refundRate: number;
   refundOrderCount: number;
+  verifyOrderCount: number;
   totalVerifyFen: bigint | null;
   verifyRate: number;
   paidOrderCount: number;
@@ -153,6 +176,10 @@ export interface GmvTrendPoint {
   refundRate: number;
   verifyRate: number;
   paidOrderCount: number;
+  /** 退款单数（单数口径分母/分子） */
+  refundCount?: number;
+  /** 核销单数（单数口径分母/分子） */
+  verifyCount?: number;
 }
 
 export interface GmvHourlyPoint {
@@ -196,7 +223,9 @@ export const emptyTrendPoint = (date = ''): GmvTrendPoint => ({
   totalRefundFen: 0n,
   refundRate: 0,
   verifyRate: 0,
-  paidOrderCount: 0
+  paidOrderCount: 0,
+  refundCount: 0,
+  verifyCount: 0
 });
 
 export const emptyTodayPayload = (
@@ -214,6 +243,7 @@ export const emptyTodayPayload = (
   totalRefundFen: 0n,
   refundRate: 0,
   refundOrderCount: 0,
+  verifyOrderCount: 0,
   totalVerifyFen: 0n,
   verifyRate: 0,
   paidOrderCount: 0,

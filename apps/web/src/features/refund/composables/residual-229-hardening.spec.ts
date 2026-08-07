@@ -20,6 +20,7 @@ describe('residual #229 refund top-merchants pagination', () => {
     expect(src).toMatch(/merchantPage:\s*ref\(1\)/);
     expect(src).toMatch(/merchantHasMore:\s*ref\(false\)/);
     expect(src).toMatch(/getRefundTopMerchants\(\{[\s\S]{0,160}page:\s*params\.page/);
+    expect(src).toMatch(/getRefundTopMerchants\(\{[\s\S]{0,220}window:\s*params\.window/);
     expect(src).toMatch(/params\.hasMore\.value\s*=\s*!!result\.hasMore/);
     expect(src).toMatch(/prevMerchantPage/);
     expect(src).toMatch(/nextMerchantPage/);

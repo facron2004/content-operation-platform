@@ -7,6 +7,7 @@ import { RefundTodayQueryDto, RefundTopMerchantsQueryDto, RefundTrendQueryDto } 
 import { RefundService } from './refund.service';
 import { assertUnrestrictedAnalytics } from '../user-access/scope-guards';
 import { RequireLogin } from '../user-access/iam/route-auth.decorator';
+import { RequirePermissions } from '../user-access/iam/require-permissions.decorator';
 import { createDtoPipe } from '../common/dto-pipe';
 
 @ApiTags('refund-verify')
@@ -16,22 +17,25 @@ export class RefundController {
   constructor(@Inject(RefundService) private readonly service: RefundService) {}
 
   @Get('refund/today')
+  @RequirePermissions('analytics:read')
   @Throttle({ long: { limit: 20, ttl: 60000 } })
   @ApiOperation({ summary: '今日退款 KPI + Top 退款商家' })
   today(@Query(createDtoPipe(RefundTodayQueryDto)) q: RefundTodayQueryDto, @Req() req: Request) {
     assertUnrestrictedAnalytics(req);
-    return this.service.getRefundToday(q.date);
+    return this.service.getRefundToday(q);
   }
 
   @Get('refund/trend')
+  @RequirePermissions('analytics:read')
   @Throttle({ long: { limit: 20, ttl: 60000 } })
   @ApiOperation({ summary: '7/30 日退款率趋势' })
   trend(@Query(createDtoPipe(RefundTrendQueryDto)) q: RefundTrendQueryDto, @Req() req: Request) {
     assertUnrestrictedAnalytics(req);
-    return this.service.getRefundTrend(q.days, q.endDate);
+    return this.service.getRefundTrend(q);
   }
 
   @Get('refund/top-merchants')
+  @RequirePermissions('analytics:read')
   @Throttle({ long: { limit: 20, ttl: 60000 } })
   @ApiOperation({ summary: '高退款商家排行' })
   topMerchants(
@@ -43,6 +47,7 @@ export class RefundController {
   }
 
   @Get('verify/today')
+  @RequirePermissions('analytics:read')
   @Throttle({ long: { limit: 20, ttl: 60000 } })
   @ApiOperation({ summary: '今日核销 KPI + Top 核销商家' })
   verifyToday(
@@ -50,10 +55,11 @@ export class RefundController {
     @Req() req: Request
   ) {
     assertUnrestrictedAnalytics(req);
-    return this.service.getVerifyToday(q.date);
+    return this.service.getVerifyToday(q);
   }
 
   @Get('verify/trend')
+  @RequirePermissions('analytics:read')
   @Throttle({ long: { limit: 20, ttl: 60000 } })
   @ApiOperation({ summary: '7/30 日核销率趋势' })
   verifyTrend(
@@ -61,6 +67,6 @@ export class RefundController {
     @Req() req: Request
   ) {
     assertUnrestrictedAnalytics(req);
-    return this.service.getVerifyTrend(q.days, q.endDate);
+    return this.service.getVerifyTrend(q);
   }
 }

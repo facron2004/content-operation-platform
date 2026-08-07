@@ -13,29 +13,15 @@ import {
   buildDeltas,
   queryChannelBreakdown,
   queryDailyTrend,
-  queryHourly,
-  queryMerchantRanking,
-  queryMerchantRefunds,
-  queryMerchantVerifyExtremes,
-  queryOrderDetails,
   queryOverview,
-  queryPackageRanking,
-  querySalesmanRanking,
-  querySalesmanRefunds,
-  querySalesmanVerifyExtremes,
-  queryTimeSlots
+  queryPackageRanking
 } from './data-analysis-query';
 import { buildDataAnalysisWorkbook, buildExportFilename } from './data-analysis-excel';
-import {
-  DATA_ANALYSIS_READ_MAX_DAYS,
-  fixedSnapshotWindows,
-  previousEqualWindow,
-  resolveAnalysisWindow
-} from './data-analysis-window';
+import { buildDataAnalysisReport } from './data-analysis-report';
+import { fixedSnapshotWindows, previousEqualWindow } from './data-analysis-window';
 import {
   DATA_ANALYSIS_DETAIL_MAX_ROWS,
   DATA_ANALYSIS_OH_CONCURRENCY,
-  DATA_ANALYSIS_RANKING_MAX_ROWS,
   mapPool
 } from '../common/sql-chunk';
 
@@ -51,16 +37,19 @@ const EMPTY_OVERVIEW: DataAnalysisOverview = {
   salesAmount: 0,
   walletAmount: 0,
   tradeAmount: 0,
+  netGmv: 0,
   netSales: 0,
   faceAmount: 0,
   refundAmount: 0,
   verifyAmount: 0,
   verifyRate: 0,
   refundRate: 0,
+  refundCount: 0,
   settlementRate: 0,
   avgOrderValue: 0,
   targetRatio: 0,
   targetRatioWithWallet: 0,
+  netGmvTargetRatio: 0,
   verifiedCount: 0,
   pendingVerifyCount: 0,
   expiredCount: 0,
@@ -261,101 +250,14 @@ export class DataAnalysisService {
     rankingLimit = DEFAULT_RANKING_LIMIT,
     opts: { includeDetails: boolean; refundLimit?: number } = { includeDetails: true }
   ): Promise<DataAnalysisReport> {
-    const { start, end } = resolveAnalysisWindow(window, date, endDate);
-    const safeDetailLimit = Math.min(
-      DATA_ANALYSIS_DETAIL_MAX_ROWS,
-      Math.max(1, Math.floor(detailLimit) || DEFAULT_DETAIL_LIMIT)
-    );
-    const safeRankingLimit = Math.min(
-      DATA_ANALYSIS_RANKING_MAX_ROWS,
-      Math.max(1, Math.floor(rankingLimit) || DEFAULT_RANKING_LIMIT)
-    );
-    const safeRefundLimit = Math.min(50, Math.max(1, Math.floor(opts.refundLimit ?? 50) || 50));
-
-    // Cap concurrent OrderHeader scans — bare Promise.all of ~10 OH queries storms SQLite.
-    // Heterogeneous job returns → Promise<unknown> then cast (mapPool is order-preserving).
-    type ReportParts = [
-      Awaited<ReturnType<typeof queryOverview>>,
-      Awaited<ReturnType<typeof queryTimeSlots>>,
-      Awaited<ReturnType<typeof queryHourly>>,
-      Awaited<ReturnType<typeof querySalesmanRanking>>,
-      Awaited<ReturnType<typeof queryMerchantRanking>>,
-      Awaited<ReturnType<typeof queryMerchantVerifyExtremes>>,
-      Awaited<ReturnType<typeof querySalesmanVerifyExtremes>>,
-      Awaited<ReturnType<typeof queryMerchantRefunds>>,
-      Awaited<ReturnType<typeof querySalesmanRefunds>>,
-      { rows: Awaited<ReturnType<typeof queryOrderDetails>>['rows']; truncated: boolean }
-    ];
-    const reportJobs: Array<() => Promise<unknown>> = [
-      () => queryOverview(this.prisma, start, end),
-      () => queryTimeSlots(this.prisma, start, end),
-      () => queryHourly(this.prisma, start, end),
-      () => querySalesmanRanking(this.prisma, start, end, safeRankingLimit),
-      () => queryMerchantRanking(this.prisma, start, end, safeRankingLimit),
-      () => queryMerchantVerifyExtremes(this.prisma, start, end, 5, 5),
-      () => querySalesmanVerifyExtremes(this.prisma, start, end, 10, 5),
-      () => queryMerchantRefunds(this.prisma, start, end, safeRefundLimit),
-      () => querySalesmanRefunds(this.prisma, start, end, safeRefundLimit),
-      () =>
-        opts.includeDetails
-          ? queryOrderDetails(this.prisma, start, end, safeDetailLimit)
-          : Promise.resolve({ rows: [], truncated: false })
-    ];
-    const reportParts = (await mapPool(reportJobs, DATA_ANALYSIS_OH_CONCURRENCY, (job) =>
-      job()
-    )) as ReportParts;
-    const [
-      overview,
-      timeSlots,
-      hourly,
-      salesmen,
-      merchants,
-      merchantVerify,
-      salesmanVerify,
-      merchantRefunds,
-      salesmanRefunds,
-      details
-    ] = reportParts;
-
-    const limitations: string[] = [];
-    if (overview.salesmanCount === 0) {
-      limitations.push(
-        '业务员字段暂无数据：请跑 GMV 刷新/订单 ETL，或执行 scripts/backfill-order-salesman.ts 从导出 Excel 回填'
-      );
-    }
-    limitations.push('订单状态文案按 status/verifyTime 映射，可能与 JeSite 原状态文案略有差异');
-    limitations.push(`目标达成比固定分母 ${33000}（模板 3.3w）`);
-    if (window === 'year') {
-      limitations.push(
-        `year 窗口为锚定日往前 ${DATA_ANALYSIS_READ_MAX_DAYS} 天（交互读上限），非整年 1/1–12/31`
-      );
-    }
-    // Channel field is sparsely populated (JeSite upserts write "jeesite"); surface that.
-    limitations.push(
-      '渠道占比基于 OrderHeader.channel；JeSite 同步默认写入 jeesite，未细分微信/支付宝时会归入「其他」'
-    );
-    limitations.push(`指标明细矩阵锚定日：${end}（北京日历）`);
-
-    return {
+    return buildDataAnalysisReport(
+      this.prisma,
       window,
-      date: start,
-      endDate: end,
-      generatedAt: new Date().toISOString(),
-      templateReady: true,
-      overview,
-      timeSlots,
-      hourly,
-      salesmen,
-      merchants,
-      merchantVerifyLow: merchantVerify.low,
-      merchantVerifyHigh: merchantVerify.high,
-      salesmanVerifyLow: salesmanVerify.low,
-      salesmanVerifyHigh: salesmanVerify.high,
-      merchantRefunds,
-      salesmanRefunds,
-      details: details.rows,
-      detailTruncated: details.truncated,
-      limitations
-    };
+      date,
+      endDate,
+      detailLimit,
+      rankingLimit,
+      opts
+    );
   }
 }

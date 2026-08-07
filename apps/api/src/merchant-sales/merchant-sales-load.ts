@@ -116,6 +116,17 @@ export async function loadMerchantSalesRanking(
 }
 
 // --- merchant-sales-load-trend.ts ---
+/**
+ * Trend bucket granularity per read window. Week/month windows resolve to one
+ * calendar period (≤31d), so bucketing them by their own granularity would
+ * yield a single point; chart daily instead. Trailing-90d year charts monthly.
+ */
+const TREND_BUCKET_FOR_WINDOW: Record<Exclude<MerchantSalesWindow, 'day'>, MerchantSalesWindow> = {
+  week: 'day',
+  month: 'day',
+  year: 'month'
+};
+
 export async function loadMerchantSalesTrend(
   prisma: PrismaService,
   cache: TtlCache,
@@ -125,10 +136,14 @@ export async function loadMerchantSalesTrend(
   force = false
 ): Promise<{ items: MerchantSalesTrendPoint[]; window: MerchantSalesWindow }> {
   const { start, end } = resolveWindow(window, date, endDate);
+  const bucketWindow = TREND_BUCKET_FOR_WINDOW[window];
   return getCachedOrLoad({
     cache,
     cacheKey: merchantSalesCacheKeys.trend(window, start, end),
     force,
-    load: async () => ({ items: await queryTrendRows(prisma, window, start, end), window })
+    load: async () => ({
+      items: await queryTrendRows(prisma, window, start, end, bucketWindow),
+      window
+    })
   });
 }

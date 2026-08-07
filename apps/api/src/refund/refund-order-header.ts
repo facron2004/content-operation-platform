@@ -2,54 +2,75 @@
 import { shiftDateKey } from '@content/shared';
 import {
   beijingDayRangeSqlite,
-  rateAgainstGmv,
+  rateByCount,
   SQL_GMV_OH,
   sqlBeijingDate,
-  sqlDatetimeExclusiveRange
+  sqlDatetimeExclusiveRange,
+  toFenBigInt
 } from '../common';
 import { PrismaService } from '../prisma/prisma.service';
 import type { RefundTodayPayload, RefundTrendPoint, RefundVerifyTodayPayload } from './refund.dto';
 
-// --- refund-order-header-day-gmv.ts ---
-/** Exclusive half-open Beijing day bounds as SQLite space-form params. */
-export function dayIsoRange(date: string) {
-  const { start, end } = beijingDayRangeSqlite(date);
-  // Keep property names for call-site compatibility; values are space form.
-  return { startIso: start, endIso: end };
-}
-export async function loadOrderHeaderDayGmv(prisma: PrismaService, date: string) {
-  const { startIso, endIso } = dayIsoRange(date);
-  const dayRows = (await prisma.$queryRawUnsafe(
-    `SELECT COALESCE(SUM(${SQL_GMV_OH}), 0) AS "totalGmvFen", COUNT(CASE WHEN "paidTime" IS NOT NULL THEN 1 END) AS "paidOrderCount" FROM "OrderHeader" WHERE ${sqlDatetimeExclusiveRange('"paidTime"')}`,
-    startIso,
-    endIso
-  )) as Array<{ totalGmvFen: bigint | null; paidOrderCount: number }>;
+type Window = { start: string; end: string };
+
+function bounds(w: Window): { startBound: string; endBound: string } {
   return {
-    totalGmvFen: BigInt(Number(dayRows[0]?.totalGmvFen ?? 0)),
-    paidOrderCount: Number(dayRows[0]?.paidOrderCount ?? 0)
+    startBound: beijingDayRangeSqlite(w.start).start,
+    endBound: beijingDayRangeSqlite(w.end).end
   };
 }
 
-// --- refund-order-header-day-events.ts ---
-export async function loadOrderHeaderRefundTotals(prisma: PrismaService, date: string) {
-  const { startIso, endIso } = dayIsoRange(date);
-  const refundRows = (await prisma.$queryRawUnsafe(
-    `SELECT COALESCE(SUM("refundAmountFen"), 0) AS "totalRefundFen", COUNT(*) AS "refundCount" FROM "OrderHeader" WHERE ${sqlDatetimeExclusiveRange('"paidTime"')} AND "refundAmountFen" > 0`,
-    startIso,
-    endIso
-  )) as Array<{ totalRefundFen: bigint | null; refundCount: number }>;
-  const r = refundRows[0] ?? { totalRefundFen: 0, refundCount: 0 };
-  return { totalRefundFen: BigInt(Number(r.totalRefundFen)), refundCount: Number(r.refundCount) };
+// --- refund-order-header-range-gmv.ts ---
+/** OrderHeader Net GMV + paid order count over a Beijing day range. */
+export async function loadOrderHeaderRangeGmv(
+  prisma: PrismaService,
+  w: Window
+): Promise<{ totalGmvFen: bigint; paidOrderCount: number }> {
+  const { startBound, endBound } = bounds(w);
+  const dayRows = (await prisma.$queryRawUnsafe(
+    `SELECT COALESCE(SUM(${SQL_GMV_OH}), 0) AS "totalGmvFen", COUNT(CASE WHEN "paidTime" IS NOT NULL THEN 1 END) AS "paidOrderCount" FROM "OrderHeader" WHERE ${sqlDatetimeExclusiveRange('"paidTime"')}`,
+    startBound,
+    endBound
+  )) as Array<{ totalGmvFen: bigint | null; paidOrderCount: number }>;
+  const r = dayRows[0] ?? { totalGmvFen: 0n, paidOrderCount: 0 };
+  return {
+    totalGmvFen: toFenBigInt(r.totalGmvFen),
+    paidOrderCount: Number(r.paidOrderCount ?? 0)
+  };
 }
-export async function loadOrderHeaderVerifyTotals(prisma: PrismaService, date: string) {
-  const { startIso, endIso } = dayIsoRange(date);
+
+// --- refund-order-header-range-events.ts ---
+export async function loadOrderHeaderRangeRefundTotals(
+  prisma: PrismaService,
+  w: Window
+): Promise<{ totalRefundFen: bigint; refundCount: number }> {
+  const { startBound, endBound } = bounds(w);
+  const refundRows = (await prisma.$queryRawUnsafe(
+    `SELECT COALESCE(SUM("refundAmountFen"), 0) AS "totalRefundFen", COUNT(CASE WHEN "refundAmountFen" > 0 THEN 1 END) AS "refundCount" FROM "OrderHeader" WHERE ${sqlDatetimeExclusiveRange('"paidTime"')}`,
+    startBound,
+    endBound
+  )) as Array<{ totalRefundFen: bigint | null; refundCount: number }>;
+  const r = refundRows[0] ?? { totalRefundFen: 0n, refundCount: 0 };
+  return {
+    totalRefundFen: toFenBigInt(r.totalRefundFen),
+    refundCount: Number(r.refundCount ?? 0)
+  };
+}
+export async function loadOrderHeaderRangeVerifyTotals(
+  prisma: PrismaService,
+  w: Window
+): Promise<{ totalVerifyFen: bigint; verifyCount: number }> {
+  const { startBound, endBound } = bounds(w);
   const verifyRows = (await prisma.$queryRawUnsafe(
-    `SELECT COALESCE(SUM("verifyAmountFen"), 0) AS "totalVerifyFen", COUNT(*) AS "verifyCount" FROM "OrderHeader" WHERE ${sqlDatetimeExclusiveRange('"verifyTime"')} AND "verifyAmountFen" > 0`,
-    startIso,
-    endIso
+    `SELECT COALESCE(SUM("verifyAmountFen"), 0) AS "totalVerifyFen", COUNT(CASE WHEN "verifyTime" IS NOT NULL THEN 1 END) AS "verifyCount" FROM "OrderHeader" WHERE ${sqlDatetimeExclusiveRange('"verifyTime"')}`,
+    startBound,
+    endBound
   )) as Array<{ totalVerifyFen: bigint | null; verifyCount: number }>;
-  const r = verifyRows[0] ?? { totalVerifyFen: 0, verifyCount: 0 };
-  return { totalVerifyFen: BigInt(Number(r.totalVerifyFen)), verifyCount: Number(r.verifyCount) };
+  const r = verifyRows[0] ?? { totalVerifyFen: 0n, verifyCount: 0 };
+  return {
+    totalVerifyFen: toFenBigInt(r.totalVerifyFen),
+    verifyCount: Number(r.verifyCount ?? 0)
+  };
 }
 
 // --- refund-order-merchants-query.ts ---
@@ -57,12 +78,15 @@ export type MerchantMetricRow = {
   merchantId: string;
   merchantName: string;
   gmvFen: bigint | null;
-  refundFen?: bigint | null;
-  verifyFen?: bigint | null;
+  refundFen: bigint | null;
+  verifyFen: bigint | null;
+  refundCount: number;
+  verifyCount: number;
+  paidOrderCount: number;
 };
 export async function queryTopMerchantsByMetric(
   prisma: PrismaService,
-  date: string,
+  w: Window,
   limit: number,
   opts: {
     timeColumn: 'paidTime' | 'orderTime' | 'verifyTime';
@@ -70,19 +94,25 @@ export async function queryTopMerchantsByMetric(
     amountAlias: 'refundFen' | 'verifyFen';
   }
 ): Promise<MerchantMetricRow[]> {
-  const { start, end } = beijingDayRangeSqlite(date);
+  const { startBound, endBound } = bounds(w);
   // timeColumn is a closed enum — safe to interpolate as an identifier.
+  // FIX: metric filter moved to HAVING so gmvFen + paidOrderCount aggregate the
+  // merchant's full order book, not just the refunded/verified subset.
   return (await prisma.$queryRawUnsafe(
-    `SELECT COALESCE(NULLIF(oh."merchantName", ''), oh."merchantId") AS "merchantName", oh."merchantId", COALESCE(SUM(${SQL_GMV_OH}), 0) AS "gmvFen", COALESCE(SUM(oh."${opts.amountColumn}"), 0) AS "${opts.amountAlias}" FROM "OrderHeader" oh WHERE ${sqlDatetimeExclusiveRange(`oh."${opts.timeColumn}"`)} AND oh."${opts.amountColumn}" > 0 AND oh."merchantId" IS NOT NULL GROUP BY oh."merchantId" ORDER BY "${opts.amountAlias}" DESC LIMIT ?`,
-    start,
-    end,
+    `SELECT COALESCE(NULLIF(oh."merchantName", ''), oh."merchantId") AS "merchantName", oh."merchantId", COALESCE(SUM(${SQL_GMV_OH}), 0) AS "gmvFen", COALESCE(SUM(oh."${opts.amountColumn}"), 0) AS "${opts.amountAlias}", COUNT(CASE WHEN oh."paidTime" IS NOT NULL THEN 1 END) AS "paidOrderCount", COUNT(CASE WHEN oh."${opts.amountColumn}" > 0 THEN 1 END) AS "refundCount", COUNT(CASE WHEN oh."verifyTime" IS NOT NULL THEN 1 END) AS "verifyCount" FROM "OrderHeader" oh WHERE ${sqlDatetimeExclusiveRange(`oh."${opts.timeColumn}"`)} AND oh."merchantId" IS NOT NULL GROUP BY oh."merchantId" HAVING oh."${opts.amountColumn}" > 0 ORDER BY "${opts.amountAlias}" DESC LIMIT ?`,
+    startBound,
+    endBound,
     limit
   )) as MerchantMetricRow[];
 }
 
 // --- refund-order-merchants.ts ---
-export async function topRefundMerchants(prisma: PrismaService, date: string, limit: number) {
-  const rows = await queryTopMerchantsByMetric(prisma, date, limit, {
+export async function topRefundMerchants(
+  prisma: PrismaService,
+  w: Window,
+  limit: number
+) {
+  const rows = await queryTopMerchantsByMetric(prisma, w, limit, {
     timeColumn: 'paidTime',
     amountColumn: 'refundAmountFen',
     amountAlias: 'refundFen'
@@ -90,45 +120,52 @@ export async function topRefundMerchants(prisma: PrismaService, date: string, li
   return rows.map((r) => {
     const gmv = Number(r.gmvFen ?? 0) / 100;
     const refund = Number(r.refundFen ?? 0) / 100;
+    const paidOrderCount = Number(r.paidOrderCount ?? 0);
     return {
       merchantId: r.merchantId,
       merchantName: r.merchantName,
       gmv,
       refund,
-      refundRate: rateAgainstGmv(refund, gmv)
+      // Unified 单数口径: 退款单数 / 支付单数.
+      refundRate: rateByCount(Number(r.refundCount ?? 0), paidOrderCount)
     };
   });
 }
 
 // --- refund-order-header-today.ts ---
 type TopRefundFn = (
-  date: string,
+  w: Window,
   limit: number
 ) => Promise<RefundTodayPayload['topRefundMerchants']>;
 type TopVerifyFn = (
-  date: string,
+  w: Window,
   limit: number
 ) => Promise<RefundVerifyTodayPayload['topVerifyMerchants']>;
 export async function computeRefundFromOrderHeader(
   prisma: PrismaService,
-  date: string,
+  w: Window,
   topRefundMerchants: TopRefundFn
 ): Promise<RefundTodayPayload> {
-  const { totalGmvFen, paidOrderCount } = await loadOrderHeaderDayGmv(prisma, date),
-    { totalRefundFen, refundCount } = await loadOrderHeaderRefundTotals(prisma, date);
+  const { totalGmvFen, paidOrderCount } = await loadOrderHeaderRangeGmv(prisma, w);
+  const { totalRefundFen, refundCount } = await loadOrderHeaderRangeRefundTotals(prisma, w);
   return {
-    date,
+    date: w.end,
     totalRefund: Number(totalRefundFen) / 100,
     totalGmv: Number(totalGmvFen) / 100,
-    refundRate: rateAgainstGmv(Number(totalRefundFen) / 100, Number(totalGmvFen) / 100),
+    // Unified 单数口径: 退款单数 / 支付单数.
+    refundRate: rateByCount(refundCount, paidOrderCount),
     refundCount,
     paidOrderCount,
-    topRefundMerchants: await topRefundMerchants(date, 5),
+    topRefundMerchants: await topRefundMerchants(w, 5),
     updatedAt: new Date().toISOString()
   };
 }
-export async function topVerifyMerchants(prisma: PrismaService, date: string, limit: number) {
-  const rows = await queryTopMerchantsByMetric(prisma, date, limit, {
+export async function topVerifyMerchants(
+  prisma: PrismaService,
+  w: Window,
+  limit: number
+) {
+  const rows = await queryTopMerchantsByMetric(prisma, w, limit, {
     timeColumn: 'verifyTime',
     amountColumn: 'verifyAmountFen',
     amountAlias: 'verifyFen'
@@ -136,30 +173,33 @@ export async function topVerifyMerchants(prisma: PrismaService, date: string, li
   return rows.map((r) => {
     const gmv = Number(r.gmvFen ?? 0) / 100;
     const verify = Number(r.verifyFen ?? 0) / 100;
+    const paidOrderCount = Number(r.paidOrderCount ?? 0);
     return {
       merchantId: r.merchantId,
       merchantName: r.merchantName,
       gmv,
       verify,
-      verifyRate: rateAgainstGmv(verify, gmv)
+      // Unified 单数口径: 核销单数 / 支付单数.
+      verifyRate: rateByCount(Number(r.verifyCount ?? 0), paidOrderCount)
     };
   });
 }
 export async function computeVerifyFromOrderHeader(
   prisma: PrismaService,
-  date: string,
+  w: Window,
   topVerifyMerchants: TopVerifyFn
 ): Promise<RefundVerifyTodayPayload> {
-  const { totalGmvFen, paidOrderCount } = await loadOrderHeaderDayGmv(prisma, date),
-    { totalVerifyFen, verifyCount } = await loadOrderHeaderVerifyTotals(prisma, date);
+  const { totalGmvFen, paidOrderCount } = await loadOrderHeaderRangeGmv(prisma, w);
+  const { totalVerifyFen, verifyCount } = await loadOrderHeaderRangeVerifyTotals(prisma, w);
   return {
-    date,
+    date: w.end,
     totalVerify: Number(totalVerifyFen) / 100,
     totalGmv: Number(totalGmvFen) / 100,
-    verifyRate: rateAgainstGmv(Number(totalVerifyFen) / 100, Number(totalGmvFen) / 100),
+    // Unified 单数口径: 核销单数 / 支付单数.
+    verifyRate: rateByCount(verifyCount, paidOrderCount),
     verifyCount,
     paidOrderCount,
-    topVerifyMerchants: await topVerifyMerchants(date, 5),
+    topVerifyMerchants: await topVerifyMerchants(w, 5),
     updatedAt: new Date().toISOString()
   };
 }
@@ -168,6 +208,7 @@ export async function computeVerifyFromOrderHeader(
 type TrendRow = {
   date: string;
   totalRefundFen: bigint | null;
+  totalGmvFen: bigint | null;
   refundCount: number;
   paidOrderCount: number;
 };
@@ -177,7 +218,7 @@ export async function queryRefundTrendRows(
   endBound: string
 ) {
   return (await prisma.$queryRawUnsafe(
-    `SELECT ${sqlBeijingDate('"paidTime"')} AS "date", COALESCE(SUM("refundAmountFen"), 0) AS "totalRefundFen", COUNT(*) AS "refundCount", COUNT(CASE WHEN "paidTime" IS NOT NULL THEN 1 END) AS "paidOrderCount" FROM "OrderHeader" WHERE ${sqlDatetimeExclusiveRange('"paidTime"')} AND "refundAmountFen" > 0 GROUP BY ${sqlBeijingDate('"paidTime"')} ORDER BY "date" ASC`,
+    `SELECT ${sqlBeijingDate('"paidTime"')} AS "date", COALESCE(SUM(CASE WHEN "refundAmountFen" > 0 THEN "refundAmountFen" ELSE 0 END), 0) AS "totalRefundFen", COALESCE(SUM(${SQL_GMV_OH}), 0) AS "totalGmvFen", COUNT(CASE WHEN "refundAmountFen" > 0 THEN 1 END) AS "refundCount", COUNT(CASE WHEN "paidTime" IS NOT NULL THEN 1 END) AS "paidOrderCount" FROM "OrderHeader" WHERE ${sqlDatetimeExclusiveRange('"paidTime"')} GROUP BY ${sqlBeijingDate('"paidTime"')} ORDER BY "date" ASC`,
     startBound,
     endBound
   )) as TrendRow[];
@@ -192,12 +233,14 @@ export function fillRefundTrendDays(
   for (let i = 0; i < days; i++) {
     const d = shiftDateKey(startDate, i),
       r = byDate.get(d);
+    const paidOrderCount = Number(r?.paidOrderCount ?? 0);
     result.push({
       date: d,
       totalRefund: Number(r?.totalRefundFen ?? 0) / 100,
-      refundRate: 0,
+      // Unified 单数口径: 退款单数 / 支付单数.
+      refundRate: rateByCount(Number(r?.refundCount ?? 0), paidOrderCount),
       refundCount: Number(r?.refundCount ?? 0),
-      paidOrderCount: Number(r?.paidOrderCount ?? 0)
+      paidOrderCount
     });
   }
   return result;

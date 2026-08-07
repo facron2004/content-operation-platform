@@ -1,5 +1,6 @@
 ﻿/** Consolidated refund module. */
 import { shiftDateKey } from '@content/shared';
+import { rateByCount } from '../common';
 import { PrismaService } from '../prisma/prisma.service';
 import { topRefundMerchants, topVerifyMerchants } from './refund-order-header';
 import type {
@@ -8,6 +9,10 @@ import type {
   RefundVerifyTodayPayload,
   VerifyTrendPoint
 } from './refund.dto';
+
+function netGmvFen(totalGmvFen: bigint | null, totalRefundFen: bigint | null): bigint {
+  return (totalGmvFen ?? 0n) - (totalRefundFen ?? 0n);
+}
 
 // --- refund-trend-points.ts ---
 type RefundTrendRow = {
@@ -28,12 +33,14 @@ export function buildRefundTrendPoints(
   for (let i = 0; i < days; i++) {
     const d = shiftDateKey(start, i),
       r = map.get(d);
+    const paidOrderCount = Number(r?.paidOrderCount ?? 0);
     result.push({
       date: d,
       totalRefund: Number(r?.totalRefundFen ?? 0) / 100,
-      refundRate: Number(r?.refundRate ?? 0),
+      // Unified 单数口径: 退款单数 / 支付单数.
+      refundRate: rateByCount(Number(r?.refundCount ?? 0), paidOrderCount),
       refundCount: Number(r?.refundCount ?? 0),
-      paidOrderCount: Number(r?.paidOrderCount ?? 0)
+      paidOrderCount
     });
   }
   return result;
@@ -44,6 +51,7 @@ type VerifyTrendRow = {
   date: string;
   totalVerifyFen: bigint | null;
   totalGmvFen: bigint | null;
+  totalRefundFen: bigint | null;
   verifyRate: number;
   verifyCount: number;
   paidOrderCount: number;
@@ -58,12 +66,14 @@ export function buildVerifyTrendPoints(
   for (let i = 0; i < days; i++) {
     const d = shiftDateKey(start, i),
       r = map.get(d);
+    const paidOrderCount = Number(r?.paidOrderCount ?? 0);
     result.push({
       date: d,
       totalVerify: Number(r?.totalVerifyFen ?? 0) / 100,
-      verifyRate: Number(r?.verifyRate ?? 0),
+      // Unified 单数口径: 核销单数 / 支付单数.
+      verifyRate: rateByCount(Number(r?.verifyCount ?? 0), paidOrderCount),
       verifyCount: Number(r?.verifyCount ?? 0),
-      paidOrderCount: Number(r?.paidOrderCount ?? 0)
+      paidOrderCount
     });
   }
   return result;
@@ -90,11 +100,12 @@ export async function refundTodayFromDailyMetrics(
   return {
     date: dm.date,
     totalRefund: Number(dm.totalRefundFen ?? 0) / 100,
-    totalGmv: Number(dm.totalGmvFen ?? 0) / 100,
-    refundRate: Number(dm.refundRate),
+    totalGmv: Number(netGmvFen(dm.totalGmvFen, dm.totalRefundFen)) / 100,
+    // Unified 单数口径: 退款单数 / 支付单数 (recomputed from counts for consistency).
+    refundRate: rateByCount(Number(dm.refundCount ?? 0), Number(dm.paidOrderCount ?? 0)),
     refundCount: dm.refundCount,
     paidOrderCount: dm.paidOrderCount,
-    topRefundMerchants: await topRefundMerchants(prisma, target, 5),
+    topRefundMerchants: await topRefundMerchants(prisma, { start: target, end: target }, 5),
     updatedAt: dm.updatedAt.toISOString()
   };
 }
@@ -130,6 +141,7 @@ export async function verifyTodayFromDailyMetrics(
       date: true,
       totalVerifyFen: true,
       totalGmvFen: true,
+      totalRefundFen: true,
       verifyRate: true,
       verifyCount: true,
       paidOrderCount: true,
@@ -140,11 +152,12 @@ export async function verifyTodayFromDailyMetrics(
   return {
     date: dm.date,
     totalVerify: Number(dm.totalVerifyFen ?? 0) / 100,
-    totalGmv: Number(dm.totalGmvFen ?? 0) / 100,
-    verifyRate: Number(dm.verifyRate),
+    totalGmv: Number(netGmvFen(dm.totalGmvFen, dm.totalRefundFen)) / 100,
+    // Unified 单数口径: 核销单数 / 支付单数 (recomputed from counts for consistency).
+    verifyRate: rateByCount(Number(dm.verifyCount ?? 0), Number(dm.paidOrderCount ?? 0)),
     verifyCount: dm.verifyCount,
     paidOrderCount: dm.paidOrderCount,
-    topVerifyMerchants: await topVerifyMerchants(prisma, target, 5),
+    topVerifyMerchants: await topVerifyMerchants(prisma, { start: target, end: target }, 5),
     updatedAt: dm.updatedAt.toISOString()
   };
 }
@@ -161,6 +174,7 @@ export async function verifyTrendFromDailyMetrics(
       date: true,
       totalVerifyFen: true,
       totalGmvFen: true,
+      totalRefundFen: true,
       verifyRate: true,
       verifyCount: true,
       paidOrderCount: true

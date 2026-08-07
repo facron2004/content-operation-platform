@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { beijingDateKey, shiftDateKey } from '@content/shared';
 import { TtlCache } from '../src/common/ttl-cache';
 import { resolveWithCacheFallback } from '../src/refund/refund-load';
 import {
@@ -6,6 +7,7 @@ import {
   csvCell,
   resolveWindow,
   sortColumn,
+  startOfWeekKey,
   whereArgsForWindow,
   whereClauseForWindow
 } from '../src/merchant-sales/merchant-sales-window';
@@ -130,14 +132,14 @@ describe('merchant-sales window and mappers', () => {
     expect(sortColumn('orderCountDesc')).toBe('"orderCount"');
 
     expect(whereClauseForWindow('day')).toContain('"date" >= ?');
-    // year uses the same inclusive date bounds (trailing 90d), not substr year-key.
+    // year uses the same inclusive date bounds (calendar year), not substr year-key.
     expect(whereClauseForWindow('year')).toContain('"date" >= ?');
     expect(whereArgsForWindow('day', '2026-07-01', '2026-07-10')).toEqual([
       '2026-07-01',
       '2026-07-10'
     ]);
-    expect(whereArgsForWindow('year', '2026-04-20', '2026-07-18')).toEqual([
-      '2026-04-20',
+    expect(whereArgsForWindow('year', '2026-01-01', '2026-07-18')).toEqual([
+      '2026-01-01',
       '2026-07-18'
     ]);
     expect(bucketExprFor('week')).toContain('%Y-W%W');
@@ -153,10 +155,20 @@ describe('merchant-sales window and mappers', () => {
     });
   });
 
-  it('resolves year to trailing 90d (not full calendar year)', () => {
-    expect(resolveWindow('year', '2026-07-18')).toEqual({
-      start: '2026-04-20',
-      end: '2026-07-18'
+  it('resolves a past year anchor to the full calendar year', () => {
+    expect(resolveWindow('year', '2024-06-15')).toEqual({
+      start: '2024-01-01',
+      end: '2024-12-31'
+    });
+  });
+
+  it('resolves a current-year anchor to Jan 1 clamped at today', () => {
+    const today = beijingDateKey(new Date());
+    const year = today.slice(0, 4);
+    const yearEnd = `${year}-12-31`;
+    expect(resolveWindow('year', `${year}-06-15`)).toEqual({
+      start: `${year}-01-01`,
+      end: today < yearEnd ? today : yearEnd
     });
   });
 
@@ -166,6 +178,56 @@ describe('merchant-sales window and mappers', () => {
       start: '2026-07-01',
       end: '2026-07-07'
     });
+  });
+
+  it('resolves week to the calendar week containing the anchor', () => {
+    // 2026-07-15 is a Wednesday → Mon 2026-07-13 … Sun 2026-07-19 (past: full week).
+    expect(resolveWindow('week', '2026-07-15')).toEqual({
+      start: '2026-07-13',
+      end: '2026-07-19'
+    });
+    // Sunday stays in its own (Mon–Sun) week.
+    expect(resolveWindow('week', '2026-07-19')).toEqual({
+      start: '2026-07-13',
+      end: '2026-07-19'
+    });
+  });
+
+  it('resolves month to the calendar month containing the anchor', () => {
+    expect(resolveWindow('month', '2026-07-15')).toEqual({
+      start: '2026-07-01',
+      end: '2026-07-31'
+    });
+    expect(resolveWindow('month', '2026-06-30')).toEqual({
+      start: '2026-06-01',
+      end: '2026-06-30'
+    });
+  });
+
+  it('clamps the current week/month at today (no future days)', () => {
+    const today = beijingDateKey(new Date());
+    expect(resolveWindow('week')).toEqual({ start: startOfWeekKey(today), end: today });
+    expect(resolveWindow('month')).toEqual({ start: `${today.slice(0, 7)}-01`, end: today });
+    expect(resolveWindow('week', today)).toEqual({ start: startOfWeekKey(today), end: today });
+  });
+
+  it('collapses future week/month anchors to a valid empty range', () => {
+    const today = beijingDateKey(new Date());
+    const future = shiftDateKey(today, 14);
+    const monday = startOfWeekKey(future);
+    expect(resolveWindow('week', future)).toEqual({ start: monday, end: monday });
+    // Mid-next-month anchor (today+14d may still sit in the current month).
+    const now = new Date();
+    const futureMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 10))
+      .toISOString()
+      .slice(0, 10);
+    const monthStart = `${futureMonth.slice(0, 7)}-01`;
+    expect(resolveWindow('month', futureMonth)).toEqual({ start: monthStart, end: monthStart });
+  });
+
+  it('rejects malformed anchors for calendar windows', () => {
+    expect(() => resolveWindow('week', '2026-07-15T00:00:00.000Z')).toThrow();
+    expect(() => resolveWindow('month', 'not-a-date')).toThrow();
   });
 
   it('escapes csv cells and maps summary/ranking', () => {
@@ -183,7 +245,9 @@ describe('merchant-sales window and mappers', () => {
         totalGmv: 100,
         totalRefund: 10,
         totalVerify: 20,
-        paidOrderCount: 5,
+        refundCount: 1,
+        verifyCount: 2,
+        paidOrderCount: 10,
         merchantCount: 2,
         packageCount: 3
       },
@@ -205,7 +269,9 @@ describe('merchant-sales window and mappers', () => {
       gmv: 200,
       gmvRefund: 20,
       gmvVerify: 40,
-      paidOrderCount: 4,
+      refundCount: 1,
+      verifyCount: 2,
+      paidOrderCount: 10,
       orderCount: 5,
       packageCount: 6
     });
@@ -220,6 +286,8 @@ describe('merchant-sales window and mappers', () => {
           gmv: 1,
           gmvRefund: 0,
           gmvVerify: 0,
+          refundCount: 0,
+          verifyCount: 0,
           paidOrderCount: 1,
           orderCount: 1,
           packageCount: 1
@@ -249,6 +317,7 @@ describe('gmv metrics and resolve priority', () => {
         refundCount: 0,
         totalVerifyFen: 4_000n,
         verifyRate: 0.2,
+        verifyCount: 0,
         paidOrderCount: 4,
         paidAmountBonusFen: 0n,
         paidAmountWalletFen: 5_000n,
@@ -270,6 +339,7 @@ describe('gmv metrics and resolve priority', () => {
           refundCount: 0,
           totalVerifyFen: 1_000n,
           verifyRate: 0.1,
+          verifyCount: 0,
           paidOrderCount: 2,
           paidAmountBonusFen: 0n,
           paidAmountWalletFen: 2_000n,
@@ -296,6 +366,8 @@ describe('gmv metrics and resolve priority', () => {
           totalRefundFen: 100n,
           refundRate: 0.1,
           verifyRate: 0.2,
+          refundCount: 0,
+          verifyCount: 0,
           paidOrderCount: 1
         }
       ],

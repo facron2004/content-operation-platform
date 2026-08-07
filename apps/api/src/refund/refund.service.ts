@@ -6,10 +6,11 @@ import { PrismaService } from '../prisma/prisma.service';
 import { createRefundServiceSurface } from './refund-load';
 import {
   type RefundTodayPayload,
+  type RefundTodayQueryDto,
   type RefundTopMerchantsQueryDto,
   type RefundTrendPoint,
+  type RefundTrendQueryDto,
   type RefundVerifyTodayPayload,
-  type TopMerchantRow,
   type VerifyTrendPoint
 } from './refund.dto';
 export type {
@@ -31,21 +32,21 @@ export class RefundService {
   constructor(@Inject(PrismaService) prisma: PrismaService) {
     this.surface = createRefundServiceSurface(prisma, this.cache);
   }
-  getRefundToday(date?: string): Promise<RefundTodayPayload> {
-    return this.surface.getRefundToday(date);
+  getRefundToday(q: RefundTodayQueryDto): Promise<RefundTodayPayload> {
+    return this.surface.getRefundToday(q);
   }
-  getRefundTrend(days: 7 | 30, endDate?: string): Promise<RefundTrendPoint[]> {
-    return this.surface.getRefundTrend(days, endDate);
+  getRefundTrend(q: RefundTrendQueryDto): Promise<RefundTrendPoint[]> {
+    return this.surface.getRefundTrend(q);
   }
-  getVerifyToday(date?: string): Promise<RefundVerifyTodayPayload> {
-    return this.surface.getVerifyToday(date);
+  getVerifyToday(q: RefundTodayQueryDto): Promise<RefundVerifyTodayPayload> {
+    return this.surface.getVerifyToday(q);
   }
-  getVerifyTrend(days: 7 | 30, endDate?: string): Promise<VerifyTrendPoint[]> {
-    return this.surface.getVerifyTrend(days, endDate);
+  getVerifyTrend(q: RefundTrendQueryDto): Promise<VerifyTrendPoint[]> {
+    return this.surface.getVerifyTrend(q);
   }
   getTopMerchants(
     q: RefundTopMerchantsQueryDto
-  ): Promise<{ items: TopMerchantRow[]; hasMore: boolean }> {
+  ): Promise<{ items: import('./refund.dto').TopMerchantRow[]; hasMore: boolean }> {
     return this.surface.getTopMerchants(q);
   }
   invalidateCache(prefix?: string) {

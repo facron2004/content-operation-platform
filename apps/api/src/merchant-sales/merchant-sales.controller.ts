@@ -25,8 +25,11 @@ import { assertUnrestrictedAnalytics } from '../user-access/scope-guards';
 import { MerchantSalesQueryDto, MerchantSalesRefreshDto } from './merchant-sales.dto';
 import { MERCHANT_SALES_SERVICE, MerchantSalesService } from './merchant-sales.service';
 
-/** Max inclusive day span for interactive merchant-sales recompute. */
-export const MERCHANT_SALES_REFRESH_MAX_DAYS = 90;
+/**
+ * Max inclusive day span for interactive merchant-sales recompute.
+ * A full calendar year (year window recompute) is the ceiling — ≤366 days.
+ */
+export const MERCHANT_SALES_REFRESH_MAX_DAYS = 366;
 
 // --- merchant-sales-controller-ops.ts ---
 export function getMerchantSalesSummary(
@@ -96,6 +99,7 @@ export function refreshMerchantSales(
 export class MerchantSalesController {
   constructor(@Inject(MERCHANT_SALES_SERVICE) private readonly service: MerchantSalesService) {}
   @Get('summary')
+  @RequirePermissions('analytics:read')
   @Throttle({ long: { limit: 20, ttl: 60000 } })
   @ApiOperation({ summary: '商家销售数据 — 汇总 KPI(日/周/月/年)' })
   summary(
@@ -106,6 +110,7 @@ export class MerchantSalesController {
     return getMerchantSalesSummary(this.service, q, req);
   }
   @Get('ranking')
+  @RequirePermissions('analytics:read')
   @Throttle({ long: { limit: 20, ttl: 60000 } })
   @ApiOperation({ summary: '商家销售数据 — 商家排行(分页)' })
   ranking(
@@ -116,6 +121,7 @@ export class MerchantSalesController {
     return getMerchantSalesRanking(this.service, q, req);
   }
   @Get('trend')
+  @RequirePermissions('analytics:read')
   @Throttle({ long: { limit: 20, ttl: 60000 } })
   @ApiOperation({ summary: '商家销售数据 — 时序(周/月/年)' })
   trend(
@@ -126,6 +132,7 @@ export class MerchantSalesController {
     return getMerchantSalesTrend(this.service, q, req);
   }
   @Get('export')
+  @RequirePermissions('analytics:export')
   @Throttle({ long: { limit: 3, ttl: 60000 } })
   @ApiOperation({ summary: '商家销售数据 — CSV 导出' })
   async export(
