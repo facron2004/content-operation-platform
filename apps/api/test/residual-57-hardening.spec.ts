@@ -4,7 +4,7 @@ describe('residual #57 response body leftovers', () => {
   it('gmv-refresh + auto-login use readResponseText (no bare response.text)', async () => {
     const fs = await import('fs/promises');
     const path = await import('path');
-    const files = ['gmv/gmv-refresh.ts', 'content/auto-login-client.ts'];
+    const files = ['gmv/gmv-refresh-page.ts', 'content/auto-login-client.ts'];
     for (const rel of files) {
       const src = await fs.readFile(path.join(__dirname, '..', 'src', rel), 'utf8');
       expect(src, rel).toContain('readResponseText');
@@ -30,7 +30,7 @@ describe('residual #57 list payload shrink', () => {
     const fs = await import('fs/promises');
     const path = await import('path');
     const src = await fs.readFile(
-      path.join(__dirname, '..', 'src', 'content', 'copy.service.ts'),
+      path.join(__dirname, '..', 'src', 'content', 'copy-query.service.ts'),
       'utf8'
     );
     expect(src).toContain('COPY_LIST_SELECT');
@@ -53,7 +53,7 @@ describe('residual #57 list payload shrink', () => {
     const fs = await import('fs/promises');
     const path = await import('path');
     const src = await fs.readFile(
-      path.join(__dirname, '..', 'src', 'content', 'dashboard.service.ts'),
+      path.join(__dirname, '..', 'src', 'content', 'dashboard-performance-read.ts'),
       'utf8'
     );
     expect(src).toContain('PERF_LIST_SELECT');
@@ -71,7 +71,7 @@ describe('residual #57 list payload shrink', () => {
       'utf8'
     );
     const ops = await fs.readFile(
-      path.join(__dirname, '..', 'src', 'content', 'rule-config-ops.ts'),
+      path.join(__dirname, '..', 'src', 'content', 'rule-config-read.ts'),
       'utf8'
     );
     expect(support).toContain('RULE_CONFIG_LIST_SELECT');

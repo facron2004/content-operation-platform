@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { DistributionExecutionRetentionJob } from '../src/jobs/distribution-execution-retention.job';
+import { createJobRunnerMock } from './helpers/job-runner';
 import {
   DISTRIBUTION_EXECUTION_PURGE_BATCH,
   DISTRIBUTION_EXECUTION_PURGE_MAX_BATCHES,
@@ -14,7 +15,7 @@ describe('DistributionExecutionRetentionJob', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    job = new DistributionExecutionRetentionJob(prisma as never);
+    job = new DistributionExecutionRetentionJob(prisma as never, createJobRunnerMock() as never);
   });
 
   it('exports retention longer than interactive timeline window', () => {

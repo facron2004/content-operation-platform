@@ -101,7 +101,7 @@ import {
   ref,
   computed,
   onMounted,
-  onUnmounted,
+  onScopeDispose,
   onActivated,
   onDeactivated,
   watch,
@@ -130,7 +130,8 @@ const {
   limit,
   intensityMode,
   load,
-  toggleMode
+  toggleMode,
+  isActive
 } = useMerchantHeatmap();
 
 const limitLabel = computed(() =>
@@ -143,6 +144,26 @@ const tooltipStyle = ref({ top: '0px', left: '0px' });
 
 let map: L.Map | null = null;
 let markers: L.CircleMarker[] = [];
+let viewActive = true;
+let mapReadyTimer: ReturnType<typeof setTimeout> | null = null;
+
+function clearMapReadyTimer() {
+  if (mapReadyTimer === null) return;
+  clearTimeout(mapReadyTimer);
+  mapReadyTimer = null;
+}
+
+function disposeMap() {
+  viewActive = false;
+  clearMapReadyTimer();
+  hoveredArea.value = null;
+  if (map) {
+    map.remove();
+    map = null;
+  }
+  markers = [];
+  heatCircles = [];
+}
 
 function initMap() {
   if (!mapContainer.value) return;
@@ -165,8 +186,10 @@ function initMap() {
     map.fitBounds(bounds, { padding: [50, 50] });
   }
 
-  setTimeout(() => {
-    if (!map) return;
+  clearMapReadyTimer();
+  mapReadyTimer = setTimeout(() => {
+    mapReadyTimer = null;
+    if (!map || !viewActive || !isActive()) return;
     map.invalidateSize();
     renderHeatCircles();
     renderInteractionMarkers();
@@ -276,8 +299,11 @@ watch(intensityMode, () => {
 });
 
 async function ensureMapReady() {
+  if (!viewActive || !isActive()) return;
   if (!data.value) await load();
+  if (!viewActive || !isActive()) return;
   await nextTick();
+  if (!viewActive || !isActive()) return;
   if (!map) {
     initMap();
   } else {
@@ -293,19 +319,17 @@ onMounted(() => {
 });
 
 onActivated(() => {
+  viewActive = true;
   void ensureMapReady();
 });
 
 onDeactivated(() => {
+  viewActive = false;
+  clearMapReadyTimer();
   hoveredArea.value = null;
 });
 
-onUnmounted(() => {
-  if (map) {
-    map.remove();
-    map = null;
-  }
-});
+onScopeDispose(disposeMap);
 </script>
 
 <style scoped>

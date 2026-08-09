@@ -42,6 +42,7 @@ export class MerchantController {
   // Tighter long limit — heavy gate already bounds process concurrency.
   @Throttle({ long: { limit: 10, ttl: 60000 } })
   @Get()
+  @RequirePermissions('merchant:read')
   @ApiOperation({ summary: '商家列表' })
   list(
     @Query(createDtoPipe(MerchantsListQueryDto)) query: MerchantsListQueryDto,
@@ -69,6 +70,7 @@ export class MerchantController {
   // Multi-query catalog scan (packages + coords + GMV) — throttle concurrent fans.
   @Throttle({ long: { limit: 10, ttl: 60000 } })
   @Get('heatmap')
+  @RequirePermissions('merchant:read')
   @ApiOperation({ summary: '商家热力图数据（按区域聚合 + 坐标 + GMV）' })
   heatmap(@Req() req: Request) {
     const actor = req.user as AuthUser | undefined;
@@ -98,6 +100,7 @@ export class MerchantController {
   }
 
   @Get(':merchantId/profile')
+  @RequirePermissions('merchant:read')
   @Throttle({ long: { limit: 30, ttl: 60000 } })
   @ApiOperation({ summary: '商家画像' })
   async profile(@Param('merchantId') merchantId: string, @Req() req: Request) {
@@ -107,6 +110,7 @@ export class MerchantController {
   }
 
   @Get(':merchantId/trend')
+  @RequirePermissions('merchant:read')
   @Throttle({ long: { limit: 30, ttl: 60000 } })
   @ApiOperation({ summary: '商家 30/60/90 日 GMV/退款/核销趋势' })
   async trend(
@@ -120,6 +124,7 @@ export class MerchantController {
   }
 
   @Get(':merchantId/skus')
+  @RequirePermissions('merchant:read')
   @Throttle({ long: { limit: 30, ttl: 60000 } })
   @ApiOperation({ summary: '商家 SKU 列表（含 stale flag）' })
   async skus(
@@ -133,6 +138,7 @@ export class MerchantController {
   }
 
   @Get(':merchantId/competitors')
+  @RequirePermissions('merchant:read')
   @Throttle({ long: { limit: 30, ttl: 60000 } })
   @ApiOperation({ summary: '同区域/品类竞品' })
   async competitors(@Param('merchantId') merchantId: string, @Req() req: Request) {

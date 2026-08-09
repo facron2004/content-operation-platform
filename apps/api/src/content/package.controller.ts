@@ -5,7 +5,6 @@ import {
   ForbiddenException,
   Get,
   Inject,
-  NotFoundException,
   Param,
   Post,
   Query,
@@ -13,19 +12,11 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
-import { ConfigService } from '@nestjs/config';
 import type { Request } from 'express';
 import type { RecommendPackageItem, UserRole } from '@content/shared';
 import { beijingDateKey, paginate, USER_ROLES } from '@content/shared';
 import { ContentService } from './content.service';
-import { PackageDetailService } from './package-detail';
-import { AutoLoginService } from './auto-login.service';
-import {
-  AICopyConfigDto,
-  BattleCardGenerateDto,
-  UpdateCookieDto,
-  RecommendationsQueryDto
-} from './content.dto';
+import { BattleCardGenerateDto, RecommendationsQueryDto } from './content.dto';
 import { Public } from '../auth';
 import { Roles } from '../user-access/role.decorator';
 import { RequireLogin } from '../user-access/iam/route-auth.decorator';
@@ -36,7 +27,6 @@ import { nowISO } from '../common/format';
 import { safePathId } from '../common/path-id';
 import { RECOMMEND_CACHE_CAP } from '../common/sql-chunk';
 import { PrismaService } from '../prisma/prisma.service';
-import { geocodeMerchantsFromPartnerShop } from '../merchant/merchant-geocoder';
 
 type AuthUser = {
   userId: string;
@@ -54,13 +44,11 @@ const toMB = (bytes: number): number => Math.round((bytes / (1024 * 1024)) * 100
 export class PackageController {
   constructor(
     @Inject(ContentService) private readonly contentService: ContentService,
-    @Inject(PackageDetailService) private readonly packageDetailService: PackageDetailService,
-    @Inject(AutoLoginService) private readonly autoLoginService: AutoLoginService,
-    @Inject(PrismaService) private readonly prisma: PrismaService,
-    @Inject(ConfigService) private readonly configService: ConfigService
+    @Inject(PrismaService) private readonly prisma: PrismaService
   ) {}
 
   @Get('packages/recommend')
+  @RequirePermissions('packages:read')
   @Throttle({ long: { limit: 30, ttl: 60000 } })
   @ApiOperation({ summary: '套餐推荐列表' })
   getRecommendations(
@@ -143,6 +131,7 @@ export class PackageController {
   }
 
   @Get('packages/categories')
+  @RequirePermissions('packages:read')
   @Throttle({ long: { limit: 30, ttl: 60000 } })
   async getCategories(
     @Query('areaId') areaId: string | undefined,
@@ -165,6 +154,7 @@ export class PackageController {
   }
 
   @Get('packages/:packageId/analysis')
+  @RequirePermissions('packages:read')
   @Throttle({ long: { limit: 30, ttl: 60000 } })
   async getPackageAnalysis(@Param('packageId') packageId: string, @Req() req: Request) {
     const id = this.safePackageId(packageId);
@@ -173,6 +163,7 @@ export class PackageController {
   }
 
   @Get('packages/:packageId/score')
+  @RequirePermissions('packages:read')
   @Throttle({ long: { limit: 30, ttl: 60000 } })
   async getPackageScore(@Param('packageId') packageId: string, @Req() req: Request) {
     const id = this.safePackageId(packageId);
@@ -187,6 +178,7 @@ export class PackageController {
   }
 
   @Get('packages/:packageId/tags')
+  @RequirePermissions('packages:read')
   @Throttle({ long: { limit: 30, ttl: 60000 } })
   async getPackageTags(@Param('packageId') packageId: string, @Req() req: Request) {
     const id = this.safePackageId(packageId);
@@ -195,169 +187,15 @@ export class PackageController {
     return { packageId: id, items: analysis.operationTags ?? [] };
   }
 
-  @Get('packages/:packageId/detail')
-  @Throttle({ long: { limit: 30, ttl: 60000 } })
-  async getPackageDetail(@Param('packageId') packageId: string, @Req() req: Request) {
-    const id = this.safePackageId(packageId);
-    await assertPackageInScope(this.prisma, id, req);
-    // Authenticated reads always hit cache. Force external fetch only via
-    // POST packages/:id/detail/refresh (RBAC-gated) — forceRefresh/saveRawHtml on
-    // GET would let any logged-in user thrash Jeesite and dump raw HTML.
-    const detail = await this.packageDetailService.fetchPackageDetail(id, {
-      forceRefresh: false,
-      saveRawHtml: false
-    });
-    if (!detail) return { success: false, message: 'Failed to fetch package detail' };
-    return { success: true, data: detail };
-  }
-
-  @Roles('admin', 'platform_operator')
-  @RequirePermissions('packages:refresh')
-  @Throttle({ long: { limit: 5, ttl: 60000 } })
-  @Post('packages/:packageId/detail/refresh')
-  async refreshPackageDetail(@Param('packageId') packageId: string, @Req() req: Request) {
-    const id = this.safePackageId(packageId);
-    await assertPackageInScope(this.prisma, id, req);
-    const detail = await this.packageDetailService.fetchPackageDetail(id, {
-      forceRefresh: true
-    });
-    if (!detail) return { success: false, message: 'Failed to refresh package detail' };
-    return { success: true, data: detail, message: 'Package detail refreshed successfully' };
-  }
-
-  @Roles('admin', 'platform_operator')
-  @RequirePermissions('packages:read')
-  @Throttle({ long: { limit: 30, ttl: 60000 } })
-  @Get('packages/cache/stats')
-  getPackageCacheStats() {
-    return this.packageDetailService.getDetailedStats();
-  }
-
-  @Roles('admin', 'platform_operator')
-  @RequirePermissions('packages:refresh')
-  @Throttle({ long: { limit: 10, ttl: 60000 } })
-  @Post('packages/cache/clear')
-  clearPackageCache(@Query('packageId') packageId?: string) {
-    // Cap free-form packageId so a multi-KB query string cannot poison logs/messages.
-    const capped = safePathId(packageId);
-    const safeId = capped || undefined;
-    this.packageDetailService.clearCache(safeId);
-    return {
-      success: true,
-      message: safeId ? `Cache cleared for package ${safeId}` : 'All package cache cleared'
-    };
-  }
-
-  @Roles('admin', 'platform_operator')
-  @RequirePermissions('packages:read')
-  @Throttle({ long: { limit: 30, ttl: 60000 } })
-  @Get('cookie/status')
-  @ApiOperation({ summary: '获取 JeeSite Cookie 状态' })
-  getCookieStatus() {
-    // Status validates against EXTERNAL_API but AutoLoginService caches
-    // the validation result so SPA 30s polling does not thrash JeeSite.
-    return this.autoLoginService.getCookieStatus();
-  }
-
-  @Roles('admin')
-  @RequirePermissions('packages:write')
-  @Throttle({ long: { limit: 5, ttl: 60000 } })
-  @Post('cookie/update')
-  @ApiOperation({ summary: '更新 JeeSite Cookie' })
-  updateCookie(@Body(createDtoPipe(UpdateCookieDto)) body: UpdateCookieDto) {
-    return this.autoLoginService.updateManualCookie(body.cookie);
-  }
-
-  /** AI provider config (masked key + baseURL) — not for every authenticated role. */
-  @Roles('admin', 'platform_operator')
-  @RequirePermissions('packages:read')
-  @Throttle({ long: { limit: 30, ttl: 60000 } })
-  @Get('ai-copy/status')
-  getAICopyStatus() {
-    return this.contentService.getAICopyStatus();
-  }
-
-  @Roles('admin')
-  @RequirePermissions('packages:write')
-  @Throttle({ long: { limit: 5, ttl: 60000 } })
-  @Post('ai-copy/config')
-  updateAICopyConfig(@Body(createDtoPipe(AICopyConfigDto)) body: AICopyConfigDto) {
-    return this.contentService.updateAICopyConfig(body);
-  }
-
-  @Roles('admin', 'platform_operator')
-  @RequirePermissions('packages:refresh')
-  @Throttle({ long: { limit: 2, ttl: 60000 } })
-  @Post('inventory/daily-crawl')
-  crawlDailyInventory(@Query('date') date?: string) {
-    // Only accept ISO dates — free-form strings must not reach crawler SQL.
-    const safeDate =
-      typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : undefined;
-    return this.contentService.crawlDailyInventory(safeDate);
-  }
-
-  @Roles('admin')
-  @RequirePermissions('packages:write')
-  @Throttle({ long: { limit: 2, ttl: 60000 } })
-  @Post('sync-merchants')
-  @ApiOperation({ summary: '从 JeeSite 拉取套餐数据并同步商家地址到 Merchant 表' })
-  syncMerchants() {
-    return this.contentService.syncMerchantsFromJeeSite();
-  }
-
-  @Roles('admin')
-  @RequirePermissions('packages:write')
-  @Throttle({ long: { limit: 2, ttl: 60000 } })
-  @Post('geocode-merchants')
-  @ApiOperation({ summary: '从 JeeSite 合作商店铺表抓取 longitude/latitude 回填 Merchant 表' })
-  geocodeMerchants() {
-    return geocodeMerchantsFromPartnerShop(this.prisma, this.configService, this.autoLoginService);
-  }
-
-  @Roles('admin')
-  @RequirePermissions('packages:write')
-  @Throttle({ long: { limit: 2, ttl: 60000 } })
-  @Post('geocode-from-partner-shop')
-  @ApiOperation({ summary: '从 JeeSite 合作商店铺表抓取 longitude/latitude（别名）' })
-  geocodeFromPartnerShop() {
-    return geocodeMerchantsFromPartnerShop(this.prisma, this.configService, this.autoLoginService);
-  }
-
-  @Roles('admin')
-  @RequirePermissions('packages:read')
-  @Throttle({ long: { limit: 5, ttl: 60000 } })
-  @Get('debug-raw/:packageId')
-  @ApiOperation({ summary: '调试：返回套餐表单页的完整 HTML，检查坐标字段' })
-  async debugRaw(@Param('packageId') packageId: string) {
-    this.assertDebugEndpointsEnabled();
-    return this.packageDetailService.debugRawHtml(this.safePackageId(packageId));
-  }
-
-  @Roles('admin')
-  @RequirePermissions('packages:read')
-  @Throttle({ long: { limit: 5, ttl: 60000 } })
-  @Get('debug-partner-shop/:merchantId')
-  @ApiOperation({ summary: '调试：抓取合作商店铺表单页，检查坐标字段' })
-  async debugPartnerShop(@Param('merchantId') merchantId: string) {
-    this.assertDebugEndpointsEnabled();
-    return this.packageDetailService.debugPartnerShopHtml(safePathId(merchantId));
-  }
-
   /** Cap free-form package path ids before DB/SSRF-adjacent fetch paths. */
   private safePackageId(packageId: string): string {
     return safePathId(packageId);
   }
 
-  /** Debug HTML endpoints are disabled in production unless ENABLE_DEBUG_ENDPOINTS=true. */
-  private assertDebugEndpointsEnabled(): void {
-    if (process.env.NODE_ENV === 'production' && process.env.ENABLE_DEBUG_ENDPOINTS !== 'true') {
-      throw new NotFoundException();
-    }
-  }
-
   // Derived communities rebuild from the selling catalog — throttle to bound CPU.
   @Throttle({ long: { limit: 30, ttl: 60000 } })
   @Get('communities')
+  @RequirePermissions('community:read')
   getCommunities(@Query('role') role: UserRole | undefined, @Req() req: Request) {
     const actor = req.user as AuthUser | undefined;
     const scoped = resolveScopedQuery(actor ?? {}, {});
@@ -388,6 +226,7 @@ export class PackageController {
 
   @Throttle({ long: { limit: 30, ttl: 60000 } })
   @Get('communities/:groupId')
+  @RequirePermissions('community:read')
   getCommunityRecommendations(
     @Param('groupId') groupId: string,
     @Query('role') role: UserRole | undefined,

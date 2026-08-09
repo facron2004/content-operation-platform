@@ -1,5 +1,4 @@
-import { ref } from 'vue';
-import { ElMessage } from 'element-plus';
+import { onScopeDispose, ref } from 'vue';
 import {
   getZeroSalesTimeline,
   type ZeroSalesSkuRow,
@@ -33,21 +32,31 @@ export function useZeroSalesTimeline() {
   const merchantName = ref('');
   const days = ref(30);
   const timeline = ref<ZeroSalesTimelineResponse['timeline']>([]);
+  const timelineError = ref<string | null>(null);
+  let disposed = false;
+  let requestId = 0;
 
   async function fetchTimeline(id: string, dayCount: number) {
+    if (disposed) return;
+    const currentRequestId = ++requestId;
     loading.value = true;
+    timelineError.value = null;
     try {
       const res = await getZeroSalesTimeline(id, dayCount);
+      if (disposed || currentRequestId !== requestId) return;
       timeline.value = res?.timeline ?? [];
       if (typeof res?.days === 'number' && res.days > 0) {
         days.value = clampTimelineDays(res.days);
       }
-    } catch (error) {
-      if (!isRequestCanceled(error))
-        ElMessage.error(extractErrorMessage(error, '加载零动销时间线失败'));
-      timeline.value = [];
+    } catch (cause) {
+      if (disposed || currentRequestId !== requestId) return;
+      if (!isRequestCanceled(cause)) {
+        const message = extractErrorMessage(cause, '加载零动销时间线失败');
+        timeline.value = [];
+        timelineError.value = message;
+      }
     } finally {
-      loading.value = false;
+      if (!disposed && currentRequestId === requestId) loading.value = false;
     }
   }
 
@@ -55,17 +64,20 @@ export function useZeroSalesTimeline() {
     row: Pick<ZeroSalesSkuRow, 'packageId' | 'packageName' | 'merchantName'>,
     opts?: { days?: number }
   ) {
+    if (disposed) return;
     packageId.value = row.packageId;
     packageName.value = row.packageName ?? '';
     merchantName.value = row.merchantName ?? '';
     days.value = clampTimelineDays(opts?.days);
     timeline.value = [];
+    timelineError.value = null;
     drawerVisible.value = true;
     await fetchTimeline(row.packageId, days.value);
   }
 
   /** Residual #234: re-fetch open package with a new window (7–90). */
   async function setDays(next: number) {
+    if (disposed) return;
     const clamped = clampTimelineDays(next);
     if (clamped === days.value && timeline.value.length > 0) return;
     days.value = clamped;
@@ -75,8 +87,16 @@ export function useZeroSalesTimeline() {
   }
 
   function close() {
+    requestId += 1;
     drawerVisible.value = false;
+    loading.value = false;
   }
+
+  onScopeDispose(() => {
+    disposed = true;
+    requestId += 1;
+    loading.value = false;
+  }, true);
 
   return {
     drawerVisible,
@@ -86,6 +106,7 @@ export function useZeroSalesTimeline() {
     merchantName,
     days,
     timeline,
+    error: timelineError,
     open,
     setDays,
     close

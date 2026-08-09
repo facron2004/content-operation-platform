@@ -24,7 +24,8 @@ const overview: DataAnalysisOverview = {
   walletAmount: 10,
   tradeAmount: 110,
   netGmv: 100,
-  netSales: 90,
+  // 核销额 = 已核销(verified)订单的 余额+现金；此处 1 笔已核销，取值与 verifyAmount 一致
+  writeOffAmount: 50,
   faceAmount: 120,
   refundAmount: 10,
   verifyAmount: 50,

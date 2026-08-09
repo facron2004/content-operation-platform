@@ -14,9 +14,11 @@ import { TrackingVisitRetentionJob } from './tracking-visit-retention.job';
 import { JobRunnerService } from './job-runner.service';
 import { JobMonitoringController } from './job-monitoring.controller';
 import { DataIntegrityPatrolJob } from './data-integrity-patrol.job';
+import { IdempotencyModule } from '../idempotency/idempotency.module';
+import { IdempotencyRetentionJob } from './idempotency-retention.job';
 
 @Module({
-  imports: [ScheduleModule.forRoot()],
+  imports: [ScheduleModule.forRoot(), IdempotencyModule],
   controllers: [JobMonitoringController],
   providers: [
     JobRunnerService,
@@ -31,7 +33,8 @@ import { DataIntegrityPatrolJob } from './data-integrity-patrol.job';
     DailyMetricsRetentionJob,
     AlertResolutionRetentionJob,
     CopyPerformanceRetentionJob,
-    DataIntegrityPatrolJob
+    DataIntegrityPatrolJob,
+    IdempotencyRetentionJob
   ],
   exports: [JobRunnerService]
 })

@@ -7,7 +7,8 @@ export interface DataAnalysisOverview {
   salesAmount: number;
   walletAmount: number;
   tradeAmount: number;
-  netSales: number;
+  netGmv: number;
+  writeOffAmount: number;
   faceAmount: number;
   refundAmount: number;
   verifyAmount: number;
@@ -17,6 +18,7 @@ export interface DataAnalysisOverview {
   avgOrderValue: number;
   targetRatio: number;
   targetRatioWithWallet: number;
+  netGmvTargetRatio: number;
   verifiedCount: number;
   pendingVerifyCount: number;
   expiredCount: number;
@@ -28,7 +30,8 @@ export interface DataAnalysisDeltas {
   orderCount: number | null;
   salesAmount: number | null;
   tradeAmount: number | null;
-  netSales: number | null;
+  netGmv: number | null;
+  writeOffAmount: number | null;
   refundAmount: number | null;
   verifyRate: number | null;
   refundRate: number | null;
@@ -40,7 +43,8 @@ export interface DataAnalysisDailyPoint {
   date: string;
   salesAmount: number;
   tradeAmount: number;
-  netSales: number;
+  netGmv: number;
+  writeOffAmount: number;
   orderCount: number;
   refundAmount: number;
 }

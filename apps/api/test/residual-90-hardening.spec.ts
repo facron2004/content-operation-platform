@@ -5,13 +5,20 @@ describe('residual #90 batchCreate bulk tracking-code allocation', () => {
     const fs = await import('fs/promises');
     const path = await import('path');
     const src = await fs.readFile(
-      path.join(__dirname, '..', 'src', 'distribution-task', 'distribution-task.service.ts'),
+      path.join(
+        __dirname,
+        '..',
+        'src',
+        'distribution-task',
+        'application',
+        'create-task.service.ts'
+      ),
       'utf8'
     );
 
     const fnStart = src.indexOf('async batchCreate(dtos: CreateTaskDto[])');
     expect(fnStart).toBeGreaterThan(0);
-    const next = src.indexOf('\n  async update(', fnStart + 10);
+    const next = src.indexOf('\n  /** Status integrity checks', fnStart + 10);
     const fn = src.slice(fnStart, next > 0 ? next : undefined);
 
     expect(fn).toContain('allocateTrackingCodes');
@@ -24,19 +31,26 @@ describe('residual #90 batchCreate bulk tracking-code allocation', () => {
     const fs = await import('fs/promises');
     const path = await import('path');
     const src = await fs.readFile(
-      path.join(__dirname, '..', 'src', 'distribution-task', 'distribution-task.service.ts'),
+      path.join(
+        __dirname,
+        '..',
+        'src',
+        'distribution-task',
+        'application',
+        'create-task.service.ts'
+      ),
       'utf8'
     );
 
-    const fnStart = src.indexOf('private async insertTaskRow');
+    const fnStart = src.indexOf('private async insertRow');
     expect(fnStart).toBeGreaterThan(0);
-    const next = src.indexOf('\n  private async findByIdempotencyKey', fnStart + 10);
+    const next = src.indexOf('\n  private isUniqueViolation', fnStart + 10);
     const fn = src.slice(fnStart, next > 0 ? next : undefined);
 
     expect(fn).toMatch(/trackingCode\?:/);
     expect(fn).toContain('opts.trackingCode');
     // Fallback still mints for single-create path.
-    expect(fn).toContain('mintTrackingCode');
+    expect(fn).toContain('allocateTrackingCode');
   });
 
   it('tracking-code module exposes bulk allocate + IN existence probe', async () => {

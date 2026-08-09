@@ -4,8 +4,15 @@
  * callers that build `IN (${ids.map(() => '?')})` should chunk via these helpers.
  */
 
-/** Default max placeholders per IN clause. */
-export const DEFAULT_IN_CHUNK = 500;
+// Keep the historical barrel path stable while the generic execution helpers
+// live in their own runtime module.
+export {
+  DEFAULT_IN_CHUNK,
+  QUERY_IN_CHUNKS_CONCURRENCY,
+  chunkIds,
+  mapPool,
+  queryInChunks
+} from './sql-chunk-runtime';
 
 /** Hard ceiling for platform-wide package/merchant scans (DoS / OOM guard). */
 export const PLATFORM_SCAN_LIMIT = 10_000;
@@ -139,11 +146,17 @@ export const TASK_PERFORMANCE_DAILY_PURGE_MAX_BATCHES = 25;
 export const AUDIT_PAYLOAD_MAX_CHARS = 4_000;
 
 /**
- * PackageSalesDaily + MerchantDailyMetrics retention (days). GMV / merchant-sales
- * refresh upsert one row per package|merchant per day; interactive APIs clamp to
- * 90d so older rows are pure SQLite growth. Indexes on `date` already exist.
+ * PackageSalesDaily + MerchantDailyMetrics + DailyMetrics retention (days).
+ *
+ * Was 180d, which silently truncated the merchant-sales `year` window: that
+ * window resolves to a full calendar year (MERCHANT_SALES_YEAR_MAX_DAYS = 366)
+ * and year-over-year reads look one more year back, so a 180d sweep left
+ * Jan 1 → today-180 empty every year. 800d ≈ 26 months keeps a full calendar
+ * year plus its prior-year comparison basis alive. Free-form range reads are
+ * still capped at 90d; only the year window and backfills reach further.
+ * Indexes on `date` already exist, so the purge stays a bounded index scan.
  */
-export const DAILY_METRICS_RETENTION_DAYS = 180;
+export const DAILY_METRICS_RETENTION_DAYS = 800;
 
 /** Max daily-metrics rows deleted per purge batch (per table). */
 export const DAILY_METRICS_PURGE_BATCH = 2_000;
@@ -297,80 +310,8 @@ export function clampListPageSize(pageSize: unknown, max = 200, fallback = 20): 
   return Math.min(max, n);
 }
 
-export function chunkIds<T>(ids: readonly T[], size = DEFAULT_IN_CHUNK): T[][] {
-  if (!ids.length) return [];
-  if (ids.length <= size) return [ids as T[]];
-  const out: T[][] = [];
-  for (let i = 0; i < ids.length; i += size) {
-    out.push(ids.slice(i, i + size) as T[]);
-  }
-  return out;
-}
-
-/**
- * Max concurrent chunk queries inside `queryInChunks`. Unbounded Promise.all
- * on ~ceil(N/500) chunks storms SQLite under cold multi-scan paths (movement /
- * zero-sales / merchant-list / heatmap / dashboard).
- */
-export const QUERY_IN_CHUNKS_CONCURRENCY = 2;
-
 /**
  * Max concurrent OrderHeader aggregate queries inside data-analysis
  * buildReport / buildSummary. Unbounded Promise.all of ~10 OH scans storms SQLite.
  */
 export const DATA_ANALYSIS_OH_CONCURRENCY = 2;
-
-/**
- * Run async work over items with a fixed concurrency pool. Preserves result order.
- * Used by data-analysis multi-query matrices (not unbounded Promise.all).
- */
-export async function mapPool<T, R>(
-  items: readonly T[],
-  concurrency: number,
-  fn: (item: T, index: number) => Promise<R>
-): Promise<R[]> {
-  if (!items.length) return [];
-  const limit = Math.max(1, Math.min(concurrency, items.length));
-  const results: R[] = new Array(items.length);
-  let next = 0;
-  async function worker(): Promise<void> {
-    while (true) {
-      const i = next;
-      next += 1;
-      if (i >= items.length) return;
-      results[i] = await fn(items[i], i);
-    }
-  }
-  await Promise.all(Array.from({ length: limit }, () => worker()));
-  return results;
-}
-
-/**
- * Run a query per id-chunk and flatten results.
- * `queryChunk` receives one slice of ids and must return an array of rows.
- * Multi-chunk work is pooled at QUERY_IN_CHUNKS_CONCURRENCY (not unbounded).
- */
-export async function queryInChunks<TId, TRow>(
-  ids: readonly TId[],
-  queryChunk: (chunk: TId[]) => Promise<TRow[]>,
-  size = DEFAULT_IN_CHUNK
-): Promise<TRow[]> {
-  if (!ids.length) return [];
-  const chunks = chunkIds(ids, size);
-  if (chunks.length === 1) return queryChunk(chunks[0]);
-  // Bounded pool — preserve chunk order for deterministic flatten.
-  const parts: TRow[][] = new Array(chunks.length);
-  let next = 0;
-  const workerCount = Math.min(QUERY_IN_CHUNKS_CONCURRENCY, chunks.length);
-  await Promise.all(
-    Array.from({ length: workerCount }, async () => {
-      while (true) {
-        const i = next;
-        next += 1;
-        if (i >= chunks.length) return;
-        parts[i] = await queryChunk(chunks[i]);
-      }
-    })
-  );
-  return parts.flat();
-}

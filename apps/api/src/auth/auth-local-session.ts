@@ -1,9 +1,10 @@
 import { ForbiddenException, type Logger } from '@nestjs/common';
 import type { Request } from 'express';
+import { isDesktopRuntime } from '../config/runtime.config';
 import { isLoopbackRemoteAddress } from './auth-loopback';
 export function assertLocalSessionAllowed(req: Request, logger: Logger): void {
   const env = process.env.NODE_ENV;
-  const isDesktop = process.env.DESKTOP_APP === '1';
+  const isDesktop = isDesktopRuntime();
   if (env !== 'development' && env !== 'test' && !isDesktop) {
     logger.warn(
       `拒绝 local-session: NODE_ENV=${env}, ip=${req.ip}, remote=${req.socket.remoteAddress}`

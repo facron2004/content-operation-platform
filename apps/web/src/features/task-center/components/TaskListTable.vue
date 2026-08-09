@@ -1,5 +1,6 @@
 <template>
   <div class="task-list-table">
+    <ErrorAlert :message="copyError" />
     <el-table v-loading="loading" :data="tasks" stripe style="width: 100%">
       <el-table-column label="任务ID" width="150" fixed="left">
         <template #default="{ row }">
@@ -157,11 +158,12 @@
 </template>
 
 <script setup lang="ts">
-import { ElMessage } from 'element-plus';
 import { CopyDocument } from '@element-plus/icons-vue';
 import type { DistributionTask, TaskChannel, TaskPriority, TaskStatus } from '@content/shared';
 import TaskStatusTag from './TaskStatusTag.vue';
 import AppleButton from '../../../components/AppleButton.vue';
+import ErrorAlert from '../../../components/ErrorAlert.vue';
+import { useTaskIdClipboard } from '../composables/useTaskIdClipboard';
 
 withDefaults(
   defineProps<{
@@ -186,6 +188,8 @@ const emit = defineEmits<{
   'update:page': [value: number];
   'update:pageSize': [value: number];
 }>();
+
+const { copyError, copyTaskId } = useTaskIdClipboard();
 
 const channelLabels: Record<TaskChannel, string> = {
   wechat_group: '微信群',
@@ -299,15 +303,6 @@ function canDelete(task: DistributionTask) {
 
 function shortId(id: string) {
   return id.length > 8 ? `${id.slice(0, 8)}…` : id;
-}
-
-async function copyTaskId(id: string) {
-  try {
-    await navigator.clipboard.writeText(id);
-    ElMessage.success('任务 ID 已复制');
-  } catch {
-    ElMessage.warning('复制失败,请手动复制');
-  }
 }
 
 function formatDateTime(value?: string): string {

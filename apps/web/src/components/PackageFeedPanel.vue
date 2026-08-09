@@ -19,6 +19,7 @@
         </AppleButton>
       </template>
     </SectionHeader>
+    <ErrorAlert :message="detailError" />
     <EmptyState
       v-if="!selectedPackage"
       icon="📦"
@@ -39,6 +40,7 @@
 <script setup lang="ts">
 import { Refresh } from '@element-plus/icons-vue';
 import EmptyState from './EmptyState.vue';
+import ErrorAlert from './ErrorAlert.vue';
 import SectionHeader from './SectionHeader.vue';
 import PackageFeedBody from './PackageFeedBody.vue';
 import AppleButton from './AppleButton.vue';
@@ -51,6 +53,7 @@ export type PackageFeedPanelProps = {
   selectedPackage: RecommendPackageItem | undefined;
   packageDetail: PackageDetailData | null;
   detailLoading: boolean;
+  detailError: string | null;
   packageId: string;
   feedFacts: Array<{ label: string; value: string }>;
   feedChecks: Array<{ label: string; ok: boolean; text: string }>;

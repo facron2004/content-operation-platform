@@ -9,7 +9,7 @@ const srcRoot = path.resolve(__dirname, '../src');
 describe('residual #253 merchant-sales packageCount multi-day DISTINCT', () => {
   it('helpers re-aggregate packageCount from OrderHeader DISTINCT', async () => {
     const src = await readFile(
-      path.join(srcRoot, 'merchant-sales/merchant-sales-query.ts'),
+      path.join(srcRoot, 'merchant-sales/merchant-sales-summary-query.ts'),
       'utf8'
     );
     expect(src).toMatch(/export async function queryDistinctPackageCount/);
@@ -23,13 +23,12 @@ describe('residual #253 merchant-sales packageCount multi-day DISTINCT', () => {
 
   it('querySummary does not SUM packageCount across MerchantDailyMetrics days', async () => {
     const src = await readFile(
-      path.join(srcRoot, 'merchant-sales/merchant-sales-query.ts'),
+      path.join(srcRoot, 'merchant-sales/merchant-sales-summary-query.ts'),
       'utf8'
     );
     const start = src.indexOf('export async function querySummary');
     expect(start).toBeGreaterThan(-1);
-    const end = src.indexOf('// --- merchant-sales-ranking-map.ts ---', start + 10);
-    const fn = src.slice(start, end > 0 ? end : undefined);
+    const fn = src.slice(start);
     expect(fn).not.toMatch(/SUM\("packageCount"\)/);
     expect(fn).toMatch(/queryDistinctPackageCount/);
     // Money still from day grain; packageCount stubbed then overwritten.
@@ -39,7 +38,7 @@ describe('residual #253 merchant-sales packageCount multi-day DISTINCT', () => {
 
   it('queryAllRankingRows overlays OrderHeader DISTINCT package counts', async () => {
     const src = await readFile(
-      path.join(srcRoot, 'merchant-sales/merchant-sales-query.ts'),
+      path.join(srcRoot, 'merchant-sales/merchant-sales-ranking-query.ts'),
       'utf8'
     );
     const start = src.indexOf('export async function queryAllRankingRows');
@@ -54,7 +53,7 @@ describe('residual #253 merchant-sales packageCount multi-day DISTINCT', () => {
 
   it('loadMerchantSalesExportRows overlays OrderHeader DISTINCT package counts', async () => {
     const src = await readFile(
-      path.join(srcRoot, 'merchant-sales/merchant-sales-query.ts'),
+      path.join(srcRoot, 'merchant-sales/merchant-sales-export-query.ts'),
       'utf8'
     );
     const start = src.indexOf('export async function loadMerchantSalesExportRows');
@@ -68,7 +67,7 @@ describe('residual #253 merchant-sales packageCount multi-day DISTINCT', () => {
 
   it('day-grain recompute still COUNT(DISTINCT packageId) per merchant-day', async () => {
     const src = await readFile(
-      path.join(srcRoot, 'merchant-sales/merchant-sales-query.ts'),
+      path.join(srcRoot, 'merchant-sales/merchant-sales-metrics-query.ts'),
       'utf8'
     );
     // Day grain remains correct — SUM was the multi-day bug, not recompute.
@@ -86,7 +85,7 @@ describe('residual #253 merchant-sales packageCount multi-day DISTINCT', () => {
     expect(cols).toMatch(/动销 SKU/);
 
     const query = await readFile(
-      path.join(srcRoot, 'merchant-sales/merchant-sales-query.ts'),
+      path.join(srcRoot, 'merchant-sales/merchant-sales-export-query.ts'),
       'utf8'
     );
     expect(query).toMatch(/动销SKU数/);

@@ -22,27 +22,31 @@ describe('residual #63 auditCopy package select hygiene', () => {
   it('uses PACKAGE_AUDIT_SELECT for machine audit (Residual #133) and status-only error re-read', async () => {
     const fs = await import('fs/promises');
     const path = await import('path');
-    const mappers = await fs.readFile(
-      path.join(__dirname, '..', 'src', 'content', 'mappers.ts'),
+    const packageMappers = await fs.readFile(
+      path.join(__dirname, '..', 'src', 'content', 'package-mappers.ts'),
       'utf8'
     );
-    const copy = await fs.readFile(
-      path.join(__dirname, '..', 'src', 'content', 'copy.service.ts'),
+    const audit = await fs.readFile(
+      path.join(__dirname, '..', 'src', 'content', 'copy-audit.service.ts'),
+      'utf8'
+    );
+    const query = await fs.readFile(
+      path.join(__dirname, '..', 'src', 'content', 'copy-query.service.ts'),
       'utf8'
     );
     // Residual #133: hot audit path uses slim PACKAGE_AUDIT_SELECT.
-    expect(mappers).toContain('PACKAGE_AUDIT_SELECT');
-    expect(mappers).toContain('mapPackageForAudit');
+    expect(packageMappers).toContain('PACKAGE_AUDIT_SELECT');
+    expect(packageMappers).toContain('mapPackageForAudit');
     // Full map select retained for generate/detail paths.
-    expect(mappers).toContain('PACKAGE_MAP_SELECT');
-    expect(mappers).toContain('export function mapPackage');
-    expect(copy).toContain('PACKAGE_AUDIT_SELECT');
-    expect(copy).toMatch(/select:\s*PACKAGE_AUDIT_SELECT/);
-    expect(copy).not.toMatch(/select:\s*PACKAGE_MAP_SELECT/);
-    expect(copy).toMatch(/select:\s*\{\s*auditStatus:\s*true\s*\}/);
+    expect(packageMappers).toContain('PACKAGE_MAP_SELECT');
+    expect(packageMappers).toContain('export function mapPackage');
+    expect(audit).toContain('PACKAGE_AUDIT_SELECT');
+    expect(audit).toMatch(/select:\s*PACKAGE_AUDIT_SELECT/);
+    expect(audit).not.toMatch(/select:\s*PACKAGE_MAP_SELECT/);
+    expect(audit).toMatch(/select:\s*\{\s*auditStatus:\s*true\s*\}/);
     // List scope IN lists clamped to 200.
-    expect(copy).toMatch(/filters\.areaIds\.slice\(0,\s*200\)/);
-    expect(copy).toMatch(/filters\.merchantIds\.slice\(0,\s*200\)/);
+    expect(query).toMatch(/filters\.areaIds\.slice\(0,\s*200\)/);
+    expect(query).toMatch(/filters\.merchantIds\.slice\(0,\s*200\)/);
   });
 });
 
@@ -64,7 +68,7 @@ describe('residual #63 queryInChunks concurrency pool', () => {
     const fs = await import('fs/promises');
     const path = await import('path');
     const src = await fs.readFile(
-      path.join(__dirname, '..', 'src', 'common', 'sql-chunk.ts'),
+      path.join(__dirname, '..', 'src', 'common', 'sql-chunk-runtime.ts'),
       'utf8'
     );
     expect(src).toContain('QUERY_IN_CHUNKS_CONCURRENCY');
@@ -78,10 +82,19 @@ describe('residual #63 merchant list cap + DISTINCT sales', () => {
   it('caps merchants and uses single-pass metrics SQL', async () => {
     const fs = await import('fs/promises');
     const path = await import('path');
-    const src = await fs.readFile(
-      path.join(__dirname, '..', 'src', 'merchant', 'merchant-list.ts'),
+    const queries = await fs.readFile(
+      path.join(__dirname, '..', 'src', 'merchant', 'merchant-list-queries.ts'),
       'utf8'
     );
+    const metrics = await fs.readFile(
+      path.join(__dirname, '..', 'src', 'merchant', 'merchant-list-metrics.ts'),
+      'utf8'
+    );
+    const projection = await fs.readFile(
+      path.join(__dirname, '..', 'src', 'merchant', 'merchant-list-projection.ts'),
+      'utf8'
+    );
+    const src = [queries, metrics, projection].join('\n');
     expect(src).toContain('MERCHANT_LIST_CACHE_CAP');
     expect(src).toMatch(/slice\(0,\s*MERCHANT_LIST_CACHE_CAP\)/);
     // Single-pass metrics: DISTINCT recent sales inside CTE (not package materialize path).

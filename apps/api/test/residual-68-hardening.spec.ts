@@ -7,7 +7,7 @@ describe('residual #68 movement membership filter-first SQL', () => {
     const fs = await import('fs/promises');
     const path = await import('path');
     const skus = await fs.readFile(
-      path.join(__dirname, '..', 'src', 'movement', 'movement-skus.ts'),
+      path.join(__dirname, '..', 'src', 'movement', 'movement-sku-loaders.ts'),
       'utf8'
     );
     const list = await fs.readFile(
@@ -31,7 +31,7 @@ describe('residual #68 merchant-list single-pass metrics', () => {
     const fs = await import('fs/promises');
     const path = await import('path');
     const src = await fs.readFile(
-      path.join(__dirname, '..', 'src', 'merchant', 'merchant-list.ts'),
+      path.join(__dirname, '..', 'src', 'merchant', 'merchant-list-metrics.ts'),
       'utf8'
     );
     expect(src).toMatch(/WITH pkgs AS/);
@@ -46,7 +46,7 @@ describe('residual #68 merchant-list single-pass metrics', () => {
     const fs = await import('fs/promises');
     const path = await import('path');
     const src = await fs.readFile(
-      path.join(__dirname, '..', 'src', 'merchant', 'merchant-list.ts'),
+      path.join(__dirname, '..', 'src', 'merchant', 'merchant-list-queries.ts'),
       'utf8'
     );
     // totalSku filter aligns with enrich pkgs CTE (stockLeft > 0).
@@ -94,7 +94,7 @@ describe('residual #68 opsCache lowered maxSize', () => {
     const fs = await import('fs/promises');
     const path = await import('path');
     const src = await fs.readFile(
-      path.join(__dirname, '..', 'src', 'content', 'dashboard.service.ts'),
+      path.join(__dirname, '..', 'src', 'content', 'dashboard-operations.service.ts'),
       'utf8'
     );
     expect(src).toContain('HEAVY_LIST_CACHE_MAX_SIZE');
@@ -124,7 +124,7 @@ describe('residual #68 external fetch concurrency default 2', () => {
     const fs = await import('fs/promises');
     const path = await import('path');
     const src = await fs.readFile(
-      path.join(__dirname, '..', 'src', 'content', 'data-source.service.ts'),
+      path.join(__dirname, '..', 'src', 'content', 'jeesite-data-source.client.ts'),
       'utf8'
     );
     expect(src).toMatch(/EXTERNAL_FETCH_CONCURRENCY \?\? 2/);
@@ -157,7 +157,7 @@ describe('residual #68 dashboard summary COUNT pool', () => {
     const fs = await import('fs/promises');
     const path = await import('path');
     const src = await fs.readFile(
-      path.join(__dirname, '..', 'src', 'content', 'dashboard.service.ts'),
+      path.join(__dirname, '..', 'src', 'content', 'dashboard-performance-read.ts'),
       'utf8'
     );
     // Residual #125: platform counters no longer use countJobs/mapPool;

@@ -5,21 +5,35 @@ describe('residual #96 batchCreate bulk rollback + attribution UNIQUE binary-spl
     const fs = await import('fs/promises');
     const path = await import('path');
     const src = await fs.readFile(
-      path.join(__dirname, '..', 'src', 'distribution-task', 'distribution-task.service.ts'),
+      path.join(
+        __dirname,
+        '..',
+        'src',
+        'distribution-task',
+        'application',
+        'create-task.service.ts'
+      ),
+      'utf8'
+    );
+    const repository = await fs.readFile(
+      path.join(__dirname, '..', 'src', 'distribution-task', 'repositories', 'task.repository.ts'),
       'utf8'
     );
 
     const fnStart = src.indexOf('async batchCreate(dtos: CreateTaskDto[])');
     expect(fnStart).toBeGreaterThan(0);
-    const next = src.indexOf('\n  async update(', fnStart + 10);
+    const next = src.indexOf('\n  /** Status integrity checks', fnStart + 10);
     const fn = src.slice(fnStart, next > 0 ? next : undefined);
 
-    // Bulk IN rollback present.
-    expect(fn).toContain('ROLLBACK_CHUNK');
-    expect(fn).toMatch(/DELETE FROM "DistributionTask"[\s\S]{0,120}WHERE "taskId" IN \(\$\{ph\}\)/);
-    // Status pin preserved so publish cannot be wiped by rollback.
-    expect(fn).toContain(`"status" IN ('draft', 'waiting_audit', 'scheduled')`);
-    // No per-id serial DELETE in the catch block.
+    // Application service delegates rollback; repository owns the bulk SQL shape.
+    expect(fn).toContain('batchRollback(this.prisma, createdIds)');
+    expect(fn).not.toContain('ROLLBACK_CHUNK');
+    expect(repository).toContain('const ROLLBACK_CHUNK = 100');
+    expect(repository).toMatch(
+      /DELETE FROM "DistributionTask"[\s\S]{0,120}WHERE "taskId" IN \(\$\{ph\}\)/
+    );
+    expect(repository).toContain(`"status" IN ('draft', 'waiting_audit', 'scheduled')`);
+    // No per-id serial DELETE in either application orchestration or repository helper.
     expect(fn).not.toMatch(
       /for\s*\(\s*const\s+taskId\s+of\s+createdIds\s*\)[\s\S]{0,200}DELETE FROM "DistributionTask"/
     );

@@ -73,24 +73,33 @@ export function bindMerchantRoute(params: {
   merchants: Ref<Array<{ merchantId: string }>>;
   reloadList: () => Promise<void>;
   reloadDetail: () => Promise<void>;
+  isCurrent?: () => boolean;
 }) {
+  const isCurrent = params.isCurrent ?? (() => true);
   watch(
     () => params.route.query.merchantId,
     (id) => {
+      if (!isCurrent()) return;
       if (typeof id === 'string' && id !== params.selectedMerchantId.value) {
         params.selectedMerchantId.value = id;
         params.reloadDetail();
       }
     }
   );
-  onMounted(async () => {
+  const loadInitialRouteData = async () => {
+    if (!isCurrent()) return;
     await params.reloadList();
+    if (!isCurrent()) return;
     if (params.selectedMerchantId.value) {
       await params.reloadDetail();
+      if (!isCurrent()) return;
       params.selectedMerchant.value =
         params.merchants.value.find((x) => x.merchantId === params.selectedMerchantId.value) ??
         null;
     }
+  };
+  onMounted(() => {
+    void loadInitialRouteData().catch(() => undefined);
   });
 }
 

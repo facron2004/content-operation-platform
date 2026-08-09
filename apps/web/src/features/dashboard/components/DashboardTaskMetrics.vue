@@ -1,6 +1,7 @@
 <template>
   <el-card v-if="canViewPlatformKpis" v-loading="loading" class="task-kpi-card">
     <template #header><span>今日任务</span></template>
+    <ErrorAlert :message="loadError" />
     <el-row :gutter="16">
       <!-- Residual #206: clickable tiles drill into task center with matching status. -->
       <el-col :span="4">
@@ -61,47 +62,25 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, onMounted } from 'vue';
+import { computed } from 'vue';
 import { useRouter } from 'vue-router';
-import { api } from '../../../services/api';
 import { useRoleStore } from '../../../stores/role';
 import { formatFenYuan } from '../../../utils/format';
 import MetricTile from '../../../components/MetricTile.vue';
+import ErrorAlert from '../../../components/ErrorAlert.vue';
+import { useDashboardTaskMetrics } from '../composables/useDashboardTaskMetrics';
 
 const router = useRouter();
 const roleStore = useRoleStore();
 const canViewPlatformKpis = computed(() =>
   roleStore.effectiveRoles.some((role) => ['admin', 'platform_operator', 'auditor'].includes(role))
 );
-const loading = ref(false);
-const kpis = ref({
-  todayPending: 0,
-  inProgress: 0,
-  completed: 0,
-  overdue: 0,
-  failed: 0,
-  todayTaskGmv: 0
-});
+const { loading, loadError, kpis } = useDashboardTaskMetrics(canViewPlatformKpis);
 
 /** Residual #206: dashboard KPI → task center deep-link (status matches getTaskKpi). */
 function goTasks(query: Record<string, string>) {
   router.push({ name: 'tasks', query });
 }
-
-async function loadKPIs() {
-  if (!canViewPlatformKpis.value) return;
-  loading.value = true;
-  try {
-    const data = await api.getTaskKPIs();
-    kpis.value = data;
-  } catch {
-    /* ignore */
-  } finally {
-    loading.value = false;
-  }
-}
-
-onMounted(loadKPIs);
 </script>
 
 <style scoped>

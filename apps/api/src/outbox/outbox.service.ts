@@ -55,7 +55,9 @@ export class OutboxService {
    */
   async fetchPending(limit = 50): Promise<OutboxEventRow[]> {
     return this.prisma.$queryRawUnsafe<OutboxEventRow[]>(
-      `SELECT * FROM "OutboxEvent"
+      `SELECT "id", "aggregateType", "aggregateId", "eventType", "payloadJson",
+              "status", "retryCount", "errorMessage", "createdAt", "processedAt"
+       FROM "OutboxEvent"
        WHERE "status" = 'pending' AND "retryCount" < 5
        ORDER BY "createdAt" ASC
        LIMIT ?`,

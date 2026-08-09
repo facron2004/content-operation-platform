@@ -18,18 +18,10 @@
 </template>
 
 <script setup lang="ts">
-type InsightTone = 'blue' | 'orange' | 'green' | 'purple';
-
-type InsightItem = {
-  key: string;
-  tone: InsightTone;
-  icon: unknown;
-  title: string;
-  desc: string;
-};
+import type { GmvInsightItem } from '../composables/gmv-insights';
 
 defineProps<{
-  insights: InsightItem[];
+  insights: GmvInsightItem[];
 }>();
 </script>
 

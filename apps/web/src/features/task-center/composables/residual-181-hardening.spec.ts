@@ -59,21 +59,45 @@ describe('residual #181 schedule/complete execution action labels', () => {
   });
 
   it('schedule/complete mutators write matching execution actions', async () => {
-    const src = await readFile(
-      path.join(srcRoot, '../../api/src/distribution-task/distribution-task.service.ts'),
+    const controller = await readFile(
+      path.join(srcRoot, '../../api/src/distribution-task/distribution-task-command.controller.ts'),
       'utf8'
     );
-    // Pin the action strings that land in DistributionExecution.action.
-    const scheduleStart = src.indexOf('async schedule(');
-    expect(scheduleStart).toBeGreaterThan(0);
-    const scheduleEnd = src.indexOf('async complete(', scheduleStart + 10);
-    const scheduleFn = src.slice(scheduleStart, scheduleEnd > 0 ? scheduleEnd : undefined);
-    expect(scheduleFn).toMatch(/action:\s*['"]schedule['"]/);
+    const canonical = await readFile(
+      path.join(srcRoot, '../../api/src/distribution-task/application/cancel-task.service.ts'),
+      'utf8'
+    );
 
-    const completeStart = src.indexOf('async complete(');
+    // The controller delegates status commands; the canonical application
+    // service owns execution action writes so there is only one implementation.
+    const scheduleStart = controller.indexOf('async schedule(');
+    expect(scheduleStart).toBeGreaterThan(0);
+    const scheduleEnd = controller.indexOf('async complete(', scheduleStart + 10);
+    const scheduleFn = controller.slice(scheduleStart, scheduleEnd > 0 ? scheduleEnd : undefined);
+    expect(scheduleFn).toContain('this.cancelSvc.schedule(');
+
+    const completeStart = controller.indexOf('async complete(');
     expect(completeStart).toBeGreaterThan(0);
-    const completeEnd = src.indexOf('async reassign(', completeStart + 10);
-    const completeFn = src.slice(completeStart, completeEnd > 0 ? completeEnd : undefined);
-    expect(completeFn).toMatch(/action:\s*['"]complete['"]/);
+    const completeEnd = controller.indexOf('async reassign(', completeStart + 10);
+    const completeFn = controller.slice(completeStart, completeEnd > 0 ? completeEnd : undefined);
+    expect(completeFn).toContain('this.cancelSvc.complete(');
+
+    const canonicalScheduleStart = canonical.indexOf('async schedule(');
+    expect(canonicalScheduleStart).toBeGreaterThan(0);
+    const canonicalScheduleEnd = canonical.indexOf('async complete(', canonicalScheduleStart + 10);
+    const canonicalSchedule = canonical.slice(
+      canonicalScheduleStart,
+      canonicalScheduleEnd > 0 ? canonicalScheduleEnd : undefined
+    );
+    expect(canonicalSchedule).toMatch(/action:\s*['"]schedule['"]/);
+
+    const canonicalCompleteStart = canonical.indexOf('async complete(');
+    expect(canonicalCompleteStart).toBeGreaterThan(0);
+    const canonicalCompleteEnd = canonical.indexOf('async reassign(', canonicalCompleteStart + 10);
+    const canonicalComplete = canonical.slice(
+      canonicalCompleteStart,
+      canonicalCompleteEnd > 0 ? canonicalCompleteEnd : undefined
+    );
+    expect(canonicalComplete).toMatch(/action:\s*['"]complete['"]/);
   });
 });

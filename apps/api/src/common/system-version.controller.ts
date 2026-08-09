@@ -1,6 +1,7 @@
 import { Controller, Get } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { RequireLogin } from '../user-access/iam/route-auth.decorator';
+import { resolveReleaseVersion } from './release-manifest';
 
 @ApiTags('system-version')
 @RequireLogin()
@@ -12,7 +13,7 @@ export class SystemVersionController {
     const memory = process.memoryUsage();
     return {
       appName: 'content-operation-platform-api',
-      version: '0.10.0',
+      version: resolveReleaseVersion(),
       nodeEnv: process.env.NODE_ENV ?? 'development',
       nodeVersion: process.version,
       uptimeSeconds: Math.floor(process.uptime()),

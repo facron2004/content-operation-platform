@@ -1,5 +1,5 @@
 import { ElMessageBox } from 'element-plus';
-import { onMounted, onUnmounted } from 'vue';
+import { onMounted, onScopeDispose } from 'vue';
 import { useRouter, type Router } from 'vue-router';
 
 export interface ShortcutDefinition {
@@ -54,7 +54,7 @@ export function useKeyboardShortcuts() {
   onMounted(() => {
     window.addEventListener('keydown', handleKeyDown);
   });
-  onUnmounted(() => {
+  onScopeDispose(() => {
     window.removeEventListener('keydown', handleKeyDown);
   });
   return { register, shortcuts };

@@ -1,4 +1,4 @@
-import { computed, onMounted, ref, type Ref } from 'vue';
+import { computed, onMounted, onScopeDispose, ref, type Ref } from 'vue';
 import {
   getMovementMoving,
   getMovementStagnant,
@@ -73,12 +73,16 @@ export function createMovementListState(): MovementListState {
 async function loadMovementToday(params: {
   today: Ref<MovementTodayPayload | null>;
   loadError: Ref<string | null>;
+  isCurrent: () => boolean;
   // Residual #227: as-of business day.
   date?: string;
 }): Promise<void> {
   try {
-    params.today.value = await getMovementToday(params.date || undefined);
+    const result = await getMovementToday(params.date || undefined);
+    if (!params.isCurrent()) return;
+    params.today.value = result;
   } catch (err) {
+    if (!params.isCurrent()) return;
     params.loadError.value = extractErrorMessage(err, '加载今日动销汇总失败');
   }
 }
@@ -91,6 +95,7 @@ async function loadMovementList(params: {
   hasMore: Ref<boolean>;
   listLoading: Ref<boolean>;
   loadError: Ref<string | null>;
+  isCurrent: () => boolean;
   // Residual #266: optional honesty sinks for MOVEMENT_CACHE_CAP.
   listTruncated?: Ref<boolean>;
   listLimit?: Ref<number | null>;
@@ -120,6 +125,7 @@ async function loadMovementList(params: {
             page: params.page.value,
             pageSize: PAGE_SIZE
           });
+    if (!params.isCurrent()) return;
     params.rows.value = result.items;
     params.hasMore.value = result.pagination.hasMore;
     if (params.listTruncated) params.listTruncated.value = Boolean(result.truncated);
@@ -127,9 +133,10 @@ async function loadMovementList(params: {
       params.listLimit.value =
         typeof result.limit === 'number' && result.limit > 0 ? result.limit : null;
   } catch (err) {
+    if (!params.isCurrent()) return;
     params.loadError.value = extractErrorMessage(err, '加载清单失败');
   } finally {
-    params.listLoading.value = false;
+    if (params.isCurrent()) params.listLoading.value = false;
   }
 }
 
@@ -165,8 +172,15 @@ export function createMovementPagination(options: {
 }
 
 export function bindMovementListLoaders(state: MovementListState) {
-  const loadList = () =>
-    loadMovementList({
+  let disposed = false;
+  let listRequestId = 0;
+  let todayRequestId = 0;
+  let reloadRequestId = 0;
+
+  const loadList = (): Promise<void> => {
+    if (disposed) return Promise.resolve();
+    const currentRequestId = ++listRequestId;
+    return loadMovementList({
       activeTab: state.activeTab,
       filters: state.filters,
       page: state.page,
@@ -174,22 +188,39 @@ export function bindMovementListLoaders(state: MovementListState) {
       hasMore: state.hasMore,
       listLoading: state.listLoading,
       loadError: state.loadError,
+      isCurrent: () => !disposed && currentRequestId === listRequestId,
       listTruncated: state.listTruncated,
       listLimit: state.listLimit
     });
+  };
+
   async function reload() {
+    if (disposed) return;
+    const currentReloadId = ++reloadRequestId;
+    const currentTodayRequestId = ++todayRequestId;
     state.loading.value = true;
     state.loadError.value = null;
     await Promise.all([
       loadMovementToday({
         today: state.today,
         loadError: state.loadError,
+        isCurrent: () => !disposed && currentTodayRequestId === todayRequestId,
         date: state.kpiDate.value || undefined
       }),
       loadList()
     ]);
-    state.loading.value = false;
+    if (!disposed && currentReloadId === reloadRequestId) state.loading.value = false;
   }
+
+  onScopeDispose(() => {
+    disposed = true;
+    listRequestId += 1;
+    todayRequestId += 1;
+    reloadRequestId += 1;
+    state.loading.value = false;
+    state.listLoading.value = false;
+  });
+
   onMounted(reload);
   return {
     loadList,

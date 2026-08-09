@@ -14,6 +14,7 @@ import {
   computeRefundFromOrderHeader,
   computeRefundTrendFromOrderHeader,
   computeVerifyFromOrderHeader,
+  computeVerifyTrendFromOrderHeader,
   topRefundMerchants,
   topVerifyMerchants
 } from './refund-order-header';
@@ -221,9 +222,9 @@ export function loadVerifyTrend(
   return resolveWithCacheFallback({
     cache,
     cacheKey: `verifyTrend:${bucket}:${q.days}:${q.endDate ?? 'today'}`,
-    primary: () => verifyTrendFromDailyMetrics(prisma, start, spanDays) ?? [],
+    primary: () => computeVerifyTrendFromOrderHeader(prisma, start, end),
     acceptPrimary: (rows) => rows.some((r) => r.paidOrderCount > 0 || r.totalVerify > 0),
-    secondary: async () => []
+    secondary: () => verifyTrendFromDailyMetrics(prisma, start, spanDays)
   }).then((rows) => aggregateVerifyTrendByBucket(rows, bucket));
 }
 
@@ -236,7 +237,7 @@ export function createRefundServiceSurface(prisma: PrismaService, cache: TtlCach
     getTopMerchants: async (q: RefundTopMerchantsQueryDto) => {
       const all = await resolveWithCacheFallback({
         cache,
-        cacheKey: `refundTopMerchants:${q.sortBy}:${q.window ?? 'week'}`,
+        cacheKey: `refundTopMerchants:${q.sortBy}:${q.window ?? 'week'}:${q.date ?? 'today'}`,
         primary: () => queryAllTopMerchants(prisma, q.sortBy, q.window ?? 'week', q.date),
         acceptPrimary: () => true
       });

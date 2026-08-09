@@ -7,6 +7,7 @@ import {
   TASK_PERFORMANCE_DAILY_PURGE_MAX_BATCHES,
   TASK_PERFORMANCE_DAILY_RETENTION_DAYS
 } from '../common/sql-chunk';
+import { JobRunnerService } from './job-runner.service';
 
 /**
  * Bounded TaskPerformanceDaily retention.
@@ -20,7 +21,10 @@ export class TaskPerformanceDailyRetentionJob {
   private readonly logger = new Logger(TaskPerformanceDailyRetentionJob.name);
   private running = false;
 
-  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(JobRunnerService) private readonly jobRunner: JobRunnerService
+  ) {}
 
   /** Daily retention sweep — staggered after DistributionExecution purge (7am). */
   @Cron(CronExpression.EVERY_DAY_AT_8AM)
@@ -30,18 +34,20 @@ export class TaskPerformanceDailyRetentionJob {
       return;
     }
     this.running = true;
-    try {
-      const deleted = await this.purgeOlderThan(TASK_PERFORMANCE_DAILY_RETENTION_DAYS);
-      if (deleted > 0) {
-        this.logger.log(
-          `Purged ${deleted} TaskPerformanceDaily rows older than ${TASK_PERFORMANCE_DAILY_RETENTION_DAYS}d`
-        );
-      }
-    } catch (err) {
-      this.logger.warn(`TaskPerformanceDaily retention failed: ${err}`);
-    } finally {
-      this.running = false;
-    }
+    await this.jobRunner
+      .runJob('task-performance-daily-retention', async (setMeta) => {
+        const deleted = await this.purgeOlderThan(TASK_PERFORMANCE_DAILY_RETENTION_DAYS);
+        setMeta({ deleted, retentionDays: TASK_PERFORMANCE_DAILY_RETENTION_DAYS });
+        if (deleted > 0) {
+          this.logger.log(
+            `Purged ${deleted} TaskPerformanceDaily rows older than ${TASK_PERFORMANCE_DAILY_RETENTION_DAYS}d`
+          );
+        }
+        return deleted;
+      })
+      .finally(() => {
+        this.running = false;
+      });
   }
 
   /**

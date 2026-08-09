@@ -34,6 +34,7 @@ export class AlertController {
 
   // Cold path still fans into recommend (heavy-gated); keep long limit tight.
   @Get('alerts')
+  @RequirePermissions('content:read')
   @Throttle({ long: { limit: 15, ttl: 60000 } })
   getOperationAlerts(
     @Query(createDtoPipe(AlertQueryDto)) query: AlertQueryDto,

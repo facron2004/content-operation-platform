@@ -24,10 +24,6 @@ export async function listUsers(
   return { items: [], total: 0, page: params.page ?? 1, pageSize: params.pageSize ?? 20 };
 }
 
-export async function getUser(id: string) {
-  return client.get(`/users/${encodeURIComponent(id)}`).then((res) => res.data);
-}
-
 export async function getMe() {
   return client.get('/users/me').then((res) => res.data);
 }

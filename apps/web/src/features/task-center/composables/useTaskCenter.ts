@@ -1,4 +1,4 @@
-import { computed, onMounted, ref, type ComputedRef, type Ref } from 'vue';
+import { computed, onMounted, onScopeDispose, ref, type ComputedRef, type Ref } from 'vue';
 import { useRoute } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import type { DistributionTask, TaskKpiResponse } from '@content/shared';
@@ -92,6 +92,7 @@ export function useTaskCenter(): PagedListReturn<DistributionTask, TaskFilters> 
   tasks: PagedListReturn<DistributionTask, TaskFilters>['items'];
   kpis: Ref<TaskKpiResponse | null>;
   kpiLoading: Ref<boolean>;
+  kpiError: Ref<string | null>;
   loadKPIs: () => Promise<void>;
   deleteTask: (task: DistributionTask) => Promise<void>;
   handleDelete: (task: DistributionTask) => Promise<void>;
@@ -118,8 +119,18 @@ export function useTaskCenter(): PagedListReturn<DistributionTask, TaskFilters> 
     return '近 90 天';
   });
 
+  let disposed = false;
+  let latestListRequestId = 0;
+  const listRef: { current?: PagedListReturn<DistributionTask, TaskFilters> } = {};
+
+  function listQueryKey(page: number, pageSize: number, filters: unknown): string {
+    return JSON.stringify({ page, pageSize, filters }) ?? '';
+  }
+
   const list = usePagedList<DistributionTask, TaskFilters>(
-    async ({ page, pageSize, filters }) => {
+    async ({ page, pageSize, filters, requestId }) => {
+      latestListRequestId = requestId;
+      const requestKey = listQueryKey(page, pageSize, filters);
       // Residual #201: API expects overdue/hasAttribution as 0|1 numbers.
       const overdueParam = filters.overdue === undefined ? undefined : filters.overdue ? 1 : 0;
       const hasAttributionParam =
@@ -142,9 +153,17 @@ export function useTaskCenter(): PagedListReturn<DistributionTask, TaskFilters> 
         page,
         pageSize
       });
-      // Residual #272: sink INTERACTIVE window projected by listTasks.
-      listDateFrom.value = data.dateFrom;
-      listDateTo.value = data.dateTo;
+      const currentList = listRef.current;
+      const currentKey = listQueryKey(
+        currentList?.pagination.value.current ?? page,
+        currentList?.pagination.value.pageSize ?? pageSize,
+        currentList?.filters ?? filters
+      );
+      // Residual #272: only the current list request may project the effective window.
+      if (!disposed && requestId === latestListRequestId && requestKey === currentKey) {
+        listDateFrom.value = data.dateFrom;
+        listDateTo.value = data.dateTo;
+      }
       return { items: data.items ?? [], total: data.total ?? 0 };
     },
     initialFilters,
@@ -152,19 +171,35 @@ export function useTaskCenter(): PagedListReturn<DistributionTask, TaskFilters> 
       onError: (msg) => ElMessage.error(extractErrorMessage(msg, '加载任务列表失败'))
     }
   );
+  listRef.current = list;
 
   const kpis = ref<TaskKpiResponse | null>(null);
   const kpiLoading = ref(false);
+  const kpiError = ref<string | null>(null);
+  let kpiRequestId = 0;
+
+  onScopeDispose(() => {
+    disposed = true;
+    kpiRequestId += 1;
+    kpiLoading.value = false;
+  }, true);
 
   async function loadKPIs() {
+    if (disposed) return;
+    const requestId = ++kpiRequestId;
     kpiLoading.value = true;
+    kpiError.value = null;
     try {
-      kpis.value = await api.getTaskKPIs();
+      const nextKpis = await api.getTaskKPIs();
+      if (disposed || requestId !== kpiRequestId) return;
+      kpis.value = nextKpis;
     } catch (err) {
+      if (disposed || requestId !== kpiRequestId) return;
       kpis.value = null;
-      ElMessage.error(extractErrorMessage(err, '加载任务指标失败'));
+      kpiError.value = extractErrorMessage(err, '加载任务指标失败');
+      ElMessage.error(kpiError.value);
     } finally {
-      kpiLoading.value = false;
+      if (!disposed && requestId === kpiRequestId) kpiLoading.value = false;
     }
   }
 
@@ -174,10 +209,11 @@ export function useTaskCenter(): PagedListReturn<DistributionTask, TaskFilters> 
         message: `确定删除任务「${task.title || task.taskId}」吗?删除后不可恢复。`,
         title: '确认删除'
       },
-      () => api.deleteTask(task.taskId),
+      () => (disposed ? Promise.resolve() : api.deleteTask(task.taskId)),
       {
         successMsg: '任务已删除',
         errorMsg: '删除任务失败',
+        isActive: () => !disposed,
         onSuccess: async () => {
           await list.load();
           await loadKPIs();
@@ -208,6 +244,7 @@ export function useTaskCenter(): PagedListReturn<DistributionTask, TaskFilters> 
     tasks: list.items,
     kpis,
     kpiLoading,
+    kpiError,
     loadKPIs,
     deleteTask,
     handleDelete: deleteTask,

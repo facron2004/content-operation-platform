@@ -1,6 +1,4 @@
-import { describe, expect, it } from 'vitest';
-import { readFileSync } from 'fs';
-import { join } from 'path';
+import { describe, expect, it, vi } from 'vitest';
 import {
   ATTRIBUTION_MISMATCH_PURGE_LIMIT,
   MERCHANT_GEOCODE_BATCH_LIMIT,
@@ -8,6 +6,10 @@ import {
   PLATFORM_SCAN_LIMIT,
   RESOLVED_ALERT_DAY_LIMIT
 } from '../src/common/sql-chunk';
+import { geocodeMerchantsFromPartnerShop } from '../src/merchant/merchant-geocoder';
+import { upsertMerchants } from '../src/merchant/merchant-address-updater';
+import { AttributionService } from '../src/attribution/attribution.service';
+import { AlertService } from '../src/content/alert.service';
 
 describe('named platform scan ceilings (residual #53)', () => {
   it('exports merchant/attribution/alert ceilings under PLATFORM_SCAN', () => {
@@ -19,29 +21,46 @@ describe('named platform scan ceilings (residual #53)', () => {
     expect(MERCHANT_UPSERT_SCAN_LIMIT).toBeLessThanOrEqual(PLATFORM_SCAN_LIMIT);
   });
 
-  it('call sites bind named constants instead of bare magic LIMITs', () => {
-    const geo = readFileSync(
-      join(__dirname, '..', 'src', 'merchant', 'merchant-geocoder.ts'),
-      'utf8'
+  it('geocoder and merchant refresh bind their runtime query caps', async () => {
+    const geocodePrisma = { $queryRawUnsafe: vi.fn().mockResolvedValue([]) };
+    await geocodeMerchantsFromPartnerShop(
+      geocodePrisma as never,
+      undefined as never,
+      undefined as never
     );
-    const addr = readFileSync(
-      join(__dirname, '..', 'src', 'merchant', 'merchant-address-updater.ts'),
-      'utf8'
+    expect(String(geocodePrisma.$queryRawUnsafe.mock.calls[0][0])).toContain(
+      `LIMIT ${MERCHANT_GEOCODE_BATCH_LIMIT}`
     );
-    const attr = readFileSync(
-      join(__dirname, '..', 'src', 'attribution', 'attribution.service.ts'),
-      'utf8'
-    );
-    const alert = readFileSync(join(__dirname, '..', 'src', 'content', 'alert.service.ts'), 'utf8');
 
-    expect(geo).toContain('MERCHANT_GEOCODE_BATCH_LIMIT');
-    expect(geo).not.toMatch(/LIMIT 2000/);
-    expect(addr).toContain('MERCHANT_UPSERT_SCAN_LIMIT');
-    expect(addr).not.toMatch(/LIMIT 5000/);
-    expect(attr).toContain('ATTRIBUTION_MISMATCH_PURGE_LIMIT');
-    // Mismatch purge must use bound param, not bare LIMIT 5000.
-    expect(attr).not.toMatch(/OR oh\."packageId" <> t\."packageId"\s*\n\s*LIMIT 5000/);
-    expect(alert).toContain('RESOLVED_ALERT_DAY_LIMIT');
-    expect(alert).not.toMatch(/const RESOLVED_ALERT_LIMIT = 5000/);
+    const addressPrisma = { $queryRawUnsafe: vi.fn().mockResolvedValue([]) };
+    await upsertMerchants(addressPrisma as never);
+    expect(String(addressPrisma.$queryRawUnsafe.mock.calls[0][0])).toContain(
+      `LIMIT ${MERCHANT_UPSERT_SCAN_LIMIT}`
+    );
+  });
+
+  it('attribution purge binds the mismatch cap at execution time', async () => {
+    const prisma = { $queryRawUnsafe: vi.fn().mockResolvedValue([]) };
+    const service = new AttributionService(prisma as never);
+
+    await expect(service.recompute()).resolves.toMatchObject({
+      success: true,
+      processedTasks: 0
+    });
+    expect(prisma.$queryRawUnsafe.mock.calls[0].at(-1)).toBe(ATTRIBUTION_MISMATCH_PURGE_LIMIT);
+  });
+
+  it('resolved alert loading requests only one bounded head plus truncation probe', async () => {
+    const findMany = vi.fn().mockResolvedValue([]);
+    const service = new AlertService({ operationAlertResolution: { findMany } } as never);
+
+    await expect(service.loadResolvedAlertIds('2026-08-03')).resolves.toMatchObject({
+      loaded: 0,
+      truncated: false,
+      limit: RESOLVED_ALERT_DAY_LIMIT
+    });
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ take: RESOLVED_ALERT_DAY_LIMIT + 1 })
+    );
   });
 });

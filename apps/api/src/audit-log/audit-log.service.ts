@@ -77,13 +77,14 @@ export class AuditLogService {
   }
 
   /**
-   * Wrapper that catches errors silently — for use in interceptors.
+   * Best-effort wrapper for interceptors. The interceptor must not fail the
+   * business response because an audit write is unavailable.
    */
   async tryLog(entry: AuditLogEntry): Promise<void> {
     try {
       await this.log(entry);
     } catch (e) {
-      this.logger.warn(`Audit log write failed (silent): ${(e as Error).message}`);
+      this.logger.warn(`Audit log write failed (best effort): ${(e as Error).message}`);
     }
   }
 

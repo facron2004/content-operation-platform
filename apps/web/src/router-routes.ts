@@ -352,6 +352,17 @@ const operationsDataRoutes: RouteRecordRaw[] = [
     PLATFORM_ROLES
   ),
   route(
+    'attribution',
+    'attribution',
+    '订单归因',
+    'Connection',
+    'growth',
+    25,
+    () => import('./views/AttributionView.vue'),
+    false,
+    PLATFORM_ROLES
+  ),
+  route(
     'zero-sales',
     'zero-sales',
     '零动销清单',

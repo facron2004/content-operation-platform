@@ -1,5 +1,11 @@
 <template>
   <section class="page-stack ai-generate-page">
+    <ErrorAlert :message="packageLoadError" />
+    <ErrorAlert :message="aiStatusError" />
+    <ErrorAlert :message="configError" />
+    <ErrorAlert :message="battleCardError" />
+    <ErrorAlert :message="generationError" />
+    <ErrorAlert :message="copyError" />
     <GenerateHeroWorkflow
       :package-name="selectedPackage?.packageName"
       :mode-label="generationModeLabel"
@@ -18,6 +24,7 @@
       :selected-package="selectedPackage"
       :package-detail="packageDetail"
       :detail-loading="detailLoading"
+      :detail-error="detailError"
       :feed-facts="feedFacts"
       :feed-checks="feedChecks"
       :format-detail-items="formatDetailItems"
@@ -39,6 +46,7 @@
   </section>
 </template>
 <script setup lang="ts">
+import ErrorAlert from '../components/ErrorAlert.vue';
 import BattleCardPanel from '../components/BattleCardPanel.vue';
 import CopyResultsPanel from '../components/CopyResultsPanel.vue';
 import GenerateHeroWorkflow from '../features/generate/components/GenerateHeroWorkflow.vue';
@@ -54,9 +62,16 @@ const {
   listTruncated,
   listLimit,
   matchedCount,
+  packageLoadError,
+  battleCardError,
+  generationError,
   copies,
   aiStatus,
+  aiStatusError,
+  configError,
+  copyError,
   packageDetail,
+  detailError,
   battleCard,
   battleCardLoading,
   form,

@@ -70,8 +70,13 @@ export async function deleteCommunity(id: string) {
   return res.data;
 }
 
-export async function importCommunities(data: { source: 'csv' | 'json'; rawData: string }) {
-  const res = await client.post('/community-library/import', data);
+export async function importCommunities(
+  data: { source: 'csv' | 'json'; rawData: string },
+  idempotencyKey: string
+) {
+  const res = await client.post('/community-library/import', data, {
+    headers: { 'Idempotency-Key': idempotencyKey }
+  });
   clearCache('/community-library');
   return res.data;
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createHash, randomBytes } from 'crypto';
-import { isLegacyHash, verifyLegacyPassword } from '../src/user-access/user.service';
+import { isLegacyHash, verifyLegacyPassword } from '../src/user-access/application/auth-utils';
 
 function makeLegacyHash(password: string): string {
   const salt = randomBytes(16).toString('hex');

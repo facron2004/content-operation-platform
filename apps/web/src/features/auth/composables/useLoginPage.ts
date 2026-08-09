@@ -1,14 +1,14 @@
 import { reactive, ref } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { ElMessage } from 'element-plus';
-import axios from 'axios';
 import { useAuthStore } from '../../../stores/auth';
+import { requestBrowserLogin } from '../../../stores/auth-requests';
 import { extractErrorMessage } from '../../../services/http-client';
 import { resolveLoginRedirect } from '../utils/login-redirect';
 
 export { resolveLoginRedirect } from '../utils/login-redirect';
 
-type AuthStoreLike = { setAuth: (token: string, username: string) => void };
+type AuthStoreLike = { setAuth: (username: string) => void };
 
 export async function performLogin(args: {
   username: string;
@@ -26,12 +26,9 @@ export async function performLogin(args: {
   args.setLoading(true);
   args.setError(null);
   try {
-    const baseURL = import.meta.env.VITE_API_BASE_URL || '/api';
-    const res = await axios.post(`${baseURL}/auth/login`, {
-      username: args.username.trim(),
-      password: args.password.trim()
-    });
-    args.authStore.setAuth(res.data.access_token, res.data.username);
+    const result = await requestBrowserLogin(args.username.trim(), args.password.trim());
+    if (!result.username) throw new Error('登录响应无效');
+    args.authStore.setAuth(result.username);
     ElMessage.success('登录成功');
     args.navigate(args.redirect);
   } catch (e: unknown) {

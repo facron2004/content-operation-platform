@@ -34,7 +34,7 @@ describe('residual #64 dashboard opsCache TTL + scoped keys', () => {
     const fs = await import('fs/promises');
     const path = await import('path');
     const service = await fs.readFile(
-      path.join(__dirname, '..', 'src', 'content', 'dashboard.service.ts'),
+      path.join(__dirname, '..', 'src', 'content', 'dashboard-operations.service.ts'),
       'utf8'
     );
     const controller = await fs.readFile(

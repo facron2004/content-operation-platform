@@ -8,6 +8,9 @@
         返回任务列表
       </AppleButton>
     </div>
+    <ErrorAlert :message="loadError" />
+    <ErrorAlert :message="performanceError" />
+    <ErrorAlert :message="actionError" />
 
     <el-row :gutter="20">
       <el-col :span="16">
@@ -107,6 +110,7 @@ import TaskExecutionTimeline from '../features/task-center/components/TaskExecut
 import TaskPublishDialog from '../features/task-center/components/TaskPublishDialog.vue';
 import TaskFailDialog from '../features/task-center/components/TaskFailDialog.vue';
 import AppleButton from '../components/AppleButton.vue';
+import ErrorAlert from '../components/ErrorAlert.vue';
 
 const route = useRoute();
 const taskId = route.params.taskId as string;
@@ -114,11 +118,14 @@ const taskId = route.params.taskId as string;
 // Mount load lives inside useTaskDetail; mutates route through composable (#127).
 const {
   loading,
+  loadError,
+  actionError,
   task,
   executions,
   executionsTruncated,
   executionsLimit,
   performance,
+  performanceError,
   publish,
   fail,
   cancel,
@@ -156,11 +163,11 @@ const failDialogVisible = ref(false);
 const failSubmitting = ref(false);
 
 async function confirmPublish(data: { evidenceUrl?: string; note?: string }) {
+  if (publishSubmitting.value) return;
   publishSubmitting.value = true;
   try {
     // Residual #127: route through composable (body reuse + timeline-only refresh).
-    await publish(data);
-    publishDialogVisible.value = false;
+    if (await publish(data)) publishDialogVisible.value = false;
   } finally {
     publishSubmitting.value = false;
   }
@@ -174,8 +181,7 @@ async function confirmFail(data: {
 }) {
   failSubmitting.value = true;
   try {
-    await fail(data);
-    failDialogVisible.value = false;
+    if (await fail(data)) failDialogVisible.value = false;
   } finally {
     failSubmitting.value = false;
   }

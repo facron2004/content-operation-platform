@@ -5,17 +5,17 @@ describe('residual #95 UserRoleBinding multi-row INSERT', () => {
     const fs = await import('fs/promises');
     const path = await import('path');
     const src = await fs.readFile(
-      path.join(__dirname, '..', 'src', 'user-access', 'user.service.ts'),
+      path.join(__dirname, '..', 'src', 'user-access', 'application', 'user-command.service.ts'),
       'utf8'
     );
 
     const fnStart = src.indexOf('private async insertRoleBindings');
     expect(fnStart).toBeGreaterThan(0);
-    const next = src.indexOf('\n  private async fetchRoleBindings', fnStart + 10);
+    const next = src.indexOf('\n  async ensureEnvAdmin', fnStart + 10);
     const fn = src.slice(fnStart, next > 0 ? next : undefined);
 
-    expect(fn).toContain('valueClauses');
-    expect(fn).toMatch(/VALUES\s+\$\{valueClauses\}/);
+    expect(fn).toContain('values');
+    expect(fn).toMatch(/VALUES\s+\$\{values\}/);
     expect(fn).toContain('UserRoleBinding');
   });
 
@@ -23,14 +23,14 @@ describe('residual #95 UserRoleBinding multi-row INSERT', () => {
     const fs = await import('fs/promises');
     const path = await import('path');
     const src = await fs.readFile(
-      path.join(__dirname, '..', 'src', 'user-access', 'user.service.ts'),
+      path.join(__dirname, '..', 'src', 'user-access', 'application', 'user-command.service.ts'),
       'utf8'
     );
 
     // create() path
     const createStart = src.indexOf('async create(');
     expect(createStart).toBeGreaterThan(0);
-    const createEnd = src.indexOf('\n  /** Update user info', createStart + 10);
+    const createEnd = src.indexOf('\n  async update(', createStart + 10);
     const createFn = src.slice(createStart, createEnd > 0 ? createEnd : undefined);
     expect(createFn).toContain('insertRoleBindings');
     expect(createFn).not.toMatch(
@@ -40,7 +40,7 @@ describe('residual #95 UserRoleBinding multi-row INSERT', () => {
     // updateRoles() path
     const rolesStart = src.indexOf('async updateRoles(');
     expect(rolesStart).toBeGreaterThan(0);
-    const rolesEnd = src.indexOf('\n  // ─── Private helpers', rolesStart + 10);
+    const rolesEnd = src.indexOf('\n  private async insertRoleBindings', rolesStart + 10);
     const rolesFn = src.slice(rolesStart, rolesEnd > 0 ? rolesEnd : undefined);
     expect(rolesFn).toContain('insertRoleBindings');
     expect(rolesFn).not.toMatch(

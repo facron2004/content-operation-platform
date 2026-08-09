@@ -8,21 +8,22 @@ const sharedRoot = path.join(__dirname, '..', '..', '..', 'packages', 'shared', 
 
 describe('residual #283 alert focus-package head honesty', () => {
   it('buildAlertPackageFocus returns items + limit/matched/truncated', async () => {
-    const src = await readFile(path.join(srcRoot, 'content', 'alert.service.ts'), 'utf8');
+    const src = await readFile(path.join(srcRoot, 'content', 'alert-aggregation.ts'), 'utf8');
     const start = src.indexOf('buildAlertPackageFocus(');
     expect(start).toBeGreaterThanOrEqual(0);
-    const end = src.indexOf('private resolvePagination(', start + 10);
-    const fn = src.slice(start, end > 0 ? end : start + 3000);
-    expect(fn).toMatch(/FOCUS_PACKAGE_LIMIT\s*=\s*8/);
+    expect(src).toMatch(/FOCUS_PACKAGE_LIMIT\s*=\s*8/);
+    const fn = src.slice(start, start + 3000);
     expect(fn).toMatch(/matched\s*=\s*ranked\.length/);
     expect(fn).toMatch(/items\s*=\s*ranked\.slice\(0,\s*FOCUS_PACKAGE_LIMIT\)/);
     expect(fn).toMatch(/truncated:\s*matched\s*>\s*items\.length/);
     expect(fn).toMatch(/limit:\s*FOCUS_PACKAGE_LIMIT/);
 
     // getOperationAlerts projects focusPackage* honesty.
-    const listStart = src.indexOf('topPackages: focus.items');
+    const service = await readFile(path.join(srcRoot, 'content', 'alert.service.ts'), 'utf8');
+    expect(service).toMatch(/buildAlertPackageFocusRows/);
+    const listStart = service.indexOf('topPackages: focus.items');
     expect(listStart).toBeGreaterThanOrEqual(0);
-    const listBlock = src.slice(listStart - 200, listStart + 400);
+    const listBlock = service.slice(listStart - 200, listStart + 400);
     expect(listBlock).toMatch(/focusPackageLimit:\s*focus\.limit/);
     expect(listBlock).toMatch(/focusPackageMatched:\s*focus\.matched/);
     expect(listBlock).toMatch(/focusPackageTruncated:\s*focus\.truncated/);

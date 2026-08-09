@@ -4,10 +4,15 @@ describe('residual #75 merchant metric-first head', () => {
   it('listMerchantRowsByMetric + computeMerchantsWithStale metric path', async () => {
     const fs = await import('fs/promises');
     const path = await import('path');
-    const src = await fs.readFile(
-      path.join(__dirname, '..', 'src', 'merchant', 'merchant-list.ts'),
+    const queries = await fs.readFile(
+      path.join(__dirname, '..', 'src', 'merchant', 'merchant-list-queries.ts'),
       'utf8'
     );
+    const projection = await fs.readFile(
+      path.join(__dirname, '..', 'src', 'merchant', 'merchant-list-projection.ts'),
+      'utf8'
+    );
+    const src = [projection, queries].join('\n');
     expect(src).toContain('listMerchantRowsByMetric');
     expect(src).toContain('buildMerchantListFilters');
     // Metric sorts must not fall through to merchantId ASC head.
@@ -54,7 +59,7 @@ describe('residual #75 last-sales date bound', () => {
     const fs = await import('fs/promises');
     const path = await import('path');
     const loaders = await fs.readFile(
-      path.join(__dirname, '..', 'src', 'zero-sales', 'zero-sales-loaders.ts'),
+      path.join(__dirname, '..', 'src', 'zero-sales', 'zero-sales-package-sales-loaders.ts'),
       'utf8'
     );
     const list = await fs.readFile(

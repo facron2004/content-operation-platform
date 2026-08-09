@@ -63,7 +63,7 @@ describe('residual #80 exclusive paidTime bounds on recompute paths', () => {
     const fs = await import('fs/promises');
     const path = await import('path');
     const src = await fs.readFile(
-      path.join(__dirname, '..', 'src', 'merchant-sales', 'merchant-sales-query.ts'),
+      path.join(__dirname, '..', 'src', 'merchant-sales', 'merchant-sales-metrics-query.ts'),
       'utf8'
     );
     expect(src).toContain('sqlDatetimeExclusiveRange(\'oh."paidTime"\')');
@@ -82,7 +82,7 @@ describe('residual #80 interactive list exclusive createdAt/orderTime', () => {
       ['community', 'community.service.ts'],
       ['audit-log', 'audit-log.service.ts'],
       ['attribution', 'attribution.service.ts'],
-      ['content', 'dashboard.service.ts']
+      ['content', 'dashboard-summary.service.ts']
     ];
     for (const parts of files) {
       const src = await fs.readFile(path.join(__dirname, '..', 'src', ...parts), 'utf8');

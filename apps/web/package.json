@@ -7,7 +7,9 @@
     "dev": "vite --host 0.0.0.0",
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview --host 0.0.0.0",
-    "test": "vitest run"
+    "test": "npm run test:behavior && npm run test:legacy",
+    "test:behavior": "vitest run --config vitest.config.ts",
+    "test:legacy": "vitest run --config vitest.legacy.config.ts"
   },
   "dependencies": {
     "@content/shared": "file:../../packages/shared",

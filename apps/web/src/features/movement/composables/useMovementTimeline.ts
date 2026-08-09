@@ -1,5 +1,4 @@
-import { ref } from 'vue';
-import { ElMessage } from 'element-plus';
+import { onScopeDispose, ref } from 'vue';
 import {
   getMovementTimeline,
   type MovementSkuRow,
@@ -31,20 +30,28 @@ export function useMovementTimeline() {
   const merchantName = ref('');
   const days = ref(30);
   const timeline = ref<MovementTimelineResponse['timeline']>([]);
+  const timelineError = ref<string | null>(null);
+  let disposed = false;
+  let requestId = 0;
 
   async function fetchTimeline(id: string, dayCount: number) {
+    if (disposed) return;
+    const currentRequestId = ++requestId;
     loading.value = true;
+    timelineError.value = null;
     try {
       const res = await getMovementTimeline(id, dayCount);
+      if (disposed || currentRequestId !== requestId) return;
       timeline.value = res?.timeline ?? [];
       if (typeof res?.days === 'number' && res.days > 0) {
         days.value = clampTimelineDays(res.days);
       }
     } catch (error) {
-      ElMessage.error(extractErrorMessage(error, '加载动销时间线失败'));
+      if (disposed || currentRequestId !== requestId) return;
+      timelineError.value = extractErrorMessage(error, '加载动销时间线失败');
       timeline.value = [];
     } finally {
-      loading.value = false;
+      if (!disposed && currentRequestId === requestId) loading.value = false;
     }
   }
 
@@ -52,17 +59,20 @@ export function useMovementTimeline() {
     row: Pick<MovementSkuRow, 'packageId' | 'packageName' | 'merchantName'>,
     opts?: { days?: number }
   ) {
+    if (disposed) return;
     packageId.value = row.packageId;
     packageName.value = row.packageName ?? '';
     merchantName.value = row.merchantName ?? '';
     days.value = clampTimelineDays(opts?.days);
     timeline.value = [];
+    timelineError.value = null;
     drawerVisible.value = true;
     await fetchTimeline(row.packageId, days.value);
   }
 
   /** Residual #234: re-fetch open package with a new window (7–90). */
   async function setDays(next: number) {
+    if (disposed) return;
     const clamped = clampTimelineDays(next);
     if (clamped === days.value && timeline.value.length > 0) return;
     days.value = clamped;
@@ -73,7 +83,15 @@ export function useMovementTimeline() {
 
   function close() {
     drawerVisible.value = false;
+    requestId += 1;
+    loading.value = false;
   }
+
+  onScopeDispose(() => {
+    disposed = true;
+    requestId += 1;
+    loading.value = false;
+  });
 
   return {
     drawerVisible,
@@ -83,6 +101,7 @@ export function useMovementTimeline() {
     merchantName,
     days,
     timeline,
+    error: timelineError,
     open,
     setDays,
     close

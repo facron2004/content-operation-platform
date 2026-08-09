@@ -20,33 +20,46 @@ describe('residual #244 createUser roles on create', () => {
   });
 
   it('UserManagementView create dialog exposes createRoleDrafts controls', async () => {
-    const src = await readFile(path.join(srcRoot, 'views/UserManagementView.vue'), 'utf8');
+    const src = await readFile(
+      path.join(srcRoot, 'features/user-management/UserFormDialog.vue'),
+      'utf8'
+    );
     expect(src).toMatch(/createRoleDrafts/);
     expect(src).toMatch(/addCreateRoleRow/);
     expect(src).toMatch(/removeCreateRoleRow/);
-    expect(src).toMatch(/validateCreateRoleDrafts/);
+    expect(src).toMatch(/validateRoleDrafts/);
     // Create-only (not on edit).
     expect(src).toMatch(/v-if="!isEdit"/);
   });
 
   it('create submit maps roles into api.createUser', async () => {
-    const src = await readFile(path.join(srcRoot, 'views/UserManagementView.vue'), 'utf8');
-    const submitStart = src.indexOf('async function handleSubmit');
+    const src = await readFile(
+      path.join(srcRoot, 'features/user-management/UserFormDialog.vue'),
+      'utf8'
+    );
+    const submitStart = src.indexOf('async function submitForm');
     expect(submitStart).toBeGreaterThan(0);
-    const submitEnd = src.indexOf('onMounted', submitStart + 10);
+    const submitEnd = src.indexOf('</script>', submitStart + 10);
     const submitFn = src.slice(submitStart, submitEnd > 0 ? submitEnd : undefined);
-    expect(submitFn).toMatch(/validateCreateRoleDrafts/);
+    expect(submitFn).toMatch(/validateRoleDrafts/);
     expect(submitFn).toMatch(/mapRoleDrafts\(createRoleDrafts\.value\)/);
-    expect(submitFn).toMatch(/api\.createUser\([\s\S]{0,400}roles/);
+    expect(submitFn).toMatch(/roles:\s*props\.isEdit\s*\?\s*undefined/);
   });
 
   it('openCreate seeds a default executor role draft', async () => {
-    const src = await readFile(path.join(srcRoot, 'views/UserManagementView.vue'), 'utf8');
+    const src = await readFile(
+      path.join(srcRoot, 'features/user-management/useUserManagement.ts'),
+      'utf8'
+    );
+    const form = await readFile(
+      path.join(srcRoot, 'features/user-management/UserFormDialog.vue'),
+      'utf8'
+    );
     const openStart = src.indexOf('function openCreate');
     expect(openStart).toBeGreaterThan(0);
-    const openEnd = src.indexOf('function handleEdit', openStart + 10);
-    const openFn = src.slice(openStart, openEnd > 0 ? openEnd : undefined);
-    expect(openFn).toMatch(/createRoleDrafts\.value\s*=\s*\[\s*\{\s*role:\s*'executor'\s*\}\s*\]/);
+    expect(form).toMatch(
+      /createRoleDrafts\.value\s*=\s*props\.isEdit\s*\?\s*\[\]\s*:\s*\[\{\s*role:\s*'executor'\s*\}\]/
+    );
   });
 
   it('CreateUserDto already accepts roles (API ready)', async () => {

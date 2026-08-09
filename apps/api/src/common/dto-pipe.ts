@@ -14,7 +14,7 @@ export function createDtoPipe<T extends object>(
   options?: { whitelist?: boolean; forbidNonWhitelisted?: boolean }
 ): PipeTransform {
   const whitelist = options?.whitelist ?? true;
-  const forbidNonWhitelisted = options?.forbidNonWhitelisted ?? false;
+  const forbidNonWhitelisted = options?.forbidNonWhitelisted ?? true;
 
   return {
     async transform(value: unknown): Promise<T> {

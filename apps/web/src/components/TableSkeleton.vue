@@ -8,10 +8,7 @@
   </div>
 </template>
 <script setup lang="ts">
-const { rows, columns } = withDefaults(defineProps<{ rows?: number; columns?: number }>(), {
-  rows: 5,
-  columns: 6
-});
+const { rows = 5, columns = 6 } = defineProps<{ rows?: number; columns?: number }>();
 const getWidth = (index: number) => ['60%', '80%', '70%', '90%', '75%', '85%'][index % 6];
 </script>
 <style src="../styles/components/table-skeleton.css" scoped></style>

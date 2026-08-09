@@ -16,6 +16,7 @@ import { safePathId } from '../common/path-id';
 import { resolveScopedQuery } from '../user-access/data-scope';
 import { assertPackageInScope } from '../user-access/scope-guards';
 import { RequireLogin } from '../user-access/iam/route-auth.decorator';
+import { RequirePermissions } from '../user-access/iam/require-permissions.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 
 type AuthUser = {
@@ -38,6 +39,7 @@ export class ZeroSalesController {
   // Tighter long limit — heavy gate already bounds process concurrency.
   @Throttle({ long: { limit: 10, ttl: 60000 } })
   @Get('merchants')
+  @RequirePermissions('packages:read')
   @ApiOperation({ summary: '零动销商家清单' })
   listMerchants(
     @Query(createDtoPipe(ZeroSalesMerchantsQueryDto)) query: ZeroSalesMerchantsQueryDto,
@@ -56,6 +58,7 @@ export class ZeroSalesController {
   // Filter-first SQL page but still cold-heavy under multi-filter keys.
   @Throttle({ long: { limit: 10, ttl: 60000 } })
   @Get('skus')
+  @RequirePermissions('packages:read')
   @ApiOperation({ summary: '零动销 SKU 清单' })
   listSkus(
     @Query(createDtoPipe(ZeroSalesSkusQueryDto)) query: ZeroSalesSkusQueryDto,
@@ -72,6 +75,7 @@ export class ZeroSalesController {
   }
 
   @Get('skus/export')
+  @RequirePermissions('packages:read')
   @Throttle({ long: { limit: 3, ttl: 60000 } })
   @ApiOperation({ summary: '零动销 SKU 导出 CSV' })
   async exportSkus(
@@ -103,6 +107,7 @@ export class ZeroSalesController {
   }
 
   @Get('skus/:packageId/timeline')
+  @RequirePermissions('packages:read')
   @Throttle({ long: { limit: 30, ttl: 60000 } })
   @ApiOperation({ summary: '单 SKU 零动销时间线（30/60/90 天）' })
   async timeline(

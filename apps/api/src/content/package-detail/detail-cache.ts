@@ -54,12 +54,14 @@ export class DetailCache {
     const pending = this.inFlight.get(packageId);
     if (pending) return pending;
 
+    const flight: { promise: Promise<PackageDetail | null> | null } = { promise: null };
     const loadPromise = (async () => {
       const data = await loader();
-      if (data) this.set(packageId, data);
+      if (this.inFlight.get(packageId) === flight.promise && data) this.set(packageId, data);
       return data;
     })();
 
+    flight.promise = loadPromise;
     this.inFlight.set(packageId, loadPromise);
     try {
       return await loadPromise;

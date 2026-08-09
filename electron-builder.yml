@@ -9,29 +9,32 @@ files:
   - apps/desktop/dist/**/*
   - apps/desktop/package.json
   - package.json
-  - "!**/*.map"
-  - "!**/*.ts"
-  - "!**/test/**"
-  - "!**/*.spec.*"
+  - '!**/*.map'
+  - '!**/*.ts'
+  - '!**/test/**'
+  - '!**/*.spec.*'
 
 extraResources:
   - from: staging/api
     to: api
     filter:
-      - "**/*"
+      - '**/*'
 
   - from: apps/web/dist
     to: web
     filter:
-      - "**/*"
+      - '**/*'
 
   - from: prisma/migrations
     to: prisma/migrations
     filter:
-      - "**/*"
+      - '**/*'
 
   - from: prisma/schema.prisma
     to: prisma/schema.prisma
+
+  - from: staging/release-manifest.json
+    to: release-manifest.json
 
   - from: resources/loading.html
     to: loading.html
@@ -42,9 +45,9 @@ extraResources:
 asar: true
 
 asarUnpack:
-  - "**/*.node"
-  - "**/.prisma/**"
-  - "**/@prisma/engines/**"
+  - '**/*.node'
+  - '**/.prisma/**'
+  - '**/@prisma/engines/**'
 
 win:
   target:
@@ -52,7 +55,7 @@ win:
       arch:
         - x64
   icon: resources/icon.png
-  artifactName: "${productName}-Setup-${version}-${arch}.${ext}"
+  artifactName: '${productName}-Setup-${version}-${arch}.${ext}'
 
 nsis:
   oneClick: false

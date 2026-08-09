@@ -1,9 +1,11 @@
-import { Inject, Injectable, Optional, UnauthorizedException } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
+import { describeError } from '@content/shared';
 import { JWT_SECRET } from '../config/auth.config';
-import { UserService } from '../user-access/user.service';
+import { UserQueryService } from '../user-access/application/user-application.service';
 import { IamAccessService } from '../user-access/iam/iam-access.service';
+import { extractJwtFromCookie } from './auth-cookie';
 
 type JwtPayload = {
   sub: string;
@@ -34,18 +36,22 @@ type CachedStatus = {
 
 /**
  * JWT strategy that re-checks AppUser isActive + roles/bindings with a short TTL cache.
- * Env-admin (sub=admin) still works without AppUser, but prefers DB row when seeded.
+ * Env-admin (sub=admin) must resolve to the AppUser seeded during module init.
  */
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
   private readonly statusCache = new Map<string, CachedStatus>();
+  private readonly logger = new Logger(JwtStrategy.name);
 
   constructor(
-    @Inject(UserService) private readonly userService: UserService,
+    @Inject(UserQueryService) private readonly userQueryService: UserQueryService,
     @Optional() @Inject(IamAccessService) private readonly iamAccessService?: IamAccessService
   ) {
     super({
-      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+      jwtFromRequest: ExtractJwt.fromExtractors([
+        ExtractJwt.fromAuthHeaderAsBearerToken(),
+        extractJwtFromCookie
+      ]),
       ignoreExpiration: false,
       secretOrKey: JWT_SECRET
     });
@@ -56,11 +62,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException('无效令牌');
     }
 
-    // Prefer DB for env-admin when bootstrap seed created AppUser(userId=admin)
+    // The bootstrap admin is a normal AppUser after module initialization.
     if (payload.sub === 'admin') {
       const status = await this.resolveStatus(payload.sub);
       if (status) {
-        // Deactivated admin must not keep working via the cold-start JWT fallback.
         if (!status.isActive) {
           throw new UnauthorizedException('用户已停用或不存在');
         }
@@ -76,22 +81,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
           tokenVersion: status.tokenVersion
         };
       }
-      // No AppUser(userId=admin). Cold-start env-admin JWT is only valid while
-      // the user table is empty. Once any operator exists, refuse the fallback
-      // so a leftover cold-start token cannot outrank real accounts.
-      const hasUsers = await this.userService.hasAnyUsers().catch(() => true);
-      if (hasUsers) {
-        throw new UnauthorizedException('用户已停用或不存在');
-      }
-      return {
-        userId: payload.sub,
-        username: payload.username,
-        roles: payload.roles?.length ? payload.roles : ['admin'],
-        bindings: [] as CachedBinding[],
-        tenantId: payload.tenantId ?? 'tenant_default',
-        permissions: [],
-        tokenVersion: typeof payload.tv === 'number' ? payload.tv : 0
-      };
+      throw new UnauthorizedException('用户已停用或不存在');
     }
 
     const status = await this.resolveStatus(payload.sub);
@@ -125,13 +115,24 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     this.statusCache.delete(userId);
   }
 
+  /** Organization mutations can change scoped bindings for every tenant user. */
+  invalidateTenant(tenantId: string): void {
+    if (!tenantId) return;
+    for (const [userId, status] of this.statusCache) {
+      if (status.tenantId === tenantId) this.statusCache.delete(userId);
+    }
+  }
+
   private async resolveStatus(userId: string): Promise<CachedStatus | null> {
     const now = Date.now();
     const cached = this.statusCache.get(userId);
     if (cached && cached.expiresAt > now) return cached;
 
     // Residual #143: status projection only — no email/phone/displayName/binding ids.
-    const user = await this.userService.findAuthStatus(userId).catch(() => null);
+    const user = await this.userQueryService.findAuthStatus(userId).catch((error: unknown) => {
+      this.logger.warn(`JWT AppUser lookup failed for ${userId}: ${describeError(error)}`);
+      return null;
+    });
     if (!user) {
       this.statusCache.delete(userId);
       return null;
@@ -142,16 +143,31 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       scopeType: r.scopeType,
       scopeId: r.scopeId
     }));
-    let tenantId = user.tenantId ?? 'tenant_default';
+    let tenantId = user.tenantId?.trim();
+    if (!tenantId) {
+      this.logger.warn(`JWT AppUser ${userId} has no usable tenantId`);
+      this.statusCache.delete(userId);
+      return null;
+    }
     let permissions: string[] = [];
-    const access = await this.iamAccessService?.getUserAccess(userId, tenantId).catch(() => null);
+    const access = await this.iamAccessService
+      ?.getUserAccess(userId, tenantId)
+      .catch((error: unknown) => {
+        this.logger.warn(`JWT IAM access lookup failed for ${userId}: ${describeError(error)}`);
+        return null;
+      });
     if (access) {
       roles = access.roles;
       tenantId = access.tenantId;
       permissions = access.permissions;
       const projectedBindings = await this.iamAccessService
         ?.getLegacyBindings(userId, tenantId)
-        .catch(() => null);
+        .catch((error: unknown) => {
+          this.logger.warn(
+            `JWT legacy binding projection failed for ${userId}: ${describeError(error)}`
+          );
+          return null;
+        });
       if (projectedBindings) bindings = projectedBindings;
     }
     const entry: CachedStatus = {

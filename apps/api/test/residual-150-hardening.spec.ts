@@ -5,7 +5,7 @@ describe('residual #150 rule activate/create list-select response (no payload)',
     const fs = await import('fs/promises');
     const path = await import('path');
     const src = await fs.readFile(
-      path.join(__dirname, '..', 'src', 'content', 'rule-config-ops.ts'),
+      path.join(__dirname, '..', 'src', 'content', 'rule-config-write.ts'),
       'utf8'
     );
 
@@ -32,7 +32,7 @@ describe('residual #150 rule activate/create list-select response (no payload)',
     const fs = await import('fs/promises');
     const path = await import('path');
     const src = await fs.readFile(
-      path.join(__dirname, '..', 'src', 'content', 'rule-config-ops.ts'),
+      path.join(__dirname, '..', 'src', 'content', 'rule-config-write.ts'),
       'utf8'
     );
 

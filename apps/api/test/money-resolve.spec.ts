@@ -43,6 +43,7 @@ describe('money-resolve policy', () => {
         findUnique: vi.fn().mockResolvedValue({
           date: '2026-07-01',
           totalGmvFen: 500_000n,
+          totalRefundFen: 20_000n,
           paidOrderCount: 40
         })
       }
@@ -50,7 +51,7 @@ describe('money-resolve policy', () => {
 
     const result = await resolveDayGmvMoney(prisma, '2026-07-01');
     expect(result.dataSource).toBe('DailyMetrics');
-    expect(result.totalGmvFen).toBe(500_000n);
+    expect(result.totalGmvFen).toBe(480_000n);
     expect(prisma.$queryRawUnsafe).not.toHaveBeenCalled();
   });
 

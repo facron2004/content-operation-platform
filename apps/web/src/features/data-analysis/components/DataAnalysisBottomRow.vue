@@ -19,8 +19,8 @@ const props = defineProps<{
 
 type MetricKey =
   | 'salesAmount'
-  | 'tradeAmount'
-  | 'netSales'
+  | 'netGmv'
+  | 'writeOffAmount'
   | 'orderCount'
   | 'avgOrderValue'
   | 'verifyRate'
@@ -35,8 +35,8 @@ const metricDefs: Array<{
   deltaKey: keyof DataAnalysisDeltas;
 }> = [
   { key: 'salesAmount', label: '总销售额（实付）', kind: 'money', deltaKey: 'salesAmount' },
-  { key: 'tradeAmount', label: '交易额（含余额）', kind: 'money', deltaKey: 'tradeAmount' },
-  { key: 'netSales', label: '净销售额', kind: 'money', deltaKey: 'netSales' },
+  { key: 'netGmv', label: '净 GMV', kind: 'money', deltaKey: 'netGmv' },
+  { key: 'writeOffAmount', label: '核销额', kind: 'money', deltaKey: 'writeOffAmount' },
   { key: 'orderCount', label: '订单数', kind: 'count', deltaKey: 'orderCount' },
   { key: 'avgOrderValue', label: '客单价', kind: 'money', deltaKey: 'avgOrderValue' },
   { key: 'verifyRate', label: '核销率', kind: 'rate', deltaKey: 'verifyRate' },

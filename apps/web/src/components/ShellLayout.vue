@@ -9,6 +9,7 @@
       <ShellTopbar
         :page-title="pageTitle"
         :cookie-status="cookieStatus"
+        :cookie-status-error="cookieStatusError"
         :role-store="roleStore"
         @open-history="historyVisible = true"
         @open-cookie="openCookieDialog"
@@ -42,6 +43,7 @@ const {
   historyVisible,
   cookieDialogVisible,
   cookieStatus,
+  cookieStatusError,
   navTree,
   sidebarCollapsed,
   toggleSidebarCollapse,

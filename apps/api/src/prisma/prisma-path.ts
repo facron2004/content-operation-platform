@@ -3,16 +3,22 @@ import { join, dirname, resolve } from 'path';
 import { existsSync } from 'fs';
 import { deepBigIntToNumber } from './prisma-bigint';
 import { findRepoRootDbPath } from './prisma-db-path';
+import { isDesktopRuntime } from '../config/runtime.config';
 export { deepBigIntToNumber } from './prisma-bigint';
 export { findRepoRootDbPath } from './prisma-db-path';
 export function getPrismaErrorCode(error: unknown): string | undefined {
   return error instanceof Prisma.PrismaClientKnownRequestError ? error.code : undefined;
 }
-/** Resolve the dev.db path. If DATABASE_URL is set, use it directly (even if file doesn't exist yet). */
+/**
+ * Resolve the local database path.
+ *
+ * Desktop mode treats DATABASE_URL as authoritative so a new userData database
+ * cannot accidentally fall back to the repository's prisma/dev.db.
+ */
 export function resolveDevDbPath() {
   const dbUrlPath = resolveDbUrlPath();
   if (dbUrlPath) {
-    if (!existsSync(dbUrlPath)) {
+    if (!existsSync(dbUrlPath) && !isDesktopRuntime()) {
       // DATABASE_URL 是相对路径（如 file:./prisma/dev.db），
       // 但 npm workspace（npm run -w）会将 CWD 切到子目录，
       // resolve("./prisma/dev.db") 走到错误路径。
@@ -40,6 +46,12 @@ export function resolveDevDbPath() {
       finalDbPath: dbUrlPath,
       exists: existsSync(dbUrlPath)
     };
+  }
+
+  if (isDesktopRuntime()) {
+    throw new Error(
+      'APP_RUNTIME=desktop requires DATABASE_URL to point to the desktop userData database; repository database fallback is disabled.'
+    );
   }
 
   // Fallback: scan filesystem (production / local dev without DATABASE_URL)

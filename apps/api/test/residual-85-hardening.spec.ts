@@ -9,22 +9,26 @@ describe('residual #85 GMV refresh money recompute heavy gate', () => {
   it('refreshGmvFromJeesite wraps recompute phase in withHeavyAggregateGate', async () => {
     const fs = await import('fs/promises');
     const path = await import('path');
-    const src = await fs.readFile(
+    const orchestrator = await fs.readFile(
       path.join(__dirname, '..', 'src', 'gmv', 'gmv-refresh.ts'),
       'utf8'
     );
-    expect(src).toContain('withHeavyAggregateGate');
-    expect(src).toContain('runMoneyRecomputes');
+    const recompute = await fs.readFile(
+      path.join(__dirname, '..', 'src', 'gmv', 'gmv-refresh-recompute.ts'),
+      'utf8'
+    );
+    expect(orchestrator).toContain('withHeavyAggregateGate');
+    expect(orchestrator).toContain('runMoneyRecomputes');
     // Pull stays outside the gate (network-bound); recompute is gated.
-    expect(src).toMatch(
+    expect(orchestrator).toMatch(
       /pullJeesiteOrders[\s\S]*?withHeavyAggregateGate\(\(\)\s*=>\s*runMoneyRecomputes/
     );
-    expect(src).toContain('recomputeDailyMetricsRange');
-    expect(src).toContain('recomputePackageSalesAmountRange');
+    expect(recompute).toContain('recomputeDailyMetricsRange');
+    expect(recompute).toContain('recomputePackageSalesAmountRange');
     // invalidateCache after merchant-sales recompute (not mid-write).
-    const fnStart = src.indexOf('async function runMoneyRecomputes');
+    const fnStart = recompute.indexOf('export async function runMoneyRecomputes');
     expect(fnStart).toBeGreaterThan(0);
-    const fn = src.slice(fnStart);
+    const fn = recompute.slice(fnStart);
     const inv = fn.indexOf('invalidateCache()');
     const ms = fn.indexOf('recomputeRange');
     expect(inv).toBeGreaterThan(ms);

@@ -33,13 +33,19 @@ function applyScenarioPreset(preset: string) {
 </script>
 <template>
   <el-form-item label="套餐" required>
-    <!-- Residual #268: first-page picker + RECOMMEND_CACHE_CAP honesty. -->
+    <!-- Residual #268: multi-page picker + RECOMMEND_CACHE_CAP honesty. -->
     <p v-if="truncated" class="list-cap-hint">
       套餐下拉仅加载评分最高的前 {{ limitLabel }} 条
       <template v-if="matchedLabel != null">（匹配 {{ matchedLabel }} 条）</template>
       ；可从推荐列表跳转带 packageId，或在推荐页筛选后生成。
     </p>
-    <el-select v-model="form.packageId" filterable placeholder="选择套餐">
+    <el-select
+      v-model="form.packageId"
+      filterable
+      default-first-option
+      no-match-text="没有匹配的套餐"
+      placeholder="搜索或选择套餐"
+    >
       <el-option
         v-for="item in packages"
         :key="item.packageId"

@@ -2,26 +2,23 @@ import { UnauthorizedException } from '@nestjs/common';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const findAuthStatus = vi.fn();
-const hasAnyUsers = vi.fn();
 
-vi.mock('../src/user-access/user.service', () => ({
-  UserService: class {
+vi.mock('../src/user-access/application/user-application.service', () => ({
+  UserQueryService: class {
     findAuthStatus = findAuthStatus;
-    hasAnyUsers = hasAnyUsers;
   }
 }));
 
 import { JwtStrategy } from '../src/auth/jwt.strategy';
-import { UserService } from '../src/user-access/user.service';
+import { UserQueryService } from '../src/user-access/application/user-application.service';
 
 describe('JwtStrategy.validate', () => {
   let strategy: JwtStrategy;
 
   beforeEach(() => {
+    process.env.NODE_ENV = 'test';
     findAuthStatus.mockReset();
-    hasAnyUsers.mockReset();
-    hasAnyUsers.mockResolvedValue(false);
-    strategy = new JwtStrategy(new UserService(null as never));
+    strategy = new JwtStrategy(new UserQueryService(null as never));
   });
 
   it('rejects inactive users', async () => {
@@ -30,6 +27,7 @@ describe('JwtStrategy.validate', () => {
       username: 'bob',
       isActive: false,
       tokenVersion: 0,
+      tenantId: 'tenant_default',
       roles: [{ role: 'platform_operator' }]
     });
     await expect(
@@ -43,6 +41,7 @@ describe('JwtStrategy.validate', () => {
       username: 'bob',
       isActive: true,
       tokenVersion: 0,
+      tenantId: 'tenant_default',
       roles: [{ role: 'area_operator', scopeType: 'area', scopeId: 'A1' }]
     });
     const user = await strategy.validate({
@@ -57,12 +56,60 @@ describe('JwtStrategy.validate', () => {
     expect(user.tokenVersion).toBe(0);
   });
 
+  it('clears cached auth status for all users in a changed tenant', async () => {
+    findAuthStatus.mockResolvedValue({
+      userId: 'u1',
+      username: 'bob',
+      isActive: true,
+      tokenVersion: 0,
+      tenantId: 'tenant_default',
+      roles: [{ role: 'area_operator', scopeType: 'area', scopeId: 'A1' }]
+    });
+    await strategy.validate({
+      sub: 'u1',
+      username: 'bob',
+      roles: [],
+      tenantId: 'tenant_default',
+      tv: 0
+    });
+
+    findAuthStatus.mockResolvedValue({
+      userId: 'u1',
+      username: 'bob',
+      isActive: true,
+      tokenVersion: 0,
+      tenantId: 'tenant_default',
+      roles: [{ role: 'merchant_operator', scopeType: 'merchant', scopeId: 'M1' }]
+    });
+    await strategy.validate({
+      sub: 'u1',
+      username: 'bob',
+      roles: [],
+      tenantId: 'tenant_default',
+      tv: 0
+    });
+    expect(findAuthStatus).toHaveBeenCalledTimes(1);
+
+    strategy.invalidateTenant('tenant_default');
+
+    const refreshed = await strategy.validate({
+      sub: 'u1',
+      username: 'bob',
+      roles: [],
+      tenantId: 'tenant_default',
+      tv: 0
+    });
+    expect(refreshed.roles).toEqual(['merchant_operator']);
+    expect(findAuthStatus).toHaveBeenCalledTimes(2);
+  });
+
   it('rejects JWT with mismatched tokenVersion after password/role revoke', async () => {
     findAuthStatus.mockResolvedValue({
       userId: 'u1',
       username: 'bob',
       isActive: true,
       tokenVersion: 3,
+      tenantId: 'tenant_default',
       roles: [{ role: 'platform_operator' }]
     });
     await expect(
@@ -70,27 +117,53 @@ describe('JwtStrategy.validate', () => {
     ).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
-  it('falls back to token claims for env-admin when user table is empty', async () => {
+  it('rejects env-admin JWT when the bootstrap AppUser is missing', async () => {
     findAuthStatus.mockResolvedValue(null);
-    hasAnyUsers.mockResolvedValue(false);
-    const user = await strategy.validate({
-      sub: 'admin',
-      username: 'admin',
-      roles: ['admin'],
-      tv: 0
-    });
-    expect(user.userId).toBe('admin');
-    expect(user.roles).toContain('admin');
-    expect(user.bindings).toEqual([]);
-    expect(findAuthStatus).toHaveBeenCalledWith('admin');
-  });
-
-  it('rejects env-admin cold-start JWT once any AppUser exists', async () => {
-    findAuthStatus.mockResolvedValue(null);
-    hasAnyUsers.mockResolvedValue(true);
     await expect(
       strategy.validate({ sub: 'admin', username: 'admin', roles: ['admin'], tv: 0 })
     ).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+
+  it('fails closed when env-admin AppUser lookup errors', async () => {
+    findAuthStatus.mockResolvedValue(null);
+    findAuthStatus.mockRejectedValueOnce(new Error('database unavailable'));
+    const warn = vi.spyOn(
+      (strategy as unknown as { logger: { warn: (message: string) => void } }).logger,
+      'warn'
+    );
+    await expect(
+      strategy.validate({ sub: 'admin', username: 'admin', roles: ['admin'], tv: 0 })
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('database unavailable'));
+  });
+
+  it('logs IAM access lookup failures while preserving legacy role compatibility', async () => {
+    findAuthStatus.mockResolvedValue({
+      userId: 'u1',
+      username: 'bob',
+      isActive: true,
+      tokenVersion: 0,
+      tenantId: 'tenant_default',
+      roles: [{ role: 'platform_operator' }]
+    });
+    const getUserAccess = vi.fn().mockRejectedValue(new Error('IAM projection unavailable'));
+    const strategyWithIam = new JwtStrategy(new UserQueryService(null as never), {
+      getUserAccess
+    } as never);
+    const warn = vi.spyOn(
+      (strategyWithIam as unknown as { logger: { warn: (message: string) => void } }).logger,
+      'warn'
+    );
+
+    const user = await strategyWithIam.validate({
+      sub: 'u1',
+      username: 'bob',
+      roles: ['platform_operator'],
+      tv: 0
+    });
+
+    expect(user.roles).toEqual(['platform_operator']);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('IAM projection unavailable'));
   });
 
   it('prefers seeded AppUser for env-admin sub=admin', async () => {
@@ -99,6 +172,7 @@ describe('JwtStrategy.validate', () => {
       username: 'admin',
       isActive: true,
       tokenVersion: 0,
+      tenantId: 'tenant_default',
       roles: [{ role: 'admin' }]
     });
     const user = await strategy.validate({
@@ -117,6 +191,7 @@ describe('JwtStrategy.validate', () => {
       username: 'admin',
       isActive: false,
       tokenVersion: 0,
+      tenantId: 'tenant_default',
       roles: [{ role: 'admin' }]
     });
     await expect(
@@ -137,6 +212,7 @@ describe('JwtStrategy.validate', () => {
       username: 'bob',
       isActive: true,
       tokenVersion: 2,
+      tenantId: 'tenant_default',
       roles: [{ role: 'platform_operator' }]
     });
     await expect(
@@ -150,10 +226,25 @@ describe('JwtStrategy.validate', () => {
       username: 'bob',
       isActive: true,
       tokenVersion: 0,
+      tenantId: 'tenant_default',
       roles: [{ role: 'platform_operator' }]
     });
     await expect(
       strategy.validate({ sub: 'u1', username: 'bob', roles: ['platform_operator'] })
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+
+  it('rejects an active AppUser without a tenant boundary', async () => {
+    findAuthStatus.mockResolvedValue({
+      userId: 'u1',
+      username: 'bob',
+      isActive: true,
+      tokenVersion: 0,
+      roles: [{ role: 'platform_operator' }]
+    });
+
+    await expect(
+      strategy.validate({ sub: 'u1', username: 'bob', roles: ['platform_operator'], tv: 0 })
     ).rejects.toBeInstanceOf(UnauthorizedException);
   });
 });

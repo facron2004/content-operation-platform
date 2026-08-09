@@ -24,7 +24,10 @@ export function filterOperationRecords(
   return result;
 }
 
-export function exportOperationHistoryCsv(exportToCSV: () => string): void {
+export function exportOperationHistoryCsv(
+  exportToCSV: () => string,
+  onError?: (message: string) => void
+): void {
   try {
     const csv = exportToCSV(),
       blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
@@ -34,7 +37,9 @@ export function exportOperationHistoryCsv(exportToCSV: () => string): void {
     link.click();
     ElMessage.success('导出成功');
   } catch {
-    ElMessage.error('导出失败');
+    const message = '导出失败';
+    ElMessage.error(message);
+    onError?.(message);
   }
 }
 export async function clearOperationHistory(
@@ -58,12 +63,14 @@ export function useOperationHistoryDialog() {
   const records = ref<OperationRecord[]>(getAll()),
     searchText = ref(''),
     filterType = ref(''),
+    exportError = ref<string | null>(null),
     detailsVisible = ref(false),
     selectedRecord = ref<OperationRecord | null>(null);
   return {
     records,
     searchText,
     filterType,
+    exportError,
     detailsVisible,
     selectedRecord,
     filteredRecords: computed(() =>
@@ -77,7 +84,12 @@ export function useOperationHistoryDialog() {
       selectedRecord.value = record;
       detailsVisible.value = true;
     },
-    exportCSV: () => exportOperationHistoryCsv(exportToCSV),
+    exportCSV: () => {
+      exportError.value = null;
+      exportOperationHistoryCsv(exportToCSV, (message) => {
+        exportError.value = message;
+      });
+    },
     clearHistory: () => clearOperationHistory(clear, (next) => (records.value = next)),
     refresh: () => {
       records.value = getAll();

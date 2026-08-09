@@ -64,6 +64,7 @@ export type TaskUpdateMeta = {
   fallbackPackageId: string | null;
   contentId: string | null;
   packageId: string;
+  packageGeo: { areaId: string | null; merchantId: string | null } | null;
 };
 
 export async function getUpdateMeta(tx: Tx, id: string): Promise<TaskUpdateMeta | null> {
@@ -76,17 +77,32 @@ export async function getUpdateMeta(tx: Tx, id: string): Promise<TaskUpdateMeta 
       fallbackPackageId: string | null;
       contentId: string | null;
       packageId: string;
+      areaId: string | null;
+      merchantId: string | null;
+      pkgKey: string | null;
     }>
   >(
     `SELECT t."status", t."publishedAt", t."campaignId", t."groupId",
             t."fallbackPackageId", t."contentId",
-            COALESCE(t."packageId", p."packageId") AS "packageId"
+            COALESCE(t."packageId", p."packageId") AS "packageId",
+            p."areaId" AS "areaId", p."merchantId" AS "merchantId", p."packageId" AS "pkgKey"
      FROM "DistributionTask" t
      LEFT JOIN "ContentPackage" p ON p."packageId" = t."packageId"
      WHERE t."taskId" = ?`,
     id
   );
-  return rows[0] ?? null;
+  const row = rows[0];
+  if (!row) return null;
+  return {
+    status: row.status,
+    publishedAt: row.publishedAt,
+    campaignId: row.campaignId,
+    groupId: row.groupId,
+    fallbackPackageId: row.fallbackPackageId,
+    contentId: row.contentId,
+    packageId: row.packageId,
+    packageGeo: row.pkgKey == null ? null : { areaId: row.areaId, merchantId: row.merchantId }
+  };
 }
 
 export type TaskAccessMeta = {
@@ -233,143 +249,4 @@ export async function batchRollback(tx: Tx, taskIds: string[]): Promise<void> {
       ...slice
     );
   }
-}
-
-// ── FK resolves ──────────────────────────────────────────────
-
-type PrismaQuery = Pick<PrismaService, '$queryRawUnsafe'>;
-
-async function loadIn<T extends Record<string, unknown>>(
-  prisma: PrismaQuery,
-  ids: string[],
-  sql: string
-): Promise<T[]> {
-  if (!ids.length) return [];
-  if (ids.length === 1) {
-    const eqSql = sql.replace(/IN\s*\(\s*__IN__\s*\)/i, '= ?');
-    return prisma.$queryRawUnsafe<T[]>(eqSql, ids[0]);
-  }
-  const ph = ids.map(() => '?').join(',');
-  return prisma.$queryRawUnsafe<T[]>(sql.replace('__IN__', ph), ...ids);
-}
-
-export type TaskFkMaps = {
-  packages: Map<string, { packageId: string; areaId: string; merchantId: string }>;
-  campaigns: Map<
-    string,
-    { campaignId: string; status: string; areaIds: string | null; merchantIds: string | null }
-  >;
-  groups: Map<string, { groupId: string; isActive: number; areaId: string }>;
-  contents: Map<string, { contentId: string; packageId: string; auditStatus: string }>;
-  contentTwins: Map<string, string>;
-  assignees: Map<string, { userId: string; displayName: string; active: boolean }>;
-};
-
-function uniqIds(raw: Array<string | null | undefined>, max = 200): string[] {
-  return [
-    ...new Set(
-      raw
-        .map((v) => String(v ?? '').trim())
-        .filter(Boolean)
-        .map((v) => v.slice(0, 64))
-    )
-  ].slice(0, max);
-}
-
-export async function loadFkBatch(
-  prisma: PrismaQuery,
-  packageIdsIn: string[],
-  campaignIdsIn: string[],
-  groupIdsIn: string[],
-  contentIdsIn: string[],
-  assigneeIdsIn: string[]
-): Promise<TaskFkMaps> {
-  const packages = new Map<string, { packageId: string; areaId: string; merchantId: string }>();
-  const campaigns = new Map<
-    string,
-    { campaignId: string; status: string; areaIds: string | null; merchantIds: string | null }
-  >();
-  const groups = new Map<string, { groupId: string; isActive: number; areaId: string }>();
-  const contents = new Map<string, { contentId: string; packageId: string; auditStatus: string }>();
-  const contentTwins = new Map<string, string>();
-  const assignees = new Map<string, { userId: string; displayName: string; active: boolean }>();
-
-  const packageIds = uniqIds([...packageIdsIn, ...campaignIdsIn]); // note: this is legacy, we keep separate args
-  const campaignIds = uniqIds(campaignIdsIn);
-  const groupIds = uniqIds(groupIdsIn);
-  const contentIds = uniqIds(contentIdsIn);
-  const assigneeIds = uniqIds(assigneeIdsIn);
-
-  const [pkgRows, campRows, groupRows, contentRows, twinRows, userRows] = await Promise.all([
-    loadIn<{ packageId: string; areaId: string; merchantId: string }>(
-      prisma,
-      packageIds,
-      `SELECT "packageId", "areaId", "merchantId" FROM "ContentPackage" WHERE "packageId" IN (__IN__)`
-    ),
-    loadIn<{
-      campaignId: string;
-      status: string;
-      areaIds: string | null;
-      merchantIds: string | null;
-    }>(
-      prisma,
-      campaignIds,
-      `SELECT "campaignId", "status", "areaIds", "merchantIds" FROM "MarketingCampaign" WHERE "campaignId" IN (__IN__)`
-    ),
-    loadIn<{ groupId: string; isActive: number; areaId: string }>(
-      prisma,
-      groupIds,
-      `SELECT "groupId", "isActive", "areaId" FROM "CommunityGroup" WHERE "groupId" IN (__IN__)`
-    ),
-    loadIn<{ contentId: string; packageId: string; auditStatus: string }>(
-      prisma,
-      contentIds,
-      `SELECT "contentId", "packageId", "auditStatus" FROM "GeneratedCopy" WHERE "contentId" IN (__IN__)`
-    ),
-    loadIn<{ contentId: string; taskId: string }>(
-      prisma,
-      contentIds,
-      `SELECT "contentId", "taskId" FROM "DistributionTask"
-       WHERE "contentId" IN (__IN__) AND "status" <> 'cancelled'`
-    ),
-    loadIn<{ userId: string; displayName: string | null; username: string; isActive: number }>(
-      prisma,
-      assigneeIds,
-      `SELECT "userId", "displayName", "username", "isActive" FROM "AppUser" WHERE "userId" IN (__IN__)`
-    )
-  ]);
-
-  for (const r of pkgRows) packages.set(r.packageId, r);
-  for (const r of campRows) campaigns.set(r.campaignId, r);
-  for (const r of groupRows) groups.set(r.groupId, r);
-  for (const r of contentRows) contents.set(r.contentId, r);
-  for (const r of twinRows) contentTwins.set(r.contentId, r.taskId);
-  for (const r of userRows)
-    assignees.set(r.userId, {
-      userId: r.userId,
-      displayName: r.displayName ?? r.username,
-      active: Number(r.isActive) === 1
-    });
-
-  return { packages, campaigns, groups, contents, contentTwins, assignees };
-}
-
-export async function resolveAssignee(
-  tx: Tx,
-  assigneeId: string
-): Promise<{ userId: string; displayName: string; isActive: number } | null> {
-  const rows = await tx.$queryRawUnsafe<
-    Array<{ userId: string; displayName: string | null; username: string; isActive: number }>
-  >(
-    `SELECT "userId", "displayName", "username", "isActive"
-     FROM "AppUser" WHERE "userId" = ?`,
-    assigneeId
-  );
-  return rows[0]
-    ? {
-        userId: rows[0].userId,
-        displayName: rows[0].displayName ?? rows[0].username,
-        isActive: Number(rows[0].isActive)
-      }
-    : null;
 }

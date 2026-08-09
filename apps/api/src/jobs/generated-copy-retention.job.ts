@@ -7,6 +7,7 @@ import {
   GENERATED_COPY_RETENTION_DAYS
 } from '../common/sql-chunk';
 import { sqlDatetime, toSqliteDateTime } from '../common/sqlite-datetime';
+import { JobRunnerService } from './job-runner.service';
 
 /**
  * Bounded GeneratedCopy retention for non-approved history.
@@ -22,7 +23,10 @@ export class GeneratedCopyRetentionJob {
   private readonly logger = new Logger(GeneratedCopyRetentionJob.name);
   private running = false;
 
-  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(JobRunnerService) private readonly jobRunner: JobRunnerService
+  ) {}
 
   /** Daily retention sweep — staggered after inventory purge (5am). */
   @Cron(CronExpression.EVERY_DAY_AT_6AM)
@@ -32,18 +36,20 @@ export class GeneratedCopyRetentionJob {
       return;
     }
     this.running = true;
-    try {
-      const deleted = await this.purgeOlderThan(GENERATED_COPY_RETENTION_DAYS);
-      if (deleted > 0) {
-        this.logger.log(
-          `Purged ${deleted} non-approved GeneratedCopy rows older than ${GENERATED_COPY_RETENTION_DAYS}d`
-        );
-      }
-    } catch (err) {
-      this.logger.warn(`GeneratedCopy retention failed: ${err}`);
-    } finally {
-      this.running = false;
-    }
+    await this.jobRunner
+      .runJob('generated-copy-retention', async (setMeta) => {
+        const deleted = await this.purgeOlderThan(GENERATED_COPY_RETENTION_DAYS);
+        setMeta({ deleted, retentionDays: GENERATED_COPY_RETENTION_DAYS });
+        if (deleted > 0) {
+          this.logger.log(
+            `Purged ${deleted} non-approved GeneratedCopy rows older than ${GENERATED_COPY_RETENTION_DAYS}d`
+          );
+        }
+        return deleted;
+      })
+      .finally(() => {
+        this.running = false;
+      });
   }
 
   /**

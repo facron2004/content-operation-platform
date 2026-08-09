@@ -20,16 +20,19 @@ describe('residual #191 user list shape normalize', () => {
   });
 
   it('UserManagementView loader prefers items with data fallback', async () => {
-    const src = await readFile(path.join(srcRoot, 'views/UserManagementView.vue'), 'utf8');
+    const src = await readFile(
+      path.join(srcRoot, 'features/user-management/useUserManagement.ts'),
+      'utf8'
+    );
     // Residual #205/#208: loader now destructures filters too.
-    expect(src).toMatch(/async \(\{\s*page,\s*pageSize,\s*filters/);
+    expect(src).toMatch(/async \(\{\s*page,\s*pageSize,\s*filters:\s*currentFilters/);
     expect(src).toMatch(/data\.items\s*\?\?\s*data\.data/);
     expect(src).toMatch(/api\.listUsers/);
   });
 
   it('API user.service list still returns data key (contract pin)', async () => {
     const src = await readFile(
-      path.join(srcRoot, '../../api/src/user-access/user.service.ts'),
+      path.join(srcRoot, '../../api/src/user-access/application/user-query.service.ts'),
       'utf8'
     );
     // Signature grew keyword/isActive after #205/#208 — pin contract, not exact sig.

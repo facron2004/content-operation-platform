@@ -1,5 +1,7 @@
 # 未售罄链接库存标注实现计划
 
+> **归档状态（2026-08-09）**：本计划的功能已落在当前仓库（共享库存类型、库存标记/快照、API 筛选与趋势、Web 展示及回归测试）；原始执行 checkbox 保留作历史审计，不代表当前工作树仍需逐项重新执行。当前验证和范围以 [文档对齐总览](../../DOCUMENTATION-STATUS.md) 为准，Windows/EXE 不在本轮。
+
 > **给执行 agent 的要求：** 实施本计划时必须使用 `superpowers:subagent-driven-development`（推荐）或 `superpowers:executing-plans`。每一步用 checkbox 跟踪。
 
 **目标：** 从 JeeSite 后台每天读取剩余库存，沉淀每日快照，并在运营中台标出没售罄、连续没售罄、库存下降慢的套餐链接。
@@ -21,7 +23,7 @@
 - 新增 `apps/api/test/inventory-flags.spec.ts`：库存标记规则单测。
 - 新增 `apps/api/test/inventory-snapshot.service.spec.ts`：每日快照 upsert 和趋势读取测试。
 - 新增 `apps/api/test/content-inventory-api.spec.ts`：推荐接口筛选和详情趋势测试。
-- 修改 `apps/web/src/services/api.ts`：新增前端 API 参数类型。
+- 原计划修改 `apps/web/src/services/api.ts`；当前实现已按业务域拆分到 `apps/web/src/services/api/` 与 HTTP 客户端管线。
 - 修改 `apps/web/src/views/RecommendationsView.vue`：新增“只看未售罄链接”筛选和库存标记列。
 - 修改 `apps/web/src/views/PackageAnalysisView.vue`：新增详情页库存标记和最近库存变化。
 
@@ -859,7 +861,7 @@ git commit -m "feat: expose unsold inventory flags"
 ## 任务 4：推荐列表筛选和标记
 
 **文件：**
-- 修改：`apps/web/src/services/api.ts`
+- 原始文件：`apps/web/src/services/api.ts`（当前已拆分到 `apps/web/src/services/api/`）
 - 修改：`apps/web/src/views/RecommendationsView.vue`
 
 - [ ] **步骤 1：先让前端类型检查失败**
@@ -945,7 +947,7 @@ npm run build -w @content/web
 
 - [ ] **步骤 2：补前端 API 参数类型**
 
-在 `apps/web/src/services/api.ts` 的 `getRecommendations` 参数类型里加入：
+在当前 `apps/web/src/services/api/` 推荐 API 客户端中加入（原计划文件为 `apps/web/src/services/api.ts`）：
 
 ```ts
     inventoryFlag?: 'unsold';
@@ -963,7 +965,7 @@ npm run build -w @content/web
 - [ ] **步骤 4：提交本任务**
 
 ```bash
-git add apps/web/src/services/api.ts apps/web/src/views/RecommendationsView.vue
+git add apps/web/src/services/api/ apps/web/src/views/RecommendationsView.vue
 git commit -m "feat: mark unsold inventory links in recommendations"
 ```
 

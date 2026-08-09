@@ -5,6 +5,7 @@ import { Throttle } from '@nestjs/throttler';
 import type { Request } from 'express';
 import { assertUnrestrictedAnalytics } from '../user-access/scope-guards';
 import { RequireLogin } from '../user-access/iam/route-auth.decorator';
+import { RequirePermissions } from '../user-access/iam/require-permissions.decorator';
 import { OverviewService } from './overview.service';
 import {
   OverviewDistributionQueryDto,
@@ -21,6 +22,7 @@ export class OverviewController {
 
   // Cold KPI/top-offenders share heavy gate; tighten long limit vs multi-tab home paint.
   @Get('kpis')
+  @RequirePermissions('analytics:read')
   @Throttle({ long: { limit: 20, ttl: 60000 } })
   @ApiOperation({
     summary: '总览 KPI',
@@ -35,6 +37,7 @@ export class OverviewController {
   }
 
   @Get('trend')
+  @RequirePermissions('analytics:read')
   @Throttle({ long: { limit: 20, ttl: 60000 } })
   @ApiOperation({ summary: '7/30 日趋势', description: '[{date, gmv, paidOrderCount}]' })
   getTrend(
@@ -46,6 +49,7 @@ export class OverviewController {
   }
 
   @Get('distribution')
+  @RequirePermissions('analytics:read')
   @Throttle({ long: { limit: 20, ttl: 60000 } })
   @ApiOperation({ summary: '区域/品类/stale 分布' })
   getDistribution(
@@ -57,6 +61,7 @@ export class OverviewController {
   }
 
   @Get('top-offenders')
+  @RequirePermissions('analytics:read')
   @Throttle({ long: { limit: 15, ttl: 60000 } })
   @ApiOperation({ summary: '异常商家 Top N / stale_30d SKU' })
   getTopOffenders(

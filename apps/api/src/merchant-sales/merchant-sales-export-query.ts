@@ -42,7 +42,11 @@ export function buildMerchantSalesCsv(
   for (const r of rows) {
     const gmv = Number(r.gmv),
       refund = Number(r.gmvRefund),
-      verify = Number(r.gmvVerify);
+      verify = Number(r.gmvVerify),
+      paidOrderCount = Number(r.paidOrderCount ?? 0),
+      // Keep CSV aligned with summary/ranking: rate is orders, not money.
+      refundRate = paidOrderCount > 0 ? Number(r.refundCount ?? 0) / paidOrderCount : 0,
+      verifyRate = paidOrderCount > 0 ? Number(r.verifyCount ?? 0) / paidOrderCount : 0;
     lines.push(
       [
         csvCell(r.merchantName),
@@ -50,9 +54,9 @@ export function buildMerchantSalesCsv(
         gmv.toFixed(2),
         refund.toFixed(2),
         verify.toFixed(2),
-        gmv > 0 ? (refund / gmv).toFixed(4) : '0',
-        gmv > 0 ? (verify / gmv).toFixed(4) : '0',
-        String(r.paidOrderCount),
+        refundRate.toFixed(4),
+        verifyRate.toFixed(4),
+        String(paidOrderCount),
         String(r.orderCount),
         String(r.packageCount),
         window,
@@ -78,7 +82,7 @@ export async function loadMerchantSalesExportRows(
   // Residual #253: packageCount via OrderHeader DISTINCT (not SUM of daily counts).
   const [moneyRows, packageCounts] = await Promise.all([
     prisma.$queryRawUnsafe(
-      `SELECT "merchantName", MAX("areaName") AS "areaName", COALESCE(SUM(${SQL_GMV_SS}) / 100.0, 0) AS "gmv", COALESCE(SUM("refundAmountFen") / 100.0, 0) AS "gmvRefund", COALESCE(SUM("verifyAmountFen") / 100.0, 0) AS "gmvVerify", COALESCE(SUM("paidOrderCount"), 0) AS "paidOrderCount", COALESCE(SUM("orderCount"), 0) AS "orderCount", 0 AS "packageCount" FROM "MerchantDailyMetrics" WHERE ${whereClause} GROUP BY "merchantName" ORDER BY ${orderColumn} DESC, "merchantName" ASC LIMIT ?`,
+      `SELECT "merchantName", MAX("areaName") AS "areaName", COALESCE(SUM(${SQL_GMV_SS}) / 100.0, 0) AS "gmv", COALESCE(SUM("refundAmountFen") / 100.0, 0) AS "gmvRefund", COALESCE(SUM("verifyAmountFen") / 100.0, 0) AS "gmvVerify", COALESCE(SUM("refundCount"), 0) AS "refundCount", COALESCE(SUM("verifyCount"), 0) AS "verifyCount", COALESCE(SUM("paidOrderCount"), 0) AS "paidOrderCount", COALESCE(SUM("orderCount"), 0) AS "orderCount", 0 AS "packageCount" FROM "MerchantDailyMetrics" WHERE ${whereClause} GROUP BY "merchantName" ORDER BY ${orderColumn} DESC, "merchantName" ASC LIMIT ?`,
       ...whereArgs,
       CSV_EXPORT_MAX_ROWS
     ) as Promise<RankingSqlRow[]>,

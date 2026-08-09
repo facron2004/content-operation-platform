@@ -5,13 +5,13 @@ describe('residual #97 alert resolve multi-row INSERT ON CONFLICT', () => {
     const fs = await import('fs/promises');
     const path = await import('path');
     const src = await fs.readFile(
-      path.join(__dirname, '..', 'src', 'content', 'alert.service.ts'),
+      path.join(__dirname, '..', 'src', 'content', 'alert-resolution.ts'),
       'utf8'
     );
 
-    const fnStart = src.indexOf('async resolveOperationAlerts(');
+    const fnStart = src.indexOf('export async function resolveOperationAlerts(');
     expect(fnStart).toBeGreaterThan(0);
-    const next = src.indexOf('\n  /**\n   * alertId shape is', fnStart + 10);
+    const next = src.indexOf('\n/** Return a Prisma promise', fnStart + 10);
     const fn = src.slice(fnStart, next > 0 ? next : undefined);
 
     expect(fn).toContain('RESOLVE_INSERT_CHUNK');
@@ -27,13 +27,13 @@ describe('residual #97 alert resolve multi-row INSERT ON CONFLICT', () => {
     const fs = await import('fs/promises');
     const path = await import('path');
     const src = await fs.readFile(
-      path.join(__dirname, '..', 'src', 'content', 'alert.service.ts'),
+      path.join(__dirname, '..', 'src', 'content', 'alert-resolution.ts'),
       'utf8'
     );
 
-    const fnStart = src.indexOf('async resolveOperationAlert(');
+    const fnStart = src.indexOf('export async function resolveOperationAlert(');
     expect(fnStart).toBeGreaterThan(0);
-    const next = src.indexOf('\n  async resolveOperationAlerts(', fnStart + 10);
+    const next = src.indexOf('\nexport async function resolveOperationAlerts(', fnStart + 10);
     const fn = src.slice(fnStart, next > 0 ? next : undefined);
     expect(fn).toContain('upsertResolution');
   });

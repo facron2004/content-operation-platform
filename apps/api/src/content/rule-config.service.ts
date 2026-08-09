@@ -4,14 +4,16 @@ import { PrismaService } from '../prisma/prisma.service';
 import type { CacheEntry } from './rule-config-support';
 import { ruleConfigDefaults } from './rule-config-support';
 import {
-  activateRuleAndInvalidate,
-  createRuleAndInvalidate,
-  deleteRuleAndInvalidate,
   getRuleConfigById,
   listRuleConfigs,
   loadEffectiveRulesForMerchants,
   resolveEffectiveRules
-} from './rule-config-ops';
+} from './rule-config-read';
+import {
+  activateRuleAndInvalidate,
+  createRuleAndInvalidate,
+  deleteRuleAndInvalidate
+} from './rule-config-write';
 import { rethrowMissingRule } from './rule-config-support';
 
 import type {

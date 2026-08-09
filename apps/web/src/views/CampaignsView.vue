@@ -17,6 +17,8 @@
     <p v-if="windowLabel" class="list-window-hint">
       开始日筛选已按交互查询上限收束为 {{ windowLabel }}；超出该区间的活动不会出现在本列表。
     </p>
+    <ErrorAlert :message="loadError" />
+    <ErrorAlert :message="writeError" />
     <!-- Residual #207: list status CTAs (start/pause/complete/cancel). -->
     <CampaignListTable
       :loading="loading"
@@ -50,10 +52,13 @@ import CampaignListTable from '../features/campaigns/components/CampaignListTabl
 import CampaignCreateDialog from '../features/campaigns/components/CampaignCreateDialog.vue';
 import CampaignFilterBar from '../features/campaigns/components/CampaignFilterBar.vue';
 import AppleButton from '../components/AppleButton.vue';
+import ErrorAlert from '../components/ErrorAlert.vue';
 import type { MarketingCampaign } from '@content/shared';
 
 const {
   loading,
+  error: loadError,
+  writeError,
   campaigns,
   pagination,
   filters,
@@ -70,7 +75,7 @@ const {
 } = useCampaigns();
 
 // Residual #190: refresh list after create/edit so table is not stale.
-const form = useCampaignForm(undefined, { onSuccess: () => refresh() });
+const form = useCampaignForm(undefined, { onSuccess: () => refresh(), writeError });
 const { submitting, isEdit } = form;
 
 function handleSearch() {

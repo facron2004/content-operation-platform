@@ -5,7 +5,8 @@
         {{ selectedMerchant ? selectedMerchant.merchantName : '商家清单' }}
       </template>
     </MerchantHero>
-    <ErrorAlert :message="loadError" />
+    <ErrorAlert :message="listError" />
+    <ErrorAlert :message="detailError" />
     <div class="layout-grid">
       <MerchantListPanel
         v-model:search="search"
@@ -56,7 +57,8 @@ import MerchantDetailPanel from '../features/merchants/components/MerchantDetail
 const {
   loading,
   detailLoading,
-  loadError,
+  listError,
+  detailError,
   merchants,
   search,
   areaId,

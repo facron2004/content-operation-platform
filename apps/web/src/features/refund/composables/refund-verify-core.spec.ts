@@ -230,4 +230,26 @@ describe('refund verify request lifecycle', () => {
     expect(state.listLoading.value).toBe(false);
     expect(mocks.getRefundTopMerchants).toHaveBeenCalledTimes(1);
   });
+
+  it('keeps KPI and trend failures separate and clears each error on retry', async () => {
+    mocks.getRefundToday.mockRejectedValueOnce(new Error('kpi unavailable'));
+    mocks.getRefundTrend.mockRejectedValueOnce(new Error('trend unavailable'));
+    const state = createRefundVerifyState();
+    scope = effectScope();
+    const loaders = scope.run(() => bindRefundVerifyLoaders(state))!;
+
+    await loaders.reload();
+
+    expect(state.kpiError.value).toBe('加载 KPI 失败');
+    expect(state.trendError.value).toBe('加载趋势失败');
+    expect(state.merchantError.value).toBeNull();
+    expect(state.loadError.value).toBe('加载 KPI 失败');
+
+    await loaders.reload();
+
+    expect(state.kpiError.value).toBeNull();
+    expect(state.trendError.value).toBeNull();
+    expect(state.merchantError.value).toBeNull();
+    expect(state.loadError.value).toBeNull();
+  });
 });

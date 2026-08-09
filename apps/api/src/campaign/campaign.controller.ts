@@ -10,7 +10,8 @@ import {
   Post,
   Query,
   Req,
-  UseGuards
+  UseGuards,
+  UseInterceptors
 } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
@@ -27,6 +28,8 @@ import { safePathId } from '../common/path-id';
 import { createDtoPipe } from '../common/dto-pipe';
 import { resolveInteractiveDateSpan } from '../common/list-date-span';
 import { IdempotencyGuard } from '../idempotency/idempotency.guard';
+import { IdempotencyInterceptor } from '../idempotency/idempotency.interceptor';
+import { RequireIdempotency } from '../idempotency/require-idempotency.decorator';
 
 type AuthUser = {
   userId: string;
@@ -37,11 +40,13 @@ type AuthUser = {
 
 @ApiTags('campaigns')
 @RequireLogin()
+@UseInterceptors(IdempotencyInterceptor)
 @Controller('api/campaigns')
 export class CampaignController {
   constructor(@Inject(CampaignService) private readonly svc: CampaignService) {}
 
   @Get()
+  @RequirePermissions('campaigns:read')
   @Throttle({ long: { limit: 30, ttl: 60000 } })
   @ApiOperation({
     summary: 'List campaigns',
@@ -74,7 +79,6 @@ export class CampaignController {
 
   @Roles('admin', 'platform_operator')
   @RequirePermissions('campaigns:write')
-  @UseGuards(IdempotencyGuard)
   @Throttle({ long: { limit: 20, ttl: 60000 } })
   @Post()
   @ApiOperation({ summary: 'Create campaign' })
@@ -88,6 +92,7 @@ export class CampaignController {
   }
 
   @Get(':id')
+  @RequirePermissions('campaigns:read')
   @Throttle({ long: { limit: 60, ttl: 60000 } })
   @ApiOperation({ summary: 'Get campaign detail' })
   async getById(@Param('id') id: string, @Req() req: Request) {
@@ -135,6 +140,7 @@ export class CampaignController {
 
   @Roles('admin', 'platform_operator')
   @RequirePermissions('campaigns:publish')
+  @RequireIdempotency('campaign-start')
   @UseGuards(IdempotencyGuard)
   @Throttle({ long: { limit: 30, ttl: 60000 } })
   @Post(':id/start')
@@ -152,7 +158,6 @@ export class CampaignController {
 
   @Roles('admin', 'platform_operator')
   @RequirePermissions('campaigns:publish')
-  @UseGuards(IdempotencyGuard)
   @Throttle({ long: { limit: 30, ttl: 60000 } })
   @Post(':id/pause')
   @ApiOperation({
@@ -168,7 +173,6 @@ export class CampaignController {
 
   @Roles('admin', 'platform_operator')
   @RequirePermissions('campaigns:publish')
-  @UseGuards(IdempotencyGuard)
   @Throttle({ long: { limit: 30, ttl: 60000 } })
   @Post(':id/complete')
   @ApiOperation({
@@ -195,6 +199,7 @@ export class CampaignController {
   }
 
   @Get(':id/performance')
+  @RequirePermissions('campaigns:read')
   @Throttle({ long: { limit: 30, ttl: 60000 } })
   @ApiOperation({
     summary: 'Campaign performance',

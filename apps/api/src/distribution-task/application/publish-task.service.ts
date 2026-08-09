@@ -1,10 +1,12 @@
 import { Injectable, BadRequestException, NotFoundException, Inject } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { DistributionExecutionService } from '../distribution-execution.service';
 import { auditCopyText } from '../../domain/copy-rules';
 import { mapPackageForAudit, type PackageAuditRow } from '../../content/mappers';
 import { getStatus } from '../repositories/task.repository';
 import { transitionPublished, transitionFail } from '../domain/task-status-machine';
 import { findTaskRow, parseTask } from '../distribution-task-query';
+import { assertOptionalTaskFks } from '../distribution-task-fk';
 import { PublishTaskDto } from '../dto/publish-task.dto';
 import { FailTaskDto } from '../dto/fail-task.dto';
 
@@ -22,7 +24,11 @@ type PreloadedPublishTask = {
 
 @Injectable()
 export class PublishTaskService {
-  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(DistributionExecutionService)
+    private readonly executionService: DistributionExecutionService
+  ) {}
 
   async publish(
     id: string,
@@ -43,37 +49,59 @@ export class PublishTaskService {
     if (task.contentId) {
       // Copy-approved path: load approved copy
       const copies = await this.prisma.$queryRawUnsafe<
-        Array<{ title: string | null; body: string | null; cta: string | null }>
+        Array<{
+          contentId: string;
+          packageId: string | null;
+          auditStatus: string;
+          title: string | null;
+          body: string | null;
+          cta: string | null;
+        }>
       >(
-        `SELECT "title", "body", "cta" FROM "GeneratedCopy"
-         WHERE "contentId" = ? AND "auditStatus" = 'approved'
-         LIMIT 1`,
+        `SELECT "contentId", "packageId", "auditStatus", "title", "body", "cta"
+         FROM "GeneratedCopy" WHERE "contentId" = ? LIMIT 1`,
         task.contentId
       );
       if (!copies.length) {
-        throw new BadRequestException(`发布失败：文案 ${task.contentId} 未审核或审核未通过`);
+        throw new BadRequestException(`发布失败：绑定文案不存在 (${task.contentId})`);
+      }
+      if (String(copies[0].auditStatus) !== 'approved') {
+        throw new BadRequestException(
+          `发布失败：绑定文案审核状态为 '${copies[0].auditStatus}'，仅已通过文案可发布`
+        );
+      }
+      if (
+        copies[0].packageId &&
+        task.packageId &&
+        String(copies[0].packageId) !== String(task.packageId)
+      ) {
+        throw new BadRequestException(
+          `发布失败：文案 packageId=${copies[0].packageId} 与任务 packageId=${task.packageId} 不一致`
+        );
       }
       publishTitle = copies[0].title ?? null;
       publishBody = copies[0].body ?? null;
       publishCta = copies[0].cta ?? null;
 
       // Re-validate FK liveness at publish
-      await this.assertFkLive({
+      await assertOptionalTaskFks(this.prisma, {
         packageId: task.packageId,
         groupId: task.groupId,
         campaignId: task.campaignId,
         fallbackPackageId: task.fallbackPackageId,
         contentId: task.contentId,
+        status: 'scheduled',
         excludeTaskId: id
       });
     } else if (publishTitle || publishBody) {
       publishTitle = task.title ?? null;
       publishBody = task.body ?? null;
-      await this.assertFkLive({
+      await assertOptionalTaskFks(this.prisma, {
         packageId: task.packageId,
         groupId: task.groupId,
         campaignId: task.campaignId,
         fallbackPackageId: task.fallbackPackageId,
+        status: 'scheduled',
         excludeTaskId: id
       });
 
@@ -115,6 +143,15 @@ export class PublishTaskService {
       );
     }
 
+    await this.executionService.create({
+      taskId: id,
+      action: 'publish',
+      operatorId: dto.operatorId,
+      operatorName: dto.operatorName,
+      evidenceUrl: dto.evidenceUrl,
+      note: dto.note
+    });
+
     return parseTask(returned, { includeTrackingCode: false });
   }
 
@@ -138,6 +175,17 @@ export class PublishTaskService {
       );
     }
 
+    await this.executionService.create({
+      taskId: id,
+      action: 'confirm_fail',
+      operatorId: dto.operatorId,
+      operatorName: dto.operatorName,
+      evidenceUrl: dto.evidenceUrl,
+      failReason: dto.failReason,
+      failCategory: dto.failCategory,
+      note: dto.note
+    });
+
     return parseTask(returned, { includeTrackingCode: false });
   }
 
@@ -146,61 +194,5 @@ export class PublishTaskService {
     if (!row) throw new NotFoundException('Distribution task not found');
     const { packageGeo: _packageGeo, ...task } = row;
     return task;
-  }
-
-  private async assertFkLive(args: {
-    packageId: string;
-    groupId?: string | null;
-    campaignId?: string | null;
-    fallbackPackageId?: string | null;
-    contentId?: string | null;
-    excludeTaskId?: string;
-  }): Promise<void> {
-    const { packageId, groupId, campaignId, fallbackPackageId, contentId } = args;
-
-    if (packageId) {
-      const pkgs = await this.prisma.$queryRawUnsafe<Array<{ packageId: string }>>(
-        `SELECT "packageId" FROM "ContentPackage" WHERE "packageId" = ? LIMIT 1`,
-        packageId
-      );
-      if (!pkgs.length) throw new NotFoundException(`套餐不存在: ${packageId}`);
-    }
-    if (campaignId) {
-      const camps = await this.prisma.$queryRawUnsafe<
-        Array<{ campaignId: string; status: string }>
-      >(
-        `SELECT "campaignId", "status" FROM "MarketingCampaign" WHERE "campaignId" = ? LIMIT 1`,
-        campaignId
-      );
-      if (!camps.length) throw new NotFoundException(`活动不存在: ${campaignId}`);
-      if (!['draft', 'active', 'paused'].includes(camps[0].status)) {
-        throw new BadRequestException(`活动状态为 '${camps[0].status}'，不可绑定新任务`);
-      }
-    }
-    if (groupId) {
-      const groups = await this.prisma.$queryRawUnsafe<
-        Array<{ groupId: string; isActive: number }>
-      >(`SELECT "groupId", "isActive" FROM "CommunityGroup" WHERE "groupId" = ? LIMIT 1`, groupId);
-      if (!groups.length) throw new NotFoundException(`社群不存在: ${groupId}`);
-      if (Number(groups[0].isActive) !== 1) {
-        throw new BadRequestException(`社群已停用，不可绑定新任务`);
-      }
-    }
-    if (fallbackPackageId) {
-      const fb = await this.prisma.$queryRawUnsafe<Array<{ packageId: string }>>(
-        `SELECT "packageId" FROM "ContentPackage" WHERE "packageId" = ? LIMIT 1`,
-        fallbackPackageId
-      );
-      if (!fb.length) throw new NotFoundException(`兜底套餐不存在: ${fallbackPackageId}`);
-    }
-    if (contentId) {
-      const contents = await this.prisma.$queryRawUnsafe<
-        Array<{ contentId: string; auditStatus: string; packageId: string }>
-      >(
-        `SELECT "contentId", "auditStatus", "packageId" FROM "GeneratedCopy" WHERE "contentId" = ? LIMIT 1`,
-        contentId
-      );
-      if (!contents.length) throw new NotFoundException(`文案不存在: ${contentId}`);
-    }
   }
 }

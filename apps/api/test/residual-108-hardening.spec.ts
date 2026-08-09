@@ -8,11 +8,20 @@ describe('residual #108 distribution-task controller packageId-only scope', () =
       path.join(__dirname, '..', 'src', 'distribution-task', 'distribution-task.service.ts'),
       'utf8'
     );
+    const read = await fs.readFile(
+      path.join(__dirname, '..', 'src', 'distribution-task', 'distribution-task-read.ts'),
+      'utf8'
+    );
+    const repository = await fs.readFile(
+      path.join(__dirname, '..', 'src', 'distribution-task', 'repositories', 'task.repository.ts'),
+      'utf8'
+    );
 
     // Residual #151: packageId+status probe; getTaskPackageId aliases it.
     expect(src).toMatch(/async getTaskAccessMeta\(id: string\)/);
-    expect(src).toMatch(/t\."packageId", t\."status"/);
-    expect(src).toMatch(/LEFT JOIN "ContentPackage"/);
+    expect(read).toMatch(/getAccessMeta\(prisma, id\)/);
+    expect(repository).toMatch(/t\."packageId", t\."status"/);
+    expect(repository).toMatch(/LEFT JOIN "ContentPackage"/);
     const pkgStart = src.indexOf('async getTaskPackageId(id: string)');
     expect(pkgStart).toBeGreaterThan(0);
     const pkgFn = src.slice(pkgStart, pkgStart + 300);
@@ -22,10 +31,21 @@ describe('residual #108 distribution-task controller packageId-only scope', () =
   it('mutate + performance controllers use package scope probe (not full getById)', async () => {
     const fs = await import('fs/promises');
     const path = await import('path');
-    const src = await fs.readFile(
+    const queryController = await fs.readFile(
       path.join(__dirname, '..', 'src', 'distribution-task', 'distribution-task.controller.ts'),
       'utf8'
     );
+    const commandController = await fs.readFile(
+      path.join(
+        __dirname,
+        '..',
+        'src',
+        'distribution-task',
+        'distribution-task-command.controller.ts'
+      ),
+      'utf8'
+    );
+    const src = `${queryController}\n${commandController}`;
 
     // Full getById remains only for GET :id detail; Residual #167 folds packageGeo.
     const detailStart = src.search(/async getById\(\s*@Param/);
@@ -33,7 +53,9 @@ describe('residual #108 distribution-task controller packageId-only scope', () =
     const detailNext = src.indexOf('\n  @Roles(', detailStart + 10);
     const detail = src.slice(detailStart, detailNext > 0 ? detailNext : detailStart + 700);
     expect(detail).toMatch(/this\.svc\.getById\(safeId\)/);
-    expect(detail).toMatch(/assertTaskAccess\(detail\.packageId,\s*req,\s*detail\.packageGeo\)/);
+    expect(detail).toMatch(
+      /assertTaskAccess\((?:this\.prisma,\s*)?detail\.packageId,\s*req,\s*detail\.packageGeo\)/
+    );
 
     // Residual #151: status mutates use getTaskAccessMeta; others packageId-only.
     for (const action of ['complete', 'fail', 'cancel', 'reassign'] as const) {
@@ -48,7 +70,7 @@ describe('residual #108 distribution-task controller packageId-only scope', () =
 
       expect(fn).toMatch(/this\.svc\.getTaskAccessMeta\(safeId\)/);
       expect(fn).not.toMatch(/this\.svc\.getById\(safeId\)/);
-      expect(fn).toMatch(/assertTaskAccess\(access\.packageId/);
+      expect(fn).toMatch(/assertTaskAccess\((?:this\.prisma,\s*)?access\.packageId/);
     }
 
     // Residual #160: getPerformance uses access meta (+ geo) for scope.
@@ -64,7 +86,7 @@ describe('residual #108 distribution-task controller packageId-only scope', () =
 
       expect(fn).toMatch(/this\.svc\.getTaskAccessMeta\(safeId\)/);
       expect(fn).not.toMatch(/this\.svc\.getById\(safeId\)/);
-      expect(fn).toMatch(/assertTaskAccess\(access\.packageId/);
+      expect(fn).toMatch(/assertTaskAccess\((?:this\.prisma,\s*)?access\.packageId/);
       expect(fn).toMatch(/access\.packageGeo/);
     }
 
@@ -79,8 +101,8 @@ describe('residual #108 distribution-task controller packageId-only scope', () =
       const next = candidates.length ? Math.min(...candidates) : fnStart + 800;
       const fn = src.slice(fnStart, next);
       expect(fn).toMatch(/this\.svc\.getTaskDeleteMeta\(safeId\)/);
-      expect(fn).toMatch(/assertTaskAccess\(meta\.packageId/);
-      expect(fn).toMatch(/this\.svc\.delete\(safeId, meta\)/);
+      expect(fn).toMatch(/assertTaskAccess\((?:this\.prisma,\s*)?meta\.packageId/);
+      expect(fn).toMatch(/this\.deleteSvc\.delete\(safeId, meta\)/);
       expect(fn).not.toMatch(/this\.svc\.getById\(safeId\)/);
       expect(fn).not.toMatch(/getTaskPackageId/);
     }
@@ -96,8 +118,8 @@ describe('residual #108 distribution-task controller packageId-only scope', () =
       const next = candidates.length ? Math.min(...candidates) : fnStart + 800;
       const fn = src.slice(fnStart, next);
       expect(fn).toMatch(/this\.svc\.getTaskUpdateMeta\(safeId\)/);
-      expect(fn).toMatch(/assertTaskAccess\(meta\.packageId/);
-      expect(fn).toMatch(/this\.svc\.update\(safeId, body, meta\)/);
+      expect(fn).toMatch(/assertTaskAccess\((?:this\.prisma,\s*)?meta\.packageId/);
+      expect(fn).toMatch(/this\.updateSvc\.update\(safeId, body, meta\)/);
       expect(fn).not.toMatch(/this\.svc\.getById\(safeId\)/);
       expect(fn).not.toMatch(/getTaskPackageId/);
     }
@@ -113,7 +135,9 @@ describe('residual #108 distribution-task controller packageId-only scope', () =
       const next = candidates.length ? Math.min(...candidates) : fnStart + 800;
       const fn = src.slice(fnStart, next);
       expect(fn).toMatch(/this\.svc\.getTaskRow\(safeId\)/);
-      expect(fn).toMatch(/assertTaskAccess\(task\.packageId,\s*req,\s*task\.packageGeo\)/);
+      expect(fn).toMatch(
+        /assertTaskAccess\((?:this\.prisma,\s*)?task\.packageId,\s*req,\s*task\.packageGeo\)/
+      );
       expect(fn).not.toMatch(/this\.svc\.getById\(safeId\)/);
       expect(fn).not.toMatch(/getTaskPackageId/);
     }

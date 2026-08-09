@@ -20,7 +20,10 @@ describe('residual #266 cache-head list LIMIT honesty', () => {
   });
 
   it('paginateMerchantItems emits limit/truncated from MERCHANT_LIST_CACHE_CAP', async () => {
-    const src = await readFile(path.join(srcRoot, 'merchant', 'merchant-list.ts'), 'utf8');
+    const src = await readFile(
+      path.join(srcRoot, 'merchant', 'merchant-list-projection.ts'),
+      'utf8'
+    );
     const start = src.indexOf('export function paginateMerchantItems');
     expect(start).toBeGreaterThanOrEqual(0);
     const end = src.indexOf('export async function computeMerchantsWithStale', start + 10);
@@ -31,7 +34,10 @@ describe('residual #266 cache-head list LIMIT honesty', () => {
   });
 
   it('paginateMovementSkuRows emits limit/truncated from MOVEMENT_CACHE_CAP', async () => {
-    const src = await readFile(path.join(srcRoot, 'movement', 'movement-skus.ts'), 'utf8');
+    const src = await readFile(
+      path.join(srcRoot, 'movement', 'movement-sku-projection.ts'),
+      'utf8'
+    );
     const start = src.indexOf('export function paginateMovementSkuRows');
     expect(start).toBeGreaterThanOrEqual(0);
     const block = src.slice(start, start + 900);

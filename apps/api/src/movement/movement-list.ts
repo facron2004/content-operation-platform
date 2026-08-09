@@ -3,7 +3,8 @@ import { MOVEMENT_CACHE_CAP } from '../common/sql-chunk';
 import type { PrismaService } from '../prisma/prisma.service';
 import type { MovementSkusQueryDto } from './movement.dto';
 import type { MovementSkuRow } from './movement.types';
-import { computeSkuRows, loadActiveSkus, paginateMovementSkuRows } from './movement-skus';
+import { loadActiveSkus } from './movement-sku-loaders';
+import { computeSkuRows, paginateMovementSkuRows } from './movement-sku-projection';
 import { staleDaysFromBucket } from './movement-stale';
 
 /** Bound TTL-cached aggregates after sort (export pageSize ≤ CSV_EXPORT_MAX_ROWS ≤ cap). */

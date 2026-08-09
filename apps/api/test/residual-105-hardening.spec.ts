@@ -44,13 +44,13 @@ describe('residual #105 getPerformance/getTasks drop service pre-getById', () =>
     const fs = await import('fs/promises');
     const path = await import('path');
     const src = await fs.readFile(
-      path.join(__dirname, '..', 'src', 'distribution-task', 'distribution-task.service.ts'),
+      path.join(__dirname, '..', 'src', 'distribution-task', 'distribution-task-read.ts'),
       'utf8'
     );
 
-    const fnStart = src.indexOf('async getPerformance(id: string)');
+    const fnStart = src.indexOf('export function getDistributionTaskPerformance(');
     expect(fnStart).toBeGreaterThan(0);
-    const next = src.indexOf('\n  private generateId(', fnStart + 10);
+    const next = src.indexOf('\n}', fnStart + 10);
     const fn = src.slice(fnStart, next > 0 ? next : undefined);
 
     expect(fn).not.toMatch(/await this\.getById\(id\)/);

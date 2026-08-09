@@ -1,4 +1,5 @@
-import { computed, type Ref } from 'vue';
+import { computed, onScopeDispose, type Ref } from 'vue';
+import { beijingDateKey, startOfWeekKey } from '@content/shared';
 import type {
   MerchantSalesRanking,
   MerchantSalesSort,
@@ -19,7 +20,8 @@ import {
   exportMerchantSales,
   forceRefreshAndReload,
   loadMerchantSalesRanking,
-  reloadMerchantSales
+  reloadMerchantSales,
+  type MerchantSalesRequestGuard
 } from './merchant-sales-core';
 
 type MerchantSalesState = ReturnType<typeof createMerchantSalesState>;
@@ -91,6 +93,8 @@ export function buildMerchantSalesTrendOption(points: MerchantSalesTrendPoint[])
 
 export function useMerchantSalesDerived(params: {
   windowSel: Ref<MerchantSalesWindow>;
+  // Residual #228 anchor — window labels must follow the selected 业务日.
+  kpiDate: Ref<string>;
   summary: Ref<MerchantSalesSummary | null>;
   trend: Ref<MerchantSalesTrendPoint[]>;
   ranking: Ref<MerchantSalesRanking>;
@@ -99,9 +103,24 @@ export function useMerchantSalesDerived(params: {
     const { page: p, pageSize: s, total } = params.ranking.value.pagination;
     return { page: p, pageSize: s, total, totalPages: Math.max(1, Math.ceil(total / s)) };
   });
-  const windowLabel = computed(
-    () => ({ day: '今日', week: '本周', month: '本月', year: '今年' })[params.windowSel.value]
-  );
+  const windowLabel = computed(() => {
+    // Label follows the anchor's calendar period (backend resolves the same way).
+    const today = beijingDateKey(new Date());
+    const anchor = params.kpiDate.value || today;
+    const isCurrent = {
+      day: anchor === today,
+      week: startOfWeekKey(anchor) === startOfWeekKey(today),
+      month: anchor.slice(0, 7) === today.slice(0, 7),
+      year: anchor.slice(0, 4) === today.slice(0, 4)
+    }[params.windowSel.value];
+    const labels = {
+      day: ['今日', '当日'],
+      week: ['本周', '该周'],
+      month: ['本月', '该月'],
+      year: ['今年', '该年']
+    } as const;
+    return isCurrent ? labels[params.windowSel.value][0] : labels[params.windowSel.value][1];
+  });
   const gmvLabel = computed(() => `${windowLabel.value} GMV`);
   const windowRange = computed(() => {
     if (!params.summary.value) return '';
@@ -113,7 +132,15 @@ export function useMerchantSalesDerived(params: {
 }
 
 export function createMerchantSalesLoaders(state: MerchantSalesState) {
+  let disposed = false;
+  let rankingRequestId = 0;
+  let reloadRequestId = 0;
+  let refreshRequestId = 0;
+
   async function loadRanking() {
+    if (disposed) return;
+    const requestId = ++rankingRequestId;
+    const isCurrent: MerchantSalesRequestGuard = () => !disposed && requestId === rankingRequestId;
     await loadMerchantSalesRanking({
       windowSel: state.windowSel.value,
       sortBy: state.sortBy.value,
@@ -121,15 +148,25 @@ export function createMerchantSalesLoaders(state: MerchantSalesState) {
       pageSize: state.pageSize.current,
       ranking: state.ranking,
       listLoading: state.listLoading,
-      loadError: state.loadError,
+      rankingError: state.rankingError,
       // Residual #228: forward as-of day on page flips too.
-      date: state.kpiDate.value || undefined
+      date: state.kpiDate.value || undefined,
+      isCurrent
     });
   }
   async function reload() {
+    if (disposed) return;
+    const requestId = ++reloadRequestId;
+    const rankingId = ++rankingRequestId;
+    state.refreshError.value = null;
+    const isCurrent: MerchantSalesRequestGuard = () => !disposed && requestId === reloadRequestId;
+    const isRankingCurrent: MerchantSalesRequestGuard = () =>
+      !disposed && rankingId === rankingRequestId;
     await reloadMerchantSales({
       loading: state.loading,
-      loadError: state.loadError,
+      summaryError: state.summaryError,
+      trendError: state.trendError,
+      rankingError: state.rankingError,
       page: state.page,
       windowSel: state.windowSel,
       sortBy: state.sortBy,
@@ -138,10 +175,38 @@ export function createMerchantSalesLoaders(state: MerchantSalesState) {
       trend: state.trend,
       ranking: state.ranking,
       listLoading: state.listLoading,
-      kpiDate: state.kpiDate
+      kpiDate: state.kpiDate,
+      isCurrent,
+      isRankingCurrent
     });
   }
-  return { loadRanking, reload };
+  async function forceRefresh() {
+    if (disposed || state.exporting.value) return;
+    const requestId = ++refreshRequestId;
+    const summary = state.summary.value;
+    // Recompute exactly what is on screen: week/month span multiple days.
+    const range = summary ? { start: summary.date, end: summary.endDate } : undefined;
+    await forceRefreshAndReload(
+      state.exporting,
+      state.refreshError,
+      reload,
+      state.kpiDate.value || undefined,
+      () => !disposed && requestId === refreshRequestId,
+      range
+    );
+  }
+
+  onScopeDispose(() => {
+    disposed = true;
+    rankingRequestId += 1;
+    reloadRequestId += 1;
+    refreshRequestId += 1;
+    state.loading.value = false;
+    state.listLoading.value = false;
+    state.exporting.value = false;
+  }, true);
+
+  return { loadRanking, reload, forceRefresh };
 }
 
 export function createMerchantSalesHandlers(args: {
@@ -150,11 +215,11 @@ export function createMerchantSalesHandlers(args: {
   windowSel: Ref<MerchantSalesWindow>;
   sortBy: Ref<MerchantSalesSort>;
   exporting: Ref<boolean>;
-  loadError: Ref<string | null>;
   // Residual #228: as-of anchor day for export/force-refresh.
   kpiDate: Ref<string>;
   reload: () => Promise<void>;
   loadRanking: () => Promise<void>;
+  forceRefresh: () => Promise<void>;
 }) {
   return {
     onWindowChange: () => {
@@ -177,13 +242,7 @@ export function createMerchantSalesHandlers(args: {
         args.sortBy.value,
         args.kpiDate.value || undefined
       ),
-    onForceRefresh: () =>
-      forceRefreshAndReload(
-        args.exporting,
-        args.loadError,
-        args.reload,
-        args.kpiDate.value || undefined
-      )
+    onForceRefresh: args.forceRefresh
   };
 }
 

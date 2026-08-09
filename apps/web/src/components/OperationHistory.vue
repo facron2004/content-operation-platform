@@ -9,6 +9,7 @@
     class="operation-history-drawer"
     @open="refresh"
   >
+    <ErrorAlert :message="exportError" />
     <OperationHistoryList
       v-model:search-text="searchText"
       v-model:filter-type="filterType"
@@ -33,6 +34,7 @@
 <script setup lang="ts">
 import { useOperationHistoryDialog } from '../composables/useOperationHistoryDialog';
 import { useResponsiveDrawerSize } from '../composables/useResponsiveDrawerSize';
+import ErrorAlert from './ErrorAlert.vue';
 import OperationHistoryList from './OperationHistoryList.vue';
 import OperationHistoryDetails from './OperationHistoryDetails.vue';
 const visible = defineModel<boolean>('visible', { default: false });
@@ -45,6 +47,7 @@ const {
   filteredRecords,
   successCount,
   errorCount,
+  exportError,
   formatTime,
   getTypeLabel,
   showDetails,

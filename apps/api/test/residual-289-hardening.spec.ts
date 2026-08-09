@@ -37,7 +37,10 @@ describe('residual #289 GMV distribution LIMIT honesty', () => {
   });
 
   it('computeDistributionFromOrderHeader + resolve return payload type', async () => {
-    const oh = await readFile(path.join(srcRoot, 'gmv', 'gmv-order-header.ts'), 'utf8');
+    const oh = await readFile(
+      path.join(srcRoot, 'gmv', 'gmv-order-header-distribution.ts'),
+      'utf8'
+    );
     const start = oh.indexOf('export async function computeDistributionFromOrderHeader');
     expect(start).toBeGreaterThanOrEqual(0);
     const fn = oh.slice(start, start + 1200);

@@ -1,6 +1,7 @@
 <template>
   <el-card v-loading="loading" class="community-detail-card" shadow="never">
     <template v-if="community">
+      <ErrorAlert :message="detailError" />
       <div class="card-header">
         <div class="title-row">
           <h3 class="community-name">{{ community.groupName }}</h3>
@@ -76,6 +77,7 @@
       <div class="performance-section">
         <!-- Residual #256: prefer API dateFrom/dateTo over hard-coded 90d label. -->
         <h4 class="section-title">任务表现（{{ performanceWindowLabel }}）</h4>
+        <ErrorAlert :message="performanceError" />
         <div v-if="performance" class="metric-grid">
           <div class="metric-item">
             <span class="metric-value">
@@ -108,6 +110,7 @@
 
       <!-- Residual #209: todayRecommendedPackages via getCommunityRecommendations. -->
       <div v-loading="packagesLoading" class="packages-section">
+        <ErrorAlert :message="packagesError" />
         <CommunityPackageList v-if="packages.length" :packages="packages" />
         <template v-else-if="!packagesLoading">
           <h4 class="section-title">今日推荐套餐</h4>
@@ -132,6 +135,7 @@
             <AppleButton variant="ghost" size="sm" @click="goTaskCenter">任务中心</AppleButton>
           </div>
         </div>
+        <ErrorAlert :message="tasksError" />
         <el-table
           v-loading="tasksLoading"
           :data="tasks"
@@ -184,6 +188,7 @@ import type {
   DistributionTask
 } from '@content/shared';
 import { displayMoney } from '../../../utils/format';
+import ErrorAlert from '../../../components/ErrorAlert.vue';
 import AppleButton from '../../../components/AppleButton.vue';
 import TaskStatusTag from '../../task-center/components/TaskStatusTag.vue';
 import CommunityPackageList from '../../communities/components/CommunityPackageList.vue';
@@ -195,30 +200,38 @@ const props = withDefaults(
   defineProps<{
     community: CommunityGroupEntity | null;
     loading: boolean;
+    detailError?: string | null;
     // Residual #179: community-scoped performance (was wrongly visit/order rate shape).
     performance?: CommunityPerformanceResponse | null;
+    performanceError?: string | null;
     // Residual #186/#239: paginated community tasks.
     tasks?: DistributionTask[];
     tasksTotal?: number;
     tasksPage?: number;
     tasksPageSize?: number;
     tasksLoading?: boolean;
+    tasksError?: string | null;
     // Residual #271: INTERACTIVE_LIST_MAX_DAYS window honesty.
     tasksWindowLabel?: string;
     // Residual #209: today recommended OperationCard[] from content console.
     packages?: RecommendedPackages;
     packagesLoading?: boolean;
+    packagesError?: string | null;
   }>(),
   {
     performance: null,
+    detailError: null,
+    performanceError: null,
     tasks: () => [],
     tasksTotal: 0,
     tasksPage: 1,
     tasksPageSize: 10,
     tasksLoading: false,
+    tasksError: null,
     tasksWindowLabel: '近 90 天',
     packages: () => [],
-    packagesLoading: false
+    packagesLoading: false,
+    packagesError: null
   }
 );
 
@@ -290,122 +303,4 @@ function goBatchCreateTask() {
 }
 </script>
 
-<style scoped>
-.community-detail-card {
-  width: 100%;
-}
-
-.card-header {
-  margin-bottom: 16px;
-}
-
-.title-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.community-name {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 600;
-}
-
-.detail-descriptions {
-  width: 100%;
-}
-
-.tag-item {
-  margin-right: 4px;
-}
-
-.tag-item:last-child {
-  margin-right: 0;
-}
-
-.performance-section,
-.packages-section,
-.tasks-section {
-  margin-top: 20px;
-}
-
-.section-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 8px;
-}
-
-.section-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.section-title {
-  margin: 0 0 12px;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--el-text-color-primary);
-}
-
-.section-header .section-title {
-  margin-bottom: 0;
-}
-
-.section-count {
-  font-weight: 400;
-  color: var(--el-text-color-secondary);
-}
-
-.metric-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: 12px;
-}
-
-.metric-item {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  padding: 12px;
-  border-radius: 6px;
-  background: var(--el-fill-color-light);
-}
-
-.metric-value {
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--el-text-color-primary);
-}
-
-.metric-danger {
-  color: var(--el-color-danger);
-}
-
-.metric-label {
-  margin-top: 4px;
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
-}
-
-.task-link {
-  padding: 0;
-  max-width: 100%;
-}
-
-.tasks-pagination {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 12px;
-}
-
-.note-text {
-  white-space: pre-wrap;
-  line-height: 1.6;
-  max-height: 120px;
-  overflow-y: auto;
-}
-</style>
+<style scoped src="../../../styles/components/community-detail-card.css"></style>

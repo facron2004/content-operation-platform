@@ -1,6 +1,8 @@
-# 内容运营 AI 文案生成系统
+# 内容运营平台
 
 本地生活套餐推广运营中台，基于 JeeSite 实时数据实现套餐销售监测、推广优先级排序、AI/规则文案生成、人工审核、社群分发和效果回流的全链路闭环。
+
+> **当前状态（2026-08-09）**：本轮优化以 API、Web、shared、Prisma 和文档为范围。P0-03 迁移基线与 P0-04 关键写入幂等已完成并通过非 EXE 门禁；Windows Desktop、EXE、安装器、`win-unpacked` 和安装后真实进程验收明确延期，详见 [文档对齐总览](docs/DOCUMENTATION-STATUS.md)。
 
 ## 核心功能
 
@@ -38,7 +40,7 @@
 │       ├── AICopyService ── DeepSeek / OpenAI API       │
 │       └── PackageDetailService ── cheerio HTML parser  │
 │                                                        │
-│              Prisma Client  →  SQLite (dev.db)          │
+│              Prisma Client  →  SQLite (prisma/dev.db)  │
 └────────────────────────────────────────────────────────┘
 ```
 
@@ -61,13 +63,9 @@ npm run dev              # 启动前后端开发服务器
 
 访问 `http://localhost:3100`。开发时后端 API 运行在内部端口 3101，前端通过 Vite 代理统一从 3100 端口提供 `/api` 访问。
 
-### 打包为 Windows exe
+### Windows Desktop / EXE（当前延期）
 
-```bash
-npm run build:exe
-```
-
-进入 `dist` 目录，复制 `.env.example` 为 `.env` 并配置后，双击 `content-ops.exe` 启动。首次运行会自动创建数据库并初始化表结构，不需要额外复制 `dev.db`。
+Windows 打包、安装器、`win-unpacked` 和 EXE smoke 不属于当前优化范围，本轮不执行 `build:exe` 或 `package:exe`。后续恢复桌面发布时，以 [打包优化文档](docs/PACKAGING.md) 的运行时配置、用户目录数据库和安全扫描要求为准；不要把 `.env`、Cookie 或数据库复制到安装包。
 
 ## 环境变量
 
@@ -106,7 +104,7 @@ npm run build:exe
 |------|------|--------|
 | `PORT` | API 服务端口 | `3100` |
 | `HOST` | 监听地址 | `127.0.0.1` |
-| `DATABASE_URL` | SQLite 数据库路径 | `file:./dev.db` |
+| `DATABASE_URL` | SQLite 数据库路径 | `file:./prisma/dev.db` |
 
 `HOST` 默认绑定 `127.0.0.1` 防止局域网暴露。如需局域网访问，设置 `HOST=0.0.0.0`。
 
@@ -135,14 +133,23 @@ npm run build:exe
 |------|------|
 | `npm run dev` | 启动前后端开发服务器 |
 | `npm run build` | 构建 shared → api → web 三个包 |
-| `npm run build:exe` | 构建并打包为 Windows exe |
-| `npm test` | 运行后端单元测试（24 个文件，291 个用例） |
+| `npm run typecheck` | API、Web 和 shared 类型检查 |
+| `npm run test:unit -w @content/api` | API 单元测试 |
+| `npm run test:integration -w @content/api` | API 集成测试 |
+| `npm run test:behavior -w @content/web` | Web 行为回归 |
+| `npm run test:legacy -w @content/web` | Web 兼容/历史 pin 回归 |
+| `npm run lint:check` | ESLint 静态检查 |
+| `npm run format:check` | Prettier 格式检查 |
+| `npm run check:integrity` | 源码导入完整性检查 |
+| `npm run db:validate` | Prisma Schema 校验 |
+| `npm run db:drift-check` | 迁移、Schema、实际数据库三路径漂移检查 |
+| `npm test` | 完整测试入口；结果以当次输出和持续优化报告为准 |
 | `npm run prepare:db` | 初始化 / 更新 SQLite 表结构 |
 | `npm run db:purge-mock` | 清除数据库中的 mock 数据 |
 
 ## API 接口概览
 
-所有接口前缀为 `/api/content`，返回 JSON。
+核心套餐与文案接口前缀为 `/api/content`；活动、任务、GMV、IAM、数据分析、商家和社群等平台域使用各自的 `/api/*` 前缀，返回 JSON。以各模块 Controller 和当前 OpenAPI/测试契约为准。
 
 | 模块 | 方法 | 路径 | 说明 |
 |------|------|------|------|
@@ -164,6 +171,8 @@ npm run build:exe
 | AI | POST | `/ai-copy/config` | 更新 AI 配置（运行时） |
 | 库存 | POST | `/inventory/daily-crawl` | 触发每日库存抓取 |
 | 健康 | GET | `/health` | 系统健康检查 |
+
+关键写入接口（任务创建/批量创建/发布、活动启动、社群批量导入、GMV 回填）要求 `Idempotency-Key`，同一业务意图重试会重放成功结果，负载不同时返回 `409`；详见持续优化报告中的 P0-04 条目。
 
 ## 角色体系
 
@@ -187,8 +196,8 @@ npm run build:exe
 │   │   │   ├── config/          # 环境变量加载
 │   │   │   ├── content/         # 核心业务模块
 │   │   │   ├── domain/          # 领域规则（推广评分、运营标签、文案规则）
-│   │   │   └── prisma/          # 数据库服务（含自动迁移）
-│   │   └── test/                # 单元测试（24 个文件，291 个用例）
+│   │   │   └── prisma/          # 数据库服务（启动只读结构检查）
+│   │   └── test/                # API unit / integration / legacy 测试
 │   └── web/                     # Vue 3 前端
 │       ├── src/
 │       │   ├── components/      # 通用组件（布局、骨架屏、空状态等）
@@ -201,11 +210,11 @@ npm run build:exe
 │   └── shared/                  # 前后端共享类型定义
 ├── prisma/
 │   ├── schema.prisma            # 数据模型契约
-│   ├── seed-data.ts             # 建表 SQL + 自动迁移
+│   ├── seed-data.ts             # 重放未应用迁移（不含运行时 DDL）
 │   └── create-schema.ts         # 数据库初始化脚本
 ├── scripts/
 │   ├── dev-unified.js           # 统一开发服务器
-│   └── package-exe.js           # exe 打包脚本
+│   └── package-exe.js           # Windows 打包脚本（当前延期）
 ├── docs/                        # 专项文档
 └── .env.example                 # 环境变量模板
 ```
@@ -222,6 +231,7 @@ npm run build:exe
 
 - [自动登录机制](docs/AUTO_LOGIN.md) — Cookie 管理、自动登录流程和故障排查
 - [AI 文案集成](docs/DEEPSEEK-INTEGRATION.md) — DeepSeek 配置、降级策略和成本说明
-- [打包与优化](docs/PACKAGING.md) — exe 打包流程、体积优化和运行时要求
+- [打包与优化](docs/PACKAGING.md) — Windows 发布流程和运行时要求（当前延期）
 - [性能优化](docs/PERFORMANCE.md) — 缓存策略、并发控制和调优建议
 - [开发者指南](开发者指南.md) — 项目结构、开发规范、测试和贡献流程
+- [文档对齐总览](docs/DOCUMENTATION-STATUS.md) — 当前状态、验证证据、历史文档与延期边界

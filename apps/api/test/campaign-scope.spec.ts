@@ -27,6 +27,9 @@ function makePrisma(store: Store) {
     if (hasHistoryGuard && (store.taskCounts.get(campaignId) ?? 0) > 0) return null;
     const row = store.campaigns.get(campaignId);
     if (!row) return null;
+    if (sql.includes('SET "status" = ?')) {
+      row.status = params[0];
+    }
     // Apply JSON areaIds/merchantIds when present in SET clause.
     for (const p of params) {
       if (typeof p === 'string' && p.startsWith('[')) {
@@ -247,6 +250,69 @@ describe('CampaignService scope id existence', () => {
     expect(updated.campaignId).toBe(created.campaignId);
     const row = store.campaigns.get(String(created.campaignId));
     expect(JSON.parse(String(row?.areaIds))).toEqual(['area-pkg']);
+  });
+
+  it('transitions status and returns the updated campaign row in one write', async () => {
+    store.campaigns.set('campaign-transition', {
+      campaignId: 'campaign-transition',
+      name: '可切换活动',
+      description: null,
+      campaignType: 'daily',
+      status: 'draft',
+      startDate: '2026-01-01',
+      endDate: '2026-01-31',
+      areaIds: null,
+      merchantIds: null,
+      budget: 0,
+      targetGmv: 0,
+      targetOrders: 0,
+      kpiJson: null,
+      ownerId: null,
+      createdAt: '2026-01-01 00:00:00',
+      updatedAt: '2026-01-01 00:00:00'
+    });
+
+    const transitioned = await service.transitionStatus('campaign-transition', 'active');
+
+    expect(transitioned.campaignId).toBe('campaign-transition');
+    expect(transitioned.status).toBe('active');
+    expect(store.campaigns.get('campaign-transition')?.status).toBe('active');
+  });
+
+  it('uses preloaded status for a transition and returns a slim empty-update shell', async () => {
+    const id = 'campaign-preloaded';
+    store.campaigns.set(id, {
+      campaignId: id,
+      name: '预加载活动',
+      description: null,
+      campaignType: 'daily',
+      status: 'draft',
+      startDate: '2026-01-01',
+      endDate: '2026-01-31',
+      areaIds: null,
+      merchantIds: null,
+      budget: 0,
+      targetGmv: 0,
+      targetOrders: 0,
+      kpiJson: null,
+      ownerId: null,
+      createdAt: '2026-01-01 00:00:00',
+      updatedAt: '2026-01-01 00:00:00'
+    });
+
+    const transitioned = await service.transitionStatus(id, 'active', 'draft');
+    expect(transitioned.status).toBe('active');
+
+    const empty = await service.update(
+      id,
+      {},
+      {
+        status: 'active',
+        startDate: '2026-01-01',
+        endDate: '2026-01-31'
+      }
+    );
+    expect(empty).toMatchObject({ success: true, campaignId: id, status: 'active' });
   });
 
   it('blocks delete when any task history exists (including terminal)', async () => {

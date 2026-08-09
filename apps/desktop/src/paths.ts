@@ -1,6 +1,6 @@
 import { app } from 'electron';
-import { existsSync } from 'node:fs';
 import path from 'node:path';
+import { resolveDesktopDatabasePath } from './path-helpers';
 
 /**
  * 统一路径管理：区分开发环境和打包环境
@@ -20,16 +20,30 @@ export function getDataDir(): string {
   return path.join(getUserDataPath(), 'data');
 }
 
+/** 跨进程数据库迁移锁 */
+export function getMigrationLockPath(): string {
+  return path.join(getDataDir(), 'migration.lock');
+}
+
+/** 可由升级器或人工选择传入的旧数据库候选路径。 */
+export function getLegacyDatabaseCandidates(): string[] {
+  const candidates: string[] = [];
+  const configured = process.env.CONTENT_OPS_LEGACY_DATABASE_PATH?.trim();
+  if (configured) candidates.push(path.resolve(configured));
+
+  // 开发环境兼容曾经使用项目库的桌面版本；打包态不再猜测源码路径。
+  if (!app.isPackaged) {
+    candidates.push(path.resolve(app.getAppPath(), '..', '..', 'prisma', 'dev.db'));
+  }
+
+  const databasePath = path.resolve(getDatabasePath());
+  return [...new Set(candidates)].filter((candidate) => path.resolve(candidate) !== databasePath);
+}
+
 /** 数据库文件路径 */
 export function getDatabasePath(): string {
-  if (app.isPackaged) {
-    // 打包态优先复用项目里的开发库（含真实数据），避免另建孤立空库
-    const projectDevDb = 'E:/Program/Content Operation Platform/prisma/dev.db';
-    if (existsSync(projectDevDb)) {
-      return projectDevDb;
-    }
-  }
-  return path.join(getDataDir(), 'content-operations.db');
+  // 桌面端永远使用用户目录数据库，不能读取源码目录中的开发库。
+  return resolveDesktopDatabasePath(getUserDataPath());
 }
 
 /** 备份目录 */
@@ -72,6 +86,14 @@ export function getSchemaPath(): string {
     return path.join(process.resourcesPath, 'prisma', 'schema.prisma');
   }
   return path.resolve(app.getAppPath(), '..', '..', 'prisma', 'schema.prisma');
+}
+
+/** ReleaseManifest 路径 */
+export function getReleaseManifestPath(): string {
+  if (app.isPackaged) {
+    return path.join(process.resourcesPath, 'release-manifest.json');
+  }
+  return path.resolve(app.getAppPath(), '..', '..', 'release-manifest.json');
 }
 
 /** resources 目录（loading.html 等） */

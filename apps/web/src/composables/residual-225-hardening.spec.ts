@@ -13,12 +13,16 @@ describe('residual #225 recommendations as-of date', () => {
   });
 
   it('loadRecommendationsPage forwards date + cache key + watch', async () => {
-    const src = await readFile(path.join(__dirname, 'useRecommendationsPage.ts'), 'utf8');
+    const src = await readFile(path.join(__dirname, 'recommendations-page-loaders.ts'), 'utf8');
+    const actionsSrc = await readFile(
+      path.join(__dirname, 'recommendations-page-actions.ts'),
+      'utf8'
+    );
     expect(src).toMatch(/asOfDate/);
     // Pin body assignment (comment distance can exceed a tight getRecommendations slice).
     expect(src).toMatch(/date:\s*asOfDate\s*\|\|\s*undefined/);
-    expect(src).toMatch(/watch\(\(\)\s*=>\s*options\.filters\.date/);
-    expect(src).toMatch(/filters\.date\s*=\s*''/);
+    expect(actionsSrc).toMatch(/watch\(\(\)\s*=>\s*options\.filters\.date/);
+    expect(actionsSrc).toMatch(/filters\.date\s*=\s*''/);
   });
 
   it('RecommendationsFilterBar exposes date picker', async () => {

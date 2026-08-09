@@ -50,6 +50,16 @@ describe('residual #207 campaign list status CTAs', () => {
     expect(src).toMatch(/@cancel="handleCancel"/);
   });
 
+  it('CampaignsView surfaces paged-list failures without hiding existing rows', async () => {
+    const view = await readFile(path.join(srcRoot, 'views/CampaignsView.vue'), 'utf8');
+    const list = await readFile(path.join(srcRoot, 'composables/usePagedList.ts'), 'utf8');
+    expect(view).toMatch(/import ErrorAlert from ['"]\.\.\/components\/ErrorAlert\.vue['"]/);
+    expect(view).toMatch(/<ErrorAlert :message="loadError" \/>/);
+    expect(view).toMatch(/error:\s*loadError/);
+    expect(list).toMatch(/Keep previous items visible while fetching/);
+    expect(list).toMatch(/error\.value = msg/);
+  });
+
   it('campaign.api clients still post transition paths', async () => {
     const src = await readFile(path.join(srcRoot, 'services/api/campaign.api.ts'), 'utf8');
     for (const name of ['startCampaign', 'pauseCampaign', 'completeCampaign', 'cancelCampaign']) {

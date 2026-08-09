@@ -16,7 +16,10 @@ const page = useMerchantSalesPage();
       @export="page.onExport"
       @date-change="page.reload"
     />
-    <ErrorAlert :message="page.loadError" />
+    <ErrorAlert :message="page.summaryError" />
+    <ErrorAlert :message="page.trendError" />
+    <ErrorAlert :message="page.rankingError" />
+    <ErrorAlert :message="page.refreshError" />
     <MerchantSalesBody
       v-model:window-sel="page.windowSel"
       v-model:sort-by="page.sortBy"

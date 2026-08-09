@@ -23,7 +23,7 @@ describe('residual #228 merchant-sales as-of date', () => {
     expect(src).toMatch(/getMerchantSalesRanking\(\{[\s\S]{0,200}date:/);
     expect(src).toMatch(/getMerchantSalesTrend\(\{[\s\S]{0,160}date:/);
     expect(src).toMatch(/getMerchantSalesExportUrl\(\{[\s\S]{0,120}date:/);
-    expect(src).toMatch(/postMerchantSalesRefresh\(\{ startDate: day, endDate: day \}/);
+    expect(src).toMatch(/postMerchantSalesRefresh\(\{ startDate: start, endDate: end \}/);
   });
 
   it('MerchantSalesHero exposes date picker', async () => {

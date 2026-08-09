@@ -24,14 +24,19 @@ describe('residual #273 audit-log list INTERACTIVE window honesty', () => {
   });
 
   it('AuditLogView sinks window + shows list-window-hint', async () => {
-    const src = await readFile(path.join(webRoot, 'views', 'AuditLogView.vue'), 'utf8');
-    expect(src).toMatch(/listDateFrom\s*=\s*ref/);
-    expect(src).toMatch(/listDateTo\s*=\s*ref/);
-    expect(src).toMatch(/windowLabel\s*=\s*computed/);
-    expect(src).toMatch(/listDateFrom\.value\s*=\s*data\.dateFrom/);
-    expect(src).toMatch(/listDateTo\.value\s*=\s*data\.dateTo/);
-    expect(src).toMatch(/操作审计（\{\{\s*windowLabel\s*\}\}）/);
-    expect(src).toMatch(/list-window-hint/);
-    expect(src).toMatch(/仅展示/);
+    const view = await readFile(path.join(webRoot, 'views', 'AuditLogView.vue'), 'utf8');
+    const list = await readFile(
+      path.join(webRoot, 'features', 'audit-log', 'useAuditLogList.ts'),
+      'utf8'
+    );
+    expect(list).toMatch(/listDateFrom\s*=\s*ref/);
+    expect(list).toMatch(/listDateTo\s*=\s*ref/);
+    expect(list).toMatch(/windowLabel\s*=\s*computed/);
+    expect(list).toMatch(/listDateFrom\.value\s*=\s*data\.dateFrom/);
+    expect(list).toMatch(/listDateTo\.value\s*=\s*data\.dateTo/);
+    expect(view).toMatch(/useAuditLogList/);
+    expect(view).toMatch(/操作审计（\{\{\s*windowLabel\s*\}\}）/);
+    expect(view).toMatch(/list-window-hint/);
+    expect(view).toMatch(/仅展示/);
   });
 });

@@ -22,22 +22,22 @@ describe('residual #185 audit log list + detail SPA wire-up', () => {
     expect(fn).toMatch(/items:\s*raw\.data/);
   });
 
-  it('AuditLogView list reads items (normalized) not only data.items', async () => {
-    const src = await readFile(path.join(srcRoot, 'views/AuditLogView.vue'), 'utf8');
-    const loadStart = src.indexOf('async ({ page, pageSize, filters: f })');
-    expect(loadStart).toBeGreaterThan(0);
-    // Slice through the usePagedList callback.
-    const loadEnd = src.indexOf('filterDebounceMs', loadStart + 10);
-    const loadFn = src.slice(loadStart, loadEnd > 0 ? loadEnd : undefined);
+  it('audit-log list composable reads normalized items and guards stale responses', async () => {
+    const src = await readFile(path.join(srcRoot, 'features/audit-log/useAuditLogList.ts'), 'utf8');
     // Prefer items; tolerate raw data fallback.
-    expect(loadFn).toMatch(/data\.items\s*\?\?\s*data\.data/);
+    expect(src).toMatch(/data\.items\s*\?\?\s*data\.data/);
+    expect(src).toMatch(/requestGeneration/);
+    expect(src).toMatch(/disposed/);
   });
 
   it('showDetail fetches getAuditLog for before/after payloads', async () => {
-    const src = await readFile(path.join(srcRoot, 'views/AuditLogView.vue'), 'utf8');
+    const src = await readFile(
+      path.join(srcRoot, 'features/audit-log/useAuditLogDetail.ts'),
+      'utf8'
+    );
     const detailStart = src.indexOf('async function showDetail');
     expect(detailStart).toBeGreaterThan(0);
-    const detailEnd = src.indexOf('onMounted', detailStart + 10);
+    const detailEnd = src.indexOf('function onDetailClosed', detailStart + 10);
     const detailFn = src.slice(detailStart, detailEnd > 0 ? detailEnd : undefined);
     expect(detailFn).toMatch(/api\.getAuditLog\(/);
     expect(detailFn).toMatch(/row\.logId/);
@@ -54,6 +54,18 @@ describe('residual #185 audit log list + detail SPA wire-up', () => {
     expect(src).toMatch(/formatPayload/);
     expect(src).toMatch(/变更前/);
     expect(src).toMatch(/变更后/);
+  });
+
+  it('audit-log detail failures remain visible in the dialog', async () => {
+    const detail = await readFile(
+      path.join(srcRoot, 'features/audit-log/useAuditLogDetail.ts'),
+      'utf8'
+    );
+    const view = await readFile(path.join(srcRoot, 'views/AuditLogView.vue'), 'utf8');
+    expect(detail).toContain('const detailError = ref<string | null>(null)');
+    expect(detail).toContain('detailError.value = message');
+    expect(view).toMatch(/detailError/);
+    expect(view).toMatch(/<ErrorAlert :message="detailError" \/>/);
   });
 
   it('audit-log.api exposes getAuditLog', async () => {

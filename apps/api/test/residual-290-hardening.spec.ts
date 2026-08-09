@@ -13,11 +13,14 @@ describe('residual #290 ops-console GeneratedCopy title-join honesty', () => {
   });
 
   it('computeTodayOperationConsole projects titleJoin* honesty fields', async () => {
-    const src = await readFile(path.join(srcRoot, 'content', 'dashboard.service.ts'), 'utf8');
-    const start = src.indexOf('private async computeTodayOperationConsole(');
+    const src = await readFile(
+      path.join(srcRoot, 'content', 'dashboard-operations-read.ts'),
+      'utf8'
+    );
+    const start = src.indexOf('export async function computeTodayOperationConsole(');
     expect(start).toBeGreaterThanOrEqual(0);
     // Bound at computePerformance so we only pin the console path (parity #286).
-    const end = src.indexOf('private async computePerformance(', start + 10);
+    const end = src.indexOf('export async function computePerformance(', start + 10);
     const fn = src.slice(start, end > 0 ? end : start + 8000);
     expect(fn).toMatch(/DASHBOARD_GENERATED_COPY_TAKE/);
     expect(fn).toMatch(/titleJoinLimit\s*=\s*DASHBOARD_GENERATED_COPY_TAKE/);

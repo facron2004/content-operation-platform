@@ -7,6 +7,7 @@ import {
   TRACKING_VISIT_RETENTION_DAYS
 } from '../common/sql-chunk';
 import { sqlDatetime, toSqliteDateTime } from '../common/sqlite-datetime';
+import { JobRunnerService } from './job-runner.service';
 
 /**
  * Bounded TrackingVisit retention.
@@ -24,7 +25,10 @@ export class TrackingVisitRetentionJob {
   private readonly logger = new Logger(TrackingVisitRetentionJob.name);
   private running = false;
 
-  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(JobRunnerService) private readonly jobRunner: JobRunnerService
+  ) {}
 
   /** Daily retention sweep — off-peak relative to hourly performance job. */
   @Cron(CronExpression.EVERY_DAY_AT_3AM)
@@ -34,18 +38,20 @@ export class TrackingVisitRetentionJob {
       return;
     }
     this.running = true;
-    try {
-      const deleted = await this.purgeOlderThan(TRACKING_VISIT_RETENTION_DAYS);
-      if (deleted > 0) {
-        this.logger.log(
-          `Purged ${deleted} TrackingVisit rows older than ${TRACKING_VISIT_RETENTION_DAYS}d`
-        );
-      }
-    } catch (err) {
-      this.logger.warn(`TrackingVisit retention failed: ${err}`);
-    } finally {
-      this.running = false;
-    }
+    await this.jobRunner
+      .runJob('tracking-visit-retention', async (setMeta) => {
+        const deleted = await this.purgeOlderThan(TRACKING_VISIT_RETENTION_DAYS);
+        setMeta({ deleted, retentionDays: TRACKING_VISIT_RETENTION_DAYS });
+        if (deleted > 0) {
+          this.logger.log(
+            `Purged ${deleted} TrackingVisit rows older than ${TRACKING_VISIT_RETENTION_DAYS}d`
+          );
+        }
+        return deleted;
+      })
+      .finally(() => {
+        this.running = false;
+      });
   }
 
   /**

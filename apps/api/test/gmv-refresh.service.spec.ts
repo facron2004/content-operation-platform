@@ -40,4 +40,32 @@ describe('GmvService refreshFromJeesite', () => {
       'renewed-cookie'
     );
   });
+
+  it('reports an external pull warning when refresh falls back to local recompute', async () => {
+    const previousBaseUrl = process.env.EXTERNAL_API_BASE_URL;
+    const previousCookie = process.env.EXTERNAL_API_COOKIE;
+    process.env.EXTERNAL_API_BASE_URL = 'https://1.1.1.1/a';
+    process.env.EXTERNAL_API_COOKIE = 'test-cookie';
+    const fetchMock = vi.fn().mockRejectedValue(new Error('network down'));
+    vi.stubGlobal('fetch', fetchMock);
+
+    try {
+      const prisma = {
+        $executeRawUnsafe: vi.fn().mockResolvedValue(0),
+        $queryRawUnsafe: vi.fn().mockResolvedValue([{ gmv: 0 }])
+      };
+      const service = new GmvService(prisma as never);
+
+      const result = await service.refreshFromJeesite('2026-07-15', '2026-07-15');
+
+      expect(result.pullWarnings).toEqual(['JeSite pull failed: network down']);
+      expect(result.recomputeWarnings).toEqual([]);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    } finally {
+      if (previousBaseUrl === undefined) delete process.env.EXTERNAL_API_BASE_URL;
+      else process.env.EXTERNAL_API_BASE_URL = previousBaseUrl;
+      if (previousCookie === undefined) delete process.env.EXTERNAL_API_COOKIE;
+      else process.env.EXTERNAL_API_COOKIE = previousCookie;
+    }
+  });
 });

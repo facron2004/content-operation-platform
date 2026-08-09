@@ -73,6 +73,17 @@ describe('residual #182 task detail performance surface', () => {
     expect(src).not.toMatch(/api\.getTaskPerformance/);
   });
 
+  it('TaskDetailView surfaces primary and performance read failures', async () => {
+    const view = await readFile(path.join(srcRoot, 'views/TaskDetailView.vue'), 'utf8');
+    const composable = await readFile(path.join(__dirname, 'useTaskDetail.ts'), 'utf8');
+    expect(view).toMatch(/import ErrorAlert from ['"]\.\.\/components\/ErrorAlert\.vue['"]/);
+    expect(view).toMatch(/<ErrorAlert :message="loadError" \/>/);
+    expect(view).toMatch(/<ErrorAlert :message="performanceError" \/>/);
+    expect(composable).toMatch(/loadError\s*=\s*ref<string \| null>/);
+    expect(composable).toMatch(/performanceError\s*=\s*ref<string \| null>/);
+    expect(composable).toMatch(/加载任务表现失败/);
+  });
+
   it('task.api getTaskPerformance is TaskPerformanceResponse', async () => {
     const src = await readFile(path.join(srcRoot, 'services/api/task.api.ts'), 'utf8');
     const fnStart = src.indexOf('export async function getTaskPerformance');

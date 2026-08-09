@@ -539,6 +539,9 @@ model MerchantDailyMetrics {
   date                String
   areaName            String?
   paidOrderCount      Int      @default(0)
+  // ── 统一单数口径（退款/核销率 = 单数比）：按商家×日存储退款单数/核销单数 ──
+  refundCount         Int      @default(0)
+  verifyCount         Int      @default(0)
   // ── VNext 金额精度治理（PRD §7.4）：分整数影子字段 ──
   paidAmountOnlineFen BigInt?
   paidAmountWalletFen BigInt?

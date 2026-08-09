@@ -11,6 +11,7 @@ import { OpsTodayQueryDto } from './content.dto';
 import { resolveScopedQuery } from '../user-access/data-scope';
 import { assertUnrestrictedAnalytics } from '../user-access/scope-guards';
 import { RequireLogin } from '../user-access/iam/route-auth.decorator';
+import { RequirePermissions } from '../user-access/iam/require-permissions.decorator';
 
 type AuthUser = {
   userId: string;
@@ -68,6 +69,7 @@ export class DashboardController {
   ) {}
 
   @Get('dashboard/summary')
+  @RequirePermissions('tasks:read')
   @Throttle({ long: { limit: 20, ttl: 60000 } })
   @ApiOperation({ summary: '仪表盘摘要', description: '文稿数量、GMV、转化率、套餐状态分布' })
   async getDashboardSummary(@Req() req: Request) {
@@ -87,6 +89,9 @@ export class DashboardController {
         totalGmv: 0,
         contentConversionRate: 0,
         verifyConversionRate: 0,
+        sourceMatchedCount: 0,
+        sourceLimit: 0,
+        sourceTruncated: false,
         statusDistribution: {},
         topPackages: [],
         riskPackages: []
@@ -125,6 +130,7 @@ export class DashboardController {
   }
 
   @Get('ops/today')
+  @RequirePermissions('tasks:read')
   @Throttle({ long: { limit: 20, ttl: 60000 } })
   @ApiOperation({
     summary: '今日运营作战台',
@@ -147,6 +153,7 @@ export class DashboardController {
   }
 
   @Get('ops/review')
+  @RequirePermissions('tasks:read')
   @Throttle({ long: { limit: 20, ttl: 60000 } })
   async getOperationReview(
     @Query('date') date: string | undefined,
@@ -167,6 +174,7 @@ export class DashboardController {
   }
 
   @Get('performance')
+  @RequirePermissions('analytics:read')
   @Throttle({ long: { limit: 20, ttl: 60000 } })
   getPerformance(@Req() req: Request) {
     // CopyPerformance aggregates are platform-wide; package-scoped cards already

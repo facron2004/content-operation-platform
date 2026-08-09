@@ -1,31 +1,32 @@
-import { parseJwtExp } from './auth-storage';
+export const COOKIE_REFRESH_INTERVAL_MS = 30 * 60 * 1000;
+
 export function createAuthRefreshScheduler() {
-  let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+  let refreshTimer: ReturnType<typeof setTimeout> | null = null,
+    scheduleVersion = 0;
   const api = {
     clear() {
-      if (refreshTimer) {
+      scheduleVersion += 1;
+      if (refreshTimer !== null) {
         clearTimeout(refreshTimer);
         refreshTimer = null;
       }
     },
     schedule(args: {
-      token: string | null;
       isAuthenticated: () => boolean;
-      refresh: () => Promise<string | null>;
-      leadMs: number;
-      minIntervalMs: number;
+      refresh: () => Promise<boolean | null>;
+      intervalMs?: number;
     }) {
-      if (refreshTimer) {
+      const version = ++scheduleVersion;
+      if (refreshTimer !== null) {
         clearTimeout(refreshTimer);
         refreshTimer = null;
       }
-      const exp = args.token ? parseJwtExp(args.token) : null;
-      if (!exp) return;
-      const due = Math.max(exp - Date.now() - args.leadMs, args.minIntervalMs);
+      const due = args.intervalMs ?? COOKIE_REFRESH_INTERVAL_MS;
       refreshTimer = setTimeout(() => {
-        if (!args.isAuthenticated()) return;
+        refreshTimer = null;
+        if (version !== scheduleVersion || !args.isAuthenticated()) return;
         args.refresh().then((ok) => {
-          if (ok) api.schedule(args);
+          if (ok && version === scheduleVersion && args.isAuthenticated()) api.schedule(args);
         });
       }, due);
     }

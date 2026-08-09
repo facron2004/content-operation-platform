@@ -5,6 +5,15 @@
       <!-- Residual #261: prefer API dateFrom/dateTo over hard-coded 90d label. -->
       <span>内容漏斗（{{ windowLabel }}）</span>
     </template>
+    <ErrorAlert :message="loadError" />
+    <p v-if="funnel.sourceError" class="list-cap-hint">
+      {{ funnel.sourceError }}
+    </p>
+    <!-- Residual #291: status/top-package heads use the capped recommend source. -->
+    <p v-if="funnel.sourceTruncated" class="list-cap-hint">
+      推荐源仅加载前 {{ funnel.sourceLimit ?? 0 }} 个在售套餐（匹配
+      {{ funnel.sourceMatchedCount ?? 0 }}），状态分布和套餐榜单可能不完整。
+    </p>
     <el-row :gutter="16">
       <el-col :span="4">
         <MetricTile
@@ -60,11 +69,12 @@
 import { computed } from 'vue';
 import { useRouter } from 'vue-router';
 import MetricTile from '../../../components/MetricTile.vue';
+import ErrorAlert from '../../../components/ErrorAlert.vue';
 import { useContentFunnel } from '../composables/useContentFunnel';
 import { displayMoney } from '../../../utils/format';
 
 const router = useRouter();
-const { loading, funnel } = useContentFunnel();
+const { loading, loadError, funnel } = useContentFunnel();
 
 // Residual #261: INTERACTIVE_LIST_MAX_DAYS window bounds from API (#256 parity).
 const windowLabel = computed(() => {
@@ -91,5 +101,16 @@ function goAudit(status?: string) {
 <style scoped>
 .content-funnel-card {
   margin-bottom: 16px;
+}
+
+.list-cap-hint {
+  margin: 0 0 12px;
+  padding: 6px 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #b45309;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 6px;
 }
 </style>

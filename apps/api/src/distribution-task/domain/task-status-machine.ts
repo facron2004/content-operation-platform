@@ -136,18 +136,17 @@ export async function transitionSchedule(
 export async function transitionComplete(
   tx: Tx,
   taskId: string,
-  currentStatus: string
+  _currentStatus: string
 ): Promise<TaskRow | null> {
   const now = new Date().toISOString().replace('T', ' ').replace('Z', '');
   const returned = await tx.$queryRawUnsafe<TaskRow[]>(
     `UPDATE "DistributionTask"
      SET "status" = 'completed', "completedAt" = ?, "updatedAt" = ?
-     WHERE "taskId" = ? AND "status" = ?
+     WHERE "taskId" = ? AND "status" = 'published'
      RETURNING ${TASK_STATUS_MUTATE_COLUMNS}`,
     now,
     now,
-    taskId,
-    currentStatus
+    taskId
   );
   return returned[0] ?? null;
 }

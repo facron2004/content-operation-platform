@@ -41,6 +41,9 @@ function makePrisma(store: Store) {
       // Walk params in SET order: areaId then updatedAt then WHERE groupId.
       row.areaId = params[0];
     }
+    if (sql.includes('"areaName"')) {
+      row.areaName = params[0];
+    }
     store.groups.set(id, row);
     return row;
   }
@@ -137,6 +140,13 @@ function makePrisma(store: Store) {
     if (sql.startsWith('UPDATE "CommunityGroup"')) {
       // Legacy execute path — still apply in-place.
       return applyCommunityUpdate(sql, params) ? 1 : 0;
+    }
+    if (sql.startsWith('DELETE FROM "CommunityGroup"')) {
+      const id = String(params[0]);
+      if ((store.liveTaskCounts.get(id) ?? (store.tasksByGroup.get(id) ?? []).length) > 0) {
+        return 0;
+      }
+      return store.groups.delete(id) ? 1 : 0;
     }
     return 1;
   });
@@ -242,6 +252,73 @@ describe('CommunityService owner resolve', () => {
     store.liveTaskCounts.set(String(created.groupId), 3);
     const updated = await service.update(String(created.groupId), { areaId: 'area-1' });
     expect(updated.areaId).toBe('area-1');
+  });
+
+  it('returns slim shells for disable and update without reloading the row', async () => {
+    const created = await service.create({
+      groupName: 'G-slim',
+      groupType: 'wechat_group',
+      areaId: 'area-1'
+    });
+    const groupId = String(created.groupId);
+
+    const disabled = await service.disable(groupId);
+    expect(disabled).toEqual({ success: true, groupId, isActive: false });
+
+    const updated = await service.update(groupId, { areaName: '新区域名' });
+    expect(updated).toEqual({ success: true, groupId, areaId: 'area-1' });
+    expect(store.groups.get(groupId)?.areaName).toBe('新区域名');
+  });
+
+  it('deletes an unused group atomically and distinguishes history blocks', async () => {
+    const removable = await service.create({
+      groupName: 'G-delete',
+      groupType: 'wechat_group',
+      areaId: 'area-1'
+    });
+    const removableId = String(removable.groupId);
+    await expect(service.delete(removableId)).resolves.toEqual({ success: true });
+    expect(store.groups.has(removableId)).toBe(false);
+
+    const blocked = await service.create({
+      groupName: 'G-blocked',
+      groupType: 'wechat_group',
+      areaId: 'area-1'
+    });
+    const blockedId = String(blocked.groupId);
+    store.liveTaskCounts.set(blockedId, 1);
+    await expect(service.delete(blockedId)).rejects.toThrow(/distribution tasks/);
+    expect(store.groups.has(blockedId)).toBe(true);
+  });
+
+  it('uses a preloaded areaId for empty updates without a group probe', async () => {
+    const created = await service.create({
+      groupName: 'G-preloaded',
+      groupType: 'wechat_group',
+      areaId: 'area-1'
+    });
+    const id = String(created.groupId);
+    const areaProbe = (service as any).prisma.$queryRawUnsafe as ReturnType<typeof vi.fn>;
+    areaProbe.mockClear();
+
+    const result = await service.update(id, {}, 'area-1');
+
+    expect(result).toEqual({ success: true, groupId: id, areaId: 'area-1' });
+    expect(areaProbe).not.toHaveBeenCalled();
+  });
+
+  it('rejects area changes atomically when task history exists', async () => {
+    const created = await service.create({
+      groupName: 'G-freeze',
+      groupType: 'wechat_group',
+      areaId: 'area-1'
+    });
+    const groupId = String(created.groupId);
+    store.liveTaskCounts.set(groupId, 1);
+
+    await expect(service.update(groupId, { areaId: 'area-known' })).rejects.toThrow(
+      /不可修改 areaId/
+    );
   });
 
   it('allows areaId rewrite only when group has zero task history', async () => {

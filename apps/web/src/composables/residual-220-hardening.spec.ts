@@ -14,11 +14,15 @@ describe('residual #220 recommendations merchantId filter', () => {
   });
 
   it('loadRecommendationsPage forwards merchantId + includes it in cache key', async () => {
-    const src = await readFile(path.join(__dirname, 'useRecommendationsPage.ts'), 'utf8');
+    const src = await readFile(path.join(__dirname, 'recommendations-page-loaders.ts'), 'utf8');
+    const actionsSrc = await readFile(
+      path.join(__dirname, 'recommendations-page-actions.ts'),
+      'utf8'
+    );
     expect(src).toMatch(/filters:\s*\{[\s\S]{0,120}merchantId/);
     expect(src).toMatch(/getRecommendations\(\{[\s\S]{0,300}merchantId/);
     expect(src).toMatch(/o\.filters\.merchantId/);
-    expect(src).toMatch(/watch\(\(\)\s*=>\s*options\.filters\.merchantId/);
+    expect(actionsSrc).toMatch(/watch\(\(\)\s*=>\s*options\.filters\.merchantId/);
   });
 
   it('RecommendationsFilterBar exposes merchantId input', async () => {

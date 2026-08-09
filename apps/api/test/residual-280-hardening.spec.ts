@@ -8,8 +8,11 @@ const sharedRoot = path.join(__dirname, '..', '..', '..', 'packages', 'shared', 
 
 describe('residual #280 dashboard focus-panel KPI honesty', () => {
   it('computeTodayOperationConsole uses full candidate counts + projects panel*/alerts*', async () => {
-    const src = await readFile(path.join(srcRoot, 'content', 'dashboard.service.ts'), 'utf8');
-    const start = src.indexOf('private async computeTodayOperationConsole(');
+    const src = await readFile(
+      path.join(srcRoot, 'content', 'dashboard-operations-read.ts'),
+      'utf8'
+    );
+    const start = src.indexOf('export async function computeTodayOperationConsole(');
     expect(start).toBeGreaterThanOrEqual(0);
     const end = src.indexOf('async getDashboardSummary(', start + 10);
     const fn = src.slice(start, end > 0 ? end : start + 9000);

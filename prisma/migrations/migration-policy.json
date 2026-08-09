@@ -1,0 +1,104 @@
+{
+  "schemaVersion": 1,
+  "canonicalMigrations": [
+    {
+      "name": "0001_init",
+      "sha256": "0cc56f91c3e1e82310746332751466180498ecbf22750edf005321a442a4a307"
+    },
+    {
+      "name": "0002_money_fen_phase1",
+      "sha256": "9ab8634f19ac166e762851129498b9ec2c616ddeb4d9a1b80eb1c96ffab26035"
+    },
+    {
+      "name": "0003_reclaim_live_columns",
+      "sha256": "efb6e32b887db03b5a0a7b884394d6ecb04e108cfc77de140c0139219e14e677"
+    },
+    {
+      "name": "0004_drop_legacy_float_columns",
+      "sha256": "e12ad264de1e8af45f2c22fcfb45ea6c4c653ca220778f5385fd67949fbb7191"
+    },
+    {
+      "name": "0005_add_idempotency_record",
+      "sha256": "163cac755ecc882833eb18d0b118f61fb71ae34d194c56d026907990dcfeb53d"
+    },
+    {
+      "name": "0006_add_job_run_and_outbox_event",
+      "sha256": "d467be6a51f528dffe9ca8f42a5d07951f2e7e16af1b7f7cf35be4df0a23feea"
+    },
+    {
+      "name": "0007_add_iam_foundation",
+      "sha256": "4b6a5416f849c91c6e87560592fc6521b9d179b935f363664a9c1d4d5c366b44"
+    },
+    {
+      "name": "0008_iam_soft_delete_and_scope_fix",
+      "sha256": "6c253b3cf029b69491ac111483d43cfc4cfdc22364b7aca0c46a29022cfce55e"
+    },
+    {
+      "name": "0009_iam_role_permission_audit_fields",
+      "sha256": "0b37ed714ae55a9bce27025557ea933ec37fb1dbd24cd3f73b44f03b053b71be"
+    },
+    {
+      "name": "0010_iam_permission_catalog_expand",
+      "sha256": "0839766cded629ffe01134e90a6f84d20133bef3c4fcebebeb45fb26ce7fe5c6"
+    },
+    {
+      "name": "0011_iam_analytics_refresh_permission",
+      "sha256": "37faeb71223e4a689405c273248411d4ad0f509a70f2aaa76489af057206c674"
+    },
+    {
+      "name": "0012_iam_auditor_content_publish_compat",
+      "sha256": "b441c592089de89910a8b79d8586e8af1f78f58446f3e5426c777a63b41e50ba"
+    },
+    {
+      "name": "0013_role_permission_updated_at_required",
+      "sha256": "167002c03b8662140c06c3ff410e3b3e5de9a6d41d756b199d2f1ab18b793b7d"
+    },
+    {
+      "name": "0014_add_merchant_daily_metrics_counts",
+      "sha256": "dfb043bee4b0a3850ea6b7570f8d5478b956e376a3a3cd59838ac699871c6bed"
+    }
+  ],
+  "sourceEquivalences": [
+    {
+      "id": "0004-trailing-newline-only",
+      "migrationName": "0004_drop_legacy_float_columns",
+      "recordedSha256": "5eed266f53ca46899df2a02701229c00071974bb6406d6eec88eb67569d17b59",
+      "canonicalSha256": "e12ad264de1e8af45f2c22fcfb45ea6c4c653ca220778f5385fd67949fbb7191",
+      "reason": "archived release source differs only by one trailing newline"
+    }
+  ],
+  "legacyBaselines": [
+    {
+      "id": "manual-idempotency-record-2026-07-28",
+      "migrationName": "0005_add_idempotency_record",
+      "recordedChecksum": "dummy",
+      "canonicalSha256": "163cac755ecc882833eb18d0b118f61fb71ae34d194c56d026907990dcfeb53d",
+      "requiredTables": [
+        {
+          "name": "IdempotencyRecord",
+          "columns": [
+            "id",
+            "idempotencyKey",
+            "operationType",
+            "requestHash",
+            "status",
+            "responseData",
+            "expiresAt",
+            "createdAt",
+            "updatedAt"
+          ],
+          "indexes": [
+            {
+              "name": "IdempotencyRecord_idempotencyKey_operationType_key",
+              "unique": true
+            },
+            {
+              "name": "IdempotencyRecord_expiresAt_idx",
+              "unique": false
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

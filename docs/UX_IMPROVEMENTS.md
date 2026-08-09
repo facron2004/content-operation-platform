@@ -1,5 +1,7 @@
 # 用户体验优化总结
 
+> **文档状态（2026-08-09）**：本文是用户体验改进的历史摘要。当前 API 请求管线位于 `apps/web/src/services/http-client.ts`、`http-client-pipeline.ts` 和 `apps/web/src/services/api/`；写入失败、重试、重复提交和迟到响应的最新行为以持续优化报告及当前组件测试为准。Windows/EXE 不在本轮范围。
+
 ## 优化概览
 
 本次优化聚焦于提升产品的用户体验，包括错误处理、加载状态、操作反馈、空状态展示、表单验证和数据刷新等方面。
@@ -9,7 +11,7 @@
 ### 1. 统一错误处理 ✅
 
 **优化内容：**
-- 在 `api.ts` 中添加 axios 响应拦截器
+- 在 `apps/web/src/services/http-client.ts` 与 `http-client-pipeline.ts` 中统一 axios 请求/响应管线
 - 统一处理各类错误状态码（400、401、403、404、500、502、503）
 - 区分网络错误、超时错误和服务器错误
 - 提供友好的中文错误提示

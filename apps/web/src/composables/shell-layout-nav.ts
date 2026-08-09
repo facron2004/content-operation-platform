@@ -3,6 +3,7 @@ import {
   ChatLineRound,
   Checked,
   Coin,
+  Connection,
   DataAnalysis,
   DataBoard,
   DataLine,
@@ -46,7 +47,8 @@ export const ICON_MAP: Record<string, unknown> = {
   SetUp,
   User,
   Goods,
-  Coin
+  Coin,
+  Connection
 };
 
 export const PAGE_TITLES: Record<string, string> = {
@@ -73,6 +75,7 @@ export const PAGE_TITLES: Record<string, string> = {
   'campaign-detail': '活动详情',
   tasks: '任务中心',
   'task-detail': '任务详情',
+  attribution: '订单归因',
   'community-library': '社群库',
   users: '用户管理',
   'audit-logs': '操作审计'
@@ -171,7 +174,8 @@ export const PROTO_NAV: NavNode[] = [
     icon: 'User',
     children: [
       { path: '/recommendations', title: '套餐推荐', icon: 'Goods' },
-      { path: '/performance', title: '效果看板', icon: 'Histogram' }
+      { path: '/performance', title: '效果看板', icon: 'Histogram' },
+      { path: '/attribution', title: '订单归因', icon: 'Connection' }
     ]
   },
   {

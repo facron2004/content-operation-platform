@@ -28,7 +28,10 @@ describe('residual #208 user list isActive filter end-to-end', () => {
   });
 
   it('user.service list filters isActive = 0|1 with COUNT sharing WHERE', async () => {
-    const src = await readFile(path.join(apiRoot, 'user-access/user.service.ts'), 'utf8');
+    const src = await readFile(
+      path.join(apiRoot, 'user-access/application/user-query.service.ts'),
+      'utf8'
+    );
     const fnStart = src.indexOf('async list(');
     expect(fnStart).toBeGreaterThanOrEqual(0);
     const fnEnd = src.indexOf('async create(', fnStart + 30);
@@ -39,17 +42,21 @@ describe('residual #208 user list isActive filter end-to-end', () => {
   });
 
   it('UserManagementView coerces isActive boolean to 0|1 and exposes select', async () => {
-    const src = await readFile(path.join(__dirname, 'UserManagementView.vue'), 'utf8');
-    expect(src).toMatch(/filters\.isActive/);
-    expect(src).toMatch(/filter-status|状态/);
-    expect(src).toMatch(/el-option[^>]*label="启用"/);
-    expect(src).toMatch(/el-option[^>]*label="停用"/);
-    const loaderStart = src.indexOf('async ({ page, pageSize, filters: f })');
+    const src = await readFile(
+      path.join(__dirname, '../features/user-management/useUserManagement.ts'),
+      'utf8'
+    );
+    const page = await readFile(path.join(__dirname, 'UserManagementView.vue'), 'utf8');
+    expect(page).toMatch(/filters\.isActive/);
+    expect(page).toMatch(/filter-status|状态/);
+    expect(page).toMatch(/el-option[^>]*label="启用"/);
+    expect(page).toMatch(/el-option[^>]*label="停用"/);
+    const loaderStart = src.indexOf('async ({ page, pageSize, filters: currentFilters })');
     expect(loaderStart).toBeGreaterThanOrEqual(0);
     const loader = src.slice(loaderStart, loaderStart + 500);
-    expect(loader).toMatch(/isActiveParam/);
-    expect(loader).toMatch(/isActive:\s*isActiveParam/);
-    expect(loader).toMatch(/f\.isActive\s*\?\s*1\s*:\s*0/);
+    expect(loader).toMatch(/const isActive/);
+    expect(loader).toMatch(/isActive\s*\n\s*\}\);/);
+    expect(loader).toMatch(/currentFilters\.isActive\s*\?\s*1\s*:\s*0/);
   });
 
   it('listUsers client accepts isActive number param', async () => {

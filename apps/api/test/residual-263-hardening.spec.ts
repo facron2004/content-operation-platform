@@ -8,7 +8,7 @@ const webRoot = path.join(__dirname, '..', '..', 'web', 'src');
 describe('residual #263 merchant-sales CSV export honesty (#262 parity)', () => {
   it('queryExportCsv returns csv + total/truncated/limit meta', async () => {
     const src = await readFile(
-      path.join(srcRoot, 'merchant-sales', 'merchant-sales-query.ts'),
+      path.join(srcRoot, 'merchant-sales', 'merchant-sales-export-query.ts'),
       'utf8'
     );
     const start = src.indexOf('export async function queryExportCsv');

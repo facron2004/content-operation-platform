@@ -229,8 +229,7 @@ describe('content inventory API', () => {
       await api
         .post('/api/content/alerts/resolve-batch')
         .send({
-          alertIds: ['LIVE-PKG-ALERTS:continuous_unsold'],
-          resolvedBy: 'vitest-alerts'
+          alertIds: ['LIVE-PKG-ALERTS:continuous_unsold']
         })
         .expect(201);
 

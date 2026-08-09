@@ -5,6 +5,7 @@
     width="480px"
     :close-on-click-modal="false"
     @open="handleOpen"
+    @closed="handleClosed"
   >
     <el-form ref="formRef" :model="form" :rules="rules" label-width="100px">
       <el-form-item label="备注" prop="note">
@@ -42,6 +43,7 @@ const emit = defineEmits<{
   'update:modelValue': [value: boolean];
   'update:visible': [value: boolean];
   confirm: [data: { evidenceUrl?: string; note?: string }];
+  closed: [];
 }>();
 
 const dialogVisible = computed({
@@ -70,6 +72,10 @@ function handleOpen() {
   form.evidenceUrl = '';
   form.note = '';
   formRef.value?.clearValidate();
+}
+
+function handleClosed() {
+  emit('closed');
 }
 
 async function handleConfirm() {

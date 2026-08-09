@@ -3,10 +3,22 @@ import {
   CanActivate,
   ExecutionContext,
   Inject,
-  ConflictException
+  BadRequestException,
+  ConflictException,
+  Logger
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import type { Request, Response } from 'express';
 import { IdempotencyService } from './idempotency.service';
+import { REQUIRE_IDEMPOTENCY_METADATA } from './require-idempotency.decorator';
+
+export type IdempotencyRequest = Request & {
+  __idempotentCached?: unknown;
+  __idempotencyReplay?: boolean;
+  __idempotencyRecordId?: string;
+};
+
+type ReflectTarget = ReturnType<ExecutionContext['getHandler']>;
 
 /** Operations for which idempotency is REQUIRED (PRD §7.8.1). */
 export const IDEMPOTENT_OPERATIONS = [
@@ -32,6 +44,7 @@ export const IDEMPOTENCY_OP_HEADER = 'Idempotency-Operation';
  *
  * Usage:
  *   @UseGuards(IdempotencyGuard)
+ *   @RequireIdempotency('create-task')
  *   @Post()
  *   async create(@Body() body: CreateDto) { ... }
  *
@@ -40,48 +53,47 @@ export const IDEMPOTENCY_OP_HEADER = 'Idempotency-Operation';
  *   - Same key + same body: returns cached result
  *   - Same key + different body: 409 Conflict
  *   - Different key: treated as new request
- *   - No header: passes through (existing non-idempotent behavior)
+ *   - No header on a required route: returns 400
+ *   - No header on an optional route: passes through for compatibility
  */
 @Injectable()
 export class IdempotencyGuard implements CanActivate {
+  private readonly logger = new Logger(IdempotencyGuard.name);
+
   constructor(
     @Inject(IdempotencyService) private readonly svc: IdempotencyService,
-    private readonly reflector: Reflector
+    @Inject(Reflector) private readonly reflector: Reflector
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const request = context.switchToHttp().getRequest();
-    const response = context.switchToHttp().getResponse();
+    const request = context.switchToHttp().getRequest<IdempotencyRequest>();
+    const response = context.switchToHttp().getResponse<Response>();
     const method = request.method?.toUpperCase();
 
     // Only guard mutating methods
     if (!['POST', 'PUT', 'PATCH'].includes(method)) return true;
 
-    const idempotencyKey = request.headers[IDEMPOTENCY_KEY_HEADER.toLowerCase()] as
-      string | undefined;
-    if (!idempotencyKey) return true; // No key = pass through
+    const requiredOperation = this.getRequiredOperation(context);
+    const idempotencyKey = this.readHeader(request, IDEMPOTENCY_KEY_HEADER);
+    if (!idempotencyKey) {
+      if (requiredOperation) {
+        throw new BadRequestException(
+          `缺少 ${IDEMPOTENCY_KEY_HEADER}：${requiredOperation} 必须提供业务意图幂等键`
+        );
+      }
+      return true;
+    }
 
     const operationType =
-      (request.headers[IDEMPOTENCY_OP_HEADER.toLowerCase()] as string) ??
+      requiredOperation ??
+      this.readHeader(request, IDEMPOTENCY_OP_HEADER) ??
       this.guessOperation(request);
     const requestHash = this.svc.hashRequest(request.body);
 
     // Look for existing record
     const existing = await this.svc.findRecord(idempotencyKey, operationType);
     if (existing) {
-      if (existing.requestHash !== requestHash) {
-        // Same key, different body — reject
-        throw new ConflictException('幂等键冲突：相同 Idempotency-Key 但请求内容不同');
-      }
-      if (existing.status === 'completed' && existing.responseData) {
-        // Replay cached response
-        const cached = JSON.parse(existing.responseData);
-        // Attach the cached data to request so the handler can short-circuit
-        request.__idempotentCached = cached;
-        return true;
-      }
-      // Pending or failed — let the request proceed
-      return true;
+      return this.handleExisting(request, response, existing, requestHash);
     }
 
     // Create new record
@@ -89,37 +101,124 @@ export class IdempotencyGuard implements CanActivate {
     if (!record) {
       // Race: another request created the record first
       const winner = await this.svc.findRecord(idempotencyKey, operationType);
-      if (winner) {
-        if (winner.requestHash !== requestHash) {
-          throw new ConflictException('幂等键冲突：相同 Idempotency-Key 但请求内容不同');
-        }
-        return true;
-      }
+      if (!winner) throw new ConflictException('幂等记录创建冲突，请使用相同幂等键重试');
+      return this.handleExisting(request, response, winner, requestHash);
     }
 
     // Store record id on request so the response interceptor can update it
-    request.__idempotencyRecordId = record?.id;
+    request.__idempotencyRecordId = record.id;
 
+    this.wrapResponse(response, request);
+    return true;
+  }
+
+  private async handleExisting(
+    request: IdempotencyRequest,
+    response: Response,
+    existing: {
+      id: string;
+      requestHash: string;
+      status: 'pending' | 'completed' | 'failed';
+      responseData: string | null;
+    },
+    requestHash: string
+  ): Promise<boolean> {
+    if (existing.requestHash !== requestHash) {
+      throw new ConflictException('幂等键冲突：相同 Idempotency-Key 但请求内容不同');
+    }
+    if (existing.status === 'completed') {
+      if (existing.responseData == null) {
+        throw new ConflictException('幂等记录缺少已完成响应，请使用新的幂等键重试');
+      }
+      try {
+        request.__idempotentCached = JSON.parse(existing.responseData) as unknown;
+        request.__idempotencyReplay = true;
+      } catch {
+        throw new ConflictException('幂等记录响应无效，请使用新的幂等键重试');
+      }
+      return true;
+    }
+    if (existing.status === 'pending') {
+      throw new ConflictException('相同幂等请求正在处理中，请稍后重试');
+    }
+
+    // Failed records may be retried with the same key. Reuse the record so a
+    // successful retry becomes the cached response for later requests.
+    const acquired = await this.svc.tryAcquireFailed(existing.id);
+    if (!acquired) {
+      throw new ConflictException('相同幂等请求正在重试中，请稍后重试');
+    }
+    request.__idempotencyRecordId = existing.id;
+    this.wrapResponse(response, request);
+    return true;
+  }
+
+  private getRequiredOperation(context: ExecutionContext): IdempotentOperation | undefined {
+    const executionContext = context as ExecutionContext & {
+      getHandler?: ExecutionContext['getHandler'];
+      getClass?: ExecutionContext['getClass'];
+    };
+    const targets = [executionContext.getHandler?.(), executionContext.getClass?.()].filter(
+      (target): target is ReflectTarget => typeof target === 'function'
+    );
+    if (!targets.length) return undefined;
+    return this.reflector.getAllAndOverride<IdempotentOperation>(
+      REQUIRE_IDEMPOTENCY_METADATA,
+      targets
+    );
+  }
+
+  private wrapResponse(response: Response, request: IdempotencyRequest): void {
     // Wrap response to cache on success
     const originalJson = response.json.bind(response);
     response.json = (body: unknown) => {
-      if (request.__idempotencyRecordId && body) {
+      if (request.__idempotencyRecordId && body !== undefined) {
+        const recordId = request.__idempotencyRecordId;
         const statusCode = response.statusCode;
         if (statusCode >= 200 && statusCode < 300) {
-          this.svc.complete(request.__idempotencyRecordId, JSON.stringify(body)).catch(() => {});
+          void this.svc
+            .complete(recordId, JSON.stringify(body))
+            .catch((error: unknown) =>
+              this.logPersistenceFailure(recordId, 'completed', statusCode, error)
+            );
         } else if (statusCode >= 400) {
-          this.svc.fail(request.__idempotencyRecordId).catch(() => {});
+          void this.svc
+            .fail(recordId)
+            .catch((error: unknown) =>
+              this.logPersistenceFailure(recordId, 'failed', statusCode, error)
+            );
         }
       }
       return originalJson(body);
     };
-
-    return true;
   }
 
-  private guessOperation(request: any): string {
+  private logPersistenceFailure(
+    recordId: string,
+    targetStatus: 'completed' | 'failed',
+    statusCode: number,
+    error: unknown
+  ): void {
+    const message = error instanceof Error ? error.message : String(error);
+    this.logger.error(
+      `Failed to persist idempotency record ${recordId} as ${targetStatus} after HTTP ${statusCode}: ${message}`,
+      error instanceof Error ? error.stack : undefined
+    );
+  }
+
+  private readHeader(request: Request, name: string): string | undefined {
+    const value = request.headers[name.toLowerCase()];
+    return Array.isArray(value) ? value[0] : value;
+  }
+
+  private guessOperation(request: Request): string {
     // Derive operation type from route path and method
-    const path = request.route?.path ?? request.url ?? '';
+    const path = (
+      request.originalUrl ??
+      [request.baseUrl, request.route?.path].filter(Boolean).join('') ??
+      request.url ??
+      ''
+    ).split('?')[0];
     if (path.includes('/tasks') || path.includes('/distribution-tasks')) {
       if (path.endsWith('/publish')) return 'publish-task';
       if (path.endsWith('/cancel')) return 'cancel-task';

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { InventorySnapshotRetentionJob } from '../src/jobs/inventory-snapshot-retention.job';
+import { createJobRunnerMock } from './helpers/job-runner';
 import {
   INVENTORY_SNAPSHOT_PURGE_BATCH,
   INVENTORY_SNAPSHOT_PURGE_MAX_BATCHES,
@@ -14,7 +15,7 @@ describe('InventorySnapshotRetentionJob', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    job = new InventorySnapshotRetentionJob(prisma as never);
+    job = new InventorySnapshotRetentionJob(prisma as never, createJobRunnerMock() as never);
   });
 
   it('exports retention matching interactive 90d timeline window', () => {

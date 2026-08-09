@@ -1,4 +1,13 @@
-import { computed, reactive, ref, watch, type Ref, type UnwrapRef, type ComputedRef } from 'vue';
+import {
+  computed,
+  onScopeDispose,
+  reactive,
+  ref,
+  watch,
+  type Ref,
+  type UnwrapRef,
+  type ComputedRef
+} from 'vue';
 
 /** Filter bag values accepted by list views (string selects, booleans, optional empties). */
 export type FilterPrimitive = string | number | boolean | null | undefined;
@@ -40,7 +49,13 @@ export interface UsePagedListOptions {
  * Eliminates ~40 lines of pagination boilerplate per list view.
  */
 export function usePagedList<T, F extends object>(
-  fetcher: (params: { page: number; pageSize: number; filters: F; force: boolean }) => Promise<{
+  fetcher: (params: {
+    page: number;
+    pageSize: number;
+    filters: F;
+    force: boolean;
+    requestId: number;
+  }) => Promise<{
     items: T[];
     total: number;
   }>,
@@ -72,6 +87,7 @@ export function usePagedList<T, F extends object>(
   const filters = reactive<F>({ ...defaultFilters });
   const requestId = ref(0);
   const filterTimer = ref<ReturnType<typeof setTimeout> | undefined>(undefined);
+  let disposed = false;
   /** LRU map of cacheKey → { items, total }. Insertion order = LRU. */
   const pageCache = new Map<string, { items: T[]; total: number }>();
 
@@ -94,7 +110,22 @@ export function usePagedList<T, F extends object>(
     pageCache.clear();
   }
 
+  function clearFilterTimer(): void {
+    if (!filterTimer.value) return;
+    clearTimeout(filterTimer.value);
+    filterTimer.value = undefined;
+  }
+
+  onScopeDispose(() => {
+    disposed = true;
+    clearFilterTimer();
+    requestId.value += 1;
+    loading.value = false;
+  }, true);
+
   async function load(force = false): Promise<void> {
+    if (disposed) return;
+    clearFilterTimer();
     const rid = ++requestId.value;
     const key = cacheKey(page.value, pageSize.value, { ...filters } as F);
     if (!force && pageCacheSize > 0) {
@@ -119,10 +150,12 @@ export function usePagedList<T, F extends object>(
         page: page.value,
         pageSize: pageSize.value,
         filters: { ...filters } as F,
-        force
+        force,
+        requestId: rid
       });
       // Stale-response guard: skip if a newer request has been issued
-      if (rid !== requestId.value) return;
+      const currentKey = cacheKey(page.value, pageSize.value, { ...filters } as F);
+      if (rid !== requestId.value || key !== currentKey) return;
       items.value = data.items;
       total.value = data.total;
       rememberPage(key, { items: data.items, total: data.total });
@@ -138,11 +171,13 @@ export function usePagedList<T, F extends object>(
   }
 
   function setPage(nextPage: number): void {
+    if (disposed) return;
     page.value = clampPage(nextPage);
     load();
   }
 
   function setPageSize(nextPageSize: number): void {
+    if (disposed) return;
     pageSize.value = clampPageSize(nextPageSize);
     page.value = 1;
     clearPageCache();
@@ -150,12 +185,14 @@ export function usePagedList<T, F extends object>(
   }
 
   function refresh(): void {
+    if (disposed) return;
     page.value = 1;
     clearPageCache();
     load(true);
   }
 
   function updateFilter(patch: Partial<F>): void {
+    if (disposed) return;
     Object.assign(filters, patch);
     page.value = 1;
     clearPageCache();
@@ -166,6 +203,7 @@ export function usePagedList<T, F extends object>(
   }
 
   function resetFilters(next?: F): void {
+    if (disposed) return;
     const source = next ?? defaultFilters;
     // Clear then re-apply so removed optional keys (e.g. isActive) don't stick.
     for (const key of Object.keys(filters as object)) {
@@ -180,6 +218,7 @@ export function usePagedList<T, F extends object>(
   }
 
   async function reloadCurrentPage(): Promise<void> {
+    if (disposed) return;
     // Mutations (delete/edit) must bypass the soft page cache.
     clearPageCache();
     await load(true);

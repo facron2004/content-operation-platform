@@ -10,7 +10,7 @@ describe('residual #54 hardening hygiene', () => {
     const fs = await import('fs/promises');
     const path = await import('path');
     const src = await fs.readFile(
-      path.join(__dirname, '..', 'src', 'merchant-sales', 'merchant-sales-query.ts'),
+      path.join(__dirname, '..', 'src', 'merchant-sales', 'merchant-sales-export-query.ts'),
       'utf8'
     );
     expect(src).toContain('CSV_EXPORT_MAX_ROWS');
@@ -87,7 +87,7 @@ describe('residual #54 hardening hygiene', () => {
     const fs = await import('fs/promises');
     const path = await import('path');
     const src = await fs.readFile(
-      path.join(__dirname, '..', 'src', 'content', 'rule-config-ops.ts'),
+      path.join(__dirname, '..', 'src', 'content', 'rule-config-write.ts'),
       'utf8'
     );
     expect(src).toContain('RULE_CONFIG_INACTIVE_KEEP');

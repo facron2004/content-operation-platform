@@ -47,8 +47,8 @@ export interface DataAnalysisOverview {
   tradeAmount: number;
   /** 净 GMV = 毛 GMV − 退款金额。 */
   netGmv: number;
-  /** 净销售额 = sales − refund */
-  netSales: number;
+  /** 核销额 = 已核销(verified)订单的 余额 + 现金，按 paidTime 归算。 */
+  writeOffAmount: number;
   /** 券面额合计 = SUM(orderAmount) */
   faceAmount: number;
   refundAmount: number;
@@ -84,7 +84,7 @@ export interface DataAnalysisDeltas {
   salesAmount: number | null;
   tradeAmount: number | null;
   netGmv: number | null;
-  netSales: number | null;
+  writeOffAmount: number | null;
   refundAmount: number | null;
   verifyRate: number | null;
   refundRate: number | null;
@@ -98,7 +98,7 @@ export interface DataAnalysisDailyPoint {
   salesAmount: number;
   tradeAmount: number;
   netGmv: number;
-  netSales: number;
+  writeOffAmount: number;
   orderCount: number;
   refundAmount: number;
 }

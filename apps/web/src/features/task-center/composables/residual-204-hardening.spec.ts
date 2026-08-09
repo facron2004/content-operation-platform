@@ -18,15 +18,17 @@ describe('residual #204 task list reassign affordance', () => {
     expect(src).not.toMatch(/REASSIGNABLE[\s\S]*'completed'/);
   });
 
-  it('TaskCenterView handleReassign prompts and calls reassignTask', async () => {
-    const src = await readFile(path.join(srcRoot, 'views/TaskCenterView.vue'), 'utf8');
-    expect(src).toMatch(/@reassign="handleReassign"/);
+  it('TaskCenter action composable prompts and calls reassignTask', async () => {
+    const view = await readFile(path.join(srcRoot, 'views/TaskCenterView.vue'), 'utf8');
+    expect(view).toMatch(/@reassign="handleReassign"/);
+    const src = await readFile(path.join(__dirname, 'useTaskCenterActions.ts'), 'utf8');
     const fnStart = src.indexOf('async function handleReassign');
     expect(fnStart).toBeGreaterThanOrEqual(0);
     const fn = src.slice(fnStart);
     expect(fn).toMatch(/api\.reassignTask/);
-    expect(fn).toMatch(/assigneeId:\s*value\.trim\(\)/);
-    expect(fn).toMatch(/refresh\(\)/);
+    expect(fn).toMatch(/assigneeId:\s*value/);
+    expect(src).toMatch(/await request\(value\.trim\(\)\)/);
+    expect(src).toMatch(/refresh\(/);
   });
 
   it('reassignTask client still posts /reassign', async () => {

@@ -46,22 +46,29 @@ export interface VerifyTrendPoint {
   paidOrderCount: number;
 }
 
-export const getRefundToday = (date?: string) =>
-  client.get<RefundTodayPayload>('/refund/today', { params: { date } }).then((r) => r.data);
-export const getRefundTrend = (days: 7 | 30, endDate?: string) =>
+export type RefundWindow = 'day' | 'week' | 'month' | 'year';
+export type TrendBucket = 'day' | 'week' | 'month' | 'year';
+
+export const getRefundToday = (date?: string, window?: RefundWindow) =>
+  client.get<RefundTodayPayload>('/refund/today', { params: { date, window } }).then((r) => r.data);
+export const getRefundTrend = (days: 7 | 30, endDate?: string, bucket?: TrendBucket) =>
   client
-    .get<RefundTrendPoint[]>('/refund/trend', { params: { days, endDate } })
+    .get<RefundTrendPoint[]>('/refund/trend', { params: { days, endDate, bucket } })
     .then((r) => r.data);
-export const getVerifyToday = (date?: string) =>
-  client.get<VerifyTodayPayload>('/verify/today', { params: { date } }).then((r) => r.data);
-export const getVerifyTrend = (days: 7 | 30, endDate?: string) =>
+export const getVerifyToday = (date?: string, window?: RefundWindow) =>
+  client.get<VerifyTodayPayload>('/verify/today', { params: { date, window } }).then((r) => r.data);
+export const getVerifyTrend = (days: 7 | 30, endDate?: string, bucket?: TrendBucket) =>
   client
-    .get<VerifyTrendPoint[]>('/verify/trend', { params: { days, endDate } })
+    .get<VerifyTrendPoint[]>('/verify/trend', { params: { days, endDate, bucket } })
     .then((r) => r.data);
 export const getRefundTopMerchants = (params: {
   sortBy: 'refundDesc' | 'verifyDesc';
   page: number;
   pageSize: number;
+  /** 周期口径: 今日/本周/本月/本年. */
+  window?: RefundWindow;
+  /** 周期锚点日期(可选). */
+  date?: string;
 }) =>
   client
     .get<{

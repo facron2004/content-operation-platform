@@ -1,8 +1,9 @@
-import { reactive, ref } from 'vue';
+import { onScopeDispose, reactive, ref, type Ref } from 'vue';
 import { ElMessage } from 'element-plus';
 import type { TaskChannel, TaskPriority } from '@content/shared';
 import { api } from '../../../services/api';
 import { extractErrorMessage } from '../../../services/http-client';
+import { resolveSubmissionIntent, type SubmissionIntent } from '../../../services/idempotency-key';
 import type { TaskCreateStatus } from './useTaskForm';
 
 /** One editable batch row (group + package required per API CreateTaskDto). */
@@ -53,15 +54,21 @@ export const TASK_BATCH_MAX_ROWS = 20;
 
 export interface TaskBatchCreateOptions {
   onSaved?: () => void | Promise<void>;
+  writeError?: Ref<string | null>;
 }
 
 export function useTaskBatchCreate(options: TaskBatchCreateOptions = {}) {
   const dialogVisible = ref(false);
   const submitting = ref(false);
+  const writeError = options.writeError ?? ref<string | null>(null);
   const shared = reactive<TaskBatchShared>({ ...DEFAULT_SHARED });
   const rows = ref<TaskBatchRow[]>([emptyRow(), emptyRow()]);
+  let submitSequence = 0;
+  let disposed = false;
+  let submissionIntent: SubmissionIntent | null = null;
 
   function reset() {
+    submissionIntent = null;
     Object.assign(shared, DEFAULT_SHARED);
     rows.value = [emptyRow(), emptyRow()];
   }
@@ -71,6 +78,7 @@ export function useTaskBatchCreate(options: TaskBatchCreateOptions = {}) {
    */
   function open(seed?: Partial<TaskBatchShared> & { groupId?: string; packageId?: string }) {
     reset();
+    writeError.value = null;
     if (seed?.campaignId) shared.campaignId = seed.campaignId;
     if (seed?.channel) shared.channel = seed.channel;
     if (seed?.priority) shared.priority = seed.priority;
@@ -136,6 +144,8 @@ export function useTaskBatchCreate(options: TaskBatchCreateOptions = {}) {
   }
 
   async function submit(): Promise<boolean> {
+    if (disposed || submitting.value) return false;
+    writeError.value = null;
     const err = validate() ?? validateCreateStatus();
     if (err) {
       ElMessage.warning(err);
@@ -168,28 +178,43 @@ export function useTaskBatchCreate(options: TaskBatchCreateOptions = {}) {
       ElMessage.warning('请至少填写一行完整任务');
       return false;
     }
+    const submitId = ++submitSequence;
     submitting.value = true;
     try {
-      const res = await api.batchCreateTasks({
+      const payload = {
         campaignId: shared.campaignId.trim() || undefined,
         tasks
-      });
+      };
+      submissionIntent = resolveSubmissionIntent('batch-create-tasks', payload, submissionIntent);
+      const res = await api.batchCreateTasks(payload, submissionIntent.key);
+      if (disposed || submitId !== submitSequence) return false;
       const created = Number(res?.created ?? tasks.length);
       ElMessage.success(`已批量创建 ${created} 条任务`);
       dialogVisible.value = false;
       await options.onSaved?.();
-      return true;
+      submissionIntent = null;
+      return !disposed && submitId === submitSequence;
     } catch (e) {
-      ElMessage.error(extractErrorMessage(e, '批量创建任务失败'));
+      if (!disposed && submitId === submitSequence) {
+        writeError.value = extractErrorMessage(e, '批量创建任务失败');
+        ElMessage.error(writeError.value);
+      }
       return false;
     } finally {
-      submitting.value = false;
+      if (!disposed && submitId === submitSequence) submitting.value = false;
     }
   }
+
+  onScopeDispose(() => {
+    disposed = true;
+    submitSequence += 1;
+    submitting.value = false;
+  });
 
   return {
     dialogVisible,
     submitting,
+    writeError,
     shared,
     rows,
     open,

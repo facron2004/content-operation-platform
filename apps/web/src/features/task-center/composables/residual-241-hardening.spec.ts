@@ -23,8 +23,9 @@ describe('residual #241 task create-time status', () => {
     expect(src).toMatch(/初始状态为「待审核」时必须提供文案 ID/);
     // Create path must send status; update path must not.
     expect(src).toMatch(
-      /api\.createTask\(\{\s*\.\.\.identityFields,\s*\.\.\.optionalFields,\s*status:\s*form\.status/
+      /const payload = \{\s*\.\.\.identityFields,\s*\.\.\.optionalFields,\s*status:\s*form\.status/
     );
+    expect(src).toMatch(/api\.createTask\(payload, createIntent\.key\)/);
     const updateStart = src.indexOf('api.updateTask');
     expect(updateStart).toBeGreaterThan(-1);
     const updateSlice = src.slice(updateStart, updateStart + 220);

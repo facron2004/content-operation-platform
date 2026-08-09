@@ -2,8 +2,9 @@
  * package-exe.js
  * 一键打包：编译全部模块 → 收集运行时 → 校验 → electron-builder → NSIS 安装包
  *
- * 用法: node scripts/package-exe.js
- * 输出: release/内容运营中台-Setup-x.x.x-x64.exe
+ * 用法: node scripts/package-exe.js --output-root=release_candidate_v011
+ * 输出: release_candidate_v011/release/内容运营中台-Setup-x.x.x-x64.exe
+ * 说明: 默认使用隔离候选目录；旧 release/staging 与运行中的 Electron 不会被清理。
  */
 const { execSync } = require('child_process');
 const fs = require('fs');
@@ -13,15 +14,56 @@ const ROOT = path.resolve(__dirname, '..');
 const isWin = process.platform === 'win32';
 const npmCmd = isWin ? 'npm.cmd' : 'npm';
 const npxCmd = isWin ? 'npx.cmd' : 'npx';
+const cliArgs = process.argv.slice(2);
+const outputRootArg = cliArgs.find((arg) => arg.startsWith('--output-root='));
+const outputRoot = path.resolve(
+  ROOT,
+  outputRootArg ? outputRootArg.slice('--output-root='.length) : 'release_candidate_v011'
+);
+const stagingDir = path.join(outputRoot, 'staging');
+const releaseDir = path.join(outputRoot, 'release');
+const killStale = cliArgs.includes('--kill-stale');
+const forceOutput = cliArgs.includes('--force');
 
 function run(cmd, args = [], opts = {}) {
-  console.log(`\n▶ ${cmd} ${args.join(' ')}\n`);
-  execSync(`${cmd} ${args.join(' ')}`, {
+  const shellArgs = args.map((arg) => {
+    const value = String(arg);
+    return /[\s"]/.test(value) ? `"${value.replace(/(["\\])/g, '\\$1')}"` : value;
+  });
+  console.log(`\n▶ ${cmd} ${shellArgs.join(' ')}\n`);
+  execSync(`${cmd} ${shellArgs.join(' ')}`, {
     stdio: 'inherit',
     cwd: opts.cwd || ROOT,
     shell: isWin,
-    env: { ...process.env, ...opts.env },
+    env: { ...process.env, ...opts.env }
   });
+}
+
+function assertSafeOutputRoot() {
+  const relative = path.relative(ROOT, outputRoot);
+  if (!relative || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+    throw new Error(`打包输出目录必须位于工作树内：${outputRoot}`);
+  }
+  if (['release', 'staging', 'dist-electron'].includes(relative)) {
+    throw new Error(`拒绝复用受保护的旧产物目录：${outputRoot}`);
+  }
+  if (fs.existsSync(outputRoot) && fs.readdirSync(outputRoot).length > 0 && !forceOutput) {
+    throw new Error(`输出目录已有内容，若确认覆盖请显式传入 --force：${outputRoot}`);
+  }
+  fs.mkdirSync(outputRoot, { recursive: true });
+}
+
+function createBuilderConfig() {
+  const source = fs.readFileSync(path.join(ROOT, 'electron-builder.yml'), 'utf8');
+  const quoteYamlPath = (filePath) => `'${filePath.replace(/\\/g, '/').replace(/'/g, "''")}'`;
+  const stagingApi = quoteYamlPath(path.join(stagingDir, 'api'));
+  const stagingManifest = quoteYamlPath(path.join(stagingDir, 'release-manifest.json'));
+  const config = source
+    .replace(/from: staging\/api/g, `from: ${stagingApi}`)
+    .replace(/from: staging\/release-manifest\.json/g, `from: ${stagingManifest}`);
+  const configPath = path.join(outputRoot, 'electron-builder.generated.yml');
+  fs.writeFileSync(configPath, config, 'utf8');
+  return configPath;
 }
 
 function copyRecursive(src, dest) {
@@ -47,7 +89,9 @@ function cleanDir(dir) {
       const trashDir = `${dir}_old_${Date.now()}`;
       try {
         fs.renameSync(dir, trashDir);
-        console.log(`  [提示] 目录 ${path.basename(dir)} 存在锁定文件，已重命名隔离为 ${path.basename(trashDir)}`);
+        console.log(
+          `  [提示] 目录 ${path.basename(dir)} 存在锁定文件，已重命名隔离为 ${path.basename(trashDir)}`
+        );
       } catch (renameErr) {
         console.warn(`  [警告] 无法清理或隔离目录 ${path.basename(dir)}: ${renameErr.message}`);
       }
@@ -87,11 +131,17 @@ console.log('  内容运营中台 - EXE 打包');
 console.log('═══════════════════════════════════════════════\n');
 
 try {
-  // 1. 清理旧产物与残留进程
-  console.log('1️⃣  清理旧产物与残留进程...');
-  killStaleProcesses();
-  cleanDir(path.join(ROOT, 'staging'));
-  cleanDir(path.join(ROOT, 'release'));
+  // 1. 只清理本次明确指定的候选目录，不触碰旧 release/staging 或运行中的 Electron。
+  console.log('1️⃣  准备隔离候选输出目录...');
+  assertSafeOutputRoot();
+  if (killStale) {
+    console.log('  [提示] 已显式要求清理残留 Electron 进程');
+    killStaleProcesses();
+  } else {
+    console.log('  [提示] 保留现有 Electron 进程；如需清理请传入 --kill-stale');
+  }
+  cleanDir(stagingDir);
+  cleanDir(releaseDir);
 
   // 2. 安装依赖（确保 node_modules 完整）
   console.log('2️⃣  安装依赖...');
@@ -123,28 +173,40 @@ try {
 
   // 8. 收集 API 运行时依赖到 staging
   console.log('8️⃣  收集 API 运行时...');
-  run('node', ['scripts/prepare-api-runtime.js']);
+  run('node', ['scripts/prepare-api-runtime.js'], {
+    env: { CONTENT_OPS_STAGING_DIR: stagingDir }
+  });
 
-  // 9. 校验打包文件
-  console.log('9️⃣  校验打包文件...');
-  run('node', ['scripts/verify-package.js']);
+  // 9. 生成发布清单，供打包扫描与运行时 /ready 共用
+  console.log('9️⃣  生成 ReleaseManifest...');
+  run('node', ['scripts/release-manifest.js'], {
+    env: { CONTENT_OPS_STAGING_DIR: stagingDir }
+  });
 
-  // 10. 执行 electron-builder
-  console.log('🔟  执行 electron-builder (NSIS x64)...');
-  const tempReleaseDir = path.join(ROOT, 'release_build');
+  // 10. 校验打包文件
+  console.log('🔟  校验打包文件...');
+  run('node', ['scripts/verify-package.js'], {
+    env: { CONTENT_OPS_PACKAGE_ROOT: outputRoot }
+  });
+
+  // 11. 执行 electron-builder
+  console.log('1️⃣1️⃣  执行 electron-builder (NSIS x64)...');
+  const tempReleaseDir = path.join(outputRoot, 'release_build');
+  const builderConfigPath = createBuilderConfig();
   cleanDir(tempReleaseDir);
   run(npxCmd, [
     'electron-builder',
     '--win',
     'nsis',
     '--x64',
+    '--projectDir',
+    ROOT,
     '--config',
-    'electron-builder.yml',
-    `-c.directories.output=${path.relative(ROOT, tempReleaseDir)}`,
+    builderConfigPath,
+    `-c.directories.output=${path.relative(ROOT, tempReleaseDir)}`
   ]);
 
   // 将生成的安装包和 win-unpacked 目录复制到 release 目录
-  const releaseDir = path.join(ROOT, 'release');
   cleanDir(releaseDir);
   if (fs.existsSync(tempReleaseDir)) {
     const files = fs.readdirSync(tempReleaseDir);
@@ -158,29 +220,23 @@ try {
     // 完整回填 API 运行时依赖到 win-unpacked/resources/api/node_modules。
     // electron-builder 会把 extraResources 里的 node_modules 裁剪到只剩手动补充的 prisma，
     // 丢失 @prisma/engines、bcrypt 原生绑定等全部生产依赖，导致 migrate deploy 与后端启动失败。
-    const unpackedNodeModules = path.join(releaseDir, 'win-unpacked', 'resources', 'api', 'node_modules');
-    const stagingNodeModules = path.join(ROOT, 'staging', 'api', 'node_modules');
+    const unpackedNodeModules = path.join(
+      releaseDir,
+      'win-unpacked',
+      'resources',
+      'api',
+      'node_modules'
+    );
+    const stagingNodeModules = path.join(stagingDir, 'api', 'node_modules');
     if (fs.existsSync(stagingNodeModules)) {
       console.log('  [提示] 回填完整 API 运行时依赖到 win-unpacked/resources/api/node_modules...');
       copyRecursive(stagingNodeModules, unpackedNodeModules);
     }
 
-    // 复制根目录 .env 到 win-unpacked/resources/api/.env。
-    // 打包后端的 load-env 只会从 resources/api 及后端 cwd 解析 .env，而 electron-builder 不会打包根 .env，
-    // 缺失会导致外部数据源配置（EXTERNAL_API_* / CONTENT_DATA_SOURCE）全部丢失、AutoLoginService 失败。
-    const rootEnv = path.join(ROOT, '.env');
-    const unpackedEnv = path.join(releaseDir, 'win-unpacked', 'resources', 'api', '.env');
-    if (fs.existsSync(rootEnv)) {
-      console.log('  [提示] 复制 .env 到 win-unpacked/resources/api/.env...');
-      fs.copyFileSync(rootEnv, unpackedEnv);
-    } else {
-      console.warn('  [警告] 未找到根目录 .env，打包应用将无法加载外部数据源配置');
-    }
-
     // 回填必须发生在安装器生成之前。electron-builder 在直接构建 NSIS 时
     // 可能裁剪 extraResources 中的 node_modules；使用已校正的解包目录重新
     // 打包，确保真正安装后的 API 仍包含 Prisma、bcrypt 等运行时依赖。
-    const repackagedDir = path.join(ROOT, 'release_repackaged');
+    const repackagedDir = path.join(outputRoot, 'release_repackaged');
     cleanDir(repackagedDir);
     console.log('  [提示] 基于完整 win-unpacked 目录重新生成 NSIS 安装器...');
     run(npxCmd, [
@@ -190,9 +246,11 @@ try {
       '--win',
       'nsis',
       '--x64',
+      '--projectDir',
+      ROOT,
       '--config',
-      'electron-builder.yml',
-      `-c.directories.output=${path.relative(ROOT, repackagedDir)}`,
+      builderConfigPath,
+      `-c.directories.output=${path.relative(ROOT, repackagedDir)}`
     ]);
 
     // 只把重新生成的发布文件覆盖回 release，保留已经校正过的 win-unpacked。
@@ -211,10 +269,16 @@ try {
     } catch (_) {}
   }
 
+  // 产物生成后再次扫描，确保回填和重打包没有把敏感文件带回安装包。
+  console.log('1️⃣2️⃣ 发布产物安全校验...');
+  run('node', ['scripts/verify-package.js', '--release'], {
+    env: { CONTENT_OPS_PACKAGE_ROOT: outputRoot }
+  });
+
   console.log('\n═══════════════════════════════════════════════');
   console.log('  ✅ 打包完成！');
   console.log('═══════════════════════════════════════════════');
-  console.log(`\n📁 输出目录: ${path.join(ROOT, 'release')}`);
+  console.log(`\n📁 输出目录: ${releaseDir}`);
 
   // 列出生成的安装包及解包目录
   if (fs.existsSync(releaseDir)) {

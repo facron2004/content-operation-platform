@@ -1,6 +1,7 @@
 import type { Ref } from 'vue';
 import type { GmvDistributionRow, GmvKpi } from '../../../services/api/gmv.api';
 import { getGmvDistribution } from '../../../services/api/gmv.api';
+import { extractErrorMessage } from '../../../services/http-client';
 import { readFen, sumMoneyFen } from '../../../utils/format';
 import type {
   GmvActivityRow,
@@ -8,7 +9,8 @@ import type {
   GmvCategoryRow,
   GmvChannelRow,
   GmvFunnelStage,
-  GmvHeatPoint
+  GmvHeatPoint,
+  GmvRequestGuard
 } from './gmv-cockpit-core';
 
 const PALETTE = [
@@ -197,6 +199,7 @@ export function mapAlertsFromKpi(kpi: GmvKpi | null): GmvAlertItem[] {
 
 export async function loadGmvCockpitExtras(params: {
   kpi: Ref<GmvKpi | null>;
+  extrasError: Ref<string | null>;
   categories: Ref<GmvCategoryRow[]>;
   channels: Ref<GmvChannelRow[]>;
   funnel: Ref<GmvFunnelStage[]>;
@@ -204,25 +207,44 @@ export async function loadGmvCockpitExtras(params: {
   heatPoints: Ref<GmvHeatPoint[]>;
   heatCity: Ref<string>;
   alerts: Ref<GmvAlertItem[]>;
+  isCurrent?: GmvRequestGuard;
 }) {
+  const isCurrent = params.isCurrent ?? (() => true);
   const kpi = params.kpi.value;
 
-  // 品类 + 区域并行；失败时各自降级为空，不阻断整页
+  // 品类 + 区域并行；辅助图表失败不阻断主看板，但必须显式可见。
   // Residual #289: distribution returns { items, limit, matched, truncated }.
   const empty: GmvDistributionRow[] = [];
-  const [categoryPayload, areaPayload] = await Promise.all([
-    getGmvDistribution('category', 8, true).catch(() => null),
-    getGmvDistribution('area', 20, true).catch(() => null)
+  const [categoryResult, areaResult] = await Promise.all([
+    getGmvDistribution('category', 8, true).then(
+      (payload) => ({ payload, error: null as unknown }),
+      (error: unknown) => ({ payload: null, error })
+    ),
+    getGmvDistribution('area', 20, true).then(
+      (payload) => ({ payload, error: null as unknown }),
+      (error: unknown) => ({ payload: null, error })
+    )
   ]);
-  const categoryRows = categoryPayload?.items ?? empty;
-  const areaRows = areaPayload?.items ?? empty;
+  if (!isCurrent()) return;
 
-  params.categories.value = mapCategoryRows(categoryRows);
+  const errors: string[] = [];
+  if (categoryResult.error) {
+    errors.push(`品类分布：${extractErrorMessage(categoryResult.error, '加载品类分布失败')}`);
+  } else {
+    params.categories.value = mapCategoryRows(categoryResult.payload?.items ?? empty);
+  }
+  if (areaResult.error) {
+    errors.push(`区域热力：${extractErrorMessage(areaResult.error, '加载区域热力失败')}`);
+  } else {
+    const areaRows = areaResult.payload?.items ?? empty;
+    params.heatPoints.value = mapHeatFromAreas(areaRows);
+    params.heatCity.value = heatCityLabel(areaRows);
+  }
+  params.extrasError.value = errors.length > 0 ? errors.join('；') : null;
+
   params.channels.value = mapPaymentChannelRows(kpi);
   params.funnel.value = mapFunnelFromKpi(kpi);
   // 活动效果暂无后端数据源，保持空态，避免假数据误导
   params.activities.value = [];
-  params.heatPoints.value = mapHeatFromAreas(areaRows);
-  params.heatCity.value = heatCityLabel(areaRows);
   params.alerts.value = mapAlertsFromKpi(kpi);
 }

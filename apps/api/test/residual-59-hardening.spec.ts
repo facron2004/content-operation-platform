@@ -19,7 +19,7 @@ describe('residual #59 recommend cold-path cap', () => {
     const fs = await import('fs/promises');
     const path = await import('path');
     const src = await fs.readFile(
-      path.join(__dirname, '..', 'src', 'content', 'content-facade.ts'),
+      path.join(__dirname, '..', 'src', 'content', 'content-recommendation-facade.ts'),
       'utf8'
     );
     expect(src).toContain('RECOMMEND_SCORE_CAP');
@@ -49,7 +49,7 @@ describe('residual #59 rule resolve in-flight', () => {
     const fs = await import('fs/promises');
     const path = await import('path');
     const ops = await fs.readFile(
-      path.join(__dirname, '..', 'src', 'content', 'rule-config-ops.ts'),
+      path.join(__dirname, '..', 'src', 'content', 'rule-config-read.ts'),
       'utf8'
     );
     const svc = await fs.readFile(

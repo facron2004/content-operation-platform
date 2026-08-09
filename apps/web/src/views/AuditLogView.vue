@@ -61,6 +61,8 @@
       仅展示 {{ windowLabel }} 内的操作日志；更早记录不在本列表分页范围内（交互查询上限 90 天）。
     </p>
 
+    <ErrorAlert :message="error" />
+
     <el-table
       v-loading="loading"
       :data="items"
@@ -107,6 +109,7 @@
 
     <el-dialog v-model="detailVisible" title="操作详情" width="720px" @closed="onDetailClosed">
       <div v-loading="detailLoading">
+        <ErrorAlert :message="detailError" />
         <el-descriptions v-if="selectedLog" column="1" border>
           <el-descriptions-item label="日志 ID">{{ selectedLog.logId }}</el-descriptions-item>
           <el-descriptions-item label="操作者">
@@ -151,78 +154,28 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, onMounted } from 'vue';
-import { ElMessage } from 'element-plus';
-import { api } from '../services/api';
-import { extractErrorMessage } from '../services/http-client';
-import { usePagedList } from '../composables/usePagedList';
+import { onMounted } from 'vue';
 import AppleButton from '../components/AppleButton.vue';
+import ErrorAlert from '../components/ErrorAlert.vue';
+import { useAuditLogList } from '../features/audit-log/useAuditLogList';
+import { useAuditLogDetail } from '../features/audit-log/useAuditLogDetail';
 
-// Residual #185: align with OperationAuditLogEntry (before/after on detail only).
-type AuditLogRow = {
-  logId?: string;
-  username?: string;
-  userId?: string;
-  action?: string;
-  objectType?: string;
-  objectId?: string;
-  ip?: string;
-  createdAt?: string;
-  result?: string;
-  failReason?: string;
-  before?: string;
-  after?: string;
-};
+const {
+  items,
+  loading,
+  error,
+  pagination,
+  filters,
+  load,
+  setPage,
+  resetFilters,
+  listDateFrom,
+  listDateTo,
+  windowLabel
+} = useAuditLogList();
 
-type AuditFilters = {
-  userId: string;
-  objectType: string;
-  action: string;
-  // Residual #193: wire dateFrom/dateTo already on AuditLogQueryDto + listAuditLogs.
-  dateFrom: string;
-  dateTo: string;
-};
-
-// Residual #273: prefer API effective window over filter inputs (filters may be empty).
-const listDateFrom = ref<string | undefined>();
-const listDateTo = ref<string | undefined>();
-const windowLabel = computed(() => {
-  if (listDateFrom.value && listDateTo.value) {
-    return `${listDateFrom.value} ~ ${listDateTo.value}`;
-  }
-  return '近 90 天';
-});
-
-const { items, loading, pagination, filters, load, setPage, updateFilter } = usePagedList<
-  AuditLogRow,
-  AuditFilters
->(
-  async ({ page, pageSize, filters: f }) => {
-    const params: Record<string, unknown> = { page, pageSize };
-    if (f.userId) params.userId = f.userId;
-    if (f.objectType) params.objectType = f.objectType;
-    if (f.action) params.action = f.action;
-    if (f.dateFrom) params.dateFrom = f.dateFrom;
-    if (f.dateTo) params.dateTo = f.dateTo;
-    const data = await api.listAuditLogs(params);
-    // Residual #185: API returns { data, total, page, pageSize } — not { items }.
-    // Prefer client-normalized items when present; fall back to raw data array.
-    const rows = (data.items ?? data.data ?? []) as AuditLogRow[];
-    // Residual #273: sink INTERACTIVE window projected by list.
-    listDateFrom.value = data.dateFrom;
-    listDateTo.value = data.dateTo;
-    return { items: rows, total: data.total ?? 0 };
-  },
-  { userId: '', objectType: '', action: '', dateFrom: '', dateTo: '' },
-  {
-    filterDebounceMs: 0,
-    onError: (msg) => ElMessage.error(extractErrorMessage(msg, '加载审计日志失败'))
-  }
-);
-
-const detailVisible = ref(false);
-const detailLoading = ref(false);
-const selectedLog = ref<AuditLogRow | null>(null);
+const { detailVisible, detailLoading, detailError, selectedLog, showDetail, onDetailClosed } =
+  useAuditLogDetail();
 
 function objectTypeLabel(type: unknown): string {
   const map: Record<string, string> = {
@@ -252,34 +205,9 @@ function formatPayload(raw: string): string {
   }
 }
 
-function resetFilters() {
-  updateFilter({ userId: '', objectType: '', action: '', dateFrom: '', dateTo: '' });
-  load();
-}
-
-function onDetailClosed() {
-  selectedLog.value = null;
-  detailLoading.value = false;
-}
-
-// Residual #185: list omits before/after — fetch full row via getAuditLog.
-async function showDetail(row: AuditLogRow) {
-  selectedLog.value = row;
-  detailVisible.value = true;
-  if (!row.logId) return;
-  detailLoading.value = true;
-  try {
-    const full = (await api.getAuditLog(row.logId)) as AuditLogRow | null;
-    if (full) selectedLog.value = full;
-  } catch (err) {
-    // Keep list-row fields visible; before/after stay empty.
-    ElMessage.warning(extractErrorMessage(err, '加载审计详情失败'));
-  } finally {
-    detailLoading.value = false;
-  }
-}
-
-onMounted(() => load());
+onMounted(() => {
+  void load();
+});
 </script>
 
 <style scoped>

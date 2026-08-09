@@ -13,24 +13,48 @@ vi.mock('fs/promises', () => {
 describe('AutoLoginService', () => {
   let service: AutoLoginService;
   const previousEnvCookie = process.env.EXTERNAL_API_COOKIE;
+  const previousBaseUrl = process.env.EXTERNAL_API_BASE_URL;
   const previousUsername = process.env.EXTERNAL_API_USERNAME;
   const previousPassword = process.env.EXTERNAL_API_PASSWORD;
 
   beforeEach(() => {
     vi.restoreAllMocks();
     process.env.EXTERNAL_API_COOKIE = 'mock-env-cookie';
-    process.env.EXTERNAL_API_BASE_URL = 'https://zdm.zhsh1.cn/a';
+    // Use a public literal IP so concurrent validation tests never depend on
+    // the host machine's DNS resolver or an external lookup timeout.
+    process.env.EXTERNAL_API_BASE_URL = 'https://1.1.1.1/a';
     service = new AutoLoginService();
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
     process.env.EXTERNAL_API_COOKIE = previousEnvCookie;
+    process.env.EXTERNAL_API_BASE_URL = previousBaseUrl;
     process.env.EXTERNAL_API_USERNAME = previousUsername;
     process.env.EXTERNAL_API_PASSWORD = previousPassword;
   });
 
   describe('getCookieStatus', () => {
+    it('reports a pending configuration state without attempting a network call', async () => {
+      delete process.env.EXTERNAL_API_COOKIE;
+      delete process.env.EXTERNAL_API_BASE_URL;
+      delete process.env.EXTERNAL_API_USERNAME;
+      delete process.env.EXTERNAL_API_PASSWORD;
+      service = new AutoLoginService();
+      const fetchMock = vi.fn();
+      vi.stubGlobal('fetch', fetchMock);
+
+      const status = await service.getCookieStatus();
+
+      expect(status.state).toBe('pending_config');
+      expect(status.missingConfig).toEqual([
+        'EXTERNAL_API_BASE_URL',
+        'EXTERNAL_API_USERNAME',
+        'EXTERNAL_API_PASSWORD'
+      ]);
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
     it('returns validation status as true when cookie validation succeeds', async () => {
       // Mock fetch to return valid JSON listData
       vi.stubGlobal(
@@ -91,6 +115,226 @@ describe('AutoLoginService', () => {
       // Only the validation probe — never login flow
       expect(fetchMock).toHaveBeenCalledTimes(1);
       expect(fs.writeFile).not.toHaveBeenCalled();
+    });
+
+    it('does not reuse a validation result that finishes after clearCache', async () => {
+      let resolveFirst: (value: { ok: boolean; text: () => Promise<string> }) => void = () => {};
+      const firstResponse = new Promise<{ ok: boolean; text: () => Promise<string> }>((resolve) => {
+        resolveFirst = resolve;
+      });
+      const fetchMock = vi
+        .fn()
+        .mockReturnValueOnce(firstResponse)
+        .mockResolvedValueOnce({
+          ok: true,
+          text: vi.fn().mockResolvedValue(JSON.stringify({ count: 1, list: [] }))
+        });
+      vi.stubGlobal('fetch', fetchMock);
+
+      const firstStatus = service.getCookieStatus();
+      service.clearCache();
+      resolveFirst({
+        ok: true,
+        text: vi.fn().mockResolvedValue(JSON.stringify({ count: 1, list: [] }))
+      });
+      await firstStatus;
+
+      await service.getCookieStatus();
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not let an older cookie validation overwrite a newer cookie result', async () => {
+      let resolveOld: (value: { ok: boolean; text: () => Promise<string> }) => void = () => {};
+      const oldResponse = new Promise<{ ok: boolean; text: () => Promise<string> }>((resolve) => {
+        resolveOld = resolve;
+      });
+      const validResponse = () => ({
+        ok: true,
+        text: vi.fn().mockResolvedValue(JSON.stringify({ count: 1, list: [] }))
+      });
+      const fetchMock = vi
+        .fn()
+        .mockReturnValueOnce(oldResponse)
+        .mockResolvedValueOnce(validResponse());
+      vi.stubGlobal('fetch', fetchMock);
+
+      const oldStatus = service.getCookieStatus();
+      await expect(service.updateManualCookie('new-valid-cookie')).resolves.toEqual({
+        success: true
+      });
+      resolveOld(validResponse());
+      await oldStatus;
+
+      await service.getCookieStatus();
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not load a cached cookie validated before clearCache', async () => {
+      delete process.env.EXTERNAL_API_COOKIE;
+      delete process.env.EXTERNAL_API_USERNAME;
+      delete process.env.EXTERNAL_API_PASSWORD;
+      vi.mocked(fs.access).mockResolvedValue(undefined);
+      vi.mocked(fs.readFile).mockResolvedValue('cached-cookie' as never);
+
+      let resolveValidation: (value: {
+        ok: boolean;
+        text: () => Promise<string>;
+      }) => void = () => {};
+      const pendingValidation = new Promise<{ ok: boolean; text: () => Promise<string> }>(
+        (resolve) => {
+          resolveValidation = resolve;
+        }
+      );
+      let resolveFirstFetch: () => void = () => {};
+      const firstFetchStarted = new Promise<void>((resolve) => {
+        resolveFirstFetch = resolve;
+      });
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(() => {
+          resolveFirstFetch();
+          return pendingValidation;
+        })
+      );
+
+      const initialization = service.onModuleInit();
+      await firstFetchStarted;
+      service.clearCache();
+      resolveValidation({
+        ok: true,
+        text: vi.fn().mockResolvedValue(JSON.stringify({ count: 1, list: [] }))
+      });
+      await initialization;
+
+      const status = await service.getCookieStatus();
+      expect(status.hasCookie).toBe(false);
+      expect(status.isValid).toBe(false);
+    });
+
+    it('does not commit an environment cookie validated before clearCache', async () => {
+      let resolveValidation: (value: {
+        ok: boolean;
+        text: () => Promise<string>;
+      }) => void = () => {};
+      const pendingValidation = new Promise<{ ok: boolean; text: () => Promise<string> }>(
+        (resolve) => {
+          resolveValidation = resolve;
+        }
+      );
+      let resolveFirstFetch: () => void = () => {};
+      const firstFetchStarted = new Promise<void>((resolve) => {
+        resolveFirstFetch = resolve;
+      });
+      const fetchMock = vi.fn(() => {
+        resolveFirstFetch();
+        return pendingValidation;
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      const staleEnsure = service.ensureValidCookie();
+      await firstFetchStarted;
+      service.clearCache();
+      resolveValidation({
+        ok: true,
+        text: vi.fn().mockResolvedValue(JSON.stringify({ count: 1, list: [] }))
+      });
+
+      await expect(staleEnsure).resolves.toBeNull();
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not let an older manual cookie update overwrite a newer one', async () => {
+      let resolveOld: (value: { ok: boolean; text: () => Promise<string> }) => void = () => {};
+      const oldValidation = new Promise<{ ok: boolean; text: () => Promise<string> }>((resolve) => {
+        resolveOld = resolve;
+      });
+      let resolveFirstFetch: () => void = () => {};
+      const firstFetchStarted = new Promise<void>((resolve) => {
+        resolveFirstFetch = resolve;
+      });
+      let firstFetch = true;
+      const validResponse = () => ({
+        ok: true,
+        text: vi.fn().mockResolvedValue(JSON.stringify({ count: 1, list: [] }))
+      });
+      const fetchMock = vi.fn(() => {
+        if (firstFetch) {
+          firstFetch = false;
+          resolveFirstFetch();
+          return oldValidation;
+        }
+        return Promise.resolve(validResponse());
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      const oldUpdate = service.updateManualCookie('old-cookie');
+      await firstFetchStarted;
+      await expect(service.updateManualCookie('new-cookie')).resolves.toEqual({ success: true });
+
+      resolveOld(validResponse());
+      await expect(oldUpdate).resolves.toEqual({
+        success: false,
+        error: 'Cookie 校验已失效，请重试。'
+      });
+      expect(await service.ensureValidCookie()).toBe('new-cookie');
+    });
+
+    it('serializes cache file writes so an older write cannot finish after a newer one', async () => {
+      let resolveFirstWrite: () => void = () => {};
+      const firstWriteFinished = new Promise<void>((resolve) => {
+        resolveFirstWrite = resolve;
+      });
+      let resolveFirstWriteStarted: () => void = () => {};
+      const firstWriteStarted = new Promise<void>((resolve) => {
+        resolveFirstWriteStarted = resolve;
+      });
+      let resolveSecondWriteStarted: () => void = () => {};
+      const secondWriteStarted = new Promise<void>((resolve) => {
+        resolveSecondWriteStarted = resolve;
+      });
+      let resolveSecondValidationStarted: () => void = () => {};
+      const secondValidationStarted = new Promise<void>((resolve) => {
+        resolveSecondValidationStarted = resolve;
+      });
+      const writtenCookies: string[] = [];
+      let validationCalls = 0;
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(() => {
+          validationCalls += 1;
+          if (validationCalls === 2) resolveSecondValidationStarted();
+          return Promise.resolve({
+            ok: true,
+            text: vi.fn().mockResolvedValue(JSON.stringify({ count: 1, list: [] }))
+          });
+        })
+      );
+      vi.mocked(fs.writeFile).mockImplementation(async (_path, data) => {
+        writtenCookies.push(String(data));
+        if (writtenCookies.length === 1) {
+          resolveFirstWriteStarted();
+          await firstWriteFinished;
+        } else if (writtenCookies.length === 2) {
+          resolveSecondWriteStarted();
+        }
+      });
+
+      const oldUpdate = service.updateManualCookie('old-cookie');
+      await firstWriteStarted;
+
+      const newUpdate = service.updateManualCookie('new-cookie');
+      await secondValidationStarted;
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      expect(writtenCookies).toEqual(['old-cookie']);
+
+      resolveFirstWrite();
+      await secondWriteStarted;
+      expect(writtenCookies).toEqual(['old-cookie', 'new-cookie']);
+      await expect(newUpdate).resolves.toEqual({ success: true });
+      await expect(oldUpdate).resolves.toEqual({
+        success: false,
+        error: 'Cookie 校验已失效，请重试。'
+      });
     });
 
     it('does not return an expired environment cookie from ensureValidCookie', async () => {
@@ -159,6 +403,75 @@ describe('AutoLoginService', () => {
       );
       expect(second).toBe(first);
       expect(fetchMock).toHaveBeenCalledTimes(3);
+    });
+
+    it('does not let a login started before clearCache repopulate the session', async () => {
+      process.env.EXTERNAL_API_USERNAME = 'login-user';
+      process.env.EXTERNAL_API_PASSWORD = 'login-password';
+
+      const makeLoginPage = (initialCookie: string) => ({
+        headers: {
+          get: vi.fn((name: string) => (name === 'set-cookie' ? `${initialCookie}; Path=/` : null))
+        }
+      });
+      const makeRedirect = (sessionId: string) => ({
+        status: 302,
+        headers: {
+          get: vi.fn((name: string) =>
+            name === 'set-cookie' ? `jeesite.session.id=${sessionId}; Path=/; HttpOnly` : null
+          )
+        }
+      });
+
+      let resolveOldLoginPage: (value: ReturnType<typeof makeLoginPage>) => void = () => {};
+      const oldLoginPage = new Promise<ReturnType<typeof makeLoginPage>>((resolve) => {
+        resolveOldLoginPage = resolve;
+      });
+      let resolveFirstFetch: () => void = () => {};
+      const firstFetchStarted = new Promise<void>((resolve) => {
+        resolveFirstFetch = resolve;
+      });
+      let firstLoginPage = true;
+      const fetchMock = vi.fn((input: string, init?: RequestInit) => {
+        const url = String(input);
+        const method = init?.method ?? 'GET';
+        const headers = (init?.headers ?? {}) as Record<string, string>;
+
+        if (url.includes('listData')) {
+          const session = headers.Cookie?.includes('new-session') ? 'new' : 'old';
+          return Promise.resolve({
+            ok: true,
+            text: vi.fn().mockResolvedValue(JSON.stringify({ count: 1, list: [], session }))
+          });
+        }
+
+        if (method === 'GET') {
+          if (firstLoginPage) {
+            firstLoginPage = false;
+            resolveFirstFetch();
+            return oldLoginPage;
+          }
+          return Promise.resolve(makeLoginPage('initial=new'));
+        }
+
+        const session = headers.Cookie?.includes('initial=new') ? 'new' : 'old';
+        return Promise.resolve(makeRedirect(`${session}-session`));
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      const staleLogin = service.ensureValidCookie(true);
+      await firstFetchStarted;
+      service.clearCache();
+      const freshLogin = service.ensureValidCookie(true);
+
+      resolveOldLoginPage(makeLoginPage('initial=old'));
+      const [staleCookie, freshCookie] = await Promise.all([staleLogin, freshLogin]);
+
+      expect(staleCookie).toBeNull();
+      expect(freshCookie).toBe(
+        'skinName=skin-green; jeesite.session.id=new-session; pageSize=10; pageNo=1'
+      );
+      expect(await service.ensureValidCookie()).toBe(freshCookie);
     });
   });
 

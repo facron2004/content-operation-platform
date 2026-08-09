@@ -20,8 +20,9 @@ describe('residual #186 community detail nested tasks', () => {
     expect(src).toMatch(/api\.getCommunity\s*\(/);
     expect(src).toMatch(/api\.getCommunityPerformance\s*\(/);
     expect(src).toMatch(/Promise\.all/);
-    // Soft-fail tasks independently (call may be chained across lines).
-    expect(src).toMatch(/getCommunityTasks\([\s\S]*?\)\s*\.catch/);
+    // Promise.allSettled keeps task failures independent from the other detail domains.
+    expect(src).toMatch(/Promise\.allSettled/);
+    expect(src).toMatch(/tasksError\.value/);
     expect(src).toMatch(/tasks\.value/);
     expect(src).toMatch(/tasksTotal\.value/);
   });

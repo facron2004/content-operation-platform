@@ -38,7 +38,7 @@ const EMPTY_OVERVIEW: DataAnalysisOverview = {
   walletAmount: 0,
   tradeAmount: 0,
   netGmv: 0,
-  netSales: 0,
+  writeOffAmount: 0,
   faceAmount: 0,
   refundAmount: 0,
   verifyAmount: 0,

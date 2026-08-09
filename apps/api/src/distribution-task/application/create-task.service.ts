@@ -5,11 +5,11 @@ import { newEntityId } from '../../common/id';
 import { toSqliteDateTime } from '../../common/sqlite-datetime';
 import { allocateTrackingCode, allocateTrackingCodes } from '../../common/tracking-code';
 import { CreateTaskDto } from '../dto/create-task.dto';
+import { assertOptionalTaskFksFromMaps, loadTaskFkBatch } from '../distribution-task-fk';
 import { getStatus } from '../repositories/task.repository';
 import {
   insertTask,
   findByIdempotencyKey,
-  loadFkBatch,
   batchRollback,
   type InsertTaskParams
 } from '../repositories/task.repository';
@@ -41,13 +41,17 @@ export class CreateTaskService {
     const status = dto.status ?? 'draft';
     this.assertCreateStatusRules(dto, status);
 
-    const maps = await loadFkBatch(
-      this.prisma,
-      [dto.packageId, dto.fallbackPackageId].filter(Boolean) as string[],
-      dto.campaignId ? [dto.campaignId] : [],
-      dto.groupId ? [dto.groupId] : [],
-      dto.contentId ? [dto.contentId] : [],
-      dto.assigneeId ? [dto.assigneeId] : []
+    const maps = await loadTaskFkBatch(this.prisma, [dto]);
+    assertOptionalTaskFksFromMaps(
+      {
+        packageId: dto.packageId,
+        campaignId: dto.campaignId,
+        groupId: dto.groupId,
+        fallbackPackageId: dto.fallbackPackageId,
+        contentId: dto.contentId,
+        status
+      },
+      maps
     );
 
     const assignee = this.resolveFromMap(dto.assigneeId, maps.assignees);
@@ -58,30 +62,7 @@ export class CreateTaskService {
   async batchCreate(dtos: CreateTaskDto[]) {
     const list = Array.isArray(dtos) ? dtos : [];
 
-    // Collect all IDs for batch FK validation
-    const allPackageIds: string[] = [];
-    const allCampaignIds: string[] = [];
-    const allGroupIds: string[] = [];
-    const allContentIds: string[] = [];
-    const allAssigneeIds: string[] = [];
-
-    for (const dto of list) {
-      if (dto.packageId) allPackageIds.push(dto.packageId);
-      if (dto.fallbackPackageId) allPackageIds.push(dto.fallbackPackageId);
-      if (dto.campaignId) allCampaignIds.push(dto.campaignId);
-      if (dto.groupId) allGroupIds.push(dto.groupId);
-      if (dto.contentId) allContentIds.push(dto.contentId);
-      if (dto.assigneeId) allAssigneeIds.push(dto.assigneeId);
-    }
-
-    const maps = await loadFkBatch(
-      this.prisma,
-      [...new Set(allPackageIds)],
-      [...new Set(allCampaignIds)],
-      [...new Set(allGroupIds)],
-      [...new Set(allContentIds)],
-      [...new Set(allAssigneeIds)]
-    );
+    const maps = await loadTaskFkBatch(this.prisma, list);
 
     // Pre-validate each row
     const assignees: Array<{ userId: string; displayName: string } | null> = [];
@@ -90,6 +71,17 @@ export class CreateTaskService {
       const status = dto.status ?? 'draft';
       try {
         this.assertCreateStatusRules(dto, status);
+        assertOptionalTaskFksFromMaps(
+          {
+            packageId: dto.packageId,
+            campaignId: dto.campaignId,
+            groupId: dto.groupId,
+            fallbackPackageId: dto.fallbackPackageId,
+            contentId: dto.contentId,
+            status
+          },
+          maps
+        );
         assignees.push(this.resolveFromMap(dto.assigneeId, maps.assignees));
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err ?? 'validation failed');

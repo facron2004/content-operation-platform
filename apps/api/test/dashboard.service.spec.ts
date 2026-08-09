@@ -2,8 +2,11 @@ import { Test, type TestingModule } from '@nestjs/testing';
 import type { OperationAlert, RecommendPackageItem } from '@content/shared';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { DashboardService } from '../src/content/dashboard.service';
+import { DashboardOperationsService } from '../src/content/dashboard-operations.service';
+import { DashboardSummaryService } from '../src/content/dashboard-summary.service';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { AlertService } from '../src/content/alert.service';
+import { RECOMMEND_CACHE_CAP } from '../src/common/sql-chunk';
 
 // ---- helpers ----
 
@@ -122,6 +125,8 @@ describe('DashboardService', () => {
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
+        DashboardOperationsService,
+        DashboardSummaryService,
         DashboardService,
         { provide: PrismaService, useValue: mockPrisma },
         { provide: AlertService, useValue: mockAlertService }
@@ -157,6 +162,38 @@ describe('DashboardService', () => {
       const dist = service.statusDistribution([makePackageItem({ status: 'healthy_sales' })]);
       expect(dist).toEqual({ healthy_sales: 1 });
     });
+  });
+
+  it('aggregates GeneratedCopy status in one grouped query', async () => {
+    mockPrisma.$queryRawUnsafe
+      .mockResolvedValueOnce([
+        { auditStatus: 'approved', cnt: 2 },
+        { auditStatus: 'pending', cnt: 3 },
+        { auditStatus: 'risk', cnt: 1 }
+      ])
+      .mockResolvedValueOnce([
+        {
+          rowCount: 4,
+          exposureCount: 100,
+          clickCount: 20,
+          orderCount: 5,
+          verifyCount: 4,
+          gmvFen: 12500
+        }
+      ]);
+
+    const result = await service.getDashboardSummary(
+      vi.fn().mockResolvedValue({ date: '2026-08-03', packages: [], matchedCount: 0 })
+    );
+
+    expect(result.generatedCount).toBe(6);
+    expect(result.approvedCount).toBe(2);
+    expect(result.pendingCount).toBe(3);
+    expect(result.riskCount).toBe(1);
+    expect(result.pushedCount).toBe(4);
+    expect(mockPrisma.$queryRawUnsafe).toHaveBeenCalledTimes(2);
+    expect(mockPrisma.generatedCopy.count).not.toHaveBeenCalled();
+    expect(mockPrisma.copyPerformance.count).not.toHaveBeenCalled();
   });
 
   // ---- getTodayOperationConsole ----
@@ -315,6 +352,39 @@ describe('DashboardService', () => {
 
       expect(result.contentConversionRate).toBe(0);
       expect(result.verifyConversionRate).toBe(0);
+    });
+
+    it('projects recommendation source coverage for capped status and package heads', async () => {
+      const packages = [
+        makePackageItem({ packageId: 'PKG-HEAD-1', status: 'nearly_sold_out' }),
+        makePackageItem({ packageId: 'PKG-HEAD-2', status: 'high_refund_risk' })
+      ];
+
+      const result = await service.getDashboardSummary(
+        vi.fn().mockResolvedValue({ packages, matchedCount: RECOMMEND_CACHE_CAP + 37 }),
+        { includePlatformCounters: false }
+      );
+
+      expect(result.sourceMatchedCount).toBe(RECOMMEND_CACHE_CAP + 37);
+      expect(result.sourceLimit).toBe(RECOMMEND_CACHE_CAP);
+      expect(result.sourceTruncated).toBe(true);
+      expect(result.statusDistribution).toEqual({
+        nearly_sold_out: 1,
+        high_refund_risk: 1
+      });
+      expect(result.topPackages.map((pkg) => pkg.packageId)).toEqual(['PKG-HEAD-1', 'PKG-HEAD-2']);
+    });
+
+    it('marks recommendation source failure instead of returning an unmarked empty head', async () => {
+      const result = await service.getDashboardSummary(
+        vi.fn().mockRejectedValue(new Error('recommendation source down')),
+        { includePlatformCounters: false }
+      );
+
+      expect(result.sourceError).toBe('推荐源暂不可用，状态分布和套餐榜单未加载');
+      expect(result.sourceMatchedCount).toBe(0);
+      expect(result.statusDistribution).toEqual({});
+      expect(result.topPackages).toEqual([]);
     });
 
     it('caps CopyPerformance SUM to trailing 90d (date params on createdAt)', async () => {

@@ -1,68 +1,13 @@
-import { ElMessage } from 'element-plus';
-import { computed, reactive, ref, watch, type Ref } from 'vue';
-import type { OperationAlert, PaginationMeta } from '@content/shared';
+import { reactive, ref, watch, type Ref } from 'vue';
+import type { PaginationMeta } from '@content/shared';
 import { api } from '../../../services/api';
 import { clearAlertCache } from '../../../services/cache.service';
-import { extractErrorMessage } from '../../../services/http-client';
-import type { OperationRecord } from '../../../services/operation-history';
+import type { AlertItem, AlertPageCache, AlertResponse } from './alert-types';
 
-// --- types ---
-export interface AlertSummary {
-  totalCount: number;
-  activeCount: number;
-  resolvedCount: number;
-  dangerCount: number;
-  warningCount: number;
-  infoCount: number;
-  packageCount: number;
-  typeDistribution: Record<string, number>;
-}
-export interface AlertPackageFocus {
-  packageId: string;
-  packageName: string;
-  merchantName: string;
-  areaName: string;
-  alertCount: number;
-  dangerCount: number;
-  warningCount: number;
-  priorityScore: number;
-  mainReason: string;
-  nextAction: string;
-  alertIds: string[];
-  types: OperationAlert['type'][];
-}
-export interface AlertItem extends OperationAlert {
-  priorityScore?: number;
-}
-export interface AlertResponse {
-  items: AlertItem[];
-  summary: AlertSummary;
-  topPackages: AlertPackageFocus[];
-  pagination: { page: number; pageSize: number; total: number; totalPages: number };
-  // Residual #283: Top-N focus package head honesty.
-  focusPackageLimit?: number;
-  focusPackageMatched?: number;
-  focusPackageTruncated?: boolean;
-  // Residual #274: RESOLVED_ALERT_DAY_LIMIT honesty.
-  resolvedIdsLimit?: number;
-  resolvedIdsLoaded?: number;
-  resolvedIdsTruncated?: boolean;
-  // Residual #275: RECOMMEND_CACHE_CAP source-cap honesty.
-  sourceMatchedCount?: number;
-  sourceLimit?: number;
-  sourceTruncated?: boolean;
-}
-export type AlertPagination = Omit<PaginationMeta, 'totalPages'>;
-export const EMPTY_ALERT_SUMMARY: AlertSummary = {
-  totalCount: 0,
-  activeCount: 0,
-  resolvedCount: 0,
-  dangerCount: 0,
-  warningCount: 0,
-  infoCount: 0,
-  packageCount: 0,
-  typeDistribution: {}
-};
+// Compatibility barrel: existing imports keep the historical alert-core path.
+export * from './alert-types';
+export * from './alert-handlers';
+export * from './alert-summary';
 
 // --- state + loaders ---
 export function createAlertState() {
@@ -70,6 +15,7 @@ export function createAlertState() {
     loading: ref(false),
     resolving: ref(false),
     loadError: ref<string | null>(null),
+    actionError: ref<string | null>(null),
     alerts: ref<AlertItem[]>([]),
     alertResponse: ref<AlertResponse | null>(null),
     // Residual #221: date as-of (AlertQueryDto.date) — empty = today server-side.
@@ -79,8 +25,14 @@ export function createAlertState() {
     loadRequestId: ref(0),
     resolveRequestId: ref(0),
     /** Soft page LRU — page flips reuse payload without blanking the table. */
-    pageCache: new Map<string, { items: AlertItem[]; total: number; response: AlertResponse }>()
+    pageCache: new Map() as AlertPageCache
   };
+}
+
+export function clearAlertFilterTimer(state: ReturnType<typeof createAlertState>): void {
+  if (!state.filterTimer.value) return;
+  clearTimeout(state.filterTimer.value);
+  state.filterTimer.value = undefined;
 }
 
 export async function loadAlertsPage(p: {
@@ -98,7 +50,7 @@ export async function loadAlertsPage(p: {
   setError: (v: string | null) => void;
   setResponse: (data: AlertResponse) => void;
   setItems: (items: AlertItem[]) => void;
-  pageCache?: Map<string, { items: AlertItem[]; total: number; response: AlertResponse }>;
+  pageCache?: AlertPageCache;
   pageCacheSize?: number;
 }) {
   const {
@@ -180,6 +132,7 @@ export function createAlertLoader(
   role: Ref<string | undefined>
 ) {
   return async (force = false) => {
+    clearAlertFilterTimer(state);
     const requestId = ++state.loadRequestId.value;
     await loadAlertsPage({
       role: role.value,
@@ -213,12 +166,14 @@ export function bindAlertWatchers(args: {
   pagination: Omit<PaginationMeta, 'totalPages'>;
   role: Ref<string | undefined>;
   load: (force?: boolean) => Promise<void> | void;
+  isActive?: () => boolean;
   setFilterTimer: (timer: ReturnType<typeof window.setTimeout> | undefined) => void;
   getFilterTimer: () => ReturnType<typeof window.setTimeout> | undefined;
 }) {
   watch(
     () => [args.filters.keyword, args.filters.level, args.filters.type, args.filters.date],
     () => {
+      if (args.isActive && !args.isActive()) return;
       const prev = args.getFilterTimer();
       if (prev) clearTimeout(prev);
       args.setFilterTimer(
@@ -230,173 +185,8 @@ export function bindAlertWatchers(args: {
     }
   );
   watch(args.role, () => {
+    if (args.isActive && !args.isActive()) return;
     args.pagination.page = 1;
     void args.load(true);
   });
-}
-
-// --- handlers ---
-type OperationType = OperationRecord['type'];
-type Filters = { keyword: string; level: string; type: string; date: string };
-
-function buildResolveSuccessMeta(ids: string[]) {
-  const single = ids.length === 1;
-  return {
-    type: (single ? 'alert_resolve' : 'alert_batch_resolve') as OperationType,
-    action: single ? '处理预警' : `批量处理 ${ids.length} 条预警`,
-    details: { alertIds: ids, count: ids.length }
-  };
-}
-
-function buildResolveErrorMeta(ids: string[], error: string) {
-  const single = ids.length === 1;
-  return {
-    type: (single ? 'alert_resolve' : 'alert_batch_resolve') as OperationType,
-    action: single ? '处理预警失败' : `批量处理 ${ids.length} 条预警失败`,
-    error,
-    details: { alertIds: ids }
-  };
-}
-
-export async function resolveAlertBatch(p: {
-  alertIds: string[];
-  successText: string;
-  requestId: number;
-  currentRequestId: () => number;
-  setResolving: (v: boolean) => void;
-  recordSuccess: (type: OperationType, action: string, details?: Record<string, unknown>) => void;
-  recordError: (
-    type: OperationType,
-    action: string,
-    error: string,
-    details?: Record<string, unknown>
-  ) => void;
-  reload: () => Promise<void>;
-}) {
-  const ids = [...new Set((p.alertIds ?? []).filter(Boolean))];
-  if (!ids.length) {
-    ElMessage.warning('当前没有可处理的预警');
-    return;
-  }
-  p.setResolving(true);
-  try {
-    await api.resolveAlerts(ids);
-    if (p.requestId !== p.currentRequestId()) return;
-    ElMessage.success(p.successText);
-    const s = buildResolveSuccessMeta(ids);
-    p.recordSuccess(s.type, s.action, s.details);
-    await p.reload();
-  } catch (error) {
-    if (p.requestId !== p.currentRequestId()) return;
-    ElMessage.error('操作失败，请稍后重试');
-    const f = buildResolveErrorMeta(ids, extractErrorMessage(error, '未知错误'));
-    p.recordError(f.type, f.action, f.error, f.details);
-  } finally {
-    if (p.requestId === p.currentRequestId()) p.setResolving(false);
-  }
-}
-
-export type AlertResolveArgs = {
-  alerts: Ref<AlertItem[]>;
-  resolveRequestId: () => number;
-  currentResolveRequestId: () => number;
-  setResolving: (v: boolean) => void;
-  recordSuccess: (type: OperationType, action: string, details?: Record<string, unknown>) => void;
-  recordError: (
-    type: OperationType,
-    action: string,
-    error: string,
-    details?: Record<string, unknown>
-  ) => void;
-  load: (force?: boolean) => Promise<void>;
-};
-
-function createAlertResolveHandlers(args: AlertResolveArgs) {
-  const resolveBatch = async (
-    alertIds: string[],
-    successText = '已标记处理，今日不会再进入待办'
-  ) => {
-    const requestId = args.resolveRequestId();
-    await resolveAlertBatch({
-      alertIds,
-      successText,
-      requestId,
-      currentRequestId: args.currentResolveRequestId,
-      setResolving: args.setResolving,
-      recordSuccess: args.recordSuccess,
-      recordError: args.recordError,
-      reload: () => args.load(true)
-    });
-  };
-  return {
-    resolve: async (alertId: string) => resolveBatch([alertId]),
-    resolveBatch,
-    resolveCurrentPage: async () =>
-      resolveBatch(
-        args.alerts.value.map((a) => a.alertId),
-        `已处理当前页 ${args.alerts.value.length} 条预警`
-      )
-  };
-}
-
-function createAlertFilterHandlers(args: {
-  filters: Filters;
-  pagination: Omit<PaginationMeta, 'totalPages'>;
-  load: (force?: boolean) => Promise<void>;
-}) {
-  return {
-    clearFilters: () => {
-      args.filters.keyword = '';
-      args.filters.level = '';
-      args.filters.type = '';
-      args.filters.date = '';
-    },
-    handlePageChange: () => args.load(),
-    handleSizeChange: () => {
-      args.pagination.page = 1;
-      args.load();
-    }
-  };
-}
-
-export function useAlertHandlers(
-  args: AlertResolveArgs & {
-    filters: Filters;
-    pagination: Omit<PaginationMeta, 'totalPages'>;
-  }
-) {
-  return { ...createAlertResolveHandlers(args), ...createAlertFilterHandlers(args) };
-}
-
-// --- table summary (used by AlertTable) ---
-export function useAlertTableSummary(
-  alerts: () => Array<OperationAlert & { priorityScore?: number }>
-) {
-  const currentPageDangerCount = computed(
-    () => alerts().filter((item) => item.level === 'danger').length
-  );
-  const currentPageWarningCount = computed(
-    () => alerts().filter((item) => item.level === 'warning').length
-  );
-  const currentPageAvgScore = computed(() => {
-    const rows = alerts();
-    if (!rows.length) return 0;
-    return (
-      Math.round(
-        (rows.reduce((sum, item) => sum + (item.priorityScore ?? 0), 0) / rows.length) * 10
-      ) / 10
-    );
-  });
-  const currentPagePackageCount = computed(
-    () => new Set(alerts().map((item) => item.packageId)).size
-  );
-  const alertRowClassName = ({ row }: { row: OperationAlert & { priorityScore?: number } }) =>
-    row.level === 'danger' ? 'row-danger' : row.level === 'warning' ? 'row-warning' : '';
-  return {
-    currentPageDangerCount,
-    currentPageWarningCount,
-    currentPageAvgScore,
-    currentPagePackageCount,
-    alertRowClassName
-  };
 }

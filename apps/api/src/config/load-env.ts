@@ -19,8 +19,15 @@ const loadEnvFile = (filePath: string) => {
     }
   }
 };
-const rootDir = resolve(__dirname, '../../../..');
-loadEnvFile(resolve(rootDir, '.env'));
-loadEnvFile(resolve(rootDir, '.env.local'));
-loadEnvFile(resolve(process.cwd(), '.env'));
-loadEnvFile(resolve(process.cwd(), '.env.local'));
+
+export function shouldLoadEnvFiles(nodeEnv = process.env.NODE_ENV): boolean {
+  return nodeEnv === 'development' || nodeEnv === 'test';
+}
+
+if (shouldLoadEnvFiles()) {
+  const rootDir = resolve(__dirname, '../../../..');
+  loadEnvFile(resolve(rootDir, '.env'));
+  loadEnvFile(resolve(rootDir, '.env.local'));
+  loadEnvFile(resolve(process.cwd(), '.env'));
+  loadEnvFile(resolve(process.cwd(), '.env.local'));
+}

@@ -24,15 +24,20 @@ describe('residual #127/#174 SPA task detail body reuse', () => {
     expect(timelineFn).toMatch(/api\.getTask\(/);
     expect(timelineFn).not.toMatch(/api\.getTaskKPIs/);
 
-    // Residual #174: status mutates that append executions discard body + refresh
-    // timeline only (no applyTaskRow thrash before re-GET).
+    // Residual #174: status mutates that append executions discard body and use
+    // the shared mutation runner for the timeline-only refresh.
+    const mutationStart = src.indexOf('async function runMutation');
+    expect(mutationStart).toBeGreaterThan(0);
+    const mutationEnd = src.indexOf('\n  async function publish', mutationStart + 10);
+    const mutationFn = src.slice(mutationStart, mutationEnd > 0 ? mutationEnd : undefined);
+    expect(mutationFn).toMatch(/refreshTaskTimeline\(requestId\)/);
     for (const name of ['publish', 'fail', 'cancel'] as const) {
       const fnStart = src.indexOf(`async function ${name}(`);
       expect(fnStart).toBeGreaterThan(0);
       const next = src.indexOf('\n  async function ', fnStart + 10);
       const fn = src.slice(fnStart, next > 0 ? next : undefined);
       expect(fn).not.toMatch(/applyTaskRow\(/);
-      expect(fn).toMatch(/refreshTaskTimeline\(/);
+      expect(fn).toMatch(/runMutation\(/);
       expect(fn).not.toMatch(/await loadDetail\s*\(/);
     }
 
@@ -42,7 +47,7 @@ describe('residual #127/#174 SPA task detail body reuse', () => {
     expect(reassignStart).toBeGreaterThan(0);
     const reassignEnd = src.indexOf('\n  async function ', reassignStart + 10);
     const reassignFn = src.slice(reassignStart, reassignEnd > 0 ? reassignEnd : undefined);
-    expect(reassignFn).toMatch(/applyTaskRow\(/);
+    expect(reassignFn).toMatch(/applyResult:\s*applyTaskRow/);
     expect(reassignFn).not.toMatch(/refreshTaskTimeline\(/);
     expect(reassignFn).not.toMatch(/await loadDetail\s*\(/);
   });
@@ -80,6 +85,9 @@ describe('residual #127/#174 SPA task detail body reuse', () => {
     expect(src).toMatch(/await reassign\(/);
     expect(src).toMatch(/await schedule\(/);
     expect(src).toMatch(/await complete\(/);
+    expect(src).toMatch(
+      /async function confirmPublish[\s\S]*if \(publishSubmitting\.value\) return;[\s\S]*publishSubmitting\.value = true;/
+    );
     // Residual #174: view never destructures kpis.
     expect(src).not.toMatch(/\bkpis\b/);
   });

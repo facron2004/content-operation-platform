@@ -10,7 +10,9 @@ const ChartPanel = defineAsyncComponent(() => import('../components/ChartPanel.v
   {
     loading,
     listLoading,
-    loadError,
+    kpiError,
+    trendError,
+    merchantError,
     activeTab,
     trendDays,
     sortBy,
@@ -48,13 +50,14 @@ const ChartPanel = defineAsyncComponent(() => import('../components/ChartPanel.v
       @date-change="reload"
       @window-change="reload"
     />
-    <ErrorAlert :message="loadError" />
+    <ErrorAlert :message="kpiError" />
     <el-tabs v-model="activeTab" @tab-change="reload">
       <el-tab-pane label="退款分析" name="refund" />
       <el-tab-pane label="核销分析" name="verify" />
     </el-tabs>
     <RefundVerifyKpiRow
       :active-tab="activeTab"
+      :kpi-window="kpiWindow"
       :refund-today="refundToday"
       :verify-today="verifyToday"
       :current-gmv="currentGmv"
@@ -64,13 +67,13 @@ const ChartPanel = defineAsyncComponent(() => import('../components/ChartPanel.v
       :active-tab="activeTab"
       :trend-days="trendDays"
       :trend-bucket="trendBucket"
-      :trend-option="trendOption"
       @update:trend-days="trendDays = $event === 30 ? 30 : 7"
       @update:trend-bucket="trendBucket = $event"
       @change="loadTrend"
     >
       <ChartPanel :option="trendOption" />
     </RefundVerifyTrend>
+    <ErrorAlert :message="trendError" />
     <RefundMerchantTable
       v-model:sort-by="sortBy"
       :active-tab="activeTab"
@@ -88,6 +91,7 @@ const ChartPanel = defineAsyncComponent(() => import('../components/ChartPanel.v
       @prev="prevMerchantPage"
       @next="nextMerchantPage"
     />
+    <ErrorAlert :message="merchantError" />
   </section>
 </template>
 <style src="../styles/views/refund-verify.css" scoped></style>

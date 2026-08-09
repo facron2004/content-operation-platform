@@ -4,6 +4,7 @@ import { beijingDateKey } from '@content/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { bulkRefreshTaskPerformanceDaily } from '../common/task-performance-daily';
 import { PERF_JOB_TASK_LIMIT } from '../common/sql-chunk';
+import { JobRunnerService } from './job-runner.service';
 
 type TaskRow = { taskId: string; trackingCode: string | null };
 
@@ -13,7 +14,10 @@ export class PerformanceAggregationJob {
   // Overlap guard: a slow hour must not stack a second full task scan.
   private running = false;
 
-  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(JobRunnerService) private readonly jobRunner: JobRunnerService
+  ) {}
 
   /**
    * Run every hour.
@@ -28,30 +32,32 @@ export class PerformanceAggregationJob {
       return;
     }
     this.running = true;
-    this.logger.log('Aggregating task performance...');
-    // Business day is Beijing (UTC+8); UTC dateKey would mis-bucket 00:00–08:00 CST.
-    const today = beijingDateKey(new Date());
+    await this.jobRunner
+      .runJob('performance-aggregation', async (setMeta) => {
+        this.logger.log('Aggregating task performance...');
+        // Business day is Beijing (UTC+8); UTC dateKey would mis-bucket 00:00–08:00 CST.
+        const today = beijingDateKey(new Date());
+        const tasks = await this.prisma.$queryRawUnsafe<TaskRow[]>(
+          `SELECT "taskId", "trackingCode" FROM "DistributionTask"
+           WHERE "status" IN ('published', 'completed')
+           ORDER BY "updatedAt" DESC
+           LIMIT ?`,
+          PERF_JOB_TASK_LIMIT
+        );
 
-    try {
-      const tasks = await this.prisma.$queryRawUnsafe<TaskRow[]>(
-        `SELECT "taskId", "trackingCode" FROM "DistributionTask"
-         WHERE "status" IN ('published', 'completed')
-         ORDER BY "updatedAt" DESC
-         LIMIT ?`,
-        PERF_JOB_TASK_LIMIT
-      );
+        if (!tasks.length) {
+          setMeta({ taskCount: 0, updatedCount: 0, date: today });
+          this.logger.log('No published/completed tasks to aggregate');
+          return 0;
+        }
 
-      if (!tasks.length) {
-        this.logger.log('No published/completed tasks to aggregate');
-        return;
-      }
-
-      const updated = await bulkRefreshTaskPerformanceDaily(this.prisma, tasks, today);
-      this.logger.log(`Upserted performance for ${updated}/${tasks.length} tasks`);
-    } catch (err) {
-      this.logger.warn(`Failed to aggregate performance: ${err}`);
-    } finally {
-      this.running = false;
-    }
+        const updated = await bulkRefreshTaskPerformanceDaily(this.prisma, tasks, today);
+        setMeta({ taskCount: tasks.length, updatedCount: updated, date: today });
+        this.logger.log(`Upserted performance for ${updated}/${tasks.length} tasks`);
+        return updated;
+      })
+      .finally(() => {
+        this.running = false;
+      });
   }
 }

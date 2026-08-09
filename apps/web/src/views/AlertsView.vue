@@ -2,6 +2,7 @@
   <section v-loading="loading" class="page-stack alerts-page">
     <AlertsHero :loading="loading" :summary="summary" @reload="load(true)" />
     <ErrorAlert :message="loadError" />
+    <ErrorAlert :message="actionError" />
     <!-- Residual #274: RESOLVED_ALERT_DAY_LIMIT silent clip honesty. -->
     <p v-if="resolvedIdsTruncated" class="list-cap-hint">
       今日已处理记录超过 {{ resolvedIdsLimit }} 条上限（已加载 {{ resolvedIdsLoaded }}
@@ -62,6 +63,7 @@ const {
   loading,
   resolving,
   loadError,
+  actionError,
   alerts,
   summary,
   topPackages,

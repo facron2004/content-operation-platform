@@ -4,6 +4,7 @@ import * as path from 'path';
 import { describeError, exponentialBackoff } from '@content/shared';
 import { msToISO } from '../common/format';
 import { MS_PER_MINUTE } from '../domain/utils';
+import { isDesktopRuntime } from '../config/runtime.config';
 import {
   loginToJeesite,
   maskCookie,
@@ -30,20 +31,48 @@ export class AutoLoginService implements OnModuleInit {
   private loginInProgress: Promise<LoginResult> | null = null;
   private failedAttempts = 0;
   private lastFailedTime = 0;
+  private loginEpoch = 0;
+  private cookieStateEpoch = 0;
   /** Cache last validateCookie result so status polling does not thrash EXTERNAL_API. */
   private lastValidateAt = 0;
   private lastValidateCookie: string | null = null;
   private lastValidateResult = false;
+  /** Serialize cache writes so an older async write cannot finish after a newer cookie. */
+  private cacheFileWriteQueue: Promise<void> = Promise.resolve();
   /** Coalesce concurrent validateCookie calls for the same cookie (residual #84). */
   private validateInFlight: Promise<boolean> | null = null;
   private validateInFlightCookie: string | null = null;
+  /** Identity token prevents an older cookie check from repopulating validation state. */
+  private validateInFlightRequest: { epoch: number; cookie: string } | null = null;
+  private validationEpoch = 0;
 
   async onModuleInit() {
+    const hasDesktopConfig =
+      process.env.EXTERNAL_API_COOKIE ||
+      (process.env.EXTERNAL_API_BASE_URL &&
+        process.env.EXTERNAL_API_USERNAME &&
+        process.env.EXTERNAL_API_PASSWORD);
+    if (isDesktopRuntime() && !hasDesktopConfig) {
+      this.logger.log('桌面端未配置外部数据源，进入待配置状态');
+      return;
+    }
     await this.loadCookieFromCacheFile();
-    if (!this.cachedCookie) await this.refreshExpiredCookie('startup');
+    if (!this.cachedCookie && !this.getEnvironmentCookie()) {
+      if (
+        !process.env.EXTERNAL_API_BASE_URL ||
+        !process.env.EXTERNAL_API_USERNAME ||
+        !process.env.EXTERNAL_API_PASSWORD
+      ) {
+        this.logger.log('外部数据源配置不完整，跳过启动时自动登录');
+        return;
+      }
+      await this.refreshExpiredCookie('startup');
+    }
   }
 
   private async loadCookieFromCacheFile() {
+    if (isDesktopRuntime()) return;
+    const requestStateEpoch = this.cookieStateEpoch;
     try {
       const cachePath = path.resolve(process.cwd(), '.cookie.cache');
       const exists = await fs
@@ -59,6 +88,7 @@ export class AutoLoginService implements OnModuleInit {
         return;
       }
 
+      if (requestStateEpoch !== this.cookieStateEpoch) return;
       this.cachedCookie = cookie;
       this.lastLoginTime = Date.now();
       this.failedAttempts = 0;
@@ -68,11 +98,19 @@ export class AutoLoginService implements OnModuleInit {
     }
   }
 
-  private async saveCookieToCacheFile(cookie: string) {
+  private async saveCookieToCacheFile(cookie: string, expectedStateEpoch?: number) {
+    if (isDesktopRuntime()) return;
+    const requestStateEpoch = expectedStateEpoch ?? this.cookieStateEpoch;
+    if (requestStateEpoch !== this.cookieStateEpoch) return;
     try {
       const cachePath = path.resolve(process.cwd(), '.cookie.cache');
-      await fs.writeFile(cachePath, cookie, { encoding: 'utf8', mode: 0o600 });
-      this.logger.log('Saved valid cookie to .cookie.cache');
+      const writeTask = this.cacheFileWriteQueue.then(async () => {
+        if (requestStateEpoch !== this.cookieStateEpoch) return;
+        await fs.writeFile(cachePath, cookie, { encoding: 'utf8', mode: 0o600 });
+        this.logger.log('Saved valid cookie to .cookie.cache');
+      });
+      this.cacheFileWriteQueue = writeTask.catch(() => undefined);
+      await writeTask;
     } catch (error: unknown) {
       this.logger.error(`Failed to save cookie to cache file: ${describeError(error)}`);
     }
@@ -93,12 +131,18 @@ export class AutoLoginService implements OnModuleInit {
 
     const environmentCookie = this.getEnvironmentCookie();
     if (environmentCookie) {
+      const stateEpoch = this.cookieStateEpoch;
       if (await this.validateCookie(environmentCookie)) {
+        if (stateEpoch !== this.cookieStateEpoch) return this.getFreshCachedCookie(Date.now());
+
+        const committedStateEpoch = ++this.cookieStateEpoch;
         this.cachedCookie = environmentCookie;
         this.lastLoginTime = Date.now();
         this.failedAttempts = 0;
-        await this.saveCookieToCacheFile(environmentCookie);
-        return environmentCookie;
+        await this.saveCookieToCacheFile(environmentCookie, committedStateEpoch);
+        return this.cookieStateEpoch === committedStateEpoch
+          ? environmentCookie
+          : this.getFreshCachedCookie(Date.now());
       }
       this.logger.warn('Environment cookie is invalid or expired, performing auto login');
     } else {
@@ -149,14 +193,25 @@ export class AutoLoginService implements OnModuleInit {
 
   private async performLogin(): Promise<string | null> {
     if (this.loginInProgress) {
+      const requestEpoch = this.loginEpoch;
+      const loginRequest = this.loginInProgress;
       this.logger.debug('Login in progress, waiting...');
-      const result = await this.loginInProgress;
-      return result.success ? (result.cookie ?? null) : null;
+      const result = await loginRequest;
+      return this.loginEpoch === requestEpoch && result.success ? (result.cookie ?? null) : null;
     }
 
-    this.loginInProgress = this.doLogin();
+    const requestEpoch = this.loginEpoch;
+    const requestStateEpoch = this.cookieStateEpoch;
+    const loginRequest = this.doLogin();
+    this.loginInProgress = loginRequest;
     try {
-      const result = await this.loginInProgress;
+      const result = await loginRequest;
+      const isCurrentRequest =
+        this.loginEpoch === requestEpoch &&
+        this.cookieStateEpoch === requestStateEpoch &&
+        this.loginInProgress === loginRequest;
+      if (!isCurrentRequest) return null;
+
       if (!result.success || !result.cookie) {
         this.failedAttempts += 1;
         this.lastFailedTime = Date.now();
@@ -164,6 +219,7 @@ export class AutoLoginService implements OnModuleInit {
         return null;
       }
 
+      const committedStateEpoch = ++this.cookieStateEpoch;
       this.cachedCookie = result.cookie;
       this.lastLoginTime = Date.now();
       this.failedAttempts = 0;
@@ -171,10 +227,12 @@ export class AutoLoginService implements OnModuleInit {
       this.lastValidateResult = true;
       this.lastValidateAt = Date.now();
       this.logger.log(`Auto login successful, new cookie: ${maskCookie(result.cookie)}`);
-      await this.saveCookieToCacheFile(result.cookie);
-      return result.cookie;
+      await this.saveCookieToCacheFile(result.cookie, committedStateEpoch);
+      return this.cookieStateEpoch === committedStateEpoch
+        ? result.cookie
+        : this.getFreshCachedCookie(Date.now());
     } finally {
-      this.loginInProgress = null;
+      if (this.loginInProgress === loginRequest) this.loginInProgress = null;
     }
   }
 
@@ -200,27 +258,42 @@ export class AutoLoginService implements OnModuleInit {
       return this.validateInFlight;
     }
 
+    const request = { epoch: this.validationEpoch, cookie };
     const flight = validateJeesiteCookie(cookie, process.env.EXTERNAL_API_BASE_URL)
       .then((result) => {
-        this.lastValidateCookie = cookie;
-        this.lastValidateResult = result;
-        this.lastValidateAt = Date.now();
+        if (this.validationEpoch === request.epoch && this.validateInFlightRequest === request) {
+          this.lastValidateCookie = cookie;
+          this.lastValidateResult = result;
+          this.lastValidateAt = Date.now();
+        }
         return result;
       })
       .finally(() => {
-        if (this.validateInFlightCookie === cookie) {
+        if (this.validationEpoch === request.epoch && this.validateInFlightRequest === request) {
           this.validateInFlight = null;
           this.validateInFlightCookie = null;
+          this.validateInFlightRequest = null;
         }
       });
     this.validateInFlight = flight;
     this.validateInFlightCookie = cookie;
+    this.validateInFlightRequest = request;
     return flight;
   }
 
   clearCache(): void {
     this.cachedCookie = null;
     this.lastLoginTime = 0;
+    this.loginEpoch += 1;
+    this.cookieStateEpoch += 1;
+    this.loginInProgress = null;
+    this.validationEpoch += 1;
+    this.lastValidateCookie = null;
+    this.lastValidateResult = false;
+    this.lastValidateAt = 0;
+    this.validateInFlight = null;
+    this.validateInFlightCookie = null;
+    this.validateInFlightRequest = null;
   }
 
   /**
@@ -244,6 +317,15 @@ export class AutoLoginService implements OnModuleInit {
           )
         : 0;
 
+    const missingConfig: string[] = [];
+    if (!process.env.EXTERNAL_API_BASE_URL) missingConfig.push('EXTERNAL_API_BASE_URL');
+    if (!cookieToTest && !process.env.EXTERNAL_API_USERNAME) {
+      missingConfig.push('EXTERNAL_API_USERNAME');
+    }
+    if (!cookieToTest && !process.env.EXTERNAL_API_PASSWORD) {
+      missingConfig.push('EXTERNAL_API_PASSWORD');
+    }
+
     // Do not return maskedCookie — cookie *names* (session id keys) are recon
     // even when values are redacted. hasCookie + isValid is enough for SPA status.
     // failedAttempts is also omitted: SPA only needs cooldownMinutes; exposing
@@ -256,30 +338,40 @@ export class AutoLoginService implements OnModuleInit {
         ? maskIdentifier(process.env.EXTERNAL_API_USERNAME)
         : null,
       cooldownMinutes,
-      lastLoginTime: msToISO(this.lastLoginTime)
+      lastLoginTime: msToISO(this.lastLoginTime),
+      state:
+        missingConfig.length > 0 ? 'pending_config' : isValid ? 'ready' : 'authentication_required',
+      missingConfig
     };
   }
 
   async updateManualCookie(cookie: string): Promise<{ success: boolean; error?: string }> {
     const trimmedCookie = cookie.trim();
     if (!trimmedCookie) return { success: false, error: 'Cookie 内容不能为空' };
+    const requestStateEpoch = ++this.cookieStateEpoch;
+    this.loginEpoch += 1;
     if (!(await this.validateCookie(trimmedCookie))) {
-      this.lastValidateCookie = trimmedCookie;
-      this.lastValidateResult = false;
-      this.lastValidateAt = Date.now();
       return {
         success: false,
         error: 'Cookie 校验失败，该 Cookie 可能已失效，请重新从浏览器获取。'
       };
     }
 
+    if (requestStateEpoch !== this.cookieStateEpoch) {
+      return { success: false, error: 'Cookie 校验已失效，请重试。' };
+    }
+
+    const committedStateEpoch = ++this.cookieStateEpoch;
     this.cachedCookie = trimmedCookie;
     this.lastLoginTime = Date.now();
     this.failedAttempts = 0;
     this.lastValidateCookie = trimmedCookie;
     this.lastValidateResult = true;
     this.lastValidateAt = Date.now();
-    await this.saveCookieToCacheFile(trimmedCookie);
+    await this.saveCookieToCacheFile(trimmedCookie, committedStateEpoch);
+    if (this.cookieStateEpoch !== committedStateEpoch) {
+      return { success: false, error: 'Cookie 校验已失效，请重试。' };
+    }
     this.logger.log('Manual cookie update validated and saved');
     return { success: true };
   }

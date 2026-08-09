@@ -20,6 +20,9 @@
 
     <CommunityFilterBar v-model="filters" @search="handleSearch" @reset="handleReset" />
 
+    <ErrorAlert :message="error" />
+    <ErrorAlert :message="writeError" />
+
     <CommunityLibraryTable
       v-loading="loading"
       :communities="communities"
@@ -57,14 +60,18 @@
       <CommunityDetailCard
         :community="detailCommunity"
         :loading="detailLoading"
+        :detail-error="detailError"
         :performance="detailPerformance"
+        :performance-error="detailPerformanceError"
         :packages="detailPackages"
         :packages-loading="detailPackagesLoading"
+        :packages-error="detailPackagesError"
         :tasks="detailTasks"
         :tasks-total="detailTasksTotal"
         :tasks-page="detailTasksPage"
         :tasks-page-size="detailTasksPageSize"
         :tasks-loading="detailTasksLoading"
+        :tasks-error="detailTasksError"
         :tasks-window-label="detailTasksWindowLabel"
         @update:tasks-page="setDetailTasksPage"
       />
@@ -74,9 +81,8 @@
 
 <script setup lang="ts">
 import { ref, reactive } from 'vue';
-import { ElMessage } from 'element-plus';
 import { Plus, Upload } from '@element-plus/icons-vue';
-import { api } from '../services/api';
+import ErrorAlert from '../components/ErrorAlert.vue';
 import { useCommunityLibrary } from '../features/community-library/composables/useCommunityLibrary';
 import { useCommunityDetail } from '../features/community-library/composables/useCommunityDetail';
 import CommunityLibraryTable from '../features/community-library/components/CommunityLibraryTable.vue';
@@ -89,6 +95,7 @@ import type { CommunityGroupEntity } from '@content/shared';
 
 const {
   loading,
+  error,
   communities,
   pagination,
   filters,
@@ -98,7 +105,12 @@ const {
   resetFilters,
   handleDelete,
   handleDisable,
-  handleEnable
+  handleEnable,
+  writeError,
+  createSubmitting,
+  importSubmitting,
+  saveCommunity,
+  importCommunities
 } = useCommunityLibrary();
 
 // Residual #179/#186/#209: detail drawer + performance + packages + nested tasks.
@@ -106,14 +118,18 @@ const {
   drawerVisible: detailDrawerVisible,
   loading: detailLoading,
   community: detailCommunity,
+  detailError,
   performance: detailPerformance,
+  performanceError: detailPerformanceError,
   packages: detailPackages,
   packagesLoading: detailPackagesLoading,
+  packagesError: detailPackagesError,
   tasks: detailTasks,
   tasksTotal: detailTasksTotal,
   tasksPage: detailTasksPage,
   tasksPageSize: detailTasksPageSize,
   tasksLoading: detailTasksLoading,
+  tasksError: detailTasksError,
   // Residual #271
   tasksWindowLabel: detailTasksWindowLabel,
   setTasksPage: setDetailTasksPage,
@@ -121,7 +137,6 @@ const {
 } = useCommunityDetail();
 
 const createDialogVisible = ref(false);
-const createSubmitting = ref(false);
 const isEdit = ref(false);
 const communityForm = reactive({
   groupName: '',
@@ -143,7 +158,6 @@ const communityForm = reactive({
 const editId = ref<string | null>(null);
 
 const importDialogVisible = ref(false);
-const importSubmitting = ref(false);
 
 function handleSearch() {
   refresh();
@@ -204,20 +218,9 @@ function openCreateDialog() {
 }
 
 async function submitCreate() {
-  createSubmitting.value = true;
-  try {
-    const payload = toCommunityWritePayload();
-    if (isEdit.value && editId.value) {
-      await api.updateCommunity(editId.value, payload);
-      ElMessage.success('社群已更新');
-    } else {
-      await api.createCommunity(payload);
-      ElMessage.success('社群已创建');
-    }
+  const saved = await saveCommunity(isEdit.value ? editId.value : null, toCommunityWritePayload());
+  if (saved) {
     createDialogVisible.value = false;
-    refresh();
-  } finally {
-    createSubmitting.value = false;
   }
 }
 
@@ -257,15 +260,8 @@ function openImportDialog() {
 }
 
 async function submitImport(data: { source: 'csv' | 'json'; rawData: string }) {
-  importSubmitting.value = true;
-  try {
-    await api.importCommunities(data);
-    ElMessage.success('社群导入成功');
-    importDialogVisible.value = false;
-    refresh();
-  } finally {
-    importSubmitting.value = false;
-  }
+  const imported = await importCommunities(data);
+  if (imported) importDialogVisible.value = false;
 }
 </script>
 

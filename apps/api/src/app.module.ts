@@ -30,6 +30,7 @@ import { PermissionGuard } from './user-access/iam';
 import { appThrottlerConfig } from './app-throttler.config';
 import { SystemVersionController } from './common/system-version.controller';
 import { HealthController } from './common/health.controller';
+import { ReadinessService } from './common/readiness.service';
 
 @Module({
   imports: [
@@ -57,6 +58,7 @@ import { HealthController } from './common/health.controller';
   ],
   controllers: [SystemVersionController, HealthController],
   providers: [
+    ReadinessService,
     { provide: APP_FILTER, useClass: GlobalExceptionFilter },
     { provide: APP_INTERCEPTOR, useClass: BigIntSerializerInterceptor },
     // 金额读路径增强：*Fen 字符串化 + 追加 *Display（PRD §7.4.4 阶段五）。须位于 BigIntSerializer 之后。

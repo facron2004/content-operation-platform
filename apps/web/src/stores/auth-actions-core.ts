@@ -1,33 +1,39 @@
 import type { Ref } from 'vue';
-import {
-  clearStoredAuth,
-  MIN_REFRESH_INTERVAL_MS,
-  REFRESH_LEAD_MS,
-  writeStoredAuth
-} from './auth-storage';
-import { loginLocalAuthSession, refreshAuthToken } from './auth-session';
+import { clearStoredAuth, writeStoredAuth } from './auth-storage';
+import { loginLocalAuthSession, refreshAuthSession } from './auth-session';
+import { COOKIE_REFRESH_INTERVAL_MS } from './auth-refresh-scheduler';
+import { requestLogout } from './auth-requests';
 import type { createAuthRefreshScheduler } from './auth-refresh-scheduler';
+import type { AuthSessionResult } from './auth-session-exclusive';
 type AuthRefreshScheduler = ReturnType<typeof createAuthRefreshScheduler>;
 export type AuthActionOptions = {
-  token: Ref<string | null>;
+  authenticated: Ref<boolean>;
   username: Ref<string | null>;
   isAuthenticated: () => boolean;
-  refreshInflight: { current: Promise<string | null> | null };
-  localSessionInflight: { current: Promise<string | null> | null };
+  refreshInflight: { current: Promise<AuthSessionResult> | null };
+  localSessionInflight: { current: Promise<AuthSessionResult> | null };
   scheduler: AuthRefreshScheduler;
 };
 export function createAuthCore(options: AuthActionOptions) {
-  const setAuth = (accessToken: string, user: string) => {
-    options.token.value = accessToken;
+  let authGeneration = 0;
+  const setAuth = (user: string) => {
+    options.authenticated.value = true;
     options.username.value = user;
-    writeStoredAuth(accessToken, user);
+    writeStoredAuth(user);
     scheduleRefresh();
   };
+  const setAuthForGeneration = (generation: number) => (user: string) => {
+    if (generation === authGeneration) setAuth(user);
+  };
   const clearAuth = () => {
-    options.token.value = null;
+    authGeneration += 1;
+    options.authenticated.value = false;
     options.username.value = null;
     clearStoredAuth();
     options.scheduler.clear();
+    options.refreshInflight.current = null;
+    options.localSessionInflight.current = null;
+    void requestLogout();
     // Drop in-memory GET cache + role session so a subsequent login (shared
     // browser / 401 forced re-auth) cannot flash previous user's scoped data
     // or keep hasServerSession true with stale roles until full reload.
@@ -44,22 +50,26 @@ export function createAuthCore(options: AuthActionOptions) {
       })
       .catch(() => undefined);
   };
-  const refresh = () =>
-    refreshAuthToken({
-      token: options.token,
+  const refresh = () => {
+    const generation = authGeneration;
+    return refreshAuthSession({
       username: options.username,
       inflight: options.refreshInflight,
-      setAuth
-    });
-  const loginLocally = () =>
-    loginLocalAuthSession({ inflight: options.localSessionInflight, setAuth });
+      setAuth: setAuthForGeneration(generation)
+    }).then((result) => (generation === authGeneration ? result : null));
+  };
+  const loginLocally = () => {
+    const generation = authGeneration;
+    return loginLocalAuthSession({
+      inflight: options.localSessionInflight,
+      setAuth: setAuthForGeneration(generation)
+    }).then((result) => (generation === authGeneration ? result : null));
+  };
   const scheduleRefresh = () =>
     options.scheduler.schedule({
-      token: options.token.value,
       isAuthenticated: options.isAuthenticated,
       refresh,
-      leadMs: REFRESH_LEAD_MS,
-      minIntervalMs: MIN_REFRESH_INTERVAL_MS
+      intervalMs: COOKIE_REFRESH_INTERVAL_MS
     });
   return { setAuth, clearAuth, refresh, loginLocally, scheduleRefresh };
 }

@@ -51,7 +51,9 @@ export function useOverview() {
     kpiDate,
     router
   });
-  onMounted(actions.reload);
+  onMounted(() => {
+    void actions.reload();
+  });
   return {
     loading,
     loadError,

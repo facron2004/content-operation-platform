@@ -8,7 +8,7 @@ const sharedRoot = path.join(__dirname, '..', '..', '..', 'packages', 'shared', 
 
 describe('residual #270 audit listCopies INTERACTIVE window honesty', () => {
   it('API listCopies projects pagination.dateFrom/dateTo', async () => {
-    const src = await readFile(path.join(srcRoot, 'content', 'copy.service.ts'), 'utf8');
+    const src = await readFile(path.join(srcRoot, 'content', 'copy-query.service.ts'), 'utf8');
     const start = src.indexOf('async listCopies(');
     expect(start).toBeGreaterThanOrEqual(0);
     const end = src.indexOf('async getCopy(', start + 10);

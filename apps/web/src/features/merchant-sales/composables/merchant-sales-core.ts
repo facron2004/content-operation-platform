@@ -1,4 +1,4 @@
-import { onMounted, ref, type Ref } from 'vue';
+import { computed, onMounted, ref, type Ref } from 'vue';
 import { ElMessage } from 'element-plus';
 import { localDateKey } from '@content/shared';
 import {
@@ -15,12 +15,25 @@ import {
 } from '../../../services/api/merchant-sales.api';
 import { downloadBlob, extractErrorMessage } from '../../../services/http-client';
 
+export type MerchantSalesRequestGuard = () => boolean;
+
+const alwaysCurrent: MerchantSalesRequestGuard = () => true;
+
 export function createMerchantSalesState() {
+  const summaryError = ref<string | null>(null);
+  const trendError = ref<string | null>(null);
+  const rankingError = ref<string | null>(null);
   return {
     loading: ref(false),
     listLoading: ref(false),
     exporting: ref(false),
-    loadError: ref<string | null>(null),
+    summaryError,
+    trendError,
+    rankingError,
+    refreshError: ref<string | null>(null),
+    // Compatibility aggregate for existing consumers; the view renders the
+    // three read errors separately so one request cannot hide another.
+    loadError: computed(() => summaryError.value || trendError.value || rankingError.value),
     windowSel: ref<MerchantSalesWindow>('day'),
     sortBy: ref<MerchantSalesSort>('gmvDesc'),
     // Residual #228: as-of anchor day (API date/endDate already accept free dates).
@@ -44,40 +57,49 @@ export function mountMerchantSalesReload(reload: () => Promise<void>) {
 export async function loadMerchantSalesSummary(
   windowSel: MerchantSalesWindow,
   summary: Ref<MerchantSalesSummary | null>,
-  loadError: Ref<string | null>,
+  summaryError: Ref<string | null>,
   // Residual #228: as-of anchor day.
-  date?: string
+  date?: string,
+  isCurrent: MerchantSalesRequestGuard = alwaysCurrent
 ) {
+  if (isCurrent()) summaryError.value = null;
   try {
-    summary.value = await getMerchantSalesSummary({
+    const result = await getMerchantSalesSummary({
       window: windowSel,
       date: date || undefined
     });
+    if (isCurrent()) summary.value = result;
   } catch (err) {
-    loadError.value = extractErrorMessage(err, '加载汇总 KPI 失败');
+    if (isCurrent()) summaryError.value = extractErrorMessage(err, '加载汇总 KPI 失败');
   }
 }
 
 export async function loadMerchantSalesTrend(
   windowSel: MerchantSalesWindow,
   trend: Ref<MerchantSalesTrendPoint[]>,
-  loadError: Ref<string | null>,
+  trendError: Ref<string | null>,
   // Residual #228: as-of anchor day.
-  date?: string
+  date?: string,
+  isCurrent: MerchantSalesRequestGuard = alwaysCurrent
 ) {
   if (windowSel === 'day') {
-    trend.value = [];
+    if (isCurrent()) {
+      trend.value = [];
+      trendError.value = null;
+    }
     return;
   }
+  if (isCurrent()) trendError.value = null;
   try {
-    trend.value = (
+    const result = (
       await getMerchantSalesTrend({
         window: windowSel as Exclude<MerchantSalesWindow, 'day'>,
         date: date || undefined
       })
     ).items;
+    if (isCurrent()) trend.value = result;
   } catch (err) {
-    loadError.value = extractErrorMessage(err, '加载趋势失败');
+    if (isCurrent()) trendError.value = extractErrorMessage(err, '加载趋势失败');
   }
 }
 
@@ -88,23 +110,28 @@ export async function loadMerchantSalesRanking(params: {
   pageSize: number;
   ranking: Ref<MerchantSalesRanking>;
   listLoading: Ref<boolean>;
-  loadError: Ref<string | null>;
+  rankingError: Ref<string | null>;
   // Residual #228: as-of anchor day.
   date?: string;
+  isCurrent?: MerchantSalesRequestGuard;
 }) {
+  const isCurrent = params.isCurrent ?? alwaysCurrent;
+  if (!isCurrent()) return;
+  params.rankingError.value = null;
   params.listLoading.value = true;
   try {
-    params.ranking.value = await getMerchantSalesRanking({
+    const result = await getMerchantSalesRanking({
       window: params.windowSel,
       sortBy: params.sortBy,
       page: params.page,
       pageSize: params.pageSize,
       date: params.date || undefined
     });
+    if (isCurrent()) params.ranking.value = result;
   } catch (err) {
-    params.loadError.value = extractErrorMessage(err, '加载商家排行失败');
+    if (isCurrent()) params.rankingError.value = extractErrorMessage(err, '加载商家排行失败');
   } finally {
-    params.listLoading.value = false;
+    if (isCurrent()) params.listLoading.value = false;
   }
 }
 
@@ -122,11 +149,16 @@ export function exportMerchantSalesCsv(
 
 export async function forceRefreshMerchantSales(
   _loadError: Ref<string | null>,
-  // Residual #228: recompute the selected as-of day when set.
-  date?: string
+  // Residual #228: recompute the selected as-of day (or visible window range) when set.
+  date?: string,
+  isCurrent: MerchantSalesRequestGuard = alwaysCurrent,
+  // Week/month windows span multiple days — recompute the resolved range, not just the anchor.
+  range?: { start: string; end: string }
 ) {
-  const day = date || localDateKey(new Date());
-  const result = await postMerchantSalesRefresh({ startDate: day, endDate: day });
+  const start = range?.start || date || localDateKey(new Date());
+  const end = range?.end || start;
+  const result = await postMerchantSalesRefresh({ startDate: start, endDate: end });
+  if (!isCurrent()) return;
   ElMessage.success(
     `商家销售重算完成 [${result.startDate} → ${result.endDate}] 影响 ${result.rowsUpserted} 条`
   );
@@ -135,7 +167,9 @@ export async function forceRefreshMerchantSales(
 
 export async function reloadMerchantSales(options: {
   loading: Ref<boolean>;
-  loadError: Ref<string | null>;
+  summaryError: Ref<string | null>;
+  trendError: Ref<string | null>;
+  rankingError: Ref<string | null>;
   page: Ref<number>;
   windowSel: Ref<MerchantSalesWindow>;
   sortBy: Ref<MerchantSalesSort>;
@@ -146,14 +180,33 @@ export async function reloadMerchantSales(options: {
   listLoading: Ref<boolean>;
   // Residual #228: as-of anchor day.
   kpiDate?: Ref<string>;
+  isCurrent?: MerchantSalesRequestGuard;
+  isRankingCurrent?: MerchantSalesRequestGuard;
 }) {
+  const isCurrent = options.isCurrent ?? alwaysCurrent;
+  const isRankingCurrent = options.isRankingCurrent ?? isCurrent;
+  if (!isCurrent()) return;
   options.loading.value = true;
-  options.loadError.value = null;
+  options.summaryError.value = null;
+  options.trendError.value = null;
+  options.rankingError.value = null;
   options.page.value = 1;
   const asOf = options.kpiDate?.value || undefined;
   await Promise.all([
-    loadMerchantSalesSummary(options.windowSel.value, options.summary, options.loadError, asOf),
-    loadMerchantSalesTrend(options.windowSel.value, options.trend, options.loadError, asOf),
+    loadMerchantSalesSummary(
+      options.windowSel.value,
+      options.summary,
+      options.summaryError,
+      asOf,
+      isCurrent
+    ),
+    loadMerchantSalesTrend(
+      options.windowSel.value,
+      options.trend,
+      options.trendError,
+      asOf,
+      isCurrent
+    ),
     loadMerchantSalesRanking({
       windowSel: options.windowSel.value,
       sortBy: options.sortBy.value,
@@ -161,26 +214,31 @@ export async function reloadMerchantSales(options: {
       pageSize: options.pageSize.current,
       ranking: options.ranking,
       listLoading: options.listLoading,
-      loadError: options.loadError,
-      date: asOf
+      rankingError: options.rankingError,
+      date: asOf,
+      isCurrent: isRankingCurrent
     })
   ]);
-  options.loading.value = false;
+  if (isCurrent()) options.loading.value = false;
 }
 
 export async function forceRefreshAndReload(
   exporting: Ref<boolean>,
-  loadError: Ref<string | null>,
+  refreshError: Ref<string | null>,
   reload: () => Promise<void>,
-  // Residual #228: recompute selected as-of day.
-  date?: string
+  // Residual #228: recompute selected as-of day (or visible window range).
+  date?: string,
+  isCurrent: MerchantSalesRequestGuard = alwaysCurrent,
+  range?: { start: string; end: string }
 ) {
+  if (!isCurrent() || exporting.value) return;
   exporting.value = true;
+  refreshError.value = null;
   try {
-    await forceRefreshMerchantSales(loadError, date);
-    await reload();
+    const result = await forceRefreshMerchantSales(refreshError, date, isCurrent, range);
+    if (result && isCurrent()) await reload();
   } catch (err) {
-    loadError.value = extractErrorMessage(err, '手动重算失败');
+    if (isCurrent()) refreshError.value = extractErrorMessage(err, '手动重算失败');
   } finally {
     exporting.value = false;
   }

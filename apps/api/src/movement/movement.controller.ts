@@ -6,6 +6,7 @@ import { safePathId } from '../common/path-id';
 import { resolveScopedQuery } from '../user-access/data-scope';
 import { assertPackageInScope, assertUnrestrictedAnalytics } from '../user-access/scope-guards';
 import { RequireLogin } from '../user-access/iam/route-auth.decorator';
+import { RequirePermissions } from '../user-access/iam/require-permissions.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 import { MovementService } from './movement.service';
 import {
@@ -104,6 +105,7 @@ export class MovementController {
   ) {}
 
   @Get('today')
+  @RequirePermissions('packages:read')
   @Throttle({ long: { limit: 30, ttl: 60000 } })
   @ApiOperation({ summary: '今日动销概览' })
   today(
@@ -117,6 +119,7 @@ export class MovementController {
 
   // Cold multi-scan aggregate (heavy gate + TTL) — tighter than interactive 30/min.
   @Get('skus/moving')
+  @RequirePermissions('packages:read')
   @Throttle({ long: { limit: 10, ttl: 60000 } })
   @ApiOperation({ summary: '动销 SKU 列表 (1/7/30 天窗口)' })
   moving(
@@ -142,6 +145,7 @@ export class MovementController {
 
   // Cold multi-scan aggregate (heavy gate + TTL) — tighter than interactive 30/min.
   @Get('skus/stagnant')
+  @RequirePermissions('packages:read')
   @Throttle({ long: { limit: 10, ttl: 60000 } })
   @ApiOperation({ summary: '滞销 SKU 列表' })
   stagnant(
@@ -154,6 +158,7 @@ export class MovementController {
   }
 
   @Get('skus/stagnant/export')
+  @RequirePermissions('packages:read')
   @Throttle({ long: { limit: 3, ttl: 60000 } })
   @ApiOperation({ summary: '滞销 SKU 导出 CSV' })
   exportStagnant(
@@ -172,6 +177,7 @@ export class MovementController {
   }
 
   @Get('skus/:packageId/timeline')
+  @RequirePermissions('packages:read')
   @Throttle({ long: { limit: 30, ttl: 60000 } })
   @ApiOperation({ summary: '单 SKU 动销时间线 (30/60/90 天)' })
   async timeline(

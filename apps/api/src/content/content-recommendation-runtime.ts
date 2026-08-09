@@ -80,12 +80,18 @@ function runRecommendationCompute(params: {
   const pending = params
     .compute(params.query)
     .then((data) => {
-      pruneRecommendationCache(params.cache, params.now, params.maxSize);
-      params.cache.set(params.cacheKey, { data, expiresAt: Date.now() + params.ttlMs });
+      // Invalidation detaches the old flight from the map. Do not let its
+      // result repopulate a cache for a newer external session.
+      if (params.inFlight.get(params.cacheKey) === pending) {
+        pruneRecommendationCache(params.cache, params.now, params.maxSize);
+        params.cache.set(params.cacheKey, { data, expiresAt: Date.now() + params.ttlMs });
+      }
       return data;
     })
     .finally(() => {
-      params.inFlight.delete(params.cacheKey);
+      if (params.inFlight.get(params.cacheKey) === pending) {
+        params.inFlight.delete(params.cacheKey);
+      }
     });
   params.inFlight.set(params.cacheKey, pending);
   return pending;
@@ -128,7 +134,10 @@ export function createRecommendationRuntime(
   );
   const maxSize = 50;
   return {
-    invalidate: () => cache.clear(),
+    invalidate: () => {
+      cache.clear();
+      inFlight.clear();
+    },
     getRecommendations: (query: RecommendQuery) =>
       getOrComputeRecommendations({ query, cache, inFlight, ttlMs, maxSize, compute })
   };

@@ -26,24 +26,6 @@ describe('CSV_EXPORT_MAX_ROWS', () => {
   it('is a fixed 1000-row ceiling for authenticated exports', () => {
     expect(CSV_EXPORT_MAX_ROWS).toBe(1_000);
   });
-
-  it('controllers reference the named constant (not a bare 1000)', async () => {
-    const fs = await import('fs/promises');
-    const path = await import('path');
-    const root = path.join(__dirname, '..', 'src');
-    const zeroSales = await fs.readFile(
-      path.join(root, 'zero-sales', 'zero-sales.controller.ts'),
-      'utf8'
-    );
-    const movement = await fs.readFile(
-      path.join(root, 'movement', 'movement.controller.ts'),
-      'utf8'
-    );
-    expect(zeroSales).toContain('CSV_EXPORT_MAX_ROWS');
-    expect(zeroSales).not.toMatch(/pageSize:\s*1000\b/);
-    expect(movement).toContain('CSV_EXPORT_MAX_ROWS');
-    expect(movement).not.toMatch(/pageSize:\s*1000\b/);
-  });
 });
 
 describe('paginateMovementSkuRows export clamp', () => {

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+import ErrorAlert from '../components/ErrorAlert.vue';
 import { usePackageAnalysisPage } from '../composables/usePackageAnalysisPage';
 import PackageAnalysisHero from '../features/package-analysis/components/PackageAnalysisHero.vue';
 import PackageAnalysisInfoPanel from '../features/package-analysis/components/PackageAnalysisInfoPanel.vue';
@@ -9,13 +10,13 @@ import PackageAnalysisAngles from '../features/package-analysis/components/Packa
 import PackageAnalysisScorePanel from '../features/package-analysis/components/PackageAnalysisScorePanel.vue';
 import { buildPackagePriceDisplay } from '../features/package-analysis/package-analysis-ui';
 const props = defineProps<{ packageId: string }>(),
-  { loading, analysis, pkg, scoreOption, formatInventoryTrend, goBack } = usePackageAnalysisPage(
-    props.packageId
-  ),
+  { loading, loadError, analysis, pkg, scoreOption, formatInventoryTrend, goBack } =
+    usePackageAnalysisPage(props.packageId),
   priceDisplay = computed(() => buildPackagePriceDisplay(pkg.value));
 </script>
 <template>
   <section v-loading="loading" class="page-stack package-analysis-page">
+    <ErrorAlert :message="loadError" />
     <PackageAnalysisHero v-if="pkg" :pkg="pkg" :analysis="analysis" @back="goBack" />
     <div v-if="pkg" class="analysis-content-grid">
       <PackageAnalysisInfoPanel

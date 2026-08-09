@@ -54,7 +54,9 @@ function onWindowUpdate(value: string | number | boolean) {
       <div class="hero-controls">
         <span class="control-label">周期</span>
         <el-radio-group :model-value="kpiWindow" size="small" @update:model-value="onWindowUpdate">
-          <el-radio-button v-for="w in WINDOWS" :key="w.value" :value="w.value">{{ w.label }}</el-radio-button>
+          <el-radio-button v-for="w in WINDOWS" :key="w.value" :value="w.value">
+            {{ w.label }}
+          </el-radio-button>
         </el-radio-group>
       </div>
       <AppleButton size="sm" variant="secondary" :loading="loading" @click="$emit('reload')">

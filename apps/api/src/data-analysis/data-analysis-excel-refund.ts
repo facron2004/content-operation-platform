@@ -17,12 +17,12 @@ export function addRefundSheet(wb: ExcelJS.Workbook, report: DataAnalysisReport)
   const ov = report.overview;
   const mCount = report.merchantRefunds.length;
   const sCount = report.salesmanRefunds.length;
-  const refundShare = ov.netSales > 0 ? ov.refundAmount / ov.netSales : 0;
+  const refundShare = ov.writeOffAmount > 0 ? ov.refundAmount / ov.writeOffAmount : 0;
 
   sheet.getCell('A1').value = '退款金额分析';
   sheet.getCell('A1').font = TITLE_FONT;
   sheet.getCell('A2').value =
-    `共 ${mCount} 商家、${sCount} 业务员产生退款，合计 ¥${ov.refundAmount.toFixed(2)}（占净销售额 ${(refundShare * 100).toFixed(1)}%）。`;
+    `共 ${mCount} 商家、${sCount} 业务员产生退款，合计 ¥${ov.refundAmount.toFixed(2)}（占核销额 ${(refundShare * 100).toFixed(1)}%）。`;
   sheet.getCell('A2').font = { ...BODY_FONT, size: 10, color: { argb: 'FF4B5563' } };
 
   let r = 4;

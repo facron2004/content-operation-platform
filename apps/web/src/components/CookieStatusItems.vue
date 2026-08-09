@@ -6,8 +6,23 @@
     </div>
     <div class="status-item">
       <span>连接状态</span>
-      <el-tag :type="cookieStatus?.isValid ? 'success' : 'danger'" size="small">
-        {{ cookieStatus?.isValid ? '在线' : '离线' }}
+      <el-tag
+        :type="
+          cookieStatus?.state === 'pending_config'
+            ? 'warning'
+            : cookieStatus?.isValid
+              ? 'success'
+              : 'danger'
+        "
+        size="small"
+      >
+        {{
+          cookieStatus?.state === 'pending_config'
+            ? '待配置'
+            : cookieStatus?.isValid
+              ? '在线'
+              : '离线'
+        }}
       </el-tag>
     </div>
     <div v-if="(cookieStatus?.cooldownMinutes ?? 0) > 0" class="status-item">
@@ -36,6 +51,7 @@ defineProps<{
     username?: string | null;
     cooldownMinutes?: number;
     lastLoginTime?: number | string | null;
+    state?: string;
   } | null;
   formatTime: (value: string) => string;
 }>();

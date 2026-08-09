@@ -28,9 +28,30 @@
         <span>渠道风格</span>
       </div>
       <div class="button-row">
-        <AppleButton variant="success" @click="emit('audit', 'approved')">通过</AppleButton>
-        <AppleButton variant="warning" @click="emit('audit', 'risk')">标记风险</AppleButton>
-        <AppleButton variant="danger" @click="emit('audit', 'rejected')">驳回</AppleButton>
+        <AppleButton
+          variant="success"
+          :loading="submitting"
+          :disabled="submitting"
+          @click="emit('audit', 'approved')"
+        >
+          通过
+        </AppleButton>
+        <AppleButton
+          variant="warning"
+          :loading="submitting"
+          :disabled="submitting"
+          @click="emit('audit', 'risk')"
+        >
+          标记风险
+        </AppleButton>
+        <AppleButton
+          variant="danger"
+          :loading="submitting"
+          :disabled="submitting"
+          @click="emit('audit', 'rejected')"
+        >
+          驳回
+        </AppleButton>
       </div>
     </template>
   </section>
@@ -39,7 +60,11 @@
 // Parent owns a mutable draft object and passes it by reference for in-place edits.
 import AppleButton from '../../../components/AppleButton.vue';
 
-defineProps<{ selected: unknown; draft: { title: string; body: string; auditRemark: string } }>();
+defineProps<{
+  selected: unknown;
+  draft: { title: string; body: string; auditRemark: string };
+  submitting: boolean;
+}>();
 const emit = defineEmits<{ audit: [status: 'approved' | 'risk' | 'rejected'] }>();
 </script>
 <style scoped>

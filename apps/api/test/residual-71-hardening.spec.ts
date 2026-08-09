@@ -5,7 +5,7 @@ describe('residual #71 MerchantDailyMetrics area CTE', () => {
     const fs = await import('fs/promises');
     const path = await import('path');
     const src = await fs.readFile(
-      path.join(__dirname, '..', 'src', 'merchant-sales', 'merchant-sales-query.ts'),
+      path.join(__dirname, '..', 'src', 'merchant-sales', 'merchant-sales-metrics-query.ts'),
       'utf8'
     );
     expect(src).toContain('WITH base AS');

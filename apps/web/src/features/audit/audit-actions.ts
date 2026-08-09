@@ -3,6 +3,7 @@ import type { AuditStatus, Channel, GeneratedCopy } from '@content/shared';
 import { api } from '../../services/api';
 import { auditStatusLabels, channelLabels } from '../../utils/labels';
 export type AuditDraft = { title: string; body: string; auditRemark: string };
+type AuditSubmitOptions = { isCurrent?: () => boolean; onError?: (error: unknown) => void };
 export const auditStatusOptions = (Object.entries(auditStatusLabels) as Array<[string, string]>)
   .filter(([value]) => value !== 'draft')
   .map(([value, label]) => ({ label, value }));
@@ -54,10 +55,12 @@ export async function loadAuditCopies(
 export async function submitAuditCopy(
   contentId: string,
   auditStatus: Extract<AuditStatus, 'approved' | 'rejected' | 'risk'>,
-  draft: AuditDraft
+  draft: AuditDraft,
+  options: AuditSubmitOptions = {}
 ): Promise<boolean> {
+  const isCurrent = options.isCurrent ?? (() => true);
   if (!draft.title.trim() || !draft.body.trim()) {
-    ElMessage.warning('标题和正文不能为空');
+    if (isCurrent()) ElMessage.warning('标题和正文不能为空');
     return false;
   }
   try {
@@ -67,11 +70,13 @@ export async function submitAuditCopy(
       body: draft.body,
       auditRemark: draft.auditRemark || (auditStatus === 'approved' ? '通过' : '')
     });
+    if (!isCurrent()) return false;
     ElMessage.success(
       `审核结果已保存：${auditStatus === 'approved' ? '通过' : auditStatus === 'rejected' ? '驳回' : '标记为风险'}`
     );
     return true;
-  } catch {
+  } catch (error) {
+    if (isCurrent()) options.onError?.(error);
     return false;
   }
 }

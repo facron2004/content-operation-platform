@@ -38,6 +38,9 @@ describe('residual #231 community form activityLevel', () => {
     expect(src).toMatch(/communityForm\.activityLevel\s*=/);
     expect(src).toMatch(/activityLevel:\s*communityForm\.activityLevel\s*\|\|\s*undefined/);
     expect(src).toMatch(/toCommunityWritePayload/);
+    expect(src).toMatch(/<ErrorAlert :message="writeError" \/>/);
+    expect(src).toMatch(/saveCommunity\s*\(/);
+    expect(src).toMatch(/importCommunities\s*\(/);
   });
 
   it('CreateCommunityDto already accepts activityLevel (API ready)', async () => {

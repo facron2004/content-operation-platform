@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { CopyPerformanceRetentionJob } from '../src/jobs/copy-performance-retention.job';
+import { createJobRunnerMock } from './helpers/job-runner';
 import {
   COPY_PERFORMANCE_PURGE_BATCH,
   COPY_PERFORMANCE_PURGE_MAX_BATCHES,
@@ -14,7 +15,7 @@ describe('CopyPerformanceRetentionJob', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    job = new CopyPerformanceRetentionJob(prisma as never);
+    job = new CopyPerformanceRetentionJob(prisma as never, createJobRunnerMock() as never);
   });
 
   it('exports retention longer than interactive 90d window', () => {

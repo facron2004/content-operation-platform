@@ -10,7 +10,10 @@ const sharedRoot = path.resolve(srcRoot, '../../../packages/shared/src');
 
 describe('residual #257 user list surfaces masked phone + no mask write-back', () => {
   it('UserManagementView list has phone column', async () => {
-    const src = await readFile(path.join(__dirname, 'UserManagementView.vue'), 'utf8');
+    const src = await readFile(
+      path.join(__dirname, '../features/user-management/UserTable.vue'),
+      'utf8'
+    );
     // Phone column (not just form field).
     expect(src).toMatch(/label="手机"/);
     expect(src).toMatch(/row\.phone/);
@@ -19,12 +22,13 @@ describe('residual #257 user list surfaces masked phone + no mask write-back', (
   });
 
   it('handleEdit does not seed email/phone from masked list row', async () => {
-    const src = await readFile(path.join(__dirname, 'UserManagementView.vue'), 'utf8');
-    const editStart = src.indexOf('function handleEdit');
+    const src = await readFile(
+      path.join(__dirname, '../features/user-management/UserFormDialog.vue'),
+      'utf8'
+    );
+    const editStart = src.indexOf('function initializeForm');
     expect(editStart).toBeGreaterThan(0);
-    // Stop before next function (handleEditRoles).
-    const editEnd = src.indexOf('function handleEditRoles', editStart + 10);
-    const editFn = src.slice(editStart, editEnd > 0 ? editEnd : undefined);
+    const editFn = src.slice(editStart, src.indexOf('function resetForm'));
     // Must seed empty contact fields (password leave-blank pattern).
     expect(editFn).toMatch(/email:\s*['"]{2}/);
     expect(editFn).toMatch(/phone:\s*['"]{2}/);
@@ -34,7 +38,10 @@ describe('residual #257 user list surfaces masked phone + no mask write-back', (
   });
 
   it('edit form placeholders document leave-blank for contact fields', async () => {
-    const src = await readFile(path.join(__dirname, 'UserManagementView.vue'), 'utf8');
+    const src = await readFile(
+      path.join(__dirname, '../features/user-management/UserFormDialog.vue'),
+      'utf8'
+    );
     expect(src).toMatch(/留空则不修改（列表为脱敏值）/);
   });
 
@@ -47,12 +54,15 @@ describe('residual #257 user list surfaces masked phone + no mask write-back', (
 
   it('API mapUser applies maskPhone/maskEmail (baseline)', async () => {
     const src = await readFile(
-      path.resolve(__dirname, '../../../../apps/api/src/user-access/user.service.ts'),
+      path.resolve(
+        __dirname,
+        '../../../../apps/api/src/user-access/application/user-query.service.ts'
+      ),
       'utf8'
     );
     expect(src).toMatch(/maskPhone/);
     expect(src).toMatch(/maskEmail/);
-    expect(src).toMatch(/phone:\s*maskPhone\(row\.phone\)/);
-    expect(src).toMatch(/email:\s*maskEmail\(row\.email\)/);
+    expect(src).toMatch(/phone:\s*maskPhone\(row\.phone/);
+    expect(src).toMatch(/email:\s*maskEmail\(row\.email/);
   });
 });

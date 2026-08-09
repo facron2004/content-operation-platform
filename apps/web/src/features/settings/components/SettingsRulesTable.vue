@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { reactive, watch } from 'vue';
-import type { RuleConfig, RuleConfigPayload } from '@content/shared';
+import type { RuleConfig } from '@content/shared';
 import { api } from '../../../services/api';
+import AppleButton from '../../../components/AppleButton.vue';
+import ErrorAlert from '../../../components/ErrorAlert.vue';
 import SettingsRulesTableColumns from './SettingsRulesTableColumns.vue';
+import { useRulePayload } from '../composables/useRulePayload';
 
 const props = defineProps<{
   loading: boolean;
@@ -13,52 +15,19 @@ const props = defineProps<{
 }>();
 defineEmits<{ activate: [row: RuleConfig]; remove: [row: RuleConfig] }>();
 
-// Residual #223: list omits payload (RULE_CONFIG_LIST_SELECT); expand fetches getRule.
-const payloadById = reactive<Record<string, RuleConfigPayload>>({});
-const loadingById = reactive<Record<string, boolean>>({});
-const inflight = new Map<string, Promise<RuleConfigPayload>>();
-
-// Drop cached payloads when the list page reloads so stale expand data cannot linger.
-watch(
-  () => props.rules.map((r) => r.id).join('|'),
-  () => {
-    for (const key of Object.keys(payloadById)) delete payloadById[key];
-    for (const key of Object.keys(loadingById)) delete loadingById[key];
-    inflight.clear();
-  }
-);
-
 async function ensurePayload(row: RuleConfig): Promise<void> {
-  if (payloadById[row.id] !== undefined) return;
-  const listPayload = row.payload;
-  if (listPayload && typeof listPayload === 'object' && Object.keys(listPayload).length > 0) {
-    payloadById[row.id] = listPayload;
-    return;
-  }
-  let pending = inflight.get(row.id);
-  if (!pending) {
-    loadingById[row.id] = true;
-    pending = api
-      .getRule(row.id)
-      .then((detail) => {
-        const payload = (detail.payload ?? {}) as RuleConfigPayload;
-        payloadById[row.id] = payload;
-        return payload;
-      })
-      .catch(() => {
-        // Fall back to empty object; interceptor already surfaces the error.
-        const fallback = (row.payload ?? {}) as RuleConfigPayload;
-        payloadById[row.id] = fallback;
-        return fallback;
-      })
-      .finally(() => {
-        loadingById[row.id] = false;
-        inflight.delete(row.id);
-      });
-    inflight.set(row.id, pending);
-  }
-  await pending;
+  await loadPayload(row);
 }
+
+const {
+  payloadById,
+  payloadErrorById,
+  loadingById,
+  ensurePayload: loadPayload
+} = useRulePayload(
+  () => props.rules,
+  (id) => api.getRule(id)
+);
 
 function onExpandChange(row: RuleConfig, expandedRows: RuleConfig[]) {
   const isExpanded = expandedRows.some((r) => r.id === row.id);
@@ -76,6 +45,12 @@ function onExpandChange(row: RuleConfig, expandedRows: RuleConfig[]) {
     <el-table-column type="expand">
       <template #default="{ row }">
         <div v-if="loadingById[row.id]" class="payload-preview">加载中…</div>
+        <div v-else-if="payloadErrorById[row.id]" class="payload-error">
+          <ErrorAlert :message="payloadErrorById[row.id]" />
+          <AppleButton size="sm" variant="secondary" @click="ensurePayload(row)">
+            重新加载详情
+          </AppleButton>
+        </div>
         <pre v-else class="payload-preview">{{
           pretty(payloadById[row.id] ?? row.payload ?? {})
         }}</pre>

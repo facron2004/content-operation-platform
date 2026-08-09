@@ -36,11 +36,28 @@ describe('residual #218 audit listCopies SPA pagination', () => {
     const panel = await readFile(path.join(__dirname, 'components/AuditQueuePanel.vue'), 'utf8');
     expect(panel).toMatch(/el-pagination/);
     expect(panel).toMatch(/:total="total"/);
+    expect(panel).toMatch(/size="small"/);
     expect(panel).toMatch(/page-change|page-size-change/);
 
     const view = await readFile(path.join(srcRoot, 'views/AuditView.vue'), 'utf8');
     expect(view).toMatch(/:page="page"/);
     expect(view).toMatch(/:total="total"/);
     expect(view).toMatch(/onPageChange|@page-change="onPageChange"/);
+  });
+
+  it('AuditView surfaces queue and detail read failures', async () => {
+    const composable = await readFile(path.join(__dirname, 'use-audit.ts'), 'utf8');
+    const view = await readFile(path.join(srcRoot, 'views/AuditView.vue'), 'utf8');
+    expect(composable).toContain('loadError = ref');
+    expect(composable).toContain('detailError = ref');
+    expect(composable).toContain('actionError = ref');
+    expect(composable).toMatch(/loadError\.value = extractErrorMessage/);
+    expect(composable).toMatch(/detailError\.value = extractErrorMessage/);
+    expect(composable).toMatch(/actionError\.value = extractErrorMessage/);
+    expect(view).toMatch(/import ErrorAlert from ['"]\.\.\/components\/ErrorAlert\.vue['"]/);
+    expect(view).toMatch(/<ErrorAlert :message="loadError" \/>/);
+    expect(view).toMatch(/<ErrorAlert :message="detailError" \/>/);
+    expect(view).toMatch(/<ErrorAlert :message="actionError" \/>/);
+    expect(view).toMatch(/loadError[\s\S]{0,160}detailError/);
   });
 });

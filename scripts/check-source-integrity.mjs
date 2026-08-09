@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * ENG-001 源码完整性检查（PRD 7.1）
- * - 扫描 apps/、packages/、electron/、prisma/ 下的 ts/vue/js 源文件
+ * - 扫描 API、Web、Desktop、packages/、prisma/ 下的 ts/vue/js 源文件
  * - 校验所有相对导入可解析
  * - 校验 tsconfig path alias（@content/*）可解析
  * - 校验 package.json scripts 引用的文件存在
@@ -15,9 +15,16 @@ import { fileURLToPath } from 'node:url';
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
 // scripts/ 不做导入扫描：内含一次性补丁脚本，嵌入代码字符串会误报
-const SCAN_DIRS = ['apps/api/src', 'apps/web/src', 'packages', 'electron', 'prisma'];
+const SCAN_DIRS = ['apps/api/src', 'apps/web/src', 'apps/desktop/src', 'packages', 'prisma'];
 const EXTS = ['.ts', '.tsx', '.mts', '.cts', '.js', '.mjs', '.cjs', '.vue', '.json'];
-const SKIP_DIRS = new Set(['node_modules', 'dist', 'dist-electron', 'coverage', '.git', 'generated']);
+const SKIP_DIRS = new Set([
+  'node_modules',
+  'dist',
+  'dist-electron',
+  'coverage',
+  '.git',
+  'generated'
+]);
 
 // tsconfig path alias 映射（与 tsconfig.base.json 保持一致）
 const ALIASES = [
@@ -27,12 +34,17 @@ const ALIASES = [
 
 function walk(dir, out = []) {
   let entries;
-  try { entries = readdirSync(dir, { withFileTypes: true }); } catch { return out; }
+  try {
+    entries = readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return out;
+  }
   for (const e of entries) {
     if (SKIP_DIRS.has(e.name)) continue;
     const full = join(dir, e.name);
     if (e.isDirectory()) walk(full, out);
-    else if (/\.(ts|tsx|mts|cts|js|mjs|cjs|vue)$/.test(e.name) && !/\.d\.ts$/.test(e.name)) out.push(full);
+    else if (/\.(ts|tsx|mts|cts|js|mjs|cjs|vue)$/.test(e.name) && !/\.d\.ts$/.test(e.name))
+      out.push(full);
   }
   return out;
 }
@@ -52,7 +64,8 @@ function resolveImport(fromFile, spec) {
   return false;
 }
 
-const IMPORT_RE = /(?:import|export)\s+(?:[\s\S]*?from\s+)?['"]([^'"]+)['"]|require\(\s*['"]([^'"]+)['"]\s*\)|import\(\s*['"]([^'"]+)['"]\s*\)/g;
+const IMPORT_RE =
+  /(?:import|export)\s+(?:[\s\S]*?from\s+)?['"]([^'"]+)['"]|require\(\s*['"]([^'"]+)['"]\s*\)|import\(\s*['"]([^'"]+)['"]\s*\)/g;
 
 let fileCount = 0;
 const missing = [];
@@ -80,7 +93,7 @@ for (const d of SCAN_DIRS) {
 const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
 const scriptRefs = [];
 for (const [name, cmd] of Object.entries(pkg.scripts || {})) {
-  for (const m of cmd.matchAll(/(?:node|tsx|python)\s+((?:\.\/)?(?:scripts|prisma|electron)\/[\w./-]+)/g)) {
+  for (const m of cmd.matchAll(/(?:node|tsx|python)\s+((?:\.\/)?(?:scripts|prisma)\/[\w./-]+)/g)) {
     scriptRefs.push({ name, ref: m[1] });
   }
 }
@@ -88,7 +101,8 @@ const missingScriptRefs = scriptRefs.filter((r) => !existsSync(join(ROOT, r.ref)
 
 // 关键入口
 const entryChecks = [
-  pkg.main, // electron 入口
+  'apps/desktop/src/main.ts',
+  'apps/desktop/src/preload.ts',
   'prisma/schema.prisma',
   'tsconfig.base.json'
 ].filter(Boolean);
@@ -97,7 +111,9 @@ const missingEntries = entryChecks.filter((p) => !existsSync(join(ROOT, p)));
 // ── 输出（PRD 7.1.2 规定格式）──
 console.log(`检查文件总数: ${fileCount}`);
 console.log(`未解析导入数量: ${missing.length}`);
-console.log(`缺失文件列表: ${missing.length === 0 && missingScriptRefs.length === 0 && missingEntries.length === 0 ? '无' : ''}`);
+console.log(
+  `缺失文件列表: ${missing.length === 0 && missingScriptRefs.length === 0 && missingEntries.length === 0 ? '无' : ''}`
+);
 for (const m of missing) console.log(`  [导入缺失] ${m.file} -> ${m.spec}`);
 for (const r of missingScriptRefs) console.log(`  [script缺失] scripts.${r.name} -> ${r.ref}`);
 for (const p of missingEntries) console.log(`  [入口缺失] ${p}`);

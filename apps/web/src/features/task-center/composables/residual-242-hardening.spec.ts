@@ -31,8 +31,11 @@ describe('residual #242 fail path evidenceUrl', () => {
   });
 
   it('TaskCenterView + TaskDetailView confirmFail type includes evidenceUrl', async () => {
-    const center = await readFile(path.join(srcRoot, 'views/TaskCenterView.vue'), 'utf8');
-    expect(center).toMatch(/confirmFail\(data:\s*\{[\s\S]{0,200}evidenceUrl\?:/);
+    const center = await readFile(
+      path.join(srcRoot, 'features', 'task-center', 'composables', 'useTaskCenterActions.ts'),
+      'utf8'
+    );
+    expect(center).toMatch(/export type TaskFailPayload = \{[\s\S]{0,200}evidenceUrl\?:/);
 
     const detail = await readFile(path.join(srcRoot, 'views/TaskDetailView.vue'), 'utf8');
     expect(detail).toMatch(/confirmFail\(data:\s*\{[\s\S]{0,200}evidenceUrl\?:/);

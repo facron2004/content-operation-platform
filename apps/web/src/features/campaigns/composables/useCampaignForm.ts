@@ -1,4 +1,4 @@
-import { computed, reactive, ref } from 'vue';
+import { computed, onScopeDispose, reactive, ref, type Ref } from 'vue';
 import { ElMessage } from 'element-plus';
 import type { FormRules } from 'element-plus';
 import type { MarketingCampaign } from '@content/shared';
@@ -20,6 +20,7 @@ export interface CampaignFormModel {
 
 export interface CampaignFormOptions {
   onSuccess?: () => void | Promise<void>;
+  writeError?: Ref<string | null>;
 }
 
 function createDefaultForm(): CampaignFormModel {
@@ -78,10 +79,24 @@ export function useCampaignForm(existing?: MarketingCampaign, options: CampaignF
   const submitting = ref(false);
   const editingId = ref<string | null>(null);
   const form = reactive<CampaignFormModel>(createDefaultForm());
+  const writeError = options.writeError ?? ref<string | null>(null);
+  let disposed = false;
+  let submitRequestId = 0;
 
   const isEdit = computed(() => editingId.value !== null);
   const title = computed(() => (isEdit.value ? '编辑活动' : '新建活动'));
   const rules = buildCampaignFormRules(form);
+
+  onScopeDispose(() => {
+    disposed = true;
+    submitRequestId += 1;
+    submitting.value = false;
+  }, true);
+
+  function invalidateSubmit(): void {
+    submitRequestId += 1;
+    submitting.value = false;
+  }
 
   function populateFrom(campaign: MarketingCampaign): void {
     editingId.value = campaign.campaignId;
@@ -103,6 +118,9 @@ export function useCampaignForm(existing?: MarketingCampaign, options: CampaignF
   }
 
   function open(campaign?: MarketingCampaign): void {
+    if (disposed) return;
+    invalidateSubmit();
+    writeError.value = null;
     if (campaign) {
       populateFrom(campaign);
     } else {
@@ -112,6 +130,8 @@ export function useCampaignForm(existing?: MarketingCampaign, options: CampaignF
   }
 
   function close(): void {
+    if (disposed) return;
+    invalidateSubmit();
     dialogVisible.value = false;
   }
 
@@ -124,14 +144,17 @@ export function useCampaignForm(existing?: MarketingCampaign, options: CampaignF
   }
 
   async function submit(): Promise<void> {
-    if (submitting.value) return;
+    if (disposed || submitting.value) return;
     const invalidMessage = validate();
     if (invalidMessage) {
       ElMessage.warning(invalidMessage);
       return;
     }
+    const requestId = ++submitRequestId;
+    writeError.value = null;
     submitting.value = true;
     try {
+      let successMessage: string;
       if (isEdit.value && editingId.value) {
         await api.updateCampaign(editingId.value, {
           name: form.name.trim(),
@@ -146,7 +169,7 @@ export function useCampaignForm(existing?: MarketingCampaign, options: CampaignF
           targetGmv: Number(form.targetGmv) || 0,
           targetOrders: Math.round(Number(form.targetOrders) || 0)
         });
-        ElMessage.success('活动已更新');
+        successMessage = '活动已更新';
       } else {
         await api.createCampaign({
           name: form.name.trim(),
@@ -160,14 +183,19 @@ export function useCampaignForm(existing?: MarketingCampaign, options: CampaignF
           targetGmv: Number(form.targetGmv) || 0,
           targetOrders: Math.round(Number(form.targetOrders) || 0)
         });
-        ElMessage.success('活动已创建');
+        successMessage = '活动已创建';
       }
+      if (disposed || requestId !== submitRequestId) return;
+      ElMessage.success(successMessage);
       dialogVisible.value = false;
       await options.onSuccess?.();
     } catch (error) {
-      ElMessage.error(extractErrorMessage(error, isEdit.value ? '更新活动失败' : '创建活动失败'));
+      if (disposed || requestId !== submitRequestId) return;
+      const message = extractErrorMessage(error, isEdit.value ? '更新活动失败' : '创建活动失败');
+      writeError.value = message;
+      ElMessage.error(message);
     } finally {
-      submitting.value = false;
+      if (requestId === submitRequestId) submitting.value = false;
     }
   }
 
@@ -176,6 +204,7 @@ export function useCampaignForm(existing?: MarketingCampaign, options: CampaignF
   return {
     form,
     submitting,
+    writeError,
     isEdit,
     title,
     rules,
@@ -186,7 +215,11 @@ export function useCampaignForm(existing?: MarketingCampaign, options: CampaignF
       return dialogVisible.value;
     },
     set dialogVisible(value: boolean) {
-      dialogVisible.value = value;
+      if (value) {
+        open();
+      } else {
+        close();
+      }
     }
   };
 }

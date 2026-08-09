@@ -1,5 +1,9 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { createClient } from '@libsql/client';
+import { mkdirSync, readFileSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
 import { TrackingVisitRetentionJob } from '../src/jobs/tracking-visit-retention.job';
+import { createJobRunnerMock } from './helpers/job-runner';
 import {
   TRACKING_VISIT_PURGE_BATCH,
   TRACKING_VISIT_PURGE_MAX_BATCHES,
@@ -14,7 +18,7 @@ describe('TrackingVisitRetentionJob', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    job = new TrackingVisitRetentionJob(prisma as never);
+    job = new TrackingVisitRetentionJob(prisma as never, createJobRunnerMock() as never);
   });
 
   it('exports retention constants aligned with interactive 90d cap', () => {
@@ -102,23 +106,34 @@ describe('TrackingVisitRetentionJob', () => {
 });
 
 describe('TrackingVisit index DDL (migrations source of truth)', () => {
-  it('migration declares composite code+visitTime and visitTime indexes', async () => {
-    // VNext DB-003: seed-data 手写 DDL 已废弃，索引真源为 prisma/migrations。
-    const fs = await import('fs/promises');
-    const path = await import('path');
-    const migPath = path.join(
-      __dirname,
-      '..',
-      '..',
-      '..',
-      'prisma',
-      'migrations',
-      '0001_init',
-      'migration.sql'
-    );
-    const sql = await fs.readFile(migPath, 'utf8');
-    expect(sql).toContain('"TrackingVisit_trackingCode_visitTime_idx"');
-    expect(sql).toMatch(/ON "TrackingVisit"\("trackingCode", "visitTime"\)/);
-    expect(sql).toContain('"TrackingVisit_visitTime_idx"');
+  it('migration creates code+visitTime and visitTime indexes', async () => {
+    const root = join(__dirname, '..', '..', '..');
+    const tempDir = join(root, '.tmp-test-db');
+    const databasePath = join(tempDir, 'tracking-migration.db');
+    mkdirSync(tempDir, { recursive: true });
+    rmSync(databasePath, { force: true });
+    const client = createClient({ url: `file:${databasePath.replaceAll('\\', '/')}` });
+    try {
+      const migration = readFileSync(
+        join(__dirname, '..', '..', '..', 'prisma', 'migrations', '0001_init', 'migration.sql'),
+        'utf8'
+      );
+      await client.executeMultiple(migration);
+      const composite = await client.execute({
+        sql: `SELECT name, sql FROM sqlite_master WHERE type = 'index' AND name = ?`,
+        args: ['TrackingVisit_trackingCode_visitTime_idx']
+      });
+      const singleColumn = await client.execute({
+        sql: `SELECT name, sql FROM sqlite_master WHERE type = 'index' AND name = ?`,
+        args: ['TrackingVisit_visitTime_idx']
+      });
+      expect(composite.rows).toHaveLength(1);
+      expect(singleColumn.rows).toHaveLength(1);
+      expect(String(composite.rows[0].sql)).toContain(
+        'ON "TrackingVisit"("trackingCode", "visitTime")'
+      );
+    } finally {
+      await client.close();
+    }
   });
 });

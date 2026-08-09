@@ -19,7 +19,7 @@ export function addOverviewSheet(wb: ExcelJS.Workbook, report: DataAnalysisRepor
   kpiBlock(sheet, 4, 5, '余额抵扣', ov.walletAmount, 'money');
   kpiBlock(sheet, 4, 7, '净 GMV', ov.netGmv, 'money');
 
-  kpiBlock(sheet, 7, 1, '净销售额(扣退款)', ov.netSales, 'money');
+  kpiBlock(sheet, 7, 1, '核销额(余额+现金)', ov.writeOffAmount, 'money');
   kpiBlock(sheet, 7, 3, '券面额合计', ov.faceAmount, 'money');
   kpiBlock(sheet, 7, 5, '退款金额', ov.refundAmount, 'money');
   kpiBlock(sheet, 7, 7, '整体核销率', ov.verifyRate, 'rate');
@@ -49,7 +49,7 @@ export function addOverviewSheet(wb: ExcelJS.Workbook, report: DataAnalysisRepor
 
   const note =
     '指标口径说明：销售额=支付金额合计；余额抵扣=抵扣余额合计；毛GMV=销售额+余额抵扣；净GMV=毛GMV−退款金额；' +
-    '净销售额=销售额−退款金额；客单价=销售额÷订单数；核销率=核销单数÷总订单；' +
+    '核销额=已核销(verified)订单的 余额+现金（仅 verifyTime 非空的订单计入，按 paidTime 归算）；客单价=销售额÷订单数；核销率=核销单数÷总订单；' +
     '退款率=退款单数÷总订单（单数口径，不再用金额）；结算率=核销金额÷毛GMV；' +
     `目标达成比=销售额÷${DATA_ANALYSIS_TARGET_AMOUNT / 10000}w；净GMV目标达成=净GMV÷${DATA_ANALYSIS_TARGET_AMOUNT / 10000}w。` +
     (report.limitations.length ? ` 限制：${report.limitations.join('；')}` : '');

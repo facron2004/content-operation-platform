@@ -1,11 +1,10 @@
 <script setup lang="ts">
 import type { TrendBucket } from '../../../services/api/refund.api';
 
-const props = defineProps<{
+defineProps<{
   activeTab: string;
   trendDays: 7 | 30;
   trendBucket: TrendBucket;
-  trendOption: unknown;
 }>();
 const emit = defineEmits<{
   'update:trendDays': [value: 7 | 30];
@@ -39,8 +38,14 @@ function onBucketUpdate(value: string | number | boolean) {
           <el-radio-button :value="7">近 7 日</el-radio-button>
           <el-radio-button :value="30">近 30 日</el-radio-button>
         </el-radio-group>
-        <el-radio-group :model-value="trendBucket" size="small" @update:model-value="onBucketUpdate">
-          <el-radio-button v-for="b in BUCKETS" :key="b.value" :value="b.value">{{ b.label }}</el-radio-button>
+        <el-radio-group
+          :model-value="trendBucket"
+          size="small"
+          @update:model-value="onBucketUpdate"
+        >
+          <el-radio-button v-for="b in BUCKETS" :key="b.value" :value="b.value">
+            {{ b.label }}
+          </el-radio-button>
         </el-radio-group>
       </div>
     </header>

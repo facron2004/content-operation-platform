@@ -19,9 +19,14 @@ export async function confirmAndDelete(
   options?: {
     successMsg?: string;
     errorMsg?: string;
+    /** Suppress late feedback when the owning view/composable is disposed. */
+    isActive?: () => boolean;
     onSuccess?: () => void | Promise<void>;
+    onError?: (message: string) => void;
   }
 ): Promise<boolean> {
+  if (options?.isActive && !options.isActive()) return false;
+
   try {
     await ElMessageBox.confirm(confirmOptions.message, confirmOptions.title ?? '删除确认', {
       type: 'warning',
@@ -34,11 +39,15 @@ export async function confirmAndDelete(
 
   try {
     await deleteFn();
+    if (options?.isActive && !options.isActive()) return false;
     ElMessage.success(options?.successMsg ?? '删除成功');
     await options?.onSuccess?.();
     return true;
   } catch (err) {
-    ElMessage.error(extractErrorMessage(err, options?.errorMsg ?? '删除失败'));
+    if (options?.isActive && !options.isActive()) return false;
+    const message = extractErrorMessage(err, options?.errorMsg ?? '删除失败');
+    ElMessage.error(message);
+    options?.onError?.(message);
     return false;
   }
 }

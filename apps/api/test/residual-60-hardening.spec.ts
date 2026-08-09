@@ -21,7 +21,7 @@ describe('residual #60 CopyService generate+persist single-flight', () => {
     const fs = await import('fs/promises');
     const path = await import('path');
     const src = await fs.readFile(
-      path.join(__dirname, '..', 'src', 'content', 'copy.service.ts'),
+      path.join(__dirname, '..', 'src', 'content', 'copy-generation.service.ts'),
       'utf8'
     );
     expect(src).toContain('generateInFlight');
@@ -52,7 +52,7 @@ describe('residual #60 dashboard packageId IN chunking', () => {
     const fs = await import('fs/promises');
     const path = await import('path');
     const src = await fs.readFile(
-      path.join(__dirname, '..', 'src', 'content', 'dashboard.service.ts'),
+      path.join(__dirname, '..', 'src', 'content', 'dashboard-performance-read.ts'),
       'utf8'
     );
     expect(src).toContain('queryInChunks');
@@ -71,26 +71,33 @@ describe('residual #60 user list tokenVersion hygiene', () => {
   it('list SELECT omits tokenVersion; auth paths SELECT it explicitly', async () => {
     const fs = await import('fs/promises');
     const path = await import('path');
-    const src = await fs.readFile(
-      path.join(__dirname, '..', 'src', 'user-access', 'user.service.ts'),
+    const appSrc = await fs.readFile(
+      path.join(__dirname, '..', 'src', 'user-access', 'application', 'user-command.service.ts'),
       'utf8'
     );
-    expect(src).toContain('USER_LIST_COLUMNS');
+    const repositorySrc = await fs.readFile(
+      path.join(__dirname, '..', 'src', 'user-access', 'repositories', 'user.repository.ts'),
+      'utf8'
+    );
+    expect(repositorySrc).toContain('USER_LIST_COLUMNS');
     // Residual #169: USER_AUTH_COLUMNS constant removed with mutator slim shells.
-    expect(src).not.toContain('USER_AUTH_COLUMNS');
+    expect(appSrc).not.toContain('USER_AUTH_COLUMNS');
     // List + findById paths use USER_LIST_COLUMNS (Residual #149).
     // 列表查询支持可选 whereSql 过滤（分页重构后），仍必须只投影 USER_LIST_COLUMNS。
-    expect(src).toMatch(
+    expect(repositorySrc).toMatch(
       /SELECT \$\{USER_LIST_COLUMNS\} FROM "AppUser" (\$\{whereSql\} )?ORDER BY "createdAt"/
     );
-    expect(src).toMatch(/SELECT \$\{USER_LIST_COLUMNS\} FROM "AppUser" WHERE "userId"/);
+    expect(repositorySrc).toMatch(/SELECT \$\{USER_LIST_COLUMNS\} FROM "AppUser" WHERE "userId"/);
     // Auth validate / status still project tokenVersion explicitly (not via USER_AUTH).
-    expect(src).toMatch(/SELECT "userId", "username", "isActive", "tokenVersion"/);
+    expect(repositorySrc).toMatch(/SELECT "userId", "username", "isActive", "tokenVersion"/);
     // Residual #169: mutators no longer hydrate full auth rows.
-    const updateStart = src.indexOf('async update(');
+    const updateStart = appSrc.indexOf('async update(');
     expect(updateStart).toBeGreaterThan(0);
-    const privateStart = src.indexOf('\n  // ─── Private', updateStart);
-    const mutators = src.slice(updateStart, privateStart > 0 ? privateStart : updateStart + 8000);
+    const privateStart = appSrc.indexOf('\n  private async insertRoleBindings', updateStart);
+    const mutators = appSrc.slice(
+      updateStart,
+      privateStart > 0 ? privateStart : updateStart + 8000
+    );
     expect(mutators).not.toMatch(/\bRETURNING\b/);
   });
 });
@@ -118,7 +125,7 @@ describe('residual #60 DailyMetrics findUnique select hygiene', () => {
     expect(refund).toMatch(/findUnique\(\{[\s\S]*select:\s*\{[\s\S]*totalRefund/);
     expect(refund).toMatch(/findUnique\(\{[\s\S]*select:\s*\{[\s\S]*totalVerify/);
     expect(money).toMatch(
-      /findUnique\(\{\s*where:\s*\{\s*date\s*\},\s*select:\s*\{\s*totalGmv(Fen)?:\s*true,\s*paidOrderCount:\s*true/
+      /findUnique\(\{\s*where:\s*\{\s*date\s*\},\s*select:\s*\{\s*totalGmv(Fen)?:\s*true,\s*totalRefundFen:\s*true,\s*paidOrderCount:\s*true/
     );
   });
 });
@@ -128,7 +135,7 @@ describe('residual #60 RuleConfig active resolve select + index', () => {
     const fs = await import('fs/promises');
     const path = await import('path');
     const ops = await fs.readFile(
-      path.join(__dirname, '..', 'src', 'content', 'rule-config-ops.ts'),
+      path.join(__dirname, '..', 'src', 'content', 'rule-config-read.ts'),
       'utf8'
     );
     const support = await fs.readFile(

@@ -11,9 +11,11 @@
       @update:kpi-date="kpiDate = $event"
       @date-change="onKpiDateChange"
       @backfill="onBackfillCommand"
+      @backfill-date="onBackfillDate"
       @reload="reload"
     />
     <ErrorAlert :message="loadError" />
+    <ErrorAlert :message="extrasError" />
     <GmvCockpitBody
       v-model:trend-granularity="trendGranularity"
       v-model:trend-mode="trendMode"
@@ -61,6 +63,7 @@ import GmvCockpitBody from '../features/gmv/components/GmvCockpitBody.vue';
 const {
   loading,
   loadError,
+  extrasError,
   kpi,
   topMerchants,
   merchantPage,
@@ -94,6 +97,7 @@ const {
   nextMerchantPage,
   onKpiDateChange,
   onBackfillCommand,
+  onBackfillDate,
   reload,
   categories,
   channels,

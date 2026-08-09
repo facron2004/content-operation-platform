@@ -46,8 +46,11 @@ describe('residual #175 list cancel + reason wire-up', () => {
     expect(fn).not.toMatch(/cancelReason\s*:/);
   });
 
-  it('TaskCenterView handleCancel prompts + calls api.cancelTask + refresh', async () => {
-    const src = await readFile(path.join(webSrc, 'views', 'TaskCenterView.vue'), 'utf8');
+  it('TaskCenter action composable handles cancel prompt + api.cancelTask + refresh', async () => {
+    const src = await readFile(
+      path.join(webSrc, 'features', 'task-center', 'composables', 'useTaskCenterActions.ts'),
+      'utf8'
+    );
     const fnStart = src.indexOf('async function handleCancel');
     expect(fnStart).toBeGreaterThan(0);
     // Was a pure no-op: only selectedTaskId = task.taskId
@@ -57,7 +60,8 @@ describe('residual #175 list cancel + reason wire-up', () => {
     const next = src.indexOf('\n</script>', fnStart + 10);
     const fn = src.slice(fnStart, next > 0 ? next : undefined);
     expect(fn).toMatch(/ElMessageBox\.prompt/);
-    expect(fn).toMatch(/api\.cancelTask\(task\.taskId,\s*\{\s*reason:\s*value\.trim\(\)\s*\}\)/);
-    expect(fn).toMatch(/refresh\(/);
+    expect(fn).toMatch(/api\.cancelTask\(task\.taskId,\s*\{\s*reason:\s*value\s*\}\)/);
+    expect(src).toMatch(/await request\(value\.trim\(\)\)/);
+    expect(src).toMatch(/refresh\(/);
   });
 });

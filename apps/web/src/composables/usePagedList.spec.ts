@@ -1,3 +1,4 @@
+import { effectScope, nextTick } from 'vue';
 import { describe, expect, it, vi } from 'vitest';
 import { usePagedList } from './usePagedList';
 
@@ -75,6 +76,110 @@ describe('usePagedList', () => {
     expect(fetcher).toHaveBeenCalledTimes(1);
     expect(fetcher.mock.calls[0][0].filters.keyword).toBe('abc');
     vi.useRealTimers();
+  });
+
+  it('cancels a pending debounce when an explicit load is requested', async () => {
+    vi.useFakeTimers();
+    const fetcher = vi.fn().mockResolvedValue({ items: [], total: 0 });
+    const list = usePagedList<number, { keyword: string }>(fetcher, { keyword: '' });
+
+    list.updateFilter({ keyword: 'alice' });
+    await nextTick();
+    expect(fetcher).not.toHaveBeenCalled();
+
+    await list.load();
+    await vi.advanceTimersByTimeAsync(500);
+
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+  });
+
+  it('cleans a pending debounce when its scope is disposed', async () => {
+    vi.useFakeTimers();
+    try {
+      const fetcher = vi.fn().mockResolvedValue({ items: [], total: 0 });
+      const scope = effectScope();
+      let list!: ReturnType<typeof usePagedList<number, { keyword: string }>>;
+
+      scope.run(() => {
+        list = usePagedList<number, { keyword: string }>(fetcher, { keyword: '' });
+      });
+      list.updateFilter({ keyword: 'alice' });
+      await nextTick();
+
+      scope.stop();
+      await vi.advanceTimersByTimeAsync(500);
+
+      expect(fetcher).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('invalidates in-flight loads and blocks new loads after scope disposal', async () => {
+    let resolvePending!: (value: { items: number[]; total: number }) => void;
+    const fetcher = vi.fn().mockReturnValue(
+      new Promise<{ items: number[]; total: number }>((resolve) => {
+        resolvePending = resolve;
+      })
+    );
+    const scope = effectScope();
+    let list!: ReturnType<typeof usePagedList<number, { keyword: string }>>;
+    scope.run(() => {
+      list = usePagedList<number, { keyword: string }>(
+        fetcher,
+        { keyword: '' },
+        {
+          filterDebounceMs: 0
+        }
+      );
+    });
+
+    const load = list.load();
+    expect(list.loading.value).toBe(true);
+    scope.stop();
+    expect(list.loading.value).toBe(false);
+
+    resolvePending({ items: [1], total: 1 });
+    await load;
+    await list.load();
+
+    expect(list.items.value).toEqual([]);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not apply a response after filters change before the debounce reload', async () => {
+    vi.useFakeTimers();
+    try {
+      let resolveFirst!: (value: { items: number[]; total: number }) => void;
+      const fetcher = vi
+        .fn()
+        .mockReturnValueOnce(
+          new Promise<{ items: number[]; total: number }>((resolve) => {
+            resolveFirst = resolve;
+          })
+        )
+        .mockResolvedValueOnce({ items: [2], total: 1 });
+      const scope = effectScope();
+      let list!: ReturnType<typeof usePagedList<number, { keyword: string }>>;
+      scope.run(() => {
+        list = usePagedList<number, { keyword: string }>(fetcher, { keyword: '' });
+      });
+
+      const firstLoad = list.load();
+      list.updateFilter({ keyword: 'next' });
+      await nextTick();
+      resolveFirst({ items: [1], total: 1 });
+      await firstLoad;
+
+      expect(list.items.value).toEqual([]);
+      await vi.advanceTimersByTimeAsync(500);
+      expect(list.items.value).toEqual([2]);
+      expect(fetcher).toHaveBeenCalledTimes(2);
+      scope.stop();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('soft-caches visited pages so flipping back is instant', async () => {

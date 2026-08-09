@@ -47,4 +47,17 @@ describe('residual #194 task create seed from filters', () => {
     const fn = src.slice(fnStart, end);
     expect(fn).toMatch(/openForm\s*\(\s*task\s*\)/);
   });
+
+  it('TaskCenterView surfaces list and KPI read failures', async () => {
+    const view = await readFile(path.join(srcRoot, 'views/TaskCenterView.vue'), 'utf8');
+    const composable = await readFile(path.join(__dirname, 'useTaskCenter.ts'), 'utf8');
+    expect(view).toMatch(/import ErrorAlert from ['"]\.\.\/components\/ErrorAlert\.vue['"]/);
+    expect(view).toMatch(/<ErrorAlert :message="kpiError" \/>/);
+    expect(view).toMatch(/<ErrorAlert :message="listError" \/>/);
+    expect(view).toMatch(/<ErrorAlert :message="actionError" \/>/);
+    expect(view).toMatch(/error:\s*listError/);
+    expect(view).toMatch(/actionError,\s*publishDialogVisible/);
+    expect(composable).toMatch(/kpiError:\s*Ref<string \| null>/);
+    expect(composable).toMatch(/kpiError\.value = extractErrorMessage/);
+  });
 });

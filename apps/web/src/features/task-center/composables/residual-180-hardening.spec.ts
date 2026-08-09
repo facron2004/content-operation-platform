@@ -24,6 +24,11 @@ describe('residual #180 schedule/complete SPA affordances', () => {
 
   it('useTaskDetail schedule/complete discard body + timeline re-GET', async () => {
     const src = await readFile(path.join(__dirname, 'useTaskDetail.ts'), 'utf8');
+    const mutationStart = src.indexOf('async function runMutation');
+    expect(mutationStart).toBeGreaterThan(0);
+    const mutationEnd = src.indexOf('\n  async function publish', mutationStart + 10);
+    const mutationFn = src.slice(mutationStart, mutationEnd > 0 ? mutationEnd : undefined);
+    expect(mutationFn).toMatch(/await refreshTaskTimeline\(requestId\)/);
     for (const name of ['schedule', 'complete'] as const) {
       const fnStart = src.indexOf(`async function ${name}(`);
       expect(fnStart).toBeGreaterThan(0);
@@ -31,8 +36,8 @@ describe('residual #180 schedule/complete SPA affordances', () => {
       const end = next > 0 ? next : src.indexOf('\n  onMounted', fnStart + 10);
       const fn = src.slice(fnStart, end > 0 ? end : undefined);
       expect(fn).not.toMatch(/applyTaskRow\(/);
-      expect(fn).toMatch(/await refreshTaskTimeline\(/);
-      expect(fn).toMatch(new RegExp(`api\\.${name}Task`));
+      expect(fn).toMatch(/runMutation\(/);
+      expect(src).toMatch(new RegExp(`api\\.${name}Task`));
     }
   });
 
@@ -68,13 +73,14 @@ describe('residual #180 schedule/complete SPA affordances', () => {
     );
   });
 
-  it('TaskCenterView wires schedule/complete handlers to api', async () => {
-    const src = await readFile(path.join(srcRoot, 'views/TaskCenterView.vue'), 'utf8');
-    expect(src).toMatch(/@schedule="handleSchedule"/);
-    expect(src).toMatch(/@complete="handleComplete"/);
-    expect(src).toMatch(/api\.scheduleTask/);
-    expect(src).toMatch(/api\.completeTask/);
-    expect(src).toMatch(/async function handleSchedule/);
-    expect(src).toMatch(/async function handleComplete/);
+  it('TaskCenterView wires schedule/complete handlers to the action composable', async () => {
+    const view = await readFile(path.join(srcRoot, 'views/TaskCenterView.vue'), 'utf8');
+    expect(view).toMatch(/@schedule="handleSchedule"/);
+    expect(view).toMatch(/@complete="handleComplete"/);
+    const actions = await readFile(path.join(__dirname, 'useTaskCenterActions.ts'), 'utf8');
+    expect(actions).toMatch(/api\.scheduleTask/);
+    expect(actions).toMatch(/api\.completeTask/);
+    expect(actions).toMatch(/async function handleSchedule/);
+    expect(actions).toMatch(/async function handleComplete/);
   });
 });

@@ -1,0 +1,264 @@
+.apple-btn {
+  --apple-btn-bg: rgba(120, 120, 128, 0.12);
+  --apple-btn-bg-hover: rgba(120, 120, 128, 0.18);
+  --apple-btn-bg-active: rgba(120, 120, 128, 0.22);
+  --apple-btn-fg: #1d1d1f;
+  --apple-btn-border: transparent;
+  --apple-btn-shadow: none;
+  --apple-btn-height: 34px;
+  --apple-btn-pad-x: 14px;
+  --apple-btn-radius: 999px;
+  --apple-btn-font: 13px;
+  --apple-btn-weight: 600;
+  --apple-btn-gap: 6px;
+  --apple-btn-icon: 15px;
+
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--apple-btn-gap);
+  min-height: var(--apple-btn-height);
+  padding: 0 var(--apple-btn-pad-x);
+  border: 0.5px solid var(--apple-btn-border);
+  border-radius: var(--apple-btn-radius);
+  background: var(--apple-btn-bg);
+  color: var(--apple-btn-fg);
+  box-shadow: var(--apple-btn-shadow);
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', sans-serif;
+  font-size: var(--apple-btn-font);
+  font-weight: var(--apple-btn-weight);
+  letter-spacing: -0.01em;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  outline: none;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.1s ease,
+    opacity 0.15s ease;
+}
+
+.apple-btn:hover:not(:disabled) {
+  background: var(--apple-btn-bg-hover);
+}
+
+.apple-btn:active:not(:disabled) {
+  background: var(--apple-btn-bg-active);
+  transform: scale(0.97);
+}
+
+.apple-btn:focus-visible {
+  box-shadow:
+    var(--apple-btn-shadow),
+    0 0 0 3px rgba(0, 122, 255, 0.28);
+}
+
+.apple-btn:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.apple-btn.is-loading {
+  cursor: progress;
+}
+
+.apple-btn.is-block {
+  width: 100%;
+}
+
+.apple-btn.is-icon-only {
+  width: var(--apple-btn-height);
+  min-width: var(--apple-btn-height);
+  padding: 0;
+  /* Icon circles sit in flex toolbars — never let them collapse into ovals. */
+  flex-shrink: 0;
+}
+
+.apple-btn--sm {
+  --apple-btn-height: 28px;
+  --apple-btn-pad-x: 11px;
+  --apple-btn-font: 12px;
+  --apple-btn-icon: 13px;
+  --apple-btn-gap: 5px;
+}
+
+/* Dense table / ghost text actions: slightly tighter pad, keep full sm height so icons don't squash */
+.apple-btn--sm.apple-btn--ghost,
+.apple-btn--sm.apple-btn--quiet {
+  --apple-btn-pad-x: 8px;
+}
+
+/* Icon-only sm: keep square hit target equal to height */
+.apple-btn--sm.is-icon-only {
+  width: var(--apple-btn-height);
+  min-width: var(--apple-btn-height);
+}
+
+.apple-btn--md {
+  --apple-btn-height: 34px;
+  --apple-btn-pad-x: 14px;
+  --apple-btn-font: 13px;
+}
+
+.apple-btn--lg {
+  --apple-btn-height: 40px;
+  --apple-btn-pad-x: 18px;
+  --apple-btn-font: 15px;
+  --apple-btn-icon: 16px;
+  --apple-btn-gap: 8px;
+}
+
+.apple-btn--primary {
+  --apple-btn-bg: #007aff;
+  --apple-btn-bg-hover: #0071eb;
+  --apple-btn-bg-active: #0066d6;
+  --apple-btn-fg: #fff;
+  --apple-btn-shadow: 0 1px 2px rgba(0, 122, 255, 0.28);
+}
+
+.apple-btn--secondary {
+  --apple-btn-bg: rgba(120, 120, 128, 0.12);
+  --apple-btn-bg-hover: rgba(120, 120, 128, 0.18);
+  --apple-btn-bg-active: rgba(120, 120, 128, 0.24);
+  --apple-btn-fg: #1d1d1f;
+}
+
+.apple-btn--ghost {
+  --apple-btn-bg: transparent;
+  --apple-btn-bg-hover: rgba(120, 120, 128, 0.1);
+  --apple-btn-bg-active: rgba(120, 120, 128, 0.16);
+  --apple-btn-fg: #007aff;
+}
+
+.apple-btn--tinted {
+  --apple-btn-bg: rgba(0, 122, 255, 0.12);
+  --apple-btn-bg-hover: rgba(0, 122, 255, 0.18);
+  --apple-btn-bg-active: rgba(0, 122, 255, 0.24);
+  --apple-btn-fg: #007aff;
+}
+
+.apple-btn--danger {
+  --apple-btn-bg: #ff3b30;
+  --apple-btn-bg-hover: #f23126;
+  --apple-btn-bg-active: #e02d22;
+  --apple-btn-fg: #fff;
+  --apple-btn-shadow: 0 1px 2px rgba(255, 59, 48, 0.28);
+}
+
+.apple-btn--success {
+  --apple-btn-bg: #34c759;
+  --apple-btn-bg-hover: #2fb350;
+  --apple-btn-bg-active: #28a745;
+  --apple-btn-fg: #fff;
+  --apple-btn-shadow: 0 1px 2px rgba(52, 199, 89, 0.28);
+}
+
+.apple-btn--warning {
+  --apple-btn-bg: #ff9500;
+  --apple-btn-bg-hover: #f08c00;
+  --apple-btn-bg-active: #e08500;
+  --apple-btn-fg: #fff;
+  --apple-btn-shadow: 0 1px 2px rgba(255, 149, 0, 0.28);
+}
+
+.apple-btn--quiet {
+  --apple-btn-bg: transparent;
+  --apple-btn-bg-hover: rgba(120, 120, 128, 0.1);
+  --apple-btn-bg-active: rgba(120, 120, 128, 0.16);
+  --apple-btn-fg: #3a3a3c;
+  --apple-btn-weight: 560;
+}
+
+.apple-btn[data-tone='danger'].apple-btn--ghost,
+.apple-btn[data-tone='danger'].apple-btn--quiet {
+  --apple-btn-fg: #ff3b30;
+  --apple-btn-bg-hover: rgba(255, 59, 48, 0.1);
+  --apple-btn-bg-active: rgba(255, 59, 48, 0.16);
+}
+
+.apple-btn[data-tone='warning'].apple-btn--ghost,
+.apple-btn[data-tone='warning'].apple-btn--quiet {
+  --apple-btn-fg: #ff9500;
+  --apple-btn-bg-hover: rgba(255, 149, 0, 0.12);
+  --apple-btn-bg-active: rgba(255, 149, 0, 0.18);
+}
+
+.apple-btn[data-tone='success'].apple-btn--ghost,
+.apple-btn[data-tone='success'].apple-btn--quiet {
+  --apple-btn-fg: #34c759;
+  --apple-btn-bg-hover: rgba(52, 199, 89, 0.12);
+  --apple-btn-bg-active: rgba(52, 199, 89, 0.18);
+}
+
+.apple-btn[data-tone='danger'].apple-btn--tinted {
+  --apple-btn-bg: rgba(255, 59, 48, 0.12);
+  --apple-btn-bg-hover: rgba(255, 59, 48, 0.18);
+  --apple-btn-bg-active: rgba(255, 59, 48, 0.24);
+  --apple-btn-fg: #ff3b30;
+}
+
+.apple-btn[data-tone='warning'].apple-btn--tinted {
+  --apple-btn-bg: rgba(255, 149, 0, 0.14);
+  --apple-btn-bg-hover: rgba(255, 149, 0, 0.2);
+  --apple-btn-bg-active: rgba(255, 149, 0, 0.26);
+  --apple-btn-fg: #c93400;
+}
+
+.apple-btn[data-tone='success'].apple-btn--tinted {
+  --apple-btn-bg: rgba(52, 199, 89, 0.14);
+  --apple-btn-bg-hover: rgba(52, 199, 89, 0.2);
+  --apple-btn-bg-active: rgba(52, 199, 89, 0.26);
+  --apple-btn-fg: #248a3d;
+}
+
+.apple-btn__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--apple-btn-icon);
+  height: var(--apple-btn-icon);
+  flex-shrink: 0;
+  line-height: 0;
+}
+
+.apple-btn__icon :deep(.el-icon),
+.apple-btn__icon :deep(svg) {
+  width: var(--apple-btn-icon);
+  height: var(--apple-btn-icon);
+  font-size: var(--apple-btn-icon);
+  display: block;
+}
+
+.apple-btn__icon :deep(svg) {
+  flex-shrink: 0;
+}
+
+.apple-btn__label {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.apple-btn__spinner {
+  width: var(--apple-btn-icon);
+  height: var(--apple-btn-icon);
+  border-radius: 999px;
+  border: 1.5px solid currentColor;
+  border-right-color: transparent;
+  flex-shrink: 0;
+  animation: apple-btn-spin 0.7s linear infinite;
+}
+
+@keyframes apple-btn-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

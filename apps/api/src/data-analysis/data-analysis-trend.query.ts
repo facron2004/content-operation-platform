@@ -43,7 +43,8 @@ export async function queryDailyTrend(
          ${BEIJING_DATE} AS "date",
          COUNT(*) AS "orderCount",
          COALESCE(SUM("paidAmountFen") / 100.0, 0) AS "salesAmount",
-         COALESCE(SUM("paidAmountWalletFen") / 100.0, 0) AS "walletAmount"
+         COALESCE(SUM("paidAmountWalletFen") / 100.0, 0) AS "walletAmount",
+         COALESCE(SUM(CASE WHEN ${IS_VERIFIED} THEN "paidAmountFen" + "paidAmountWalletFen" ELSE 0 END) / 100.0, 0) AS "writeOffAmount"
        FROM "OrderHeader"
        WHERE ${PAID_WHERE}
        GROUP BY ${BEIJING_DATE}
@@ -66,6 +67,7 @@ export async function queryDailyTrend(
        COALESCE(b."orderCount", 0) AS "orderCount",
        COALESCE(b."salesAmount", 0) AS "salesAmount",
        COALESCE(b."walletAmount", 0) AS "walletAmount",
+       COALESCE(b."writeOffAmount", 0) AS "writeOffAmount",
        COALESCE(r."refundAmount", 0) AS "refundAmount"
      FROM alldates a
      LEFT JOIN base b ON b."date" = a."date"
@@ -80,6 +82,7 @@ export async function queryDailyTrend(
     orderCount: number | null;
     salesAmount: number | null;
     walletAmount: number | null;
+    writeOffAmount: number | null;
     refundAmount: number | null;
   }>;
 
@@ -95,7 +98,7 @@ export async function queryDailyTrend(
       salesAmount,
       tradeAmount: salesAmount + walletAmount,
       netGmv: salesAmount + walletAmount - refundAmount,
-      netSales: salesAmount - refundAmount,
+      writeOffAmount: n(row.writeOffAmount),
       orderCount: n(row.orderCount),
       refundAmount
     });
@@ -113,7 +116,7 @@ export async function queryDailyTrend(
         salesAmount: 0,
         tradeAmount: 0,
         netGmv: 0,
-        netSales: 0,
+        writeOffAmount: 0,
         orderCount: 0,
         refundAmount: 0
       }

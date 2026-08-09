@@ -16,6 +16,9 @@ export async function getCookieStatus() {
 }
 export async function updateCookie(cookie: string): Promise<CookieUpdateResponse> {
   const { data } = await client.post('/content/cookie/update', { cookie });
+  if (data.success && window.desktopAPI?.setSecret) {
+    await window.desktopAPI.setSecret('EXTERNAL_API_COOKIE', cookie);
+  }
   clearCache('/content/cookie');
   return data;
 }
@@ -29,6 +32,18 @@ export async function getAICopyStatus(): Promise<AICopyStatus> {
 }
 export async function updateAICopyConfig(payload: AICopyConfigPayload): Promise<AICopyStatus> {
   const { data } = await client.post('/content/ai-copy/config', payload);
+  if (window.desktopAPI?.savePublicConfig) {
+    await window.desktopAPI.savePublicConfig({
+      AI_API_BASE_URL: payload.baseURL,
+      AI_MODEL: payload.model,
+      AI_PROVIDER_NAME: payload.providerName ?? '',
+      AI_TEMPERATURE: String(payload.temperature),
+      AI_MAX_TOKENS: String(payload.maxTokens)
+    });
+    if (payload.apiKey?.trim()) {
+      await window.desktopAPI.setSecret('AI_API_KEY', payload.apiKey.trim());
+    }
+  }
   deleteCacheKey('/content/ai-copy/status');
   return data;
 }

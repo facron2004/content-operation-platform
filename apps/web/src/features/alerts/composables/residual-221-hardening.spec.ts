@@ -14,12 +14,13 @@ describe('residual #221 alerts as-of date filter', () => {
   });
 
   it('alert-core filters + load + watch pass date', async () => {
-    const src = await readFile(path.join(__dirname, 'alert-core.ts'), 'utf8');
-    expect(src).toMatch(/filters:\s*reactive\(\{[\s\S]{0,80}date:\s*''/);
-    expect(src).toMatch(/getAlerts\(\{[\s\S]{0,300}date/);
-    expect(src).toMatch(/args\.filters\.date/);
+    const core = await readFile(path.join(__dirname, 'alert-core.ts'), 'utf8');
+    const handlers = await readFile(path.join(__dirname, 'alert-handlers.ts'), 'utf8');
+    expect(core).toMatch(/filters:\s*reactive\(\{[\s\S]{0,80}date:\s*''/);
+    expect(core).toMatch(/getAlerts\(\{[\s\S]{0,300}date/);
+    expect(core).toMatch(/args\.filters\.date/);
     // clearFilters resets date (body may be multi-line).
-    expect(src).toMatch(/filters\.date\s*=\s*''/);
+    expect(handlers).toMatch(/filters\.date\s*=\s*''/);
   });
 
   it('AlertFilters exposes date picker', async () => {

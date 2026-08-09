@@ -145,7 +145,9 @@ export async function loadZeroSalesSkus(params: {
   // Residual #266: optional honesty sinks for ZERO_SALES_SKUS_CACHE_CAP.
   skuTruncated?: Ref<boolean>;
   skuLimit?: Ref<number | null>;
+  isCurrent?: () => boolean;
 }) {
+  const isCurrent = params.isCurrent ?? (() => true);
   params.skuLoading.value = true;
   try {
     const result = await getZeroSalesSkus({
@@ -159,6 +161,7 @@ export async function loadZeroSalesSkus(params: {
       page: params.page,
       pageSize: 50
     });
+    if (!isCurrent()) return;
     params.skuRows.value = result.items;
     params.skuHasMore.value = result.pagination.hasMore;
     if (params.skuTruncated) params.skuTruncated.value = Boolean(result.truncated);
@@ -166,10 +169,10 @@ export async function loadZeroSalesSkus(params: {
       params.skuLimit.value =
         typeof result.limit === 'number' && result.limit > 0 ? result.limit : null;
   } catch (err) {
-    if (!isRequestCanceled(err))
+    if (isCurrent() && !isRequestCanceled(err))
       params.loadError.value = extractErrorMessage(err, '加载商品清单失败');
   } finally {
-    params.skuLoading.value = false;
+    if (isCurrent()) params.skuLoading.value = false;
   }
 }
 export async function loadZeroSalesMerchants(params: {
@@ -185,7 +188,9 @@ export async function loadZeroSalesMerchants(params: {
   // Residual #266: optional honesty sinks for ZERO_SALES_MERCHANTS_CACHE_CAP.
   merchantTruncated?: Ref<boolean>;
   merchantLimit?: Ref<number | null>;
+  isCurrent?: () => boolean;
 }) {
+  const isCurrent = params.isCurrent ?? (() => true);
   params.merchantLoading.value = true;
   try {
     const result = await getZeroSalesMerchants({
@@ -196,6 +201,7 @@ export async function loadZeroSalesMerchants(params: {
       page: params.page,
       pageSize: 20
     });
+    if (!isCurrent()) return;
     params.merchantRows.value = result.items;
     params.merchantHasMore.value = result.pagination.hasMore;
     if (params.merchantTruncated) params.merchantTruncated.value = Boolean(result.truncated);
@@ -203,15 +209,22 @@ export async function loadZeroSalesMerchants(params: {
       params.merchantLimit.value =
         typeof result.limit === 'number' && result.limit > 0 ? result.limit : null;
   } catch (err) {
-    if (!isRequestCanceled(err))
+    if (isCurrent() && !isRequestCanceled(err))
       params.loadError.value = extractErrorMessage(err, '加载商家清单失败');
   } finally {
-    params.merchantLoading.value = false;
+    if (isCurrent()) params.merchantLoading.value = false;
   }
 }
 export function createZeroSalesLoaders(state: ZeroSalesState) {
-  const loadMerchants = () =>
-    loadZeroSalesMerchants({
+  let disposed = false;
+  let merchantRequestId = 0;
+  let skuRequestId = 0;
+  let reloadRequestId = 0;
+
+  const loadMerchants = (): Promise<void> => {
+    if (disposed) return Promise.resolve();
+    const currentRequestId = ++merchantRequestId;
+    return loadZeroSalesMerchants({
       ...zeroSalesFilterParams(state),
       page: state.merchantPage.value,
       merchantRows: state.merchantRows,
@@ -219,10 +232,14 @@ export function createZeroSalesLoaders(state: ZeroSalesState) {
       merchantLoading: state.merchantLoading,
       loadError: state.loadError,
       merchantTruncated: state.merchantTruncated,
-      merchantLimit: state.merchantLimit
+      merchantLimit: state.merchantLimit,
+      isCurrent: () => !disposed && currentRequestId === merchantRequestId
     });
-  const loadSkus = () =>
-    loadZeroSalesSkus({
+  };
+  const loadSkus = (): Promise<void> => {
+    if (disposed) return Promise.resolve();
+    const currentRequestId = ++skuRequestId;
+    return loadZeroSalesSkus({
       ...zeroSalesFilterParams(state),
       page: state.skuPage.value,
       skuRows: state.skuRows,
@@ -230,15 +247,32 @@ export function createZeroSalesLoaders(state: ZeroSalesState) {
       skuLoading: state.skuLoading,
       loadError: state.loadError,
       skuTruncated: state.skuTruncated,
-      skuLimit: state.skuLimit
+      skuLimit: state.skuLimit,
+      isCurrent: () => !disposed && currentRequestId === skuRequestId
     });
+  };
   const reload = async () => {
+    if (disposed) return;
+    const currentReloadRequestId = ++reloadRequestId;
+    merchantRequestId += 1;
+    skuRequestId += 1;
     state.loading.value = true;
     state.loadError.value = null;
-    await Promise.all([state.activeTab.value === 'merchant' ? loadMerchants() : loadSkus()]);
-    state.loading.value = false;
+    const activeTab = state.activeTab.value;
+    await Promise.all([activeTab === 'merchant' ? loadMerchants() : loadSkus()]);
+    if (!disposed && currentReloadRequestId === reloadRequestId) state.loading.value = false;
   };
-  return { loadMerchants, loadSkus, reload };
+  const dispose = () => {
+    if (disposed) return;
+    disposed = true;
+    merchantRequestId += 1;
+    skuRequestId += 1;
+    reloadRequestId += 1;
+    state.loading.value = false;
+    state.merchantLoading.value = false;
+    state.skuLoading.value = false;
+  };
+  return { loadMerchants, loadSkus, reload, dispose };
 }
 export function bindZeroSalesRouteWatch(params: {
   reload: () => Promise<void>;

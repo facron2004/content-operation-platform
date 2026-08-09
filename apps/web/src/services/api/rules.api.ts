@@ -19,7 +19,6 @@ export interface CreateRulePayload {
   name: string;
   payload: RuleConfigPayload;
   comment?: string;
-  createdBy?: string;
 }
 
 export async function listRules(query: RuleListQuery = {}): Promise<RuleListResponse> {

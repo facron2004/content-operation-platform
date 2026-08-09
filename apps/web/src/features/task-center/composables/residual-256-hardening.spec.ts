@@ -75,7 +75,7 @@ describe('residual #256 performance cards surface API dateFrom/dateTo', () => {
     const taskQuery = await readFile(
       path.resolve(
         __dirname,
-        '../../../../../../apps/api/src/distribution-task/distribution-task-query.ts'
+        '../../../../../../apps/api/src/distribution-task/distribution-task-performance-query.ts'
       ),
       'utf8'
     );

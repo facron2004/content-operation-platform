@@ -30,7 +30,10 @@ describe('residual #275 RECOMMEND_CACHE_CAP source-cap honesty', () => {
   });
 
   it('dashboard projects source* + resolvedIds* honesty fields', async () => {
-    const src = await readFile(path.join(srcRoot, 'content', 'dashboard.service.ts'), 'utf8');
+    const src = await readFile(
+      path.join(srcRoot, 'content', 'dashboard-operations-read.ts'),
+      'utf8'
+    );
     expect(src).toMatch(/RECOMMEND_CACHE_CAP/);
     expect(src).toMatch(/sourceLimit\s*=\s*RECOMMEND_CACHE_CAP/);
     expect(src).toMatch(/sourceTruncated\s*=\s*sourceMatchedCount\s*>\s*packages\.length/);
@@ -60,7 +63,7 @@ describe('residual #275 RECOMMEND_CACHE_CAP source-cap honesty', () => {
 
   it('SPA Alerts sinks source* honesty + list-cap-hint', async () => {
     const core = await readFile(
-      path.join(webRoot, 'features', 'alerts', 'composables', 'alert-core.ts'),
+      path.join(webRoot, 'features', 'alerts', 'composables', 'alert-types.ts'),
       'utf8'
     );
     expect(core).toMatch(/sourceTruncated\?:/);

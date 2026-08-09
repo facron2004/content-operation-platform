@@ -16,6 +16,7 @@
 
     <!-- Residual #206: KPI tiles click-to-filter the list. -->
     <TaskKpiRow :kpis="kpis" :loading="kpiLoading" @filter="applyKpiFilter" />
+    <ErrorAlert :message="kpiError" />
 
     <TaskFilterBar v-model="filters" @search="handleSearch" />
 
@@ -23,6 +24,9 @@
     <p v-if="listDateFrom && listDateTo" class="list-window-hint">
       仅展示 {{ windowLabel }} 内创建的任务；更早记录不在本列表分页范围内。
     </p>
+    <ErrorAlert :message="listError" />
+    <ErrorAlert :message="actionError" />
+    <ErrorAlert :message="writeError" />
 
     <TaskListTable
       v-loading="loading"
@@ -65,12 +69,14 @@
       v-model="publishDialogVisible"
       :submitting="publishSubmitting"
       @confirm="confirmPublish"
+      @closed="onPublishClosed"
     />
 
     <TaskFailDialog
       v-model="failDialogVisible"
       :submitting="failSubmitting"
       @confirm="confirmFail"
+      @closed="onFailClosed"
     />
   </section>
 </template>
@@ -78,10 +84,9 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { ElMessage, ElMessageBox } from 'element-plus';
 import { Plus } from '@element-plus/icons-vue';
-import { api } from '../services/api';
 import { useTaskCenter } from '../features/task-center/composables/useTaskCenter';
+import { useTaskCenterActions } from '../features/task-center/composables/useTaskCenterActions';
 import { useTaskForm } from '../features/task-center/composables/useTaskForm';
 import { useTaskBatchCreate } from '../features/task-center/composables/useTaskBatchCreate';
 import TaskKpiRow from '../features/task-center/components/TaskKpiRow.vue';
@@ -92,6 +97,7 @@ import TaskBatchCreateDialog from '../features/task-center/components/TaskBatchC
 import TaskPublishDialog from '../features/task-center/components/TaskPublishDialog.vue';
 import TaskFailDialog from '../features/task-center/components/TaskFailDialog.vue';
 import AppleButton from '../components/AppleButton.vue';
+import ErrorAlert from '../components/ErrorAlert.vue';
 import type { DistributionTask } from '@content/shared';
 
 const route = useRoute();
@@ -99,10 +105,12 @@ const router = useRouter();
 
 const {
   loading,
+  error: listError,
   tasks,
   pagination,
   kpis,
   kpiLoading,
+  kpiError,
   filters,
   setPage,
   setPageSize,
@@ -121,6 +129,8 @@ const refreshAfterSave = async () => {
   await loadKPIs();
 };
 
+const writeError = ref<string | null>(null);
+
 // Residual #190: refresh list + KPIs after create/edit so table is not stale.
 const {
   dialogVisible: formDialogVisible,
@@ -130,7 +140,8 @@ const {
   open: openFormDialog,
   submit: submitForm
 } = useTaskForm(undefined, {
-  onSaved: refreshAfterSave
+  onSaved: refreshAfterSave,
+  writeError
 });
 
 // Residual #212: batch create via existing batchCreateTasks client.
@@ -144,7 +155,25 @@ const {
   addRow: addBatchRow,
   removeRow: removeBatchRow,
   submit: submitBatch
-} = useTaskBatchCreate({ onSaved: refreshAfterSave });
+} = useTaskBatchCreate({ onSaved: refreshAfterSave, writeError });
+
+const {
+  actionError,
+  publishDialogVisible,
+  publishSubmitting,
+  failDialogVisible,
+  failSubmitting,
+  handleSchedule,
+  handlePublish,
+  confirmPublish,
+  onPublishClosed,
+  handleComplete,
+  handleFail,
+  confirmFail,
+  onFailClosed,
+  handleCancel,
+  handleReassign
+} = useTaskCenterActions({ refresh });
 
 /**
  * Residual #194: seed create dialog from active list filters (route.query seeds
@@ -198,13 +227,6 @@ onMounted(() => {
   router.replace({ name: 'tasks', query: nextQuery });
 });
 
-const publishDialogVisible = ref(false);
-const publishSubmitting = ref(false);
-const selectedTaskId = ref<string | null>(null);
-
-const failDialogVisible = ref(false);
-const failSubmitting = ref(false);
-
 function handleSearch() {
   refresh();
 }
@@ -215,140 +237,6 @@ function handleView(task: DistributionTask) {
 
 function handleEdit(task: DistributionTask) {
   openForm(task);
-}
-
-// Residual #180: list schedule/complete were missing — draft stuck after #176.
-async function handleSchedule(task: DistributionTask) {
-  try {
-    const { value } = await ElMessageBox.prompt(
-      `为任务「${task.title || task.taskId}」设置排期时间（如 2026-07-25T10:00:00）`,
-      '任务排期',
-      {
-        confirmButtonText: '确认排期',
-        cancelButtonText: '返回',
-        inputPlaceholder: 'YYYY-MM-DDTHH:mm:ss',
-        inputValue: task.plannedAt?.slice(0, 19) || '',
-        inputValidator: (v) => {
-          if (!v || !v.trim()) return '请填写排期时间';
-          const d = new Date(v.trim());
-          return (!Number.isNaN(d.getTime()) && v.trim().length >= 10) || '排期时间格式无效';
-        }
-      }
-    );
-    await api.scheduleTask(task.taskId, { plannedAt: value.trim() });
-    ElMessage.success('任务已排期');
-    refresh();
-  } catch {
-    // User dismissed prompt or interceptor handled API error.
-  }
-}
-
-function handlePublish(task: DistributionTask) {
-  selectedTaskId.value = task.taskId;
-  publishDialogVisible.value = true;
-}
-
-async function confirmPublish(data: { evidenceUrl?: string; note?: string }) {
-  if (!selectedTaskId.value) return;
-  publishSubmitting.value = true;
-  try {
-    await api.publishTask(selectedTaskId.value, data);
-    ElMessage.success('任务发布成功');
-    publishDialogVisible.value = false;
-    refresh();
-  } catch {
-    // Error handled by interceptor
-  } finally {
-    publishSubmitting.value = false;
-  }
-}
-
-async function handleComplete(task: DistributionTask) {
-  try {
-    await ElMessageBox.confirm(
-      `确认将任务「${task.title || task.taskId}」标记为已完成？归因窗口将关闭。`,
-      '标记完成',
-      { type: 'warning', confirmButtonText: '确认完成', cancelButtonText: '返回' }
-    );
-    await api.completeTask(task.taskId);
-    ElMessage.success('任务已完成');
-    refresh();
-  } catch {
-    // User dismissed or interceptor handled API error.
-  }
-}
-
-function handleFail(task: DistributionTask) {
-  selectedTaskId.value = task.taskId;
-  failDialogVisible.value = true;
-}
-
-async function confirmFail(data: {
-  failReason: string;
-  failCategory?: string;
-  evidenceUrl?: string;
-  note?: string;
-}) {
-  if (!selectedTaskId.value) return;
-  failSubmitting.value = true;
-  try {
-    await api.failTask(selectedTaskId.value, data);
-    ElMessage.success('任务已标记为失败');
-    failDialogVisible.value = false;
-    refresh();
-  } catch {
-    // Error handled by interceptor
-  } finally {
-    failSubmitting.value = false;
-  }
-}
-
-// Residual #175: list cancel was a pure no-op (only set selectedTaskId).
-// Mirror detail cancel: prompt reason → api.cancelTask({ reason }) → refresh.
-async function handleCancel(task: DistributionTask) {
-  try {
-    const { value } = await ElMessageBox.prompt(
-      `确认取消任务「${task.title || task.taskId}」？请输入取消原因。`,
-      '取消任务',
-      {
-        confirmButtonText: '确认取消',
-        cancelButtonText: '返回',
-        inputPlaceholder: '取消原因',
-        type: 'warning',
-        inputValidator: (v) => (!!v && v.trim().length > 0) || '请填写取消原因'
-      }
-    );
-    await api.cancelTask(task.taskId, { reason: value.trim() });
-    ElMessage.success('任务已取消');
-    refresh();
-  } catch {
-    // User dismissed prompt or interceptor handled API error.
-  }
-}
-
-/**
- * Residual #204: list reassign — detail already prompts assigneeId; wire same
- * flow so operators need not open detail for triage reassignment.
- */
-async function handleReassign(task: DistributionTask) {
-  try {
-    const { value } = await ElMessageBox.prompt(
-      `为任务「${task.title || task.taskId}」指定新执行人 ID`,
-      '转派任务',
-      {
-        confirmButtonText: '确认转派',
-        cancelButtonText: '返回',
-        inputPlaceholder: '执行人 ID',
-        inputValue: task.assigneeId || '',
-        inputValidator: (v) => (!!v && v.trim().length > 0) || '请填写执行人 ID'
-      }
-    );
-    await api.reassignTask(task.taskId, { assigneeId: value.trim() });
-    ElMessage.success('任务已转派');
-    refresh();
-  } catch {
-    // User dismissed prompt or interceptor handled API error.
-  }
 }
 </script>
 

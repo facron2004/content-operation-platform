@@ -31,6 +31,8 @@ INSERT OR REPLACE INTO "MerchantDailyMetrics" (
   "verifyAmountFen",
   "orderCount",
   "packageCount",
+  "refundCount",
+  "verifyCount",
   "updatedAt"
 )
 WITH base AS (
@@ -43,6 +45,8 @@ WITH base AS (
     oh."paidAmountWalletFen" AS "paidAmountWalletFen",
     oh."paidAmountBonusFen" AS "paidAmountBonusFen",
     oh."paidAmountCardFen" AS "paidAmountCardFen",
+    oh."refundAmountFen" AS "refundAmountFen",
+    oh."verifyTime" AS "verifyTime",
     oh."verifyAmountFen" AS "verifyAmountFen",
     oh."packageId" AS "packageId"
   FROM "OrderHeader" oh
@@ -65,11 +69,13 @@ base_agg AS (
     "merchantName",
     "dateKey",
     COUNT(*) AS "paidOrderCount",
+    COUNT(CASE WHEN b."refundAmountFen" > 0 THEN 1 END) AS "refundCount",
+    COUNT(CASE WHEN b."verifyTime" IS NOT NULL THEN 1 END) AS "verifyCount",
     COALESCE(SUM("paidAmountFen"), 0) AS "paidAmountOnlineFen",
     COALESCE(SUM("paidAmountWalletFen"), 0) AS "paidAmountWalletFen",
     COALESCE(SUM("paidAmountBonusFen"), 0) AS "paidAmountBonusFen",
     COALESCE(SUM("paidAmountCardFen"), 0) AS "paidAmountCardFen",
-    COALESCE(SUM("verifyAmountFen"), 0) AS "verifyAmountFen",
+    COALESCE(SUM(CASE WHEN b."verifyTime" IS NOT NULL THEN b."verifyAmountFen" ELSE 0 END), 0) AS "verifyAmountFen",
     COUNT(*) AS "orderCount",
     COUNT(DISTINCT b."packageId") AS "packageCount"
   FROM base b
@@ -112,6 +118,8 @@ SELECT
   COALESCE(b."verifyAmountFen", 0) AS "verifyAmountFen",
   COALESCE(b."orderCount", 0) AS "orderCount",
   COALESCE(b."packageCount", 0) AS "packageCount",
+  COALESCE(b."refundCount", 0) AS "refundCount",
+  COALESCE(b."verifyCount", 0) AS "verifyCount",
   ? AS "updatedAt"
 FROM spine s
 LEFT JOIN base_agg b ON b."merchantName" = s."merchantName" AND b."dateKey" = s."dateKey"

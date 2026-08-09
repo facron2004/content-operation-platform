@@ -13,7 +13,7 @@ import {
   movingSkusCacheKey,
   stagnantSkusCacheKey
 } from './movement-list';
-import { paginateMovementSkuRows } from './movement-skus';
+import { paginateMovementSkuRows } from './movement-sku-projection';
 import { loadMovementToday } from './movement-today';
 
 export type {

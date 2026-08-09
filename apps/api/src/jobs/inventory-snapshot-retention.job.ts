@@ -7,6 +7,7 @@ import {
   INVENTORY_SNAPSHOT_RETENTION_DAYS
 } from '../common/sql-chunk';
 import { beijingDateKey, shiftDateKey } from '@content/shared';
+import { JobRunnerService } from './job-runner.service';
 
 /**
  * Bounded JeeSiteInventoryDailySnapshot retention.
@@ -21,7 +22,10 @@ export class InventorySnapshotRetentionJob {
   private readonly logger = new Logger(InventorySnapshotRetentionJob.name);
   private running = false;
 
-  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(JobRunnerService) private readonly jobRunner: JobRunnerService
+  ) {}
 
   /** Daily retention sweep — staggered after audit purge (4am). */
   @Cron(CronExpression.EVERY_DAY_AT_5AM)
@@ -31,18 +35,20 @@ export class InventorySnapshotRetentionJob {
       return;
     }
     this.running = true;
-    try {
-      const deleted = await this.purgeOlderThan(INVENTORY_SNAPSHOT_RETENTION_DAYS);
-      if (deleted > 0) {
-        this.logger.log(
-          `Purged ${deleted} JeeSiteInventoryDailySnapshot rows older than ${INVENTORY_SNAPSHOT_RETENTION_DAYS}d`
-        );
-      }
-    } catch (err) {
-      this.logger.warn(`JeeSiteInventoryDailySnapshot retention failed: ${err}`);
-    } finally {
-      this.running = false;
-    }
+    await this.jobRunner
+      .runJob('inventory-snapshot-retention', async (setMeta) => {
+        const deleted = await this.purgeOlderThan(INVENTORY_SNAPSHOT_RETENTION_DAYS);
+        setMeta({ deleted, retentionDays: INVENTORY_SNAPSHOT_RETENTION_DAYS });
+        if (deleted > 0) {
+          this.logger.log(
+            `Purged ${deleted} JeeSiteInventoryDailySnapshot rows older than ${INVENTORY_SNAPSHOT_RETENTION_DAYS}d`
+          );
+        }
+        return deleted;
+      })
+      .finally(() => {
+        this.running = false;
+      });
   }
 
   /**

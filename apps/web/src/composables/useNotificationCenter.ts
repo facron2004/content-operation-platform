@@ -1,4 +1,4 @@
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { computed, onMounted, onScopeDispose, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessageBox } from 'element-plus';
 import { useNotifications, type Notification } from '../services/notification.service';
@@ -30,6 +30,6 @@ export function useNotificationCenter() {
       notifications.value = u;
     });
   });
-  onUnmounted(() => unsubscribe?.());
+  onScopeDispose(() => unsubscribe?.());
   return { visible, notifications, unreadCount, markAllAsRead, remove, handleClick, clearAll };
 }

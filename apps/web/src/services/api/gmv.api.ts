@@ -1,6 +1,8 @@
 import { withForce } from './with-force';
 import client from '../http-client';
+import type { AxiosRequestConfig } from 'axios';
 import type { RetryableConfig } from '../http-client-utils';
+import { buildBusinessIntentKey } from '../idempotency-key';
 
 export interface GmvCompareDelta {
   totalGmv?: number | null;
@@ -94,12 +96,13 @@ export interface GmvRefreshResult {
   skipped: number;
   errors: number;
   pagesFetched: number;
+  pullWarnings?: string[];
   recomputeWarnings?: string[];
   kpi?: GmvKpi;
 }
 
 export type GmvRefreshJobStatus =
-  'queued' | 'pulling' | 'recomputing' | 'finalizing' | 'done' | 'error';
+  'queued' | 'pulling' | 'recomputing' | 'finalizing' | 'done' | 'error' | 'interrupted';
 
 export interface GmvRefreshProgress {
   pagesFetched: number;
@@ -133,15 +136,19 @@ export interface GmvRefreshStartResponse {
  * immediately with a jobId — the heavy work runs server-side and is polled via
  * getGmvRefreshStatus, so wide ranges (e.g. 30 days) never hit the HTTP timeout.
  */
-export async function startGmvRefresh(startDate?: string, endDate?: string) {
+export async function startGmvRefresh(startDate: string, endDate: string, sourceVersion: string) {
+  const config: AxiosRequestConfig & { __silentError__: true } = {
+    timeout: 30000,
+    __silentError__: true,
+    headers: {
+      'Idempotency-Key': buildBusinessIntentKey('data-backfill', startDate, endDate, sourceVersion)
+    }
+  };
   return (
     await client.post<GmvRefreshStartResponse>(
       `/gmv/refresh?_=${Date.now()}`,
       { startDate, endDate },
-      {
-        timeout: 30000,
-        __silentError__: true
-      } as RetryableConfig
+      config
     )
   ).data;
 }
@@ -194,8 +201,8 @@ export async function getGmvDistribution(
   force = false
 ) {
   return (
-    await client.get<GmvDistributionResponse>(withForce('/gmv/distribution', force), {
-      params: { dim, limit },
+    await client.get<GmvDistributionResponse>(withForce(`/gmv/distribution?dim=${dim}`, force), {
+      params: { limit },
       timeout: 10000
     })
   ).data;

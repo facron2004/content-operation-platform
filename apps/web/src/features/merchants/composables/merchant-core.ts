@@ -50,7 +50,8 @@ export function createMerchantState(query: LocationQuery = {}) {
   return {
     loading: ref(false),
     detailLoading: ref(false),
-    loadError: ref<string | null>(null),
+    listError: ref<string | null>(null),
+    detailError: ref<string | null>(null),
     merchants: ref<MerchantListItem[]>([]),
     search: ref((query.search as string) || ''),
     // Residual #219: areaId + sort (API MerchantsListQueryDto already applied).
@@ -87,12 +88,15 @@ export async function loadMerchantList(params: {
   merchants: Ref<MerchantListItem[]>;
   hasMore: Ref<boolean>;
   loading: Ref<boolean>;
-  loadError: Ref<string | null>;
+  listError: Ref<string | null>;
   // Residual #266: optional honesty sinks for MERCHANT_LIST_CACHE_CAP.
   listTruncated?: Ref<boolean>;
   listLimit?: Ref<number | null>;
+  isCurrent?: () => boolean;
 }): Promise<void> {
+  const isCurrent = params.isCurrent ?? (() => true);
   params.loading.value = true;
+  if (isCurrent()) params.listError.value = null;
   try {
     const result = await listMerchants({
       search: params.search.value || undefined,
@@ -102,6 +106,7 @@ export async function loadMerchantList(params: {
       page: params.page.value,
       pageSize: 20
     });
+    if (!isCurrent()) return;
     params.merchants.value = result.items;
     params.hasMore.value = result.pagination.hasMore;
     if (params.listTruncated) params.listTruncated.value = Boolean(result.truncated);
@@ -109,9 +114,9 @@ export async function loadMerchantList(params: {
       params.listLimit.value =
         typeof result.limit === 'number' && result.limit > 0 ? result.limit : null;
   } catch (err) {
-    params.loadError.value = extractErrorMessage(err, '加载商家列表失败');
+    if (isCurrent()) params.listError.value = extractErrorMessage(err, '加载商家列表失败');
   } finally {
-    params.loading.value = false;
+    if (isCurrent()) params.loading.value = false;
   }
 }
 
@@ -122,7 +127,7 @@ export async function loadMerchantDetail(params: {
   trend: Ref<MerchantTrendResponse | null>;
   skuList: Ref<MerchantSkuItem[]>;
   competitors: Ref<MerchantCompetitor[]>;
-  loadError: Ref<string | null>;
+  detailError: Ref<string | null>;
   // Residual #235: forward MerchantTrendQueryDto days (default 30).
   days?: Ref<number> | number;
   // Residual #250: optional honesty sinks for listSkus LIMIT.
@@ -132,9 +137,12 @@ export async function loadMerchantDetail(params: {
   competitorsTruncated?: Ref<boolean>;
   competitorsLimit?: Ref<number | null>;
   competitorsMatched?: Ref<number | null>;
+  isCurrent?: () => boolean;
 }): Promise<void> {
   if (!params.merchantId) return;
+  const isCurrent = params.isCurrent ?? (() => true);
   params.detailLoading.value = true;
+  if (isCurrent()) params.detailError.value = null;
   const dayCount = clampMerchantDetailDays(
     typeof params.days === 'number' ? params.days : params.days?.value
   );
@@ -145,6 +153,7 @@ export async function loadMerchantDetail(params: {
       getMerchantSkus(params.merchantId, dayCount),
       getMerchantCompetitors(params.merchantId)
     ]);
+    if (!isCurrent()) return;
     params.profile.value = p;
     params.trend.value = t;
     params.skuList.value = skus.items;
@@ -168,8 +177,8 @@ export async function loadMerchantDetail(params: {
         typeof comp.matched === 'number' && Number.isFinite(comp.matched) ? comp.matched : null;
     }
   } catch (err) {
-    params.loadError.value = extractErrorMessage(err, '加载商家详情失败');
+    if (isCurrent()) params.detailError.value = extractErrorMessage(err, '加载商家详情失败');
   } finally {
-    params.detailLoading.value = false;
+    if (isCurrent()) params.detailLoading.value = false;
   }
 }

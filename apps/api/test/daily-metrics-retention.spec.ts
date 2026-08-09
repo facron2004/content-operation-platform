@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { DailyMetricsRetentionJob } from '../src/jobs/daily-metrics-retention.job';
+import { createJobRunnerMock } from './helpers/job-runner';
 import {
   DAILY_METRICS_PURGE_BATCH,
   DAILY_METRICS_PURGE_MAX_BATCHES,
@@ -14,12 +15,13 @@ describe('DailyMetricsRetentionJob', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    job = new DailyMetricsRetentionJob(prisma as never);
+    job = new DailyMetricsRetentionJob(prisma as never, createJobRunnerMock() as never);
   });
 
-  it('exports retention longer than interactive 90d window', () => {
-    expect(DAILY_METRICS_RETENTION_DAYS).toBe(180);
-    expect(DAILY_METRICS_RETENTION_DAYS).toBeGreaterThan(90);
+  it('exports retention covering a calendar year plus prior-year basis', () => {
+    expect(DAILY_METRICS_RETENTION_DAYS).toBe(800);
+    // Must outlast the merchant-sales year window (366d) and its YoY basis.
+    expect(DAILY_METRICS_RETENTION_DAYS).toBeGreaterThan(366 * 2);
     expect(DAILY_METRICS_PURGE_BATCH).toBe(2_000);
     expect(DAILY_METRICS_PURGE_MAX_BATCHES).toBe(25);
   });

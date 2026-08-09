@@ -51,7 +51,7 @@ export function buildDeltas(
     salesAmount: deltaRatio(curr.salesAmount, prev.salesAmount),
     tradeAmount: deltaRatio(curr.tradeAmount, prev.tradeAmount),
     netGmv: deltaRatio(curr.netGmv, prev.netGmv),
-    netSales: deltaRatio(curr.netSales, prev.netSales),
+    writeOffAmount: deltaRatio(curr.writeOffAmount, prev.writeOffAmount),
     refundAmount: deltaRatio(curr.refundAmount, prev.refundAmount),
     verifyRate: deltaRatio(curr.verifyRate, prev.verifyRate),
     refundRate: deltaRatio(curr.refundRate, prev.refundRate),
@@ -71,9 +71,10 @@ export async function queryOverview(
        COUNT(*) AS "orderCount",
        COALESCE(SUM("paidAmountFen") / 100.0, 0) AS "salesAmount",
        COALESCE(SUM("paidAmountWalletFen") / 100.0, 0) AS "walletAmount",
+       COALESCE(SUM(CASE WHEN ${IS_VERIFIED} THEN "paidAmountFen" + "paidAmountWalletFen" ELSE 0 END) / 100.0, 0) AS "writeOffAmount",
        COALESCE(SUM("orderAmountFen") / 100.0, 0) AS "faceAmount",
        (SELECT COALESCE(SUM(${REFUND_COMPONENTS_FEN('r.')}) / 100.0, 0) FROM "OrderHeader" r WHERE ${REFUND_PAID_WHERE} AND r."refundAmountFen" > 0) AS "refundAmount",
-       COALESCE(SUM("verifyAmountFen") / 100.0, 0) AS "verifyAmount",
+       COALESCE(SUM(CASE WHEN ${IS_VERIFIED} THEN "verifyAmountFen" ELSE 0 END) / 100.0, 0) AS "verifyAmount",
        COALESCE(SUM(CASE WHEN ${IS_VERIFIED} THEN 1 ELSE 0 END), 0) AS "verifiedCount",
        COALESCE(SUM(CASE WHEN ${IS_EXPIRED} THEN 1 ELSE 0 END), 0) AS "expiredCount",
        COALESCE(SUM(CASE WHEN "refundAmountFen" > 0 THEN 1 ELSE 0 END), 0) AS "refundCount",
@@ -89,6 +90,7 @@ export async function queryOverview(
     orderCount: number | null;
     salesAmount: number | null;
     walletAmount: number | null;
+    writeOffAmount: number | null;
     faceAmount: number | null;
     refundAmount: number | null;
     verifyAmount: number | null;
@@ -119,7 +121,7 @@ export async function queryOverview(
     walletAmount,
     tradeAmount,
     netGmv,
-    netSales: salesAmount - refundAmount,
+    writeOffAmount: n(r?.writeOffAmount),
     faceAmount: n(r?.faceAmount),
     refundAmount,
     verifyAmount,

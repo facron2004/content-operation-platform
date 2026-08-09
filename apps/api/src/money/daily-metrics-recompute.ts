@@ -61,7 +61,7 @@ export async function recomputeDailyMetricsRange(
           COALESCE(SUM(oh."paidAmountWalletFen"), 0) AS "gmvWalletFen",
           COALESCE(SUM(oh."paidAmountBonusFen"), 0) AS "gmvBonusFen",
           COALESCE(SUM(oh."paidAmountCardFen"), 0) AS "gmvCardFen",
-          COALESCE(SUM(oh."verifyAmountFen"), 0) AS "totalVerifyFen",
+          COALESCE(SUM(CASE WHEN oh."verifyTime" IS NOT NULL THEN oh."verifyAmountFen" ELSE 0 END), 0) AS "totalVerifyFen",
           COUNT(*) AS "totalOrders",
           COUNT(*) AS "paidOrderCount",
           SUM(CASE WHEN oh."verifyTime" IS NOT NULL THEN 1 ELSE 0 END) AS "verifyCount",

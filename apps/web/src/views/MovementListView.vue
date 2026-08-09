@@ -45,6 +45,7 @@
       :merchant-name="timelineMerchantName"
       :days="timelineDays"
       :timeline="timelinePoints"
+      :error="timelineError"
       @change-days="setTimelineDays"
     />
   </section>
@@ -97,6 +98,7 @@ const {
   merchantName: timelineMerchantName,
   days: timelineDays,
   timeline: timelinePoints,
+  error: timelineError,
   open: openTimeline,
   setDays: setTimelineDays
 } = useMovementTimeline();

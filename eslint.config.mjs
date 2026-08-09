@@ -38,7 +38,6 @@ export default tseslint.config(
     files: ['**/*.ts'],
     languageOptions: {
       parserOptions: {
-        project: ['./tsconfig.base.json', './apps/api/tsconfig.json', './apps/web/tsconfig.json'],
         tsconfigRootDir: import.meta.dirname
       }
     },
@@ -77,7 +76,6 @@ export default tseslint.config(
         parser: tseslint.parser,
         ecmaVersion: 'latest',
         sourceType: 'module',
-        project: ['./apps/web/tsconfig.json'],
         tsconfigRootDir: import.meta.dirname,
         extraFileExtensions: ['.vue']
       }

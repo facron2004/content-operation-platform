@@ -3,6 +3,8 @@
 **Date**: 2026-07-07
 **Scope**: 5 dimensions (Backend Architecture / Frontend Architecture / Core Domain Module / Shared Packages & Tests / Security & Configuration)
 
+> **当前对齐说明（2026-08-09）**：本文件是 2026-07-07 的历史审计快照，原始日期、评分和测试统计保留。当前代码已继续完成 Prisma 迁移基线（P0-03）与关键写入幂等（P0-04），并有独立 API/Web 行为回归；旧文档中的“前端测试延期”和固定 `291/24` 数字不能代表当前状态。当前仅做 API/Web/shared/Prisma/文档验证，Windows Desktop、EXE、安装器和安装后 smoke 明确延期，最新证据见 [文档对齐总览](docs/DOCUMENTATION-STATUS.md)。
+
 ## Resolution Status
 
 | Priority | Total | Fixed | Status |
@@ -13,7 +15,7 @@
 | P3 Low | 12 | 0 | Deferred |
 
 **Commit**: `c590ff8` — `fix(audit): resolve P0/P1/P2 issues from full codebase audit`
-**Tests**: 291 passing across 24 spec files (was 251 / 22 files)
+**Tests (2026-07-07 historical snapshot)**: 291 passing across 24 spec files (was 251 / 22 files)
 **Compilation**: 0 TypeScript errors across shared / api / web packages
 
 ## Overall Scores

@@ -15,11 +15,12 @@ describe('residual #237 task edit identity fields', () => {
     expect(src).toMatch(/channel:\s*form\.channel/);
     // Edit path must spread identityFields into updateTask.
     expect(src).toMatch(
-      /api\.updateTask\(editingTask\.value\.taskId,\s*\{\s*\.\.\.identityFields,\s*\.\.\.optionalFields\s*\}/
+      /api\.updateTask\((?:editingTask\.value|editingTaskSnapshot)\.taskId,\s*\{\s*\.\.\.identityFields,\s*\.\.\.optionalFields\s*\}/
     );
     // Create path shares the same identityFields (no dual payload drift).
-    // Residual #241 also spreads create-time status after optionalFields.
-    expect(src).toMatch(/api\.createTask\(\{\s*\.\.\.identityFields,\s*\.\.\.optionalFields/);
+    // Residual #241 also spreads create-time status into the idempotent payload.
+    expect(src).toMatch(/const payload = \{\s*\.\.\.identityFields,\s*\.\.\.optionalFields/);
+    expect(src).toMatch(/api\.createTask\(payload, createIntent\.key\)/);
   });
 
   it('UpdateTaskDto already accepts identity fields (API ready)', async () => {

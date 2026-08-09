@@ -16,6 +16,16 @@ export function responseKey(config: { method?: string; url?: string }): string {
   return requestKey(config);
 }
 
+/** Remove an in-flight slot only when the settling response still owns it. */
+export function releaseInFlightController(
+  inFlightControllers: Map<string, AbortController>,
+  config: { method?: string; url?: string; signal?: unknown }
+): void {
+  const key = responseKey(config);
+  const owner = inFlightControllers.get(key);
+  if (owner && owner.signal === config.signal) inFlightControllers.delete(key);
+}
+
 /** True for AbortController / axios cancel — not a real network failure. */
 export function isRequestCanceled(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false;
@@ -98,14 +108,10 @@ export function shouldRetry(error: AxiosError): boolean {
   // Server errors only (5xx) — timeouts and rate limits fail fast
   return s != null && s >= 500 && s < 600;
 }
-export async function restoreAuth(): Promise<string | null> {
+export async function restoreAuth(): Promise<boolean | null> {
   const a = useAuthStore();
   return (await a.refresh()) || a.loginLocally();
 }
 export function extractErrorMessage(error: unknown, fallback = '请求失败'): string {
   return extractErrorMessageBase(error, { isAxiosError: axios.isAxiosError, fallback });
-}
-export function setAuthorization(config: InternalAxiosRequestConfig, token: string) {
-  config.headers = config.headers ?? ({} as InternalAxiosRequestConfig['headers']);
-  (config.headers as Record<string, string>).Authorization = `Bearer ${token}`;
 }

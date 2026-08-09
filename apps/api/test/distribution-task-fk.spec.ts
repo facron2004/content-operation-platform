@@ -1,6 +1,10 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DistributionTaskService } from '../src/distribution-task/distribution-task.service';
+import { CancelTaskService } from '../src/distribution-task/application/cancel-task.service';
+import { CreateTaskService } from '../src/distribution-task/application/create-task.service';
+import { PublishTaskService } from '../src/distribution-task/application/publish-task.service';
+import { loadTaskFkBatch } from '../src/distribution-task/distribution-task-fk';
 
 type RowMap = {
   packages: Map<
@@ -424,10 +428,13 @@ function seedBase(store: RowMap) {
 
 describe('DistributionTaskService FK consistency + assignee resolve', () => {
   let service: DistributionTaskService;
+  let createService: CreateTaskService;
+  let publishService: PublishTaskService;
+  let cancelService: CancelTaskService;
   let store: RowMap;
   let prisma: ReturnType<typeof makePrisma>;
 
-  // Execution service is only used by publish/fail/cancel — stub it.
+  // Command services and the legacy query/mutation service share this stub.
   const executionService = {
     create: vi.fn(),
     findByTaskId: vi.fn(async () => [])
@@ -445,20 +452,40 @@ describe('DistributionTaskService FK consistency + assignee resolve', () => {
     seedBase(store);
     prisma = makePrisma(store);
     service = new DistributionTaskService(prisma as never, executionService as never);
+    createService = new CreateTaskService(prisma as never);
+    publishService = new PublishTaskService(prisma as never, executionService as never);
+    cancelService = new CancelTaskService(prisma as never, executionService as never);
   });
 
   it('rejects missing packageId on create', async () => {
     await expect(
-      service.create({
+      createService.create({
         packageId: 'pkg-missing',
         channel: 'wechat_group'
       })
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 
+  it('skips empty FK probes and uses equality for single ids', async () => {
+    const queryRaw = prisma.$queryRawUnsafe as ReturnType<typeof vi.fn>;
+    queryRaw.mockClear();
+
+    const empty = await loadTaskFkBatch(prisma as never, [
+      { packageId: '', channel: 'wechat_group' }
+    ]);
+    expect(empty.packages.size).toBe(0);
+    expect(queryRaw).not.toHaveBeenCalled();
+
+    await loadTaskFkBatch(prisma as never, [{ packageId: 'pkg-a', channel: 'wechat_group' }]);
+    expect(queryRaw).toHaveBeenCalled();
+    for (const [sql] of queryRaw.mock.calls) {
+      expect(String(sql)).not.toMatch(/IN\s*\(\s*\?\s*\)/i);
+    }
+  });
+
   it('rejects group/package area mismatch', async () => {
     await expect(
-      service.create({
+      createService.create({
         packageId: 'pkg-a',
         channel: 'wechat_group',
         groupId: 'g-other'
@@ -468,7 +495,7 @@ describe('DistributionTaskService FK consistency + assignee resolve', () => {
 
   it('rejects campaign scope that does not cover package', async () => {
     await expect(
-      service.create({
+      createService.create({
         packageId: 'pkg-a',
         channel: 'wechat_group',
         campaignId: 'camp-other'
@@ -478,7 +505,7 @@ describe('DistributionTaskService FK consistency + assignee resolve', () => {
 
   it('rejects terminal campaign bind', async () => {
     await expect(
-      service.create({
+      createService.create({
         packageId: 'pkg-a',
         channel: 'wechat_group',
         campaignId: 'camp-done'
@@ -488,7 +515,7 @@ describe('DistributionTaskService FK consistency + assignee resolve', () => {
 
   it('rejects disabled group bind', async () => {
     await expect(
-      service.create({
+      createService.create({
         packageId: 'pkg-a',
         channel: 'wechat_group',
         groupId: 'g-off'
@@ -498,7 +525,7 @@ describe('DistributionTaskService FK consistency + assignee resolve', () => {
 
   it('rejects fallback package on different merchant', async () => {
     await expect(
-      service.create({
+      createService.create({
         packageId: 'pkg-a',
         channel: 'wechat_group',
         fallbackPackageId: 'pkg-c-other-merchant'
@@ -508,7 +535,7 @@ describe('DistributionTaskService FK consistency + assignee resolve', () => {
 
   it('rejects unapproved content bind', async () => {
     await expect(
-      service.create({
+      createService.create({
         packageId: 'pkg-a',
         channel: 'wechat_group',
         contentId: 'copy-pending'
@@ -518,14 +545,14 @@ describe('DistributionTaskService FK consistency + assignee resolve', () => {
 
   it('rejects inactive / missing assignee', async () => {
     await expect(
-      service.create({
+      createService.create({
         packageId: 'pkg-a',
         channel: 'wechat_group',
         assigneeId: 'u-off'
       })
     ).rejects.toThrow(/已停用/);
     await expect(
-      service.create({
+      createService.create({
         packageId: 'pkg-a',
         channel: 'wechat_group',
         assigneeId: 'no-such-user'
@@ -535,7 +562,7 @@ describe('DistributionTaskService FK consistency + assignee resolve', () => {
 
   it('rejects waiting_audit without contentId', async () => {
     await expect(
-      service.create({
+      createService.create({
         packageId: 'pkg-a',
         channel: 'wechat_group',
         status: 'waiting_audit'
@@ -545,7 +572,7 @@ describe('DistributionTaskService FK consistency + assignee resolve', () => {
 
   it('rejects scheduled without contentId or body', async () => {
     await expect(
-      service.create({
+      createService.create({
         packageId: 'pkg-a',
         channel: 'wechat_group',
         status: 'scheduled',
@@ -555,7 +582,7 @@ describe('DistributionTaskService FK consistency + assignee resolve', () => {
   });
 
   it('publish rejects empty free-form scheduled task', async () => {
-    const created = await service.create({
+    const created = await createService.create({
       packageId: 'pkg-a',
       channel: 'wechat_group',
       status: 'draft'
@@ -565,11 +592,11 @@ describe('DistributionTaskService FK consistency + assignee resolve', () => {
     row.contentId = null;
     row.title = null;
     row.body = null;
-    await expect(service.publish(created.taskId, {})).rejects.toThrow(/contentId 或 body/);
+    await expect(publishService.publish(created.taskId, {})).rejects.toThrow(/contentId 或 body/);
   });
 
   it('allows waiting_audit with pending contentId, rejects unapproved for draft', async () => {
-    const waiting = await service.create({
+    const waiting = await createService.create({
       packageId: 'pkg-a',
       channel: 'wechat_group',
       status: 'waiting_audit',
@@ -581,7 +608,7 @@ describe('DistributionTaskService FK consistency + assignee resolve', () => {
     expect(store.tasks.get(waiting.taskId)?.contentId).toBe('copy-pending');
 
     await expect(
-      service.create({
+      createService.create({
         packageId: 'pkg-a',
         channel: 'wechat_group',
         status: 'draft',
@@ -592,7 +619,7 @@ describe('DistributionTaskService FK consistency + assignee resolve', () => {
 
   it('stamps assigneeName from AppUser displayName, ignores free-form name', async () => {
     // getById after insert needs SELECT * path — extend mock for full task row.
-    const created = await service.create({
+    const created = await createService.create({
       packageId: 'pkg-a',
       channel: 'wechat_group',
       groupId: 'g-ok',
@@ -611,17 +638,17 @@ describe('DistributionTaskService FK consistency + assignee resolve', () => {
   });
 
   it('reassign resolves active AppUser and rejects spoofed name', async () => {
-    const created = await service.create({
+    const created = await createService.create({
       packageId: 'pkg-a',
       channel: 'wechat_group'
     });
-    const reassigned = await service.reassign(created.taskId, 'u1', 'Evil');
+    const reassigned = await cancelService.reassign(created.taskId, 'u1', 'Evil');
     expect(reassigned.assigneeId).toBe('u1');
     expect(reassigned.assigneeName).toBe('Alice');
   });
 
   it('publish rejects when bound content is no longer approved', async () => {
-    const created = await service.create({
+    const created = await createService.create({
       packageId: 'pkg-a',
       channel: 'wechat_group',
       contentId: 'copy-ok',
@@ -635,18 +662,18 @@ describe('DistributionTaskService FK consistency + assignee resolve', () => {
     store.copies.get('copy-ok')!.auditStatus = 'rejected';
 
     await expect(
-      service.publish(created.taskId, { evidenceUrl: 'https://example.com/e.png' })
+      publishService.publish(created.taskId, { evidenceUrl: 'https://example.com/e.png' })
     ).rejects.toThrow(/审核状态/);
   });
 
   it('rejects second live task for the same contentId', async () => {
-    await service.create({
+    await createService.create({
       packageId: 'pkg-a',
       channel: 'wechat_group',
       contentId: 'copy-ok'
     });
     await expect(
-      service.create({
+      createService.create({
         packageId: 'pkg-a',
         channel: 'wechat_group',
         contentId: 'copy-ok'
@@ -655,7 +682,7 @@ describe('DistributionTaskService FK consistency + assignee resolve', () => {
   });
 
   it('publish re-stamps title/body/cta from approved copy (no laundering)', async () => {
-    const created = await service.create({
+    const created = await createService.create({
       packageId: 'pkg-a',
       channel: 'wechat_group',
       contentId: 'copy-ok',
@@ -667,7 +694,7 @@ describe('DistributionTaskService FK consistency + assignee resolve', () => {
     row.status = 'scheduled';
     row.plannedAt = new Date().toISOString();
 
-    const published = await service.publish(created.taskId, {
+    const published = await publishService.publish(created.taskId, {
       evidenceUrl: 'https://example.com/e.png'
     });
     // Residual #173: list shell — free-form body/cta asserted via store.
@@ -679,7 +706,7 @@ describe('DistributionTaskService FK consistency + assignee resolve', () => {
   });
 
   it('publish free-form high-risk body is rejected by machine audit', async () => {
-    const created = await service.create({
+    const created = await createService.create({
       packageId: 'pkg-a',
       channel: 'wechat_group',
       title: '全网最低福利',
@@ -691,12 +718,12 @@ describe('DistributionTaskService FK consistency + assignee resolve', () => {
     row.plannedAt = new Date().toISOString();
 
     await expect(
-      service.publish(created.taskId, { evidenceUrl: 'https://example.com/e.png' })
+      publishService.publish(created.taskId, { evidenceUrl: 'https://example.com/e.png' })
     ).rejects.toThrow(/机审高风险|全网最低|禁用/);
   });
 
   it('scheduled freeze rejects packageId/channel retarget under bound contentId', async () => {
-    const created = await service.create({
+    const created = await createService.create({
       packageId: 'pkg-a',
       channel: 'wechat_group',
       contentId: 'copy-ok',
@@ -730,7 +757,7 @@ describe('DistributionTaskService FK consistency + assignee resolve', () => {
   });
 
   it('cancelled-after-publish freezes package/channel rewrite (KPI history integrity)', async () => {
-    const created = await service.create({
+    const created = await createService.create({
       packageId: 'pkg-a',
       channel: 'wechat_group',
       contentId: 'copy-ok',
@@ -753,7 +780,7 @@ describe('DistributionTaskService FK consistency + assignee resolve', () => {
   });
 
   it('failed terminal freezes attribution-sensitive fields', async () => {
-    const created = await service.create({
+    const created = await createService.create({
       packageId: 'pkg-a',
       channel: 'wechat_group',
       status: 'draft'
@@ -767,7 +794,7 @@ describe('DistributionTaskService FK consistency + assignee resolve', () => {
   });
 
   it('publish rejects bound copy package mismatch (defense-in-depth)', async () => {
-    const created = await service.create({
+    const created = await createService.create({
       packageId: 'pkg-a',
       channel: 'wechat_group',
       contentId: 'copy-ok',
@@ -780,12 +807,12 @@ describe('DistributionTaskService FK consistency + assignee resolve', () => {
     row.packageId = 'pkg-b-other-area';
 
     await expect(
-      service.publish(created.taskId, { evidenceUrl: 'https://example.com/e.png' })
+      publishService.publish(created.taskId, { evidenceUrl: 'https://example.com/e.png' })
     ).rejects.toThrow(/packageId/);
   });
 
   it('complete stamps completedAt when publishing window ends', async () => {
-    const created = await service.create({
+    const created = await createService.create({
       packageId: 'pkg-a',
       channel: 'wechat_group',
       contentId: 'copy-ok',
@@ -795,14 +822,14 @@ describe('DistributionTaskService FK consistency + assignee resolve', () => {
     row.status = 'published';
     row.publishedAt = new Date().toISOString();
 
-    const done = await service.complete(created.taskId);
+    const done = await cancelService.complete(created.taskId);
     expect(done.status).toBe('completed');
     expect(done.completedAt).toBeTruthy();
   });
 
   it('schedule promotes waiting_audit → scheduled when content approved', async () => {
     // waiting_audit allows pending content; then approve copy in store and schedule.
-    const created = await service.create({
+    const created = await createService.create({
       packageId: 'pkg-a',
       channel: 'wechat_group',
       status: 'waiting_audit',
@@ -812,7 +839,7 @@ describe('DistributionTaskService FK consistency + assignee resolve', () => {
     store.copies.get('copy-pending')!.title = 'Now Approved';
     store.copies.get('copy-pending')!.body = 'Body ok';
 
-    const scheduled = await service.schedule(
+    const scheduled = await cancelService.schedule(
       created.taskId,
       new Date(Date.now() + 3600_000).toISOString()
     );
@@ -821,26 +848,110 @@ describe('DistributionTaskService FK consistency + assignee resolve', () => {
   });
 
   it('schedule rejects when bound content still pending', async () => {
-    const created = await service.create({
+    const created = await createService.create({
       packageId: 'pkg-a',
       channel: 'wechat_group',
       status: 'waiting_audit',
       contentId: 'copy-pending'
     });
     await expect(
-      service.schedule(created.taskId, new Date(Date.now() + 3600_000).toISOString())
+      cancelService.schedule(created.taskId, new Date(Date.now() + 3600_000).toISOString())
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('complete promotes published → completed', async () => {
-    const created = await service.create({
+    const created = await createService.create({
       packageId: 'pkg-a',
       channel: 'wechat_group',
       contentId: 'copy-ok'
     });
     const row = store.tasks.get(created.taskId)!;
     row.status = 'published';
-    const completed = await service.complete(created.taskId);
+    const completed = await cancelService.complete(created.taskId);
     expect(completed.status).toBe('completed');
+  });
+
+  it('status mutators return list shells and carry cancel reason', async () => {
+    executionService.create.mockClear();
+
+    const failed = await createService.create({ packageId: 'pkg-a', channel: 'wechat_group' });
+    store.tasks.get(failed.taskId)!.status = 'scheduled';
+    const failedResult = await publishService.fail(failed.taskId, {}, 'scheduled');
+    expect(failedResult).toMatchObject({ taskId: failed.taskId, status: 'failed' });
+    expect(failedResult.trackingCode).toBeUndefined();
+
+    const cancelled = await createService.create({ packageId: 'pkg-a', channel: 'wechat_group' });
+    const cancelledResult = await cancelService.cancel(cancelled.taskId, '运营人员取消', 'draft');
+    expect(cancelledResult).toMatchObject({ taskId: cancelled.taskId, status: 'cancelled' });
+    expect(store.tasks.get(cancelled.taskId)?.cancelReason).toBe('运营人员取消');
+    expect(cancelledResult.trackingCode).toBeUndefined();
+
+    const completed = await createService.create({ packageId: 'pkg-a', channel: 'wechat_group' });
+    store.tasks.get(completed.taskId)!.status = 'published';
+    const completedResult = await cancelService.complete(completed.taskId, 'published');
+    expect(completedResult).toMatchObject({ taskId: completed.taskId, status: 'completed' });
+    expect(completedResult.trackingCode).toBeUndefined();
+    expect(executionService.create).toHaveBeenCalled();
+  });
+
+  it('uses narrow task metadata for update/delete access paths', async () => {
+    const created = await createService.create({ packageId: 'pkg-a', channel: 'wechat_group' });
+    const meta = await service.getTaskUpdateMeta(created.taskId);
+    expect(meta).toMatchObject({ packageId: 'pkg-a', status: 'draft' });
+    expect(meta.packageGeo).toEqual({ areaId: 'area-1', merchantId: 'm-1' });
+
+    await expect(
+      service.update(
+        created.taskId,
+        {},
+        {
+          status: 'draft',
+          publishedAt: null,
+          packageId: 'pkg-a',
+          contentId: null,
+          campaignId: null,
+          groupId: null,
+          fallbackPackageId: null
+        }
+      )
+    ).resolves.toMatchObject({ success: true, taskId: created.taskId, status: 'draft' });
+
+    await expect(
+      service.delete(created.taskId, { packageId: 'pkg-a', status: 'draft', publishedAt: null })
+    ).resolves.toEqual({ success: true });
+  });
+
+  it('batchCreate returns a count shell and preserves the task rows', async () => {
+    const result = await createService.batchCreate([
+      { packageId: 'pkg-a', channel: 'wechat_group' },
+      { packageId: 'pkg-a', channel: 'moments' }
+    ]);
+
+    expect(result).toEqual({ success: true, created: 2 });
+    expect(store.tasks.size).toBe(2);
+  });
+
+  it('free-form publish uses the price/stock/useRules projection', async () => {
+    const created = await createService.create({
+      packageId: 'pkg-a',
+      channel: 'wechat_group',
+      title: '标题',
+      body: '普通内容',
+      status: 'draft'
+    });
+    const row = store.tasks.get(created.taskId)!;
+    row.status = 'scheduled';
+    row.plannedAt = new Date().toISOString();
+    const published = await publishService.publish(created.taskId, {
+      evidenceUrl: 'https://example.com/e.png'
+    });
+
+    expect(published.status).toBe('published');
+    const packageQuery = (prisma.$queryRawUnsafe as ReturnType<typeof vi.fn>).mock.calls
+      .map(([sql]) => String(sql))
+      .find((sql) => sql.includes('"originalPriceFen"'));
+    expect(packageQuery).toContain('"originalPriceFen"');
+    expect(packageQuery).toContain('"useRules"');
+    expect(packageQuery).not.toContain('"merchantCooperationScore"');
   });
 });

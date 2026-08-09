@@ -17,6 +17,11 @@ import { join } from 'path';
 import { createHash, randomUUID } from 'crypto';
 import { createClient, type Client } from '@libsql/client';
 
+// Integration tests must not read the developer's external cookie cache or
+// contact JeeSite during Nest application startup. Tests that exercise cookie
+// behavior stub fetch or set the service state explicitly.
+process.env.APP_RUNTIME = 'desktop';
+
 const ROOT = join(__dirname, '..', '..', '..', '..');
 const tmpDir = join(ROOT, '.tmp-test-db');
 mkdirSync(tmpDir, { recursive: true });
@@ -30,12 +35,20 @@ const migrations = readdirSync(migrationsDir, { withFileTypes: true })
   .map((d) => d.name)
   .sort();
 
-async function appliedMigrations(client: Client): Promise<string[] | null> {
+type AppliedMigration = {
+  migration_name: string;
+  checksum: string;
+};
+
+async function appliedMigrations(client: Client): Promise<AppliedMigration[] | null> {
   try {
     const rs = await client.execute(
-      `SELECT migration_name FROM _prisma_migrations WHERE finished_at IS NOT NULL ORDER BY migration_name`
+      `SELECT migration_name, checksum FROM _prisma_migrations WHERE finished_at IS NOT NULL ORDER BY migration_name`
     );
-    return rs.rows.map((r) => String(r.migration_name));
+    return rs.rows.map((r) => ({
+      migration_name: String(r.migration_name),
+      checksum: String(r.checksum)
+    }));
   } catch {
     return null; // 无 _prisma_migrations 表 → 全新或陈旧库
   }
@@ -81,10 +94,20 @@ async function rebuildDatabase(client: Client): Promise<void> {
 const client = createClient({ url: `file:${dbPath}` });
 try {
   const applied = await appliedMigrations(client);
+  const expectedMigrations = migrations.map((name) => ({
+    migration_name: name,
+    checksum: createHash('sha256')
+      .update(readFileSync(join(migrationsDir, name, 'migration.sql'), 'utf8'))
+      .digest('hex')
+  }));
   const upToDate =
     applied !== null &&
-    applied.length === migrations.length &&
-    migrations.every((m, i) => applied[i] === m);
+    applied.length === expectedMigrations.length &&
+    expectedMigrations.every(
+      (expected, i) =>
+        applied[i]?.migration_name === expected.migration_name &&
+        applied[i]?.checksum === expected.checksum
+    );
   if (!upToDate) {
     await rebuildDatabase(client);
   }

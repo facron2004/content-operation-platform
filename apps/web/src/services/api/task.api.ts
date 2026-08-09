@@ -6,6 +6,7 @@ import type {
 } from '@content/shared';
 import client from '../http-client';
 import { cachedGet, clearCache } from '../cache.service';
+import { buildBusinessIntentKey } from '../idempotency-key';
 
 export async function listTasks(
   params: {
@@ -73,8 +74,10 @@ export type TaskWritePayload = {
   fallbackPackageId?: string;
 };
 
-export async function createTask(data: TaskWritePayload) {
-  const res = await client.post('/tasks', data);
+export async function createTask(data: TaskWritePayload, idempotencyKey: string) {
+  const res = await client.post('/tasks', data, {
+    headers: { 'Idempotency-Key': idempotencyKey }
+  });
   clearCache('/tasks');
   return res.data;
 }
@@ -99,11 +102,16 @@ export type TaskBatchItemPayload = {
   fallbackPackageId?: string;
 };
 
-export async function batchCreateTasks(data: {
-  campaignId?: string;
-  tasks: TaskBatchItemPayload[];
-}) {
-  const res = await client.post('/tasks/batch', data);
+export async function batchCreateTasks(
+  data: {
+    campaignId?: string;
+    tasks: TaskBatchItemPayload[];
+  },
+  idempotencyKey: string
+) {
+  const res = await client.post('/tasks/batch', data, {
+    headers: { 'Idempotency-Key': idempotencyKey }
+  });
   clearCache('/tasks');
   return res.data;
 }
@@ -125,9 +133,12 @@ export async function publishTask(
   data: {
     evidenceUrl?: string;
     note?: string;
-  }
+  },
+  version: string
 ) {
-  const res = await client.post(`/tasks/${encodeURIComponent(id)}/publish`, data);
+  const res = await client.post(`/tasks/${encodeURIComponent(id)}/publish`, data, {
+    headers: { 'Idempotency-Key': buildBusinessIntentKey('publish-task', id, version) }
+  });
   clearCache('/tasks');
   return res.data;
 }

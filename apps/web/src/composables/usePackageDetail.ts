@@ -1,4 +1,4 @@
-import { computed, ref } from 'vue';
+import { computed, onScopeDispose, ref } from 'vue';
 import { ElMessage } from 'element-plus';
 import type { RecommendPackageItem } from '@content/shared';
 import { currentPrice } from '@content/shared';
@@ -73,25 +73,36 @@ export function formatPackageDetailItems(items: PackageDetailItem[]): string {
 export type PackageDetailLoadTarget = {
   detailLoading: { value: boolean };
   packageDetail: { value: PackageDetailData | null };
+  detailError: { value: string | null };
 };
+export type PackageDetailRequestGuard = () => boolean;
 export async function loadPackageDetailData(
   packageId: string,
   requestId: number,
   currentRequestId: () => number,
   target: PackageDetailLoadTarget,
-  fetchDetail: (id: string) => Promise<PackageDetailResponse>
+  fetchDetail: (
+    id: string,
+    isCurrent?: PackageDetailRequestGuard
+  ) => Promise<PackageDetailResponse>,
+  isCurrent: PackageDetailRequestGuard = () => true
 ) {
+  if (!isCurrent() || requestId !== currentRequestId()) return;
   target.detailLoading.value = true;
-  target.packageDetail.value = null;
+  target.detailError.value = null;
   try {
-    const response = await fetchDetail(packageId);
-    if (requestId !== currentRequestId()) return;
-    target.packageDetail.value = response.success && response.data ? response.data : null;
-  } catch {
-    if (requestId !== currentRequestId()) return;
-    target.packageDetail.value = null;
+    const response = await fetchDetail(packageId, isCurrent);
+    if (!isCurrent() || requestId !== currentRequestId()) return;
+    if (response.success && response.data) {
+      target.packageDetail.value = response.data;
+    } else {
+      target.detailError.value = response.message || '套餐详情加载失败，请稍后重试';
+    }
+  } catch (error) {
+    if (!isCurrent() || requestId !== currentRequestId()) return;
+    target.detailError.value = extractErrorMessage(error, '套餐详情加载失败，请稍后重试');
   } finally {
-    if (requestId === currentRequestId()) target.detailLoading.value = false;
+    if (isCurrent() && requestId === currentRequestId()) target.detailLoading.value = false;
   }
 }
 export type { RecommendPackageItem };
@@ -101,53 +112,88 @@ export function usePackageDetail(
   getPackageId: () => string
 ) {
   const detailLoading = ref(false),
-    packageDetail = ref<PackageDetailData | null>(null);
+    packageDetail = ref<PackageDetailData | null>(null),
+    detailError = ref<string | null>(null);
   let packageDetailRequestId = 0;
+  let loadedPackageId: string | null = null;
+  let disposed = false;
   const feedFacts = computed(() => buildFeedFacts(selectedPackage(), packageDetail.value)),
     feedChecks = computed(() => buildFeedChecks(selectedPackage(), packageDetail.value));
+  const prepareDetailLoad = (packageId: string) => {
+    if (loadedPackageId !== packageId) packageDetail.value = null;
+    loadedPackageId = packageId;
+    detailError.value = null;
+  };
   const loadPackageDetail = async (packageId: string) => {
+    if (disposed || !packageId) return;
     const requestId = ++packageDetailRequestId;
+    const isCurrent = () => !disposed && requestId === packageDetailRequestId;
+    prepareDetailLoad(packageId);
     await loadPackageDetailData(
       packageId,
       requestId,
       () => packageDetailRequestId,
-      { detailLoading, packageDetail },
-      (id) => api.getPackageDetail(id)
+      { detailLoading, packageDetail, detailError },
+      (id) => api.getPackageDetail(id),
+      isCurrent
     );
   };
   // Residual #232: 「刷新详情」 must force-refresh via POST, not re-GET the cache.
   const refreshDetail = async () => {
     const packageId = getPackageId();
-    if (!packageId) return;
+    if (disposed || !packageId) return;
     const requestId = ++packageDetailRequestId;
+    const isCurrent = () => !disposed && requestId === packageDetailRequestId;
+    prepareDetailLoad(packageId);
     await loadPackageDetailData(
       packageId,
       requestId,
       () => packageDetailRequestId,
-      { detailLoading, packageDetail },
-      async (id) => {
+      { detailLoading, packageDetail, detailError },
+      async (id, requestIsCurrent) => {
         try {
           const response = await api.refreshPackageDetail(id);
-          if (!response.success) {
-            ElMessage.error(response.message || '刷新套餐详情失败');
-          } else {
-            ElMessage.success(response.message || '套餐详情已刷新');
+          if (requestIsCurrent?.()) {
+            if (!response.success) {
+              ElMessage.error(response.message || '刷新套餐详情失败');
+            } else {
+              ElMessage.success(response.message || '套餐详情已刷新');
+            }
           }
           return response;
         } catch (err) {
-          ElMessage.error(extractErrorMessage(err, '刷新套餐详情失败'));
+          if (requestIsCurrent?.()) {
+            ElMessage.error(extractErrorMessage(err, '刷新套餐详情失败'));
+          }
           throw err;
         }
-      }
+      },
+      isCurrent
     );
   };
+  function clearDetail() {
+    loadedPackageId = null;
+    packageDetail.value = null;
+    detailError.value = null;
+    detailLoading.value = false;
+  }
+  function dispose() {
+    if (disposed) return;
+    disposed = true;
+    packageDetailRequestId += 1;
+    detailLoading.value = false;
+    loadedPackageId = null;
+  }
+  onScopeDispose(dispose);
   return {
     detailLoading,
     packageDetail,
+    detailError,
     feedFacts,
     feedChecks,
     loadPackageDetail,
     refreshDetail,
+    clearDetail,
     formatDetailItems: formatPackageDetailItems
   };
 }

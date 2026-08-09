@@ -11,8 +11,9 @@ async function main() {
   const start = process.argv[2] ?? '2026-07-05';
   const end = process.argv[3] ?? '2026-07-12';
   const r = await recomputePackageSalesAmountRange(p, start, end);
+  // Phase 6 dropped the legacy Float "salesAmount" column — read the Fen column.
   const [psd] = (await p.$queryRawUnsafe(
-    `SELECT COALESCE(SUM("salesAmount"), 0) AS s FROM "PackageSalesDaily" WHERE "date" >= ? AND "date" <= ?`,
+    `SELECT COALESCE(SUM("salesAmountFen"), 0) AS s FROM "PackageSalesDaily" WHERE "date" >= ? AND "date" <= ?`,
     start,
     end
   )) as Array<{ s: number }>;

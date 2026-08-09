@@ -45,8 +45,14 @@ async function main() {
     }>
   >(
     `
+      -- Phase 6 dropped the legacy Float GMV columns; read the Fen columns and
+      -- render yuan so this sample stays readable (SQLite would otherwise
+      -- silently degrade unknown "identifiers" to string literals).
       SELECT "date",
-             "totalGmv", "gmvOnline", "gmvWallet", "gmvBonus",
+             "totalGmvFen" / 100.0 AS "totalGmv",
+             "gmvOnlineFen" / 100.0 AS "gmvOnline",
+             "gmvWalletFen" / 100.0 AS "gmvWallet",
+             "gmvBonusFen" / 100.0 AS "gmvBonus",
              "activeMerchants",
              "refundRate"
       FROM "DailyMetrics"

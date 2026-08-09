@@ -38,6 +38,8 @@ export interface CookieStatusResponse {
   failedAttempts?: number;
   cooldownMinutes: number;
   lastLoginTime: string | null;
+  state?: 'ready' | 'pending_config' | 'authentication_required';
+  missingConfig?: string[];
 }
 export interface CookieUpdateResponse {
   success: boolean;

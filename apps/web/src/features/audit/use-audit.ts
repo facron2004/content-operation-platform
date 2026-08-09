@@ -1,4 +1,4 @@
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, onScopeDispose, reactive, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import type { AuditStatus, Channel, GeneratedCopy } from '@content/shared';
 import { api } from '../../services/api';
@@ -8,6 +8,7 @@ import {
   loadAuditCopies,
   submitAuditCopy
 } from './audit-actions';
+import { extractErrorMessage } from '../../services/http-client';
 
 const ALLOWED_AUDIT_STATUS = new Set(auditStatusOptions.map((o) => o.value));
 const ALLOWED_CHANNEL = new Set(
@@ -29,6 +30,10 @@ export function useAudit() {
     Channel | '';
 
   const loading = ref(false),
+    loadError = ref<string | null>(null),
+    detailError = ref<string | null>(null),
+    actionError = ref<string | null>(null),
+    auditSubmitting = ref(false),
     status = ref<AuditStatus>(initialStatus),
     channel = ref<Channel | ''>(initialChannel),
     copies = ref<GeneratedCopy[]>([]),
@@ -46,29 +51,65 @@ export function useAudit() {
     if (dateFrom.value && dateTo.value) return `${dateFrom.value} ~ ${dateTo.value}`;
     return '近 90 天';
   });
+  let disposed = false;
+  let loadRequestId = 0;
+  let detailRequestId = 0;
+  let auditRequestId = 0;
+
+  onScopeDispose(() => {
+    disposed = true;
+    loadRequestId += 1;
+    detailRequestId += 1;
+    auditRequestId += 1;
+    loading.value = false;
+    auditSubmitting.value = false;
+    actionError.value = null;
+  }, true);
+
   const load = async () => {
+    if (disposed) return;
+    const requestId = ++loadRequestId;
+    const selectedIdAtRequest = selected.value?.contentId;
     loading.value = true;
+    loadError.value = null;
     try {
       const data = await loadAuditCopies(
         status.value,
-        selected.value?.contentId,
+        selectedIdAtRequest,
         channel.value,
         page.value,
         pageSize.value
       );
+      if (disposed || requestId !== loadRequestId) return;
       copies.value = data.items;
       total.value = data.total;
       page.value = data.page;
       pageSize.value = data.pageSize;
       dateFrom.value = data.dateFrom;
       dateTo.value = data.dateTo;
-      if (!data.keepSelected) selected.value = null;
+      if (!data.keepSelected && selected.value?.contentId === selectedIdAtRequest) {
+        selected.value = null;
+        detailError.value = null;
+      }
+    } catch (error) {
+      if (!disposed && requestId === loadRequestId) {
+        loadError.value = extractErrorMessage(error, '审核队列加载失败');
+      }
+      throw error;
     } finally {
-      loading.value = false;
+      if (!disposed && requestId === loadRequestId) loading.value = false;
     }
   };
   // List payload omits body/cta; hydrate full row on select for the audit editor.
   const selectCopy = async (copy: GeneratedCopy | null) => {
+    if (disposed) return;
+    const requestId = ++detailRequestId;
+    detailError.value = null;
+    actionError.value = null;
+    if (selected.value?.contentId !== copy?.contentId) {
+      auditRequestId += 1;
+      auditSubmitting.value = false;
+    }
     if (!copy) {
       selected.value = null;
       draft.title = '';
@@ -82,18 +123,50 @@ export function useAudit() {
     draft.auditRemark = copy.auditRemark ?? '';
     try {
       const full = await api.getCopy(copy.contentId);
-      if (selected.value?.contentId !== full.contentId) return;
+      if (disposed || selected.value?.contentId !== full.contentId) return;
       selected.value = full;
       draft.title = full.title ?? '';
       draft.body = full.body ?? '';
       draft.auditRemark = full.auditRemark ?? '';
-    } catch {
-      /* interceptor surfaces; keep list projection */
+    } catch (error) {
+      if (
+        !disposed &&
+        requestId === detailRequestId &&
+        selected.value?.contentId === copy.contentId
+      ) {
+        detailError.value = extractErrorMessage(error, '文案详情加载失败');
+      }
     }
   };
   const audit = async (auditStatus: Extract<AuditStatus, 'approved' | 'rejected' | 'risk'>) => {
-    if (!selected.value) return;
-    if (await submitAuditCopy(selected.value.contentId, auditStatus, draft)) await load();
+    if (disposed || auditSubmitting.value || !selected.value) return;
+    const contentId = selected.value.contentId;
+    const draftSnapshot = { ...draft };
+    const requestId = ++auditRequestId;
+    const isCurrent = () =>
+      !disposed && requestId === auditRequestId && selected.value?.contentId === contentId;
+    auditSubmitting.value = true;
+    actionError.value = null;
+    try {
+      if (
+        await submitAuditCopy(contentId, auditStatus, draftSnapshot, {
+          isCurrent,
+          onError: (error) => {
+            if (!isCurrent()) return;
+            actionError.value = extractErrorMessage(error, '审核结果保存失败');
+          }
+        })
+      ) {
+        if (!isCurrent()) return;
+        try {
+          await load();
+        } catch {
+          // The audit write succeeded; the queue refresh owns its own loadError state.
+        }
+      }
+    } finally {
+      if (requestId === auditRequestId) auditSubmitting.value = false;
+    }
   };
   // Residual #218: filter changes must reset to page 1 or the queue looks empty.
   const onStatusChange = async (value: string) => {
@@ -115,9 +188,15 @@ export function useAudit() {
     page.value = 1;
     await load();
   };
-  onMounted(load);
+  onMounted(() => {
+    void load().catch(() => undefined);
+  });
   return {
     loading,
+    loadError,
+    detailError,
+    actionError,
+    submitting: auditSubmitting,
     status,
     channel,
     copies,

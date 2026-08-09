@@ -1,6 +1,7 @@
 import { Test } from '@nestjs/testing';
 import { describe, expect, it, vi } from 'vitest';
 import { AppModule } from '../src/app.module';
+import { ExternalDataCacheInvalidationService } from '../src/content/external-data-cache-invalidation.service';
 import { authedAgent } from './helpers/auth';
 
 describe('Cookie config API', () => {
@@ -31,12 +32,15 @@ describe('Cookie config API', () => {
     expect(statusBefore.body).toHaveProperty('isValid');
 
     // 2. Update cookie
+    const cacheInvalidation = moduleRef.get(ExternalDataCacheInvalidationService);
+    const invalidateCaches = vi.spyOn(cacheInvalidation, 'invalidateExternalDataCaches');
     const updateRes = await api
       .post('/api/content/cookie/update')
       .send({ cookie: 'skinName=skin-green; jeesite.session.id=999abc; pageSize=10; pageNo=1' })
       .expect(201);
 
     expect(updateRes.body.success).toBe(true);
+    expect(invalidateCaches).toHaveBeenCalledTimes(1);
 
     // 3. Check status again
     const statusAfter = await api.get('/api/content/cookie/status').expect(200);

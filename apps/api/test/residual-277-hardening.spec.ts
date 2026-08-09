@@ -8,8 +8,11 @@ const sharedRoot = path.join(__dirname, '..', '..', '..', 'packages', 'shared', 
 
 describe('residual #277 performance RECOMMEND_CACHE_CAP source-cap honesty', () => {
   it('computePerformance projects source* honesty from matchedCount vs packages', async () => {
-    const src = await readFile(path.join(srcRoot, 'content', 'dashboard.service.ts'), 'utf8');
-    const start = src.indexOf('private async computePerformance(');
+    const src = await readFile(
+      path.join(srcRoot, 'content', 'dashboard-performance-read.ts'),
+      'utf8'
+    );
+    const start = src.indexOf('export async function computePerformance(');
     expect(start).toBeGreaterThanOrEqual(0);
     const end = src.indexOf('statusDistribution(', start + 10);
     const fn = src.slice(start, end > 0 ? end : start + 4000);

@@ -11,16 +11,16 @@ import {
   Query,
   Inject,
   Logger,
-  Req
+  Req,
+  UnauthorizedException
 } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { Type } from 'class-transformer';
 import { IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 import type { Request } from 'express';
-import { USER_ROLES } from '@content/shared';
-import type { UserRole } from '@content/shared';
-import { UserService } from './user.service';
+import { describeError } from '@content/shared';
+import { UserCommandService, UserQueryService } from './application/user-application.service';
 import { Roles } from './role.decorator';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto, UpdateUserRolesDto } from './dto/update-user.dto';
@@ -32,6 +32,7 @@ import { IamAdminService } from './iam/iam-admin.service';
 import { ReplaceUserAccessDto } from './iam/iam.dto';
 import { RequirePermissions } from './iam/require-permissions.decorator';
 import { RequireLogin } from './iam/route-auth.decorator';
+import { requireTenantId } from './tenant-context';
 
 type AuthUser = {
   userId: string;
@@ -44,6 +45,10 @@ type AuthUser = {
 
 function isAdmin(user: AuthUser | undefined): boolean {
   return Boolean(user?.roles?.includes('admin'));
+}
+
+function tenantIdOf(user: AuthUser | undefined): string {
+  return requireTenantId(user);
 }
 
 /** Drop internal session epoch — clients never need tokenVersion; only JWT minting does. */
@@ -89,7 +94,8 @@ export class UserController {
   private readonly logger = new Logger(UserController.name);
 
   constructor(
-    @Inject(UserService) private readonly userService: UserService,
+    @Inject(UserQueryService) private readonly userQueryService: UserQueryService,
+    @Inject(UserCommandService) private readonly userCommandService: UserCommandService,
     @Optional() @Inject(JwtStrategy) private readonly jwtStrategy?: JwtStrategy,
     @Optional() @Inject(IamAccessService) private readonly iamAccessService?: IamAccessService,
     @Optional() @Inject(IamAdminService) private readonly iamAdminService?: IamAdminService
@@ -100,12 +106,21 @@ export class UserController {
   @RequirePermissions('iam:user:read')
   @Throttle({ long: { limit: 30, ttl: 60000 } })
   @ApiOperation({ summary: 'List users with roles (admin only)' })
-  async listUsers(@Query(createDtoPipe(UserListQueryDto)) query: UserListQueryDto) {
+  async listUsers(
+    @Query(createDtoPipe(UserListQueryDto)) query: UserListQueryDto,
+    @Req() req: Request
+  ) {
+    const actor = req.user as AuthUser | undefined;
     // Residual #205/#208: keyword + isActive (0|1) pass-through.
-    const result = await this.userService.list(query.page ?? 1, query.pageSize ?? 20, {
-      keyword: query.keyword,
-      isActive: query.isActive
-    });
+    const result = await this.userQueryService.list(
+      tenantIdOf(actor),
+      query.page ?? 1,
+      query.pageSize ?? 20,
+      {
+        keyword: query.keyword,
+        isActive: query.isActive
+      }
+    );
     return { ...result, data: result.data.map(publicUser) };
   }
 
@@ -119,9 +134,10 @@ export class UserController {
     // Only admin may mint unrestricted roles (admin/platform_operator/auditor).
     const adminActor = isAdmin(actor);
     // Residual #170: slim success shell (SPA discards body + reloads list).
-    return this.userService.create(body, {
+    return this.userCommandService.create(body, {
       allowAdminRole: adminActor,
-      allowUnrestrictedRoles: adminActor
+      allowUnrestrictedRoles: adminActor,
+      tenantId: tenantIdOf(actor)
     });
   }
 
@@ -131,41 +147,47 @@ export class UserController {
   async getProfile(@Req() req: Request) {
     const authUser = req.user as AuthUser | undefined;
     if (!authUser?.userId) return null;
-    const user = await this.userService.findById(authUser.userId);
+    const tenantId = requireTenantId(authUser);
+    const user = await this.userQueryService.findById(authUser.userId, tenantId);
     if (user) {
       const access = await this.iamAccessService
-        ?.getUserAccess(authUser.userId, authUser.tenantId)
-        .catch(() => null);
+        ?.getUserAccess(authUser.userId, tenantId)
+        .catch((error: unknown) => {
+          this.logger.warn(
+            `Current-user IAM access lookup failed for ${authUser.userId}: ${describeError(error)}`
+          );
+          return null;
+        });
       return publicUser({
         ...user,
-        tenantId: access?.tenantId ?? authUser.tenantId ?? 'tenant_default',
+        tenantId: access?.tenantId ?? tenantId,
         primaryOrgUnitId: access?.primaryOrgUnitId ?? null,
         permissions: access?.permissions ?? authUser.permissions ?? [],
         memberships: access?.memberships ?? [],
         roleAssignments: access?.roleAssignments ?? []
       });
     }
-    // Hardcoded-admin JWT (sub=admin) has no AppUser row until seeded.
-    // Return a synthetic profile from the token so the SPA can hydrate roles.
-    const roleSet = new Set<string>(USER_ROLES);
-    const roles = (authUser.roles ?? []).filter((role): role is UserRole => roleSet.has(role));
-    return {
-      userId: authUser.userId,
-      username: authUser.username,
-      displayName: authUser.username,
-      isActive: true,
-      tenantId: authUser.tenantId ?? 'tenant_default',
-      primaryOrgUnitId: null,
-      permissions: authUser.permissions ?? [],
-      memberships: [],
-      roleAssignments: [],
-      roles: roles.map((role, index) => ({
-        id: `jwt-role-${index}`,
-        userId: authUser.userId,
-        role
-      })),
-      createdAt: new Date(0).toISOString()
-    };
+    throw new UnauthorizedException('用户已停用或不存在');
+  }
+
+  @Put(':id/access')
+  @RequirePermissions('iam:users:access')
+  async replaceUserAccess(
+    @Param('id') id: string,
+    @Body(createDtoPipe(ReplaceUserAccessDto)) body: ReplaceUserAccessDto,
+    @Req() req: Request
+  ) {
+    if (!this.iamAdminService) throw new ForbiddenException('IAM 服务未启用');
+    const actor = req.user as AuthUser | undefined;
+    const safeId = safePathId(id);
+    const result = await this.iamAdminService.replaceUserAccess(
+      tenantIdOf(actor),
+      safeId,
+      body,
+      actor?.userId
+    );
+    this.jwtStrategy?.invalidateStatus(safeId);
+    return result;
   }
 
   @Put(':id/access')
@@ -193,8 +215,9 @@ export class UserController {
   @RequirePermissions('iam:user:read')
   @Throttle({ long: { limit: 60, ttl: 60000 } })
   @ApiOperation({ summary: 'User detail with role bindings' })
-  async getUser(@Param('id') id: string) {
-    const user = await this.userService.findById(safePathId(id));
+  async getUser(@Param('id') id: string, @Req() req: Request) {
+    const actor = req.user as AuthUser | undefined;
+    const user = await this.userQueryService.findById(safePathId(id), tenantIdOf(actor));
     return user ? publicUser(user) : user;
   }
 
@@ -220,7 +243,7 @@ export class UserController {
       throw new ForbiddenException('不能停用当前登录账号');
     }
     // Residual #169: slim success shell (SPA list reloads; no AppUser body).
-    const result = await this.userService.update(safeId, body);
+    const result = await this.userCommandService.update(safeId, body, tenantIdOf(actor));
     if (body.password !== undefined || body.isActive !== undefined) {
       this.jwtStrategy?.invalidateStatus(safeId);
     }
@@ -241,7 +264,7 @@ export class UserController {
     }
     await this.assertCanMutateTarget(safeId, actor);
     // Residual #169: slim success shell (SPA discards body + reloads list).
-    const result = await this.userService.deactivate(safeId);
+    const result = await this.userCommandService.deactivate(safeId, tenantIdOf(actor));
     this.jwtStrategy?.invalidateStatus(safeId);
     return result;
   }
@@ -261,9 +284,10 @@ export class UserController {
     await this.assertCanMutateTarget(safeId, actor);
     const adminActor = isAdmin(actor);
     // Residual #169: slim success shell (SPA discards body + reloads list).
-    const result = await this.userService.updateRoles(safeId, body, {
+    const result = await this.userCommandService.updateRoles(safeId, body, {
       allowAdminRole: adminActor,
-      allowUnrestrictedRoles: adminActor
+      allowUnrestrictedRoles: adminActor,
+      tenantId: tenantIdOf(actor)
     });
     this.jwtStrategy?.invalidateStatus(safeId);
     return result;
@@ -276,7 +300,7 @@ export class UserController {
    */
   private async assertCanMutateTarget(targetId: string, actor: AuthUser | undefined) {
     if (isAdmin(actor)) return;
-    if (await this.userService.hasUnrestrictedPeerRole(targetId)) {
+    if (await this.userQueryService.hasUnrestrictedPeerRole(targetId, tenantIdOf(actor))) {
       throw new ForbiddenException('仅 admin 可修改无数据范围限制角色用户');
     }
   }

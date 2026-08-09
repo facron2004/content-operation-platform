@@ -7,6 +7,7 @@ import {
   DISTRIBUTION_EXECUTION_RETENTION_DAYS
 } from '../common/sql-chunk';
 import { sqlDatetime, toSqliteDateTime } from '../common/sqlite-datetime';
+import { JobRunnerService } from './job-runner.service';
 
 /**
  * Bounded DistributionExecution retention.
@@ -20,7 +21,10 @@ export class DistributionExecutionRetentionJob {
   private readonly logger = new Logger(DistributionExecutionRetentionJob.name);
   private running = false;
 
-  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(JobRunnerService) private readonly jobRunner: JobRunnerService
+  ) {}
 
   /** Daily retention sweep — staggered after GeneratedCopy purge (6am). */
   @Cron(CronExpression.EVERY_DAY_AT_7AM)
@@ -30,18 +34,20 @@ export class DistributionExecutionRetentionJob {
       return;
     }
     this.running = true;
-    try {
-      const deleted = await this.purgeOlderThan(DISTRIBUTION_EXECUTION_RETENTION_DAYS);
-      if (deleted > 0) {
-        this.logger.log(
-          `Purged ${deleted} DistributionExecution rows older than ${DISTRIBUTION_EXECUTION_RETENTION_DAYS}d`
-        );
-      }
-    } catch (err) {
-      this.logger.warn(`DistributionExecution retention failed: ${err}`);
-    } finally {
-      this.running = false;
-    }
+    await this.jobRunner
+      .runJob('distribution-execution-retention', async (setMeta) => {
+        const deleted = await this.purgeOlderThan(DISTRIBUTION_EXECUTION_RETENTION_DAYS);
+        setMeta({ deleted, retentionDays: DISTRIBUTION_EXECUTION_RETENTION_DAYS });
+        if (deleted > 0) {
+          this.logger.log(
+            `Purged ${deleted} DistributionExecution rows older than ${DISTRIBUTION_EXECUTION_RETENTION_DAYS}d`
+          );
+        }
+        return deleted;
+      })
+      .finally(() => {
+        this.running = false;
+      });
   }
 
   /**

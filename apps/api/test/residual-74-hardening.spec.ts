@@ -74,7 +74,7 @@ describe('residual #74 zero-sales SKU page-less head cache', () => {
     const fs = await import('fs/promises');
     const path = await import('path');
     const loaders = await fs.readFile(
-      path.join(__dirname, '..', 'src', 'zero-sales', 'zero-sales-loaders.ts'),
+      path.join(__dirname, '..', 'src', 'zero-sales', 'zero-sales-sku-loaders.ts'),
       'utf8'
     );
     const list = await fs.readFile(

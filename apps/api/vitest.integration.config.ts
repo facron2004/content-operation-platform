@@ -1,7 +1,5 @@
 import { defineConfig } from 'vitest/config';
-import { join } from 'path';
-
-const tmpDir = join(__dirname, '..', '..', '.tmp-test-db');
+import { join } from 'node:path';
 
 export default defineConfig({
   test: {
@@ -13,18 +11,17 @@ export default defineConfig({
       'test/content-api.spec.ts',
       'test/content-inventory-api.spec.ts',
       'test/cookie-config-api.spec.ts',
+      'test/data-analysis-paid-time-api.spec.ts',
       'test/rbac-gates.spec.ts',
-      'test/iam-api.spec.ts'
+      'test/iam-api.spec.ts',
+      'test/ready-api.spec.ts'
     ],
     pool: 'forks',
     fileParallelism: false,
     poolOptions: { forks: { singleFork: true } },
     isolate: true,
-    setupFiles: ['test/helpers/vitest-setup.ts'],
+    setupFiles: [join(__dirname, 'test/helpers/vitest-setup.ts')],
     testTimeout: 30000,
-    hookTimeout: 15000,
-    env: {
-      DATABASE_URL: `file:${join(tmpDir, 'integration-placeholder.db').replace(/\\/g, '/')}`
-    }
+    hookTimeout: 15000
   }
 });

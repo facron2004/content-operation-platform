@@ -19,7 +19,7 @@ describe('residual #61 recommend response/cache cap', () => {
     const fs = await import('fs/promises');
     const path = await import('path');
     const src = await fs.readFile(
-      path.join(__dirname, '..', 'src', 'content', 'content-facade.ts'),
+      path.join(__dirname, '..', 'src', 'content', 'content-recommendation-facade.ts'),
       'utf8'
     );
     expect(src).toContain('RECOMMEND_CACHE_CAP');
@@ -51,7 +51,7 @@ describe('residual #61 alert resolve batch clamp', () => {
     const fs = await import('fs/promises');
     const path = await import('path');
     const src = await fs.readFile(
-      path.join(__dirname, '..', 'src', 'content', 'alert.service.ts'),
+      path.join(__dirname, '..', 'src', 'content', 'alert-resolution.ts'),
       'utf8'
     );
     expect(src).toContain('RESOLVE_BATCH_MAX');

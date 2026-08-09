@@ -40,7 +40,7 @@ describe('residual #232 package detail force-refresh', () => {
   it('API controller already has force-refresh POST (ready)', async () => {
     const dtoPath = path.resolve(
       __dirname,
-      '../../../../apps/api/src/content/package.controller.ts'
+      '../../../../apps/api/src/content/package-detail.controller.ts'
     );
     const src = await readFile(dtoPath, 'utf8');
     expect(src).toMatch(/@Post\('packages\/:packageId\/detail\/refresh'\)/);

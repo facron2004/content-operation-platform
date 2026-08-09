@@ -16,7 +16,7 @@ export async function queryOrderHeaderGmv(
             COALESCE(SUM("paidAmountWalletFen"), 0) AS "paidAmountWalletFen",
             COALESCE(SUM("paidAmountBonusFen"), 0) AS "paidAmountBonusFen",
             COALESCE(SUM("paidAmountCardFen"), 0) AS "paidAmountCardFen",
-            COALESCE(SUM("verifyAmountFen"), 0) AS "verifyAmountFen",
+            COALESCE(SUM(CASE WHEN "verifyTime" IS NOT NULL THEN "verifyAmountFen" ELSE 0 END), 0) AS "verifyAmountFen",
             COALESCE(SUM("refundAmountFen"), 0) AS "refundAmountFen",
             COUNT(*) AS "orderCount",
             COUNT(CASE WHEN "refundAmountFen" > 0 THEN 1 END) AS "refundOrderCount",
@@ -205,7 +205,7 @@ export async function queryOrderHeaderTrendAgg(
             COALESCE(SUM("paidAmountWalletFen"), 0) AS "paidAmountWalletFen",
             COALESCE(SUM("paidAmountBonusFen"), 0) AS "paidAmountBonusFen",
             COALESCE(SUM("refundAmountFen"), 0) AS "refundAmountFen",
-            COALESCE(SUM("verifyAmountFen"), 0) AS "verifyAmountFen",
+            COALESCE(SUM(CASE WHEN "verifyTime" IS NOT NULL THEN "verifyAmountFen" ELSE 0 END), 0) AS "verifyAmountFen",
             COUNT(*) AS "orderCount",
             COUNT(CASE WHEN "refundAmountFen" > 0 THEN 1 END) AS "refundOrderCount",
             COUNT(CASE WHEN "verifyTime" IS NOT NULL THEN 1 END) AS "verifyCount"

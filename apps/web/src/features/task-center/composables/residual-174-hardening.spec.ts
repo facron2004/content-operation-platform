@@ -9,6 +9,12 @@ describe('residual #174 SPA task detail dead thrash cleanup', () => {
   it('publish/fail/cancel discard mutate body (timeline re-GET authoritative)', async () => {
     const src = await readFile(path.join(__dirname, 'useTaskDetail.ts'), 'utf8');
 
+    const mutationStart = src.indexOf('async function runMutation');
+    expect(mutationStart).toBeGreaterThan(0);
+    const mutationEnd = src.indexOf('\n  async function publish', mutationStart + 10);
+    const mutationFn = src.slice(mutationStart, mutationEnd > 0 ? mutationEnd : undefined);
+    expect(mutationFn).toMatch(/await refreshTaskTimeline\(requestId\)/);
+
     for (const name of ['publish', 'fail', 'cancel'] as const) {
       const fnStart = src.indexOf(`async function ${name}(`);
       expect(fnStart).toBeGreaterThan(0);
@@ -17,8 +23,8 @@ describe('residual #174 SPA task detail dead thrash cleanup', () => {
       // Discard body — no applyTaskRow thrash before refresh.
       expect(fn).not.toMatch(/applyTaskRow\(/);
       expect(fn).not.toMatch(/const result = await/);
-      expect(fn).toMatch(/await api\.(publish|fail|cancel)Task/);
-      expect(fn).toMatch(/await refreshTaskTimeline\(/);
+      expect(fn).toMatch(/runMutation\(/);
+      expect(src).toMatch(new RegExp(`api\\.${name}Task`));
     }
   });
 
@@ -29,8 +35,9 @@ describe('residual #174 SPA task detail dead thrash cleanup', () => {
     // Residual #180: schedule/complete follow reassign — slice to next async, not onMounted.
     const reassignEnd = src.indexOf('\n  async function ', reassignStart + 10);
     const reassignFn = src.slice(reassignStart, reassignEnd > 0 ? reassignEnd : undefined);
-    expect(reassignFn).toMatch(/const result = await api\.reassignTask/);
-    expect(reassignFn).toMatch(/applyTaskRow\(result\)/);
+    expect(reassignFn).toMatch(/runMutation\(/);
+    expect(reassignFn).toMatch(/applyResult:\s*applyTaskRow/);
+    expect(src).toMatch(/api\.reassignTask/);
     expect(reassignFn).not.toMatch(/refreshTaskTimeline/);
   });
 

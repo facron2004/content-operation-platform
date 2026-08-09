@@ -14,15 +14,18 @@
       </template>
     </AppleButton>
     <ThemeSwitch />
-    <el-badge :is-dot="!cookieStatus?.isValid" class="badge-dot">
+    <el-badge :is-dot="Boolean(cookieStatusError) || !cookieStatus?.isValid" class="badge-dot">
       <AppleButton
         class="cookie-status-btn"
         variant="tinted"
         size="sm"
-        :data-tone="cookieStatus?.isValid ? 'success' : 'danger'"
+        :data-tone="cookieStatusError ? 'warning' : cookieStatus?.isValid ? 'success' : 'danger'"
+        :title="cookieStatusError || 'JeeSite 数据源连接状态'"
+        :aria-label="cookieStatusError || 'JeeSite 数据源连接状态'"
         @click="$emit('open-cookie')"
       >
-        JeeSite: {{ cookieStatus?.isValid ? '已连接' : '未连接' }}
+        JeeSite:
+        {{ cookieStatusError ? '状态未知' : cookieStatus?.isValid ? '已连接' : '未连接' }}
       </AppleButton>
     </el-badge>
     <!-- Parent passes a live store object; field write is intentional. -->
@@ -45,6 +48,7 @@ import ThemeSwitch from './ThemeSwitch.vue';
 import AppleButton from './AppleButton.vue';
 defineProps<{
   cookieStatus: { isValid?: boolean } | null | undefined;
+  cookieStatusError?: string | null;
   roleStore: {
     currentRole: UserRole;
     roleLabel: string;

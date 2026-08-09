@@ -7,14 +7,21 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 describe('residual #200 user re-activate CTA', () => {
   it('UserManagementView shows 启用 for inactive rows and calls updateUser isActive true', async () => {
-    const src = await readFile(path.join(__dirname, 'UserManagementView.vue'), 'utf8');
-    expect(src).toMatch(/handleActivate/);
-    expect(src).toMatch(/v-else[\s\S]*?handleActivate|handleActivate[\s\S]*?启用/);
+    const src = await readFile(
+      path.join(__dirname, '../features/user-management/UserTable.vue'),
+      'utf8'
+    );
+    const composable = await readFile(
+      path.join(__dirname, '../features/user-management/useUserManagement.ts'),
+      'utf8'
+    );
+    expect(src).toMatch(/@click="\$emit\('activate', row\)"/);
+    expect(src).toMatch(/v-else[\s\S]*?\$emit\('activate', row\)|启用/);
     expect(src).toMatch(/启用/);
-    const fnStart = src.indexOf('async function handleActivate');
+    const fnStart = composable.indexOf('async function handleActivate');
     expect(fnStart).toBeGreaterThanOrEqual(0);
-    const fnEnd = src.indexOf('async function handleSubmit', fnStart + 10);
-    const fn = src.slice(fnStart, fnEnd > 0 ? fnEnd : undefined);
+    const fnEnd = composable.indexOf('async function handleAccessSaved', fnStart + 10);
+    const fn = composable.slice(fnStart, fnEnd > 0 ? fnEnd : undefined);
     expect(fn).toMatch(/updateUser\([^,]+,\s*\{\s*isActive:\s*true\s*\}/);
     expect(fn).toMatch(/reloadCurrentPage/);
   });

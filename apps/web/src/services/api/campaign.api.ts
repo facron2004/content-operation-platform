@@ -1,6 +1,7 @@
 import type { CampaignListResponse, CampaignPerformanceResponse } from '@content/shared';
 import client from '../http-client';
 import { cachedGet, clearCache } from '../cache.service';
+import { buildBusinessIntentKey } from '../idempotency-key';
 
 export async function listCampaigns(
   params: {
@@ -75,8 +76,10 @@ export async function deleteCampaign(id: string) {
   return res.data;
 }
 
-export async function startCampaign(id: string) {
-  const res = await client.post(`/campaigns/${encodeURIComponent(id)}/start`);
+export async function startCampaign(id: string, version: string) {
+  const res = await client.post(`/campaigns/${encodeURIComponent(id)}/start`, undefined, {
+    headers: { 'Idempotency-Key': buildBusinessIntentKey('campaign-start', id, version) }
+  });
   clearCache('/campaigns');
   return res.data;
 }

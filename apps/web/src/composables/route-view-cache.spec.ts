@@ -1,7 +1,8 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   _resetPrefetchSetForTests,
   collectNavLeafPaths,
+  prefetchNavPaths,
   prefetchRouteComponents,
   routeViewCacheKey
 } from './route-view-cache';
@@ -50,6 +51,11 @@ describe('prefetchRouteComponents', () => {
     _resetPrefetchSetForTests();
   });
 
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
   it('invokes lazy component loaders once per path', async () => {
     const loader = vi.fn().mockResolvedValue({ default: {} });
     const router = {
@@ -78,5 +84,23 @@ describe('prefetchRouteComponents', () => {
     prefetchRouteComponents(router as never, '/gmv-cockpit');
     await new Promise((r) => setTimeout(r, 0));
     expect(loader).toHaveBeenCalledTimes(2);
+  });
+
+  it('cancels delayed navigation prefetch when its owner is disposed', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('requestIdleCallback', undefined);
+    vi.stubGlobal('cancelIdleCallback', undefined);
+    const loader = vi.fn().mockResolvedValue({ default: {} });
+    const router = {
+      resolve: () => ({
+        matched: [{ components: { default: loader } }]
+      })
+    };
+
+    const cancel = prefetchNavPaths(router as never, ['/merchant-heatmap']);
+    cancel();
+    await vi.advanceTimersByTimeAsync(800);
+
+    expect(loader).not.toHaveBeenCalled();
   });
 });

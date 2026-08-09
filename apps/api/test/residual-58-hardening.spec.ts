@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { shouldOmitAuditBodies, shouldSkipAuditPath } from '../src/audit-log/audit-log-policy';
 
 describe('residual #58 audit list payload shrink', () => {
   it('list SELECT omits before/after; detail keeps full row columns', async () => {
@@ -27,16 +28,15 @@ describe('residual #58 audit list payload shrink', () => {
   });
 
   it('audit interceptor omits bodies on heavy admin export/refresh paths', async () => {
-    const fs = await import('fs/promises');
-    const path = await import('path');
-    const src = await fs.readFile(
-      path.join(__dirname, '..', 'src', 'audit-log', 'audit-log.interceptor.ts'),
-      'utf8'
-    );
-    expect(src).toContain("path.includes('/export')");
-    expect(src).toContain("path.includes('/gmv/refresh')");
-    expect(src).toContain("path.includes('/merchant-sales/refresh')");
-    expect(src).toContain("path.includes('/attribution/recompute')");
+    for (const path of [
+      '/api/data-analysis/export',
+      '/api/gmv/refresh',
+      '/api/merchant-sales/refresh',
+      '/api/attribution/recompute'
+    ]) {
+      expect(shouldSkipAuditPath(path)).toBe(false);
+      expect(shouldOmitAuditBodies(path)).toBe(true);
+    }
   });
 });
 
@@ -158,7 +158,7 @@ describe('residual #58 select hygiene', () => {
     const fs = await import('fs/promises');
     const path = await import('path');
     const src = await fs.readFile(
-      path.join(__dirname, '..', 'src', 'content', 'rule-config-ops.ts'),
+      path.join(__dirname, '..', 'src', 'content', 'rule-config-write.ts'),
       'utf8'
     );
     expect(src).toMatch(/skip:\s*keep/);

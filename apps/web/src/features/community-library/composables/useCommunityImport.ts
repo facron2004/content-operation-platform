@@ -1,6 +1,7 @@
 import { ref } from 'vue';
 import { ElMessage } from 'element-plus';
 import { api } from '../../../services/api';
+import { resolveSubmissionIntent, type SubmissionIntent } from '../../../services/idempotency-key';
 
 export type CommunityImportSource = 'csv' | 'json';
 
@@ -18,14 +19,17 @@ export function useCommunityImport(options: { onImported?: () => void } = {}) {
   const importing = ref(false);
   const importSource = ref<CommunityImportSource>('csv');
   const rawData = ref('');
+  let submissionIntent: SubmissionIntent | null = null;
 
   function open(): void {
+    submissionIntent = null;
     importSource.value = 'csv';
     rawData.value = '';
     dialogVisible.value = true;
   }
 
   function close(): void {
+    submissionIntent = null;
     dialogVisible.value = false;
   }
 
@@ -46,10 +50,12 @@ export function useCommunityImport(options: { onImported?: () => void } = {}) {
     if (!validate()) return false;
     importing.value = true;
     try {
-      await api.importCommunities({
+      const payload = {
         source: importSource.value,
         rawData: rawData.value.trim()
-      });
+      };
+      submissionIntent = resolveSubmissionIntent('batch-import', payload, submissionIntent);
+      await api.importCommunities(payload, submissionIntent.key);
       ElMessage.success('社群导入成功');
       close();
       options.onImported?.();

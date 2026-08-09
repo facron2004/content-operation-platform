@@ -1,5 +1,17 @@
 import type { Request, Response, NextFunction } from 'express';
 
+export const CONTENT_SECURITY_POLICY = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self'",
+  "img-src 'self' data: https:",
+  "font-src 'self'",
+  "connect-src 'self' https://api.deepseek.com https://api.openai.com",
+  "frame-ancestors 'none'",
+  "base-uri 'self'",
+  "form-action 'self'"
+].join('; ');
+
 /** Lightweight security headers middleware (replaces helmet for simpler setup). */
 export function securityHeaders(req: Request, res: Response, next: NextFunction) {
   res.setHeader('X-Frame-Options', 'DENY');
@@ -9,10 +21,7 @@ export function securityHeaders(req: Request, res: Response, next: NextFunction)
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=()');
   res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
   res.setHeader('Cross-Origin-Resource-Policy', 'same-site');
-  res.setHeader(
-    'Content-Security-Policy',
-    "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self'; connect-src 'self' https://api.deepseek.com https://api.openai.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
-  );
+  res.setHeader('Content-Security-Policy', CONTENT_SECURITY_POLICY);
   if (process.env.NODE_ENV === 'production') {
     res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
   }

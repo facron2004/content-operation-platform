@@ -14,14 +14,18 @@ describe('residual #222 recommendations inventoryMin/Max filters', () => {
   });
 
   it('loadRecommendationsPage forwards inventoryMin/Max + cache key', async () => {
-    const src = await readFile(path.join(__dirname, 'useRecommendationsPage.ts'), 'utf8');
+    const src = await readFile(path.join(__dirname, 'recommendations-page-loaders.ts'), 'utf8');
+    const actionsSrc = await readFile(
+      path.join(__dirname, 'recommendations-page-actions.ts'),
+      'utf8'
+    );
     expect(src).toMatch(/inventoryMin/);
     expect(src).toMatch(/inventoryMax/);
     // Pin body assignment (comment distance can exceed a tight getRecommendations slice).
     expect(src).toMatch(/inventoryMin:\s*inventoryMinNum/);
     expect(src).toMatch(/inventoryMax:\s*inventoryMaxNum/);
-    expect(src).toMatch(/watch\(\(\)\s*=>\s*options\.filters\.inventoryMin/);
-    expect(src).toMatch(/filters\.inventoryMin\s*=\s*''/);
+    expect(actionsSrc).toMatch(/watch\(\(\)\s*=>\s*options\.filters\.inventoryMin/);
+    expect(actionsSrc).toMatch(/filters\.inventoryMin\s*=\s*''/);
   });
 
   it('RecommendationsFilterBar exposes inventory min/max inputs', async () => {

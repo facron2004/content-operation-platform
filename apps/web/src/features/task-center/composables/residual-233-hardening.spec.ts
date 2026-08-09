@@ -15,7 +15,9 @@ describe('residual #233 task form DTO fields', () => {
     expect(src).toMatch(/riskLevel\?:/);
     expect(src).toMatch(/fallbackPackageId\?:/);
     expect(src).toMatch(/assigneeName\?:/);
-    expect(src).toMatch(/export async function createTask\(data: TaskWritePayload\)/);
+    expect(src).toMatch(
+      /export async function createTask\(data: TaskWritePayload, idempotencyKey: string\)/
+    );
     expect(src).toMatch(
       /export async function updateTask\(id: string, data: Partial<TaskWritePayload>\)/
     );

@@ -14,6 +14,17 @@ function shiftDateString(yyyyMmDd: string, days: number): string {
 export function shiftDateKey(yyyyMmDd: string, days: number): string {
   return shiftDateString(yyyyMmDd, days);
 }
+/** Monday of the calendar week containing the given day key (weeks start Monday). */
+export function startOfWeekKey(yyyyMmDd: string): string {
+  const dow = new Date(`${yyyyMmDd}T00:00:00Z`).getUTCDay(); // 0=Sun … 6=Sat
+  return shiftDateString(yyyyMmDd, -((dow + 6) % 7));
+}
+/** Last day (YYYY-MM-DD) of the calendar month containing the given day key. */
+export function endOfMonthKey(yyyyMmDd: string): string {
+  const [y, m] = yyyyMmDd.split('-').map(Number);
+  const last = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  return `${yyyyMmDd.slice(0, 7)}-${String(last).padStart(2, '0')}`;
+}
 export function beijingDayRangeUtc(date: string): { start: Date; end: Date } {
   const start = new Date(`${date}T00:00:00+08:00`);
   return { start, end: new Date(start.getTime() + 24 * 3600 * 1000) };

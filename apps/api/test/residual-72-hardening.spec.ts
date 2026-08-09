@@ -18,7 +18,9 @@ describe('residual #72 refund top-merchants page-less + SQL LIMIT', () => {
     expect(top).toMatch(/LIMIT \?/);
     expect(top).toContain('queryAllTopMerchants');
     // page-less aggregate key
-    expect(load).toMatch(/cacheKey:\s*`refundTopMerchants:\$\{q\.sortBy\}`/);
+    expect(load).toMatch(
+      /cacheKey:\s*`refundTopMerchants:\$\{q\.sortBy\}:\$\{q\.window \?\? 'week'\}:\$\{q\.date \?\? 'today'\}`/
+    );
     expect(load).not.toMatch(/refundTopMerchants:\$\{q\.sortBy\}:\$\{q\.page\}:\$\{q\.pageSize\}/);
     expect(load).toContain('queryAllTopMerchants');
     expect(load).toContain('pageTopMerchants');

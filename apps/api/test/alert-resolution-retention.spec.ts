@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { AlertResolutionRetentionJob } from '../src/jobs/alert-resolution-retention.job';
+import { createJobRunnerMock } from './helpers/job-runner';
 import {
   ALERT_RESOLUTION_PURGE_BATCH,
   ALERT_RESOLUTION_PURGE_MAX_BATCHES,
@@ -14,7 +15,7 @@ describe('AlertResolutionRetentionJob', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    job = new AlertResolutionRetentionJob(prisma as never);
+    job = new AlertResolutionRetentionJob(prisma as never, createJobRunnerMock() as never);
   });
 
   it('exports retention matching interactive day-scoped resolve window family', () => {

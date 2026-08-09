@@ -7,6 +7,7 @@ import {
   ALERT_RESOLUTION_PURGE_MAX_BATCHES,
   ALERT_RESOLUTION_RETENTION_DAYS
 } from '../common/sql-chunk';
+import { JobRunnerService } from './job-runner.service';
 
 /**
  * Bounded OperationAlertResolution retention.
@@ -20,7 +21,10 @@ export class AlertResolutionRetentionJob {
   private readonly logger = new Logger(AlertResolutionRetentionJob.name);
   private running = false;
 
-  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(JobRunnerService) private readonly jobRunner: JobRunnerService
+  ) {}
 
   /** Daily retention sweep — staggered after daily-metrics purge (9am). */
   @Cron(CronExpression.EVERY_DAY_AT_10AM)
@@ -30,18 +34,20 @@ export class AlertResolutionRetentionJob {
       return;
     }
     this.running = true;
-    try {
-      const deleted = await this.purgeOlderThan(ALERT_RESOLUTION_RETENTION_DAYS);
-      if (deleted > 0) {
-        this.logger.log(
-          `Purged ${deleted} OperationAlertResolution rows older than ${ALERT_RESOLUTION_RETENTION_DAYS}d`
-        );
-      }
-    } catch (err) {
-      this.logger.warn(`OperationAlertResolution retention failed: ${err}`);
-    } finally {
-      this.running = false;
-    }
+    await this.jobRunner
+      .runJob('alert-resolution-retention', async (setMeta) => {
+        const deleted = await this.purgeOlderThan(ALERT_RESOLUTION_RETENTION_DAYS);
+        setMeta({ deleted, retentionDays: ALERT_RESOLUTION_RETENTION_DAYS });
+        if (deleted > 0) {
+          this.logger.log(
+            `Purged ${deleted} OperationAlertResolution rows older than ${ALERT_RESOLUTION_RETENTION_DAYS}d`
+          );
+        }
+        return deleted;
+      })
+      .finally(() => {
+        this.running = false;
+      });
   }
 
   /**

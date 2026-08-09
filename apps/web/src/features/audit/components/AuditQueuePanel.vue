@@ -39,7 +39,7 @@
         :total="total"
         :page-sizes="[10, 20, 50]"
         layout="total, sizes, prev, pager, next"
-        small
+        size="small"
         @update:current-page="emit('update:page', $event)"
         @update:page-size="emit('update:pageSize', $event)"
         @current-change="emit('page-change', $event)"

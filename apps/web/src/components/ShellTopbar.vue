@@ -7,6 +7,7 @@
     </div>
     <ShellTopbarActions
       :cookie-status="cookieStatus"
+      :cookie-status-error="cookieStatusError"
       :role-store="roleStore"
       @open-history="$emit('open-history')"
       @open-cookie="$emit('open-cookie')"
@@ -19,6 +20,7 @@ import ShellTopbarActions from './ShellTopbarActions.vue';
 defineProps<{
   pageTitle: string;
   cookieStatus: { isValid?: boolean } | null | undefined;
+  cookieStatusError?: string | null;
   roleStore: {
     currentRole: UserRole;
     roleLabel: string;

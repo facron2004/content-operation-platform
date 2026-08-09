@@ -17,6 +17,7 @@ const page = useDataAnalysisPage();
       @export="page.onExport"
     />
     <ErrorAlert :message="page.loadError" />
+    <ErrorAlert :message="page.exportError" />
     <DataAnalysisBody
       v-model:preset="page.preset"
       :summary="page.summary"

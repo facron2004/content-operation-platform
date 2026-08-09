@@ -223,8 +223,7 @@ WHERE urb."scopeId" IS NOT NULL;
 INSERT OR IGNORE INTO "UserRoleAssignment" ("assignmentId", "tenantId", "userId", "roleId", "scopeType", "orgUnitId", "isActive", "createdAt", "updatedAt")
 SELECT 'ura_' || urb."id", u."tenantId", urb."userId", r."roleId",
        CASE
-         WHEN urb."scopeType" = 'area' THEN 'ORG_TREE'
-         WHEN urb."scopeType" = 'merchant' THEN 'ORG_ONLY'
+         WHEN urb."scopeType" IN ('area', 'merchant') THEN 'ORG_ONLY'
          WHEN urb."role" IN ('admin', 'platform_operator', 'auditor') THEN 'ALL'
          ELSE 'NONE'
        END,

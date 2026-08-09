@@ -7,6 +7,7 @@ import {
   AUDIT_LOG_RETENTION_DAYS
 } from '../common/sql-chunk';
 import { sqlDatetime, toSqliteDateTime } from '../common/sqlite-datetime';
+import { JobRunnerService } from './job-runner.service';
 
 /**
  * Bounded OperationAuditLog retention.
@@ -20,7 +21,10 @@ export class AuditLogRetentionJob {
   private readonly logger = new Logger(AuditLogRetentionJob.name);
   private running = false;
 
-  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(JobRunnerService) private readonly jobRunner: JobRunnerService
+  ) {}
 
   /** Daily retention sweep — staggered after visit purge (3am). */
   @Cron(CronExpression.EVERY_DAY_AT_4AM)
@@ -30,18 +34,20 @@ export class AuditLogRetentionJob {
       return;
     }
     this.running = true;
-    try {
-      const deleted = await this.purgeOlderThan(AUDIT_LOG_RETENTION_DAYS);
-      if (deleted > 0) {
-        this.logger.log(
-          `Purged ${deleted} OperationAuditLog rows older than ${AUDIT_LOG_RETENTION_DAYS}d`
-        );
-      }
-    } catch (err) {
-      this.logger.warn(`OperationAuditLog retention failed: ${err}`);
-    } finally {
-      this.running = false;
-    }
+    await this.jobRunner
+      .runJob('audit-log-retention', async (setMeta) => {
+        const deleted = await this.purgeOlderThan(AUDIT_LOG_RETENTION_DAYS);
+        setMeta({ deleted, retentionDays: AUDIT_LOG_RETENTION_DAYS });
+        if (deleted > 0) {
+          this.logger.log(
+            `Purged ${deleted} OperationAuditLog rows older than ${AUDIT_LOG_RETENTION_DAYS}d`
+          );
+        }
+        return deleted;
+      })
+      .finally(() => {
+        this.running = false;
+      });
   }
 
   /**

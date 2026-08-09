@@ -20,16 +20,24 @@
       @page-size-change="onPageSizeChange"
       @select="selectCopy"
     />
-    <AuditReviewPanel :selected="selected" :draft="draft" @audit="audit" />
+    <ErrorAlert :message="loadError" />
+    <ErrorAlert :message="detailError" />
+    <ErrorAlert :message="actionError" />
+    <AuditReviewPanel :selected="selected" :draft="draft" :submitting="submitting" @audit="audit" />
   </section>
 </template>
 <script setup lang="ts">
 import { channelLabels } from '../utils/labels';
+import ErrorAlert from '../components/ErrorAlert.vue';
 import { useAudit } from '../features/audit/use-audit';
 import AuditQueuePanel from '../features/audit/components/AuditQueuePanel.vue';
 import AuditReviewPanel from '../features/audit/components/AuditReviewPanel.vue';
 const {
   loading,
+  loadError,
+  detailError,
+  actionError,
+  submitting,
   status,
   channel,
   copies,

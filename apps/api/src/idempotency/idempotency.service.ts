@@ -20,6 +20,24 @@ export interface IdempotencyRecord {
 /** Default TTL for idempotency records: 24 hours. */
 export const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000;
 
+function isUniqueConstraintError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /UNIQUE constraint failed|SQLITE_CONSTRAINT_UNIQUE|P2002|unique constraint/i.test(message);
+}
+
+function normalizeForHash(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(normalizeForHash);
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value)
+        .filter(([, item]) => item !== undefined)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, item]) => [key, normalizeForHash(item)])
+    );
+  }
+  return value;
+}
+
 @Injectable()
 export class IdempotencyService {
   constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
@@ -27,7 +45,7 @@ export class IdempotencyService {
   /** Hash the request body for comparison. */
   hashRequest(body: unknown): string {
     return createHash('sha256')
-      .update(JSON.stringify(body ?? {}))
+      .update(JSON.stringify(normalizeForHash(body ?? {})))
       .digest('hex');
   }
 
@@ -37,7 +55,9 @@ export class IdempotencyService {
    */
   async findRecord(key: string, operationType: string): Promise<IdempotencyRecord | null> {
     const rows = await this.prisma.$queryRawUnsafe<IdempotencyRecord[]>(
-      `SELECT * FROM "IdempotencyRecord"
+      `SELECT "id", "idempotencyKey", "operationType", "requestHash", "status",
+              "responseData", "expiresAt", "createdAt", "updatedAt"
+       FROM "IdempotencyRecord"
        WHERE "idempotencyKey" = ? AND "operationType" = ?
        LIMIT 1`,
       key,
@@ -86,10 +106,23 @@ export class IdempotencyService {
         createdAt: new Date(),
         updatedAt: new Date()
       };
-    } catch {
-      // Unique constraint violation: concurrent request won
-      return null;
+    } catch (error: unknown) {
+      // Only a unique-key race means another request won. Database locks,
+      // connection failures, and other persistence faults must remain visible.
+      if (isUniqueConstraintError(error)) return null;
+      throw error;
     }
+  }
+
+  /** Atomically reacquire a failed record so concurrent retries cannot both execute. */
+  async tryAcquireFailed(id: string): Promise<boolean> {
+    const result = await this.prisma.$executeRawUnsafe(
+      `UPDATE "IdempotencyRecord"
+       SET "status" = 'pending', "responseData" = NULL, "updatedAt" = datetime('now')
+       WHERE "id" = ? AND "status" = 'failed'`,
+      id
+    );
+    return Number(result ?? 0) === 1;
   }
 
   /**
@@ -120,7 +153,7 @@ export class IdempotencyService {
    */
   async purgeExpired(): Promise<number> {
     const result = await this.prisma.$executeRawUnsafe(
-      `DELETE FROM "IdempotencyRecord" WHERE "expiresAt" < datetime('now')`
+      `DELETE FROM "IdempotencyRecord" WHERE datetime("expiresAt") < datetime('now')`
     );
     return Number(result ?? 0);
   }

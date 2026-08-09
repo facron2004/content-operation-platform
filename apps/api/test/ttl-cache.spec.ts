@@ -149,6 +149,8 @@ describe('TtlCache', () => {
       await expect(refundLoad).resolves.toBe(88);
       // The orphaned gmv load must not crash; it may still resolve to 99 after clear
       await expect(gmvLoad).resolves.toBe(99);
+      // Its stale result must not overwrite the newer value loaded after clear.
+      expect(cache.get('gmv:day:pending')).toBe(100);
     });
 
     it('clears the entire store and inFlight when no prefix is given', () => {

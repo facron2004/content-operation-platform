@@ -5,7 +5,7 @@ describe('residual #126 rule-config findUnique select slim', () => {
     const fs = await import('fs/promises');
     const path = await import('path');
     const src = await fs.readFile(
-      path.join(__dirname, '..', 'src', 'content', 'rule-config-ops.ts'),
+      path.join(__dirname, '..', 'src', 'content', 'rule-config-write.ts'),
       'utf8'
     );
 
@@ -26,7 +26,7 @@ describe('residual #126 rule-config findUnique select slim', () => {
     const fs = await import('fs/promises');
     const path = await import('path');
     const src = await fs.readFile(
-      path.join(__dirname, '..', 'src', 'content', 'rule-config-ops.ts'),
+      path.join(__dirname, '..', 'src', 'content', 'rule-config-write.ts'),
       'utf8'
     );
 

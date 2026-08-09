@@ -1,7 +1,7 @@
 <template>
   <div class="kpi-row">
     <MetricTile
-      :label="activeTab === 'refund' ? '今日退款金额' : '今日核销金额'"
+      :label="amountLabel"
       :value="
         activeTab === 'refund'
           ? displayMoney(refundToday, 'totalRefund')
@@ -9,9 +9,12 @@
       "
       info
     />
-    <MetricTile label="今日 GMV" :value="displayMoney({ totalGmv: currentGmv ?? 0 }, 'totalGmv')" />
     <MetricTile
-      :label="activeTab === 'refund' ? '退款率' : '核销率'"
+      :label="gmvLabel"
+      :value="displayMoney({ totalGmv: currentGmv ?? 0 }, 'totalGmv')"
+    />
+    <MetricTile
+      :label="rateLabel"
       :value="formatPercent(currentRate ?? 0)"
       :danger="
         activeTab === 'refund'
@@ -20,7 +23,7 @@
       "
     />
     <MetricTile
-      :label="activeTab === 'refund' ? '退款订单数' : '核销订单数'"
+      :label="countLabel"
       :value="
         activeTab === 'refund'
           ? (refundToday?.refundCount ?? '-')
@@ -30,14 +33,33 @@
   </div>
 </template>
 <script setup lang="ts">
+import { computed } from 'vue';
 import MetricTile from '../../../components/MetricTile.vue';
 import { displayMoney, formatPercent } from '../../../utils/format';
 import type { RefundVerifyTab } from '../composables/refund-verify-core';
-defineProps<{
+import { REFUND_WINDOW_LABELS } from '../composables/refund-verify-core';
+import type { RefundWindow } from '../../../services/api/refund.api';
+
+const props = defineProps<{
   activeTab: RefundVerifyTab;
+  /** 周期口径: 今日/本周/本月/本年, 决定 KPI 文案前缀. */
+  kpiWindow: RefundWindow;
   refundToday: { totalRefund?: number; refundCount?: number } | null;
   verifyToday: { totalVerify?: number; verifyCount?: number } | null;
   currentGmv?: number;
   currentRate?: number;
 }>();
+
+// 口径跟随周期切换: 今日/本周/本月/本年. 默认按今日兜底.
+const windowLabel = computed(() => REFUND_WINDOW_LABELS[props.kpiWindow] ?? '今日');
+const amountLabel = computed(
+  () => `${windowLabel.value}${props.activeTab === 'refund' ? '退款金额' : '核销金额'}`
+);
+const gmvLabel = computed(() => `${windowLabel.value} GMV`);
+const rateLabel = computed(
+  () => `${windowLabel.value}${props.activeTab === 'refund' ? '退款率' : '核销率'}`
+);
+const countLabel = computed(
+  () => `${windowLabel.value}${props.activeTab === 'refund' ? '退款订单数' : '核销订单数'}`
+);
 </script>

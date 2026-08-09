@@ -83,10 +83,23 @@ export async function findAuthByColumn(tx: Tx, column: 'userId' | 'username', va
   return rows[0] ?? null;
 }
 
-export async function findUserById(tx: Tx, userId: string) {
-  const rows = await tx.$queryRawUnsafe<UserPublicRow[]>(
-    `SELECT ${USER_LIST_COLUMNS} FROM "AppUser" WHERE "userId" = ?`,
+export async function findTenantId(tx: Tx, userId: string): Promise<string> {
+  // Tenant identity is an authorization boundary; schema/DB failures must not
+  // be converted into a default-tenant session.
+  const rows = await tx.$queryRawUnsafe<Array<{ tenantId?: string | null }>>(
+    `SELECT "tenantId" FROM "AppUser" WHERE "userId" = ?`,
     userId
+  );
+  const tenantId = rows[0]?.tenantId;
+  if (!tenantId) throw new Error(`AppUser ${userId} has no usable tenantId`);
+  return tenantId;
+}
+
+export async function findUserById(tx: Tx, userId: string, tenantId: string) {
+  const rows = await tx.$queryRawUnsafe<UserPublicRow[]>(
+    `SELECT ${USER_LIST_COLUMNS} FROM "AppUser" WHERE "userId" = ? AND "tenantId" = ?`,
+    userId,
+    tenantId
   );
   return rows[0] ?? null;
 }
@@ -98,28 +111,45 @@ export async function fetchRoleBindings(tx: Tx, userId: string) {
   );
 }
 
-export async function hasUnrestrictedPeerRole(tx: Tx, userId: string): Promise<boolean> {
+export async function hasUnrestrictedPeerRole(
+  tx: Tx,
+  userId: string,
+  tenantId: string
+): Promise<boolean> {
   const rows = await tx.$queryRawUnsafe<Array<{ role: string }>>(
-    `SELECT "role" FROM "UserRoleBinding" WHERE "userId" = ? AND "role" IN ('admin', 'platform_operator', 'auditor') LIMIT 1`,
-    userId
+    `SELECT urb."role" FROM "UserRoleBinding" urb
+     INNER JOIN "AppUser" u ON u."userId" = urb."userId"
+     WHERE urb."userId" = ? AND urb."role" IN ('admin', 'platform_operator', 'auditor') AND u."tenantId" = ?
+     LIMIT 1`,
+    userId,
+    tenantId
   );
   return rows.some(
     (r) => r.role === 'admin' || r.role === 'platform_operator' || r.role === 'auditor'
   );
 }
 
-export async function hasAdminRole(tx: Tx, userId: string): Promise<boolean> {
+export async function hasAdminRole(tx: Tx, userId: string, tenantId: string): Promise<boolean> {
   const rows = await tx.$queryRawUnsafe<Array<{ role: string }>>(
-    `SELECT "role" FROM "UserRoleBinding" WHERE "userId" = ? AND "role" = 'admin' LIMIT 1`,
-    userId
+    `SELECT urb."role" FROM "UserRoleBinding" urb
+     INNER JOIN "AppUser" u ON u."userId" = urb."userId"
+     WHERE urb."userId" = ? AND urb."role" = 'admin' AND u."tenantId" = ?
+     LIMIT 1`,
+    userId,
+    tenantId
   );
   return rows.some((r) => r.role === 'admin');
 }
 
-export async function getUserActiveMeta(tx: Tx, id: string): Promise<{ isActive: boolean } | null> {
+export async function getUserActiveMeta(
+  tx: Tx,
+  id: string,
+  tenantId: string
+): Promise<{ isActive: boolean } | null> {
   const rows = await tx.$queryRawUnsafe<Array<{ isActive: number | boolean }>>(
-    `SELECT "isActive" FROM "AppUser" WHERE "userId" = ?`,
-    id
+    `SELECT "isActive" FROM "AppUser" WHERE "userId" = ? AND "tenantId" = ?`,
+    id,
+    tenantId
   );
   if (!rows.length) return null;
   return { isActive: Number(rows[0].isActive) === 1 };
@@ -180,17 +210,19 @@ export async function insertUser(
     displayName: string;
     email: string | null;
     phone: string | null;
+    tenantId: string;
   }
 ): Promise<void> {
   const now = new Date().toISOString().replace('T', ' ').replace('Z', '');
   await tx.$executeRawUnsafe(
-    `INSERT INTO "AppUser" ("userId", "username", "passwordHash", "displayName", "email", "phone", "isActive", "tokenVersion", "createdAt", "updatedAt") VALUES (?, ?, ?, ?, ?, ?, 1, 0, ?, ?)`,
+    `INSERT INTO "AppUser" ("userId", "username", "passwordHash", "displayName", "email", "phone", "isActive", "tokenVersion", "tenantId", "createdAt", "updatedAt") VALUES (?, ?, ?, ?, ?, ?, 1, 0, ?, ?, ?)`,
     p.userId,
     p.username,
     p.passwordHash,
     p.displayName,
     p.email,
     p.phone,
+    p.tenantId,
     now,
     now
   );
@@ -201,12 +233,14 @@ export async function updateUser(
   userId: string,
   sets: string[],
   params: unknown[],
-  extraWhere?: string
+  tenantId: string,
+  extraWhere?: string,
+  extraWhereParams: unknown[] = []
 ): Promise<number> {
   const now = new Date().toISOString().replace('T', ' ').replace('Z', '');
   sets.push(`"updatedAt" = ?`);
-  params.push(now, userId);
-  const sql = `UPDATE "AppUser" SET ${sets.join(', ')} WHERE "userId" = ?${extraWhere ?? ''}`;
+  params.push(now, userId, ...extraWhereParams, tenantId);
+  const sql = `UPDATE "AppUser" SET ${sets.join(', ')} WHERE "userId" = ?${extraWhere ?? ''} AND "tenantId" = ?`;
   return Number((await tx.$executeRawUnsafe(sql, ...params)) ?? 0);
 }
 

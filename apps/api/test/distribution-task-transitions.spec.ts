@@ -30,4 +30,9 @@ describe('distribution-task transitions', () => {
   it('returns false for unknown from-status', () => {
     expect(canTransition('unknown_status', 'published')).toBe(false);
   });
+
+  it('does not expose the removed assertCanTransition helper', async () => {
+    const transitions = await import('../src/distribution-task/distribution-task-transitions');
+    expect('assertCanTransition' in transitions).toBe(false);
+  });
 });

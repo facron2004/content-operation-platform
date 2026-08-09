@@ -7,6 +7,7 @@
     @closed="onClosed"
   >
     <div v-loading="loading" class="timeline-body">
+      <ErrorAlert :message="error" />
       <div class="timeline-meta">
         <span v-if="merchantName" class="meta-item">商家：{{ merchantName }}</span>
         <!-- Residual #234: operator-selectable window (API days 7–90). -->
@@ -71,6 +72,7 @@ import { useRouter } from 'vue-router';
 import type { ZeroSalesTimelineResponse } from '../../../services/api/zero-sales.api';
 import { formatNumber } from '../../../utils/format';
 import AppleButton from '../../../components/AppleButton.vue';
+import ErrorAlert from '../../../components/ErrorAlert.vue';
 
 type TagType = 'success' | 'primary' | 'warning' | 'info' | 'danger';
 
@@ -83,6 +85,7 @@ const props = withDefaults(
     merchantName?: string;
     days?: number;
     timeline?: ZeroSalesTimelineResponse['timeline'];
+    error?: string | null;
   }>(),
   {
     loading: false,
@@ -90,7 +93,8 @@ const props = withDefaults(
     packageName: '',
     merchantName: '',
     days: 30,
-    timeline: () => []
+    timeline: () => [],
+    error: null
   }
 );
 

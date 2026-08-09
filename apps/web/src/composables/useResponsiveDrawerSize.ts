@@ -1,4 +1,4 @@
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { computed, onMounted, onScopeDispose, ref } from 'vue';
 
 /** Drawer width that collapses to full viewport on narrow screens. */
 export function useResponsiveDrawerSize(desktopSize: string, breakpoint = 520) {
@@ -9,7 +9,7 @@ export function useResponsiveDrawerSize(desktopSize: string, breakpoint = 520) {
   }
 
   onMounted(() => window.addEventListener('resize', onResize));
-  onUnmounted(() => window.removeEventListener('resize', onResize));
+  onScopeDispose(() => window.removeEventListener('resize', onResize));
 
   const drawerSize = computed(() => (viewportWidth.value < breakpoint ? '100%' : desktopSize));
 

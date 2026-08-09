@@ -59,29 +59,35 @@ describe('residual #153 empty-set update short-circuit (no full re-SELECT)', () 
     const fs = await import('fs/promises');
     const path = await import('path');
     const src = await fs.readFile(
-      path.join(__dirname, '..', 'src', 'distribution-task', 'distribution-task.service.ts'),
+      path.join(
+        __dirname,
+        '..',
+        'src',
+        'distribution-task',
+        'application',
+        'update-task.service.ts'
+      ),
       'utf8'
     );
 
-    const fnStart = src.indexOf('async update(');
+    const fnStart = src.indexOf('export async function updateDistributionTask(');
     expect(fnStart).toBeGreaterThan(0);
     const candidates = [
-      src.indexOf('\n  async ', fnStart + 10),
-      src.indexOf('\n  /**', fnStart + 10),
-      src.indexOf('\n  private ', fnStart + 10)
+      src.indexOf('\nexport ', fnStart + 10),
+      src.indexOf('\n@Injectable', fnStart + 10)
     ].filter((i) => i > 0);
     const next = candidates.length ? Math.min(...candidates) : fnStart + 3000;
     const fn = src.slice(fnStart, next);
 
-    expect(fn).toMatch(/getTaskUpdateMeta\(/);
+    expect(fn).toMatch(/getDistributionTaskUpdateMeta\(/);
     expect(fn).toMatch(/if \(sets\.length === 0\)/);
     expect(fn).toMatch(/taskId: id/);
     expect(fn).toMatch(/packageId: existing\.packageId/);
     expect(fn).toMatch(/status: existing\.status/);
     expect(fn).not.toMatch(/if \(sets\.length === 0\) return this\.getTaskRow\(id\)/);
     expect(fn).not.toMatch(/return this\.getTaskRow\(id\)/);
-    // Residual #165: happy path slim shell (no full-row payload).
-    expect(fn).toMatch(/\$executeRawUnsafe/);
+    // Residual #165: happy path delegates the slim write (no full-row payload).
+    expect(fn).toMatch(/updateTask\(prisma, id, sets, params, existing\.status\)/);
     expect(fn).not.toMatch(/\bRETURNING\b/);
     expect(fn).toMatch(/success:\s*true/);
   });

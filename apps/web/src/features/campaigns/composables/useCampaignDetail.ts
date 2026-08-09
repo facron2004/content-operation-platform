@@ -1,4 +1,4 @@
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, onScopeDispose, ref } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import type {
   CampaignPerformanceResponse,
@@ -13,6 +13,7 @@ const NESTED_TASKS_PAGE_SIZE = 10;
 export function useCampaignDetail(campaignId: string) {
   const loading = ref(false);
   const actionLoading = ref(false);
+  const actionError = ref<string | null>(null);
   const campaign = ref<MarketingCampaign | null>(null);
   // Residual #178: campaign-scoped performance (not platform getTaskKPIs).
   const performance = ref<CampaignPerformanceResponse | null>(null);
@@ -22,6 +23,8 @@ export function useCampaignDetail(campaignId: string) {
   const tasksPage = ref(1);
   const tasksPageSize = ref(NESTED_TASKS_PAGE_SIZE);
   const tasksLoading = ref(false);
+  const loadError = ref<string | null>(null);
+  const tasksError = ref<string | null>(null);
   // Residual #271: listTasks INTERACTIVE_LIST_MAX_DAYS window honesty.
   const tasksDateFrom = ref<string | undefined>();
   const tasksDateTo = ref<string | undefined>();
@@ -32,11 +35,20 @@ export function useCampaignDetail(campaignId: string) {
     return '近 90 天';
   });
   let tasksRequestId = 0;
+  let actionRequestId = 0;
+  let disposed = false;
+
+  onScopeDispose(() => {
+    disposed = true;
+    actionRequestId += 1;
+    actionLoading.value = false;
+  }, true);
 
   async function loadTasks(page = tasksPage.value): Promise<void> {
     if (!campaignId) return;
     const requestId = ++tasksRequestId;
     tasksLoading.value = true;
+    tasksError.value = null;
     try {
       const taskPage = await api.listTasks({
         campaignId,
@@ -49,8 +61,9 @@ export function useCampaignDetail(campaignId: string) {
       tasksPage.value = page;
       tasksDateFrom.value = taskPage.dateFrom;
       tasksDateTo.value = taskPage.dateTo;
-    } catch {
+    } catch (error) {
       if (requestId !== tasksRequestId) return;
+      tasksError.value = extractErrorMessage(error, '活动任务加载失败，请稍后重试');
       if (tasks.value.length === 0) {
         tasksTotal.value = 0;
       }
@@ -69,12 +82,22 @@ export function useCampaignDetail(campaignId: string) {
     if (loading.value) return;
     loading.value = true;
     tasksLoading.value = true;
+    loadError.value = null;
+    tasksError.value = null;
     const openTasksRequestId = ++tasksRequestId;
     try {
+      const taskPagePromise = api
+        .listTasks({ campaignId, page: 1, pageSize: NESTED_TASKS_PAGE_SIZE })
+        .catch((error: unknown) => {
+          if (openTasksRequestId === tasksRequestId) {
+            tasksError.value = extractErrorMessage(error, '活动任务加载失败，请稍后重试');
+          }
+          return null;
+        });
       const [campaignData, perfData, taskPage] = await Promise.all([
         api.getCampaign(campaignId),
         api.getCampaignPerformance(campaignId),
-        api.listTasks({ campaignId, page: 1, pageSize: NESTED_TASKS_PAGE_SIZE }).catch(() => null)
+        taskPagePromise
       ]);
       campaign.value = campaignData as MarketingCampaign;
       performance.value = perfData;
@@ -85,16 +108,12 @@ export function useCampaignDetail(campaignId: string) {
           tasksPage.value = 1;
           tasksDateFrom.value = taskPage.dateFrom;
           tasksDateTo.value = taskPage.dateTo;
-        } else {
-          tasks.value = [];
-          tasksTotal.value = 0;
-          tasksPage.value = 1;
-          tasksDateFrom.value = undefined;
-          tasksDateTo.value = undefined;
         }
       }
     } catch (error) {
-      ElMessage.error(extractErrorMessage(error, '加载活动详情失败'));
+      const message = extractErrorMessage(error, '加载活动详情失败');
+      loadError.value = message;
+      ElMessage.error(message);
     } finally {
       loading.value = false;
       if (openTasksRequestId === tasksRequestId) tasksLoading.value = false;
@@ -106,7 +125,9 @@ export function useCampaignDetail(campaignId: string) {
     successText: string,
     failText: string
   ): Promise<void> {
-    if (actionLoading.value) return;
+    if (disposed || actionLoading.value) return;
+    const requestId = ++actionRequestId;
+    actionError.value = null;
     actionLoading.value = true;
     try {
       // Residual #124: transition endpoints return the full campaign row.
@@ -114,19 +135,24 @@ export function useCampaignDetail(campaignId: string) {
       // Performance is a trailing 90d aggregate and does not change on status transition;
       // loadDetail remains available for explicit refresh.
       const result = await action();
+      if (disposed || requestId !== actionRequestId) return;
       if (result && typeof result === 'object' && result !== null && 'campaignId' in result) {
         campaign.value = result as MarketingCampaign;
       }
       ElMessage.success(successText);
     } catch (error) {
-      ElMessage.error(extractErrorMessage(error, failText));
+      if (disposed || requestId !== actionRequestId) return;
+      actionError.value = extractErrorMessage(error, failText);
+      ElMessage.error(actionError.value);
     } finally {
-      actionLoading.value = false;
+      if (requestId === actionRequestId) actionLoading.value = false;
     }
   }
 
   async function startCampaign(): Promise<void> {
-    await runAction(() => api.startCampaign(campaignId), '活动已启动', '启动活动失败');
+    const version = campaign.value?.updatedAt;
+    if (!version) return;
+    await runAction(() => api.startCampaign(campaignId, version), '活动已启动', '启动活动失败');
   }
 
   async function pauseCampaign(): Promise<void> {
@@ -147,6 +173,7 @@ export function useCampaignDetail(campaignId: string) {
     } catch {
       return;
     }
+    if (disposed) return;
     await runAction(() => api.cancelCampaign(campaignId), '活动已取消', '取消活动失败');
   }
 
@@ -154,7 +181,9 @@ export function useCampaignDetail(campaignId: string) {
 
   return {
     loading,
+    loadError,
     actionLoading,
+    actionError,
     campaign,
     performance,
     tasks,
@@ -162,6 +191,7 @@ export function useCampaignDetail(campaignId: string) {
     tasksPage,
     tasksPageSize,
     tasksLoading,
+    tasksError,
     // Residual #271
     tasksDateFrom,
     tasksDateTo,

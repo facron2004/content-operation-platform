@@ -3,12 +3,18 @@ import { ConflictException, Inject, Injectable, Optional } from '@nestjs/common'
 import { TtlCache, withHeavyAggregateGate } from '../common';
 import { HEAVY_LIST_CACHE_MAX_SIZE } from '../common/heavy-aggregate-gate';
 import { AutoLoginService } from '../content/auto-login.service';
+import { JobRunnerService } from '../jobs/job-runner.service';
 import { MerchantSalesService } from '../merchant-sales/merchant-sales.service';
 import { OverviewService } from '../overview/overview.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RefundService } from '../refund/refund.service';
 import { refreshGmvFromJeesite } from './gmv-refresh';
-import { getGmvRefreshJob, startGmvRefreshJob, type GmvRefreshJob } from './gmv-refresh-job';
+import {
+  getGmvRefreshJob,
+  getPersistedGmvRefreshJob,
+  startGmvRefreshJob,
+  type GmvRefreshJob
+} from './gmv-refresh-job';
 import {
   computeGmvTopMerchants,
   resolveGmvDistribution,
@@ -96,7 +102,8 @@ export function createGmvServiceOps(
   prisma: PrismaService,
   autoLogin?: AutoLoginService,
   merchantSales?: MerchantSalesService,
-  onMoneyWrite?: () => void
+  onMoneyWrite?: () => void,
+  jobRunner?: JobRunnerService
 ) {
   const ops = createGmvCacheMethods(cache, prisma);
   // Serialize refresh: concurrent tabs must not double-pull Jeesite, and a later
@@ -137,14 +144,15 @@ export function createGmvServiceOps(
             ops.invalidateCache();
             onMoneyWrite?.();
           },
-          getKpis: (date: string) => ops.getKpis(date, false)
+          getKpis: (date: string) => ops.getKpis(date, false),
+          jobRunner
         },
         startDate,
         endDate
       );
     },
-    getRefreshJob(jobId: string): GmvRefreshJob | undefined {
-      return getGmvRefreshJob(jobId);
+    async getRefreshJob(jobId: string): Promise<GmvRefreshJob | undefined> {
+      return getGmvRefreshJob(jobId) ?? (await getPersistedGmvRefreshJob(jobId, jobRunner));
     }
   };
 }
@@ -170,7 +178,8 @@ export class GmvService {
     @Optional() @Inject(AutoLoginService) autoLogin?: AutoLoginService,
     @Optional() @Inject(MerchantSalesService) merchantSales?: MerchantSalesService,
     @Optional() @Inject(OverviewService) overview?: OverviewService,
-    @Optional() @Inject(RefundService) refund?: RefundService
+    @Optional() @Inject(RefundService) refund?: RefundService,
+    @Optional() @Inject(JobRunnerService) jobRunner?: JobRunnerService
   ) {
     this.ops = createGmvServiceOps(
       new TtlCache(GMV_CACHE_TTL_MS, HEAVY_LIST_CACHE_MAX_SIZE),
@@ -180,7 +189,8 @@ export class GmvService {
       () => {
         overview?.invalidateCache();
         refund?.invalidateCache();
-      }
+      },
+      jobRunner
     );
   }
 
@@ -221,7 +231,7 @@ export class GmvService {
     return this.ops.startRefreshJob(startDate, endDate);
   }
 
-  getRefreshJob(jobId: string): GmvRefreshJob | undefined {
+  getRefreshJob(jobId: string): Promise<GmvRefreshJob | undefined> {
     return this.ops.getRefreshJob(jobId);
   }
 }

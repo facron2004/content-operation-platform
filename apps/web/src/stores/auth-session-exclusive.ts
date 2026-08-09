@@ -1,17 +1,18 @@
-export type AuthTokenResult = string | null;
+export type AuthSessionResult = boolean | null;
 export async function runExclusiveAuthRequest(
-  inflight: { current: Promise<AuthTokenResult> | null },
-  work: () => Promise<AuthTokenResult>
-): Promise<AuthTokenResult> {
+  inflight: { current: Promise<AuthSessionResult> | null },
+  work: () => Promise<AuthSessionResult>
+): Promise<AuthSessionResult> {
   if (inflight.current) return inflight.current;
-  inflight.current = (async () => {
+  const request = (async () => {
     try {
       return await work();
     } finally {
       setTimeout(() => {
-        inflight.current = null;
+        if (inflight.current === request) inflight.current = null;
       }, 100);
     }
   })();
-  return inflight.current;
+  inflight.current = request;
+  return request;
 }

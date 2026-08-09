@@ -245,7 +245,8 @@ describe('data-analysis refund paidTime attribution', () => {
         tradeAmount: 107,
         netGmv: 0,
         refundAmount: 107,
-        netSales: -5
+        // Both fixture orders are unverified (verifyTime IS NULL).
+        writeOffAmount: 0
       });
 
       await expect(queryDailyTrend(prisma, '2026-07-02', '2026-07-02')).resolves.toEqual([
@@ -254,7 +255,7 @@ describe('data-analysis refund paidTime attribution', () => {
           salesAmount: 102,
           tradeAmount: 107,
           netGmv: 0,
-          netSales: -5,
+          writeOffAmount: 0,
           orderCount: 2,
           refundAmount: 107
         }
@@ -279,6 +280,109 @@ describe('data-analysis refund paidTime attribution', () => {
   });
 });
 
+describe('data-analysis 核销额口径(已核销子集)', () => {
+  it('核销额 = 已核销(verified)订单的 余额+现金，按 paidTime 归算', async () => {
+    // 独立命名的内存库，避免与同 worker 内其它用例共享的 cache=shared 内存库冲突。
+    const client = createClient({ url: 'file::memory:' });
+    await client.execute(`
+      CREATE TABLE "OrderHeader" (
+        "orderId" TEXT PRIMARY KEY,
+        "orderTime" TEXT,
+        "paidTime" TEXT,
+        "refundTime" TEXT,
+        "status" TEXT,
+        "paidAmountFen" INTEGER,
+        "paidAmountWalletFen" INTEGER,
+        "orderAmountFen" INTEGER,
+        "refundAmountFen" INTEGER,
+        "verifyAmountFen" INTEGER,
+        "verifyTime" TEXT,
+        "merchantName" TEXT,
+        "salesman" TEXT,
+        "channel" TEXT,
+        "packageId" TEXT
+      )
+    `);
+    const insert = (args: InValue[]) =>
+      client.execute({
+        sql: `INSERT INTO "OrderHeader" (
+          "orderId", "orderTime", "paidTime", "refundTime", "status",
+          "paidAmountFen", "paidAmountWalletFen", "orderAmountFen", "refundAmountFen",
+          "verifyAmountFen", "verifyTime", "merchantName", "salesman", "channel", "packageId"
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        args
+      });
+    // 窗口 2026-07-02：A 已核销(余额+现金=100+5=105)，B 未核销但残留 verifyAmount 不应计入；C 已核销但 paidTime 在窗口外(07-01 15:00)。
+    await insert([
+      'A',
+      '2026-07-02 15:00:00',
+      '2026-07-01 16:01:00',
+      null,
+      'verified',
+      10000,
+      500,
+      11000,
+      0,
+      10500,
+      '2026-07-02 18:00:00',
+      '商家A',
+      '业务员A',
+      'wechat',
+      'p-a'
+    ]);
+    await insert([
+      'B',
+      '2026-07-02 15:30:00',
+      '2026-07-01 16:02:00',
+      null,
+      'paid',
+      20000,
+      0,
+      22000,
+      0,
+      999,
+      null,
+      '商家B',
+      '业务员B',
+      'wechat',
+      'p-b'
+    ]);
+    await insert([
+      'C',
+      '2026-07-01 15:00:00',
+      '2026-07-01 15:00:00',
+      null,
+      'verified',
+      40000,
+      1000,
+      42000,
+      0,
+      41000,
+      '2026-07-01 18:00:00',
+      '商家C',
+      '业务员C',
+      'wechat',
+      'p-c'
+    ]);
+
+    const prisma = {
+      $queryRawUnsafe: async <T = unknown>(sql: string, ...args: InValue[]) =>
+        (await client.execute({ sql, args })).rows as T
+    };
+    try {
+      const ov = await queryOverview(prisma, '2026-07-02', '2026-07-02');
+      expect(ov.orderCount).toBe(2);
+      expect(ov.tradeAmount).toBe(305); // A(105) + B(200)
+      // 仅已核销订单(A)的余额+现金计入核销额，未核销(B)与窗口外已核销(C)均不计入
+      expect(ov.writeOffAmount).toBe(105);
+      expect(ov.verifyAmount).toBe(105);
+      expect(ov.netGmv).toBe(305);
+    } finally {
+      await client.close();
+    }
+  });
+});
+
 describe('data-analysis deltas', () => {
   it('computes ratio and nulls zero-previous', () => {
     expect(deltaRatio(10, 0)).toBeNull();
@@ -289,7 +393,7 @@ describe('data-analysis deltas', () => {
       walletAmount: 0,
       tradeAmount: 0,
       netGmv: 0,
-      netSales: 0,
+      writeOffAmount: 0,
       faceAmount: 0,
       refundAmount: 0,
       verifyAmount: 0,
@@ -329,7 +433,7 @@ describe('data-analysis excel builder (砍价订单模板)', () => {
       walletAmount: 20,
       tradeAmount: 320,
       netGmv: 310,
-      netSales: 290,
+      writeOffAmount: 320,
       faceAmount: 400,
       refundAmount: 10,
       verifyAmount: 100,

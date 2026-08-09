@@ -9,7 +9,7 @@ defineProps<{
   channelOptions: Array<{ label: string; value: string }>;
   loading: boolean;
   generationMode: 'ai' | 'rule' | null;
-  // Residual #268: generate package picker honesty.
+  // Residual #268: generate package picker multi-page honesty.
   truncated?: boolean;
   limit?: number | null;
   matchedCount?: number | null;

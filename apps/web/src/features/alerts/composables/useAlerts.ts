@@ -1,18 +1,20 @@
-import { computed, onBeforeUnmount, type Ref } from 'vue';
+import { computed, onScopeDispose, type Ref } from 'vue';
 import { useOperationHistory } from '../../../services/operation-history';
 import {
-  EMPTY_ALERT_SUMMARY,
   bindAlertWatchers,
+  clearAlertFilterTimer,
   createAlertLoader,
-  createAlertState,
-  useAlertHandlers
+  createAlertState
 } from './alert-core';
+import { useAlertHandlers } from './alert-handlers';
+import { EMPTY_ALERT_SUMMARY } from './alert-types';
 
-export type { AlertSummary, AlertPackageFocus, AlertItem, AlertResponse } from './alert-core';
-export { useAlertTableSummary } from './alert-core';
+export type { AlertSummary, AlertPackageFocus, AlertItem, AlertResponse } from './alert-types';
+export { useAlertTableSummary } from './alert-summary';
 
 export function useAlerts(role: Ref<string | undefined>) {
   const state = createAlertState();
+  let disposed = false;
   const { recordSuccess, recordError } = useOperationHistory();
   const summary = computed(() => state.alertResponse.value?.summary ?? EMPTY_ALERT_SUMMARY);
   const topPackages = computed(() => state.alertResponse.value?.topPackages ?? []);
@@ -32,7 +34,11 @@ export function useAlerts(role: Ref<string | undefined>) {
   const sourceTruncated = computed(() => state.alertResponse.value?.sourceTruncated === true);
   const sourceLimit = computed(() => state.alertResponse.value?.sourceLimit ?? 0);
   const sourceMatchedCount = computed(() => state.alertResponse.value?.sourceMatchedCount ?? 0);
-  const load = createAlertLoader(state, role);
+  const rawLoad = createAlertLoader(state, role);
+  const load = async (force = false) => {
+    if (disposed) return;
+    await rawLoad(force);
+  };
   const handlers = useAlertHandlers({
     alerts: state.alerts,
     filters: state.filters,
@@ -40,16 +46,21 @@ export function useAlerts(role: Ref<string | undefined>) {
     load,
     resolveRequestId: () => ++state.resolveRequestId.value,
     currentResolveRequestId: () => state.resolveRequestId.value,
+    isActive: () => !disposed,
     setResolving: (v) => {
       state.resolving.value = v;
     },
     recordSuccess,
-    recordError
+    recordError,
+    setActionError: (value) => {
+      state.actionError.value = value;
+    }
   });
 
   bindAlertWatchers({
     filters: state.filters,
     pagination: state.pagination,
+    isActive: () => !disposed,
     role,
     load,
     setFilterTimer: (timer) => {
@@ -58,16 +69,20 @@ export function useAlerts(role: Ref<string | undefined>) {
     getFilterTimer: () => state.filterTimer.value
   });
 
-  onBeforeUnmount(() => {
-    if (state.filterTimer.value) clearTimeout(state.filterTimer.value);
+  onScopeDispose(() => {
+    disposed = true;
+    clearAlertFilterTimer(state);
     state.loadRequestId.value += 1;
     state.resolveRequestId.value += 1;
-  });
+    state.loading.value = false;
+    state.resolving.value = false;
+  }, true);
 
   return {
     loading: state.loading,
     resolving: state.resolving,
     loadError: state.loadError,
+    actionError: state.actionError,
     alerts: state.alerts,
     summary,
     topPackages,

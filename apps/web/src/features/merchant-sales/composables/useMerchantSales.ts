@@ -11,11 +11,12 @@ export function useMerchantSales() {
   const state = createMerchantSalesState();
   const derived = useMerchantSalesDerived({
     windowSel: state.windowSel,
+    kpiDate: state.kpiDate,
     summary: state.summary,
     trend: state.trend,
     ranking: state.ranking
   });
-  const { loadRanking, reload } = createMerchantSalesLoaders(state);
+  const { loadRanking, reload, forceRefresh } = createMerchantSalesLoaders(state);
   mountMerchantSalesReload(reload);
   return {
     ...state,
@@ -28,10 +29,10 @@ export function useMerchantSales() {
       windowSel: state.windowSel,
       sortBy: state.sortBy,
       exporting: state.exporting,
-      loadError: state.loadError,
       kpiDate: state.kpiDate,
       reload,
-      loadRanking
+      loadRanking,
+      forceRefresh
     }),
     ...merchantSalesFormatters
   };

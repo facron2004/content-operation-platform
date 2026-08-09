@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { TaskPerformanceDailyRetentionJob } from '../src/jobs/task-performance-daily-retention.job';
+import { createJobRunnerMock } from './helpers/job-runner';
 import {
   TASK_PERFORMANCE_DAILY_PURGE_BATCH,
   TASK_PERFORMANCE_DAILY_PURGE_MAX_BATCHES,
@@ -14,7 +15,7 @@ describe('TaskPerformanceDailyRetentionJob', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    job = new TaskPerformanceDailyRetentionJob(prisma as never);
+    job = new TaskPerformanceDailyRetentionJob(prisma as never, createJobRunnerMock() as never);
   });
 
   it('exports retention longer than interactive 90d KPI window', () => {

@@ -3,7 +3,18 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
-import { getApiEntry, getWebDistPath, getDataDir, getLogsDir, getDatabasePath } from './paths';
+import {
+  getApiEntry,
+  getWebDistPath,
+  getDataDir,
+  getLogsDir,
+  getDatabasePath,
+  getMigrationsPath,
+  getReleaseManifestPath,
+  getSchemaPath
+} from './paths';
+import { buildDesktopBackendEnvironment } from './backend-runtime-environment';
+import { getBackendConfigEnvironment } from './config-store';
 import { logInfo, logError } from './logger';
 
 export interface BackendRuntime {
@@ -11,10 +22,14 @@ export interface BackendRuntime {
   port: number;
   baseUrl: string;
   token: string;
+  bootId: string;
 }
 
 let backendProcess: UtilityProcess | null = null;
 let restartCount = 0;
+let backendExitPromise: Promise<void> = Promise.resolve();
+let resolveBackendExit: (() => void) | null = null;
+let stoppingBackend = false;
 const MAX_RESTARTS = 1;
 
 function normalizePath(filePath: string): string {
@@ -39,14 +54,29 @@ export function findAvailablePort(): Promise<number> {
 }
 
 /** 等待后端健康检查通过 */
-export async function waitForBackend(baseUrl: string, timeout = 60_000): Promise<void> {
+function isReadyPayload(value: unknown, expectedBootId?: string): boolean {
+  if (!value || typeof value !== 'object') return false;
+  const payload = value as Record<string, unknown>;
+  return (
+    payload.status === 'ready' &&
+    (expectedBootId === undefined || payload.bootId === expectedBootId)
+  );
+}
+
+export async function waitForBackend(
+  baseUrl: string,
+  timeout = 60_000,
+  expectedBootId?: string
+): Promise<void> {
   const startTime = Date.now();
 
   while (Date.now() - startTime < timeout) {
     try {
-      const response = await fetch(`${baseUrl}/health`);
-      if (response.ok) {
-        logInfo(`后端健康检查通过: ${baseUrl}/health`);
+      const response = await fetch(`${baseUrl}/ready`);
+      const payload = (await response.json().catch(() => null)) as unknown;
+      const ready = response.ok && isReadyPayload(payload, expectedBootId);
+      if (ready) {
+        logInfo(`后端就绪检查通过: ${baseUrl}/ready`);
         return;
       }
     } catch {
@@ -59,7 +89,11 @@ export async function waitForBackend(baseUrl: string, timeout = 60_000): Promise
 }
 
 /** 启动 NestJS 后端 */
-export async function startBackend(port: number): Promise<BackendRuntime> {
+export async function startBackend(
+  port: number,
+  bootId = crypto.randomUUID()
+): Promise<BackendRuntime> {
+  stoppingBackend = false;
   const dataDirectory = getDataDir();
   const logDirectory = getLogsDir();
 
@@ -67,8 +101,25 @@ export async function startBackend(port: number): Promise<BackendRuntime> {
   fs.mkdirSync(logDirectory, { recursive: true });
 
   const databasePath = getDatabasePath();
-  const token = crypto.randomBytes(32).toString('hex');
   const apiEntry = getApiEntry();
+  const migrationsPath = getMigrationsPath();
+  const schemaPath = getSchemaPath();
+  const releaseManifestPath = getReleaseManifestPath();
+  const includeReleaseManifest = app.isPackaged || fs.existsSync(releaseManifestPath);
+  const backendEnvironment = buildDesktopBackendEnvironment({
+    inheritedEnvironment: process.env,
+    configuredEnvironment: getBackendConfigEnvironment(),
+    nodeEnvironment: app.isPackaged ? 'production' : 'development',
+    port,
+    databaseUrl: `file:${normalizePath(databasePath)}`,
+    migrationsPath,
+    schemaPath,
+    releaseManifestPath: includeReleaseManifest ? releaseManifestPath : undefined,
+    bootId,
+    appVersion: app.getVersion(),
+    webDistPath: getWebDistPath(),
+    logDirectory
+  });
 
   if (!fs.existsSync(apiEntry)) {
     throw new Error(`后端入口不存在: ${apiEntry}`);
@@ -78,52 +129,46 @@ export async function startBackend(port: number): Promise<BackendRuntime> {
   logInfo(`数据库路径: ${databasePath}`);
   logInfo(`端口: ${port}`);
 
-  backendProcess = utilityProcess.fork(apiEntry, [], {
+  backendExitPromise = new Promise<void>((resolve) => {
+    resolveBackendExit = resolve;
+  });
+  const nextBackendProcess = utilityProcess.fork(apiEntry, [], {
     cwd: path.dirname(apiEntry),
     stdio: 'pipe',
-    env: {
-      ...process.env,
-      NODE_ENV: app.isPackaged ? 'production' : 'development',
-      DESKTOP_MODE: 'true',
-      DESKTOP_APP: '1',
-      HOST: '127.0.0.1',
-      PORT: String(port),
-      DATABASE_URL: `file:${normalizePath(databasePath)}`,
-      WEB_DIST_PATH: getWebDistPath(),
-      DESKTOP_RUNTIME_TOKEN: token,
-      LOG_DIR: logDirectory,
-      JWT_SECRET: crypto.randomBytes(24).toString('hex'),
-      AUTH_PASSWORD: crypto.randomBytes(16).toString('hex')
-    }
+    env: backendEnvironment.environment
   });
+  backendProcess = nextBackendProcess;
 
-  backendProcess.stdout?.on('data', (data: Buffer) => {
+  nextBackendProcess.stdout?.on('data', (data: Buffer) => {
     const text = data.toString().trim();
     if (text) logInfo(`[API] ${text}`);
   });
 
-  backendProcess.stderr?.on('data', (data: Buffer) => {
+  nextBackendProcess.stderr?.on('data', (data: Buffer) => {
     const text = data.toString().trim();
     if (text) logError(`[API stderr] ${text}`);
   });
 
-  backendProcess.on('exit', (code) => {
+  nextBackendProcess.on('exit', (code) => {
     logInfo(`后端进程退出, code=${code}`);
-    backendProcess = null;
+    resolveBackendExit?.();
+    resolveBackendExit = null;
+    if (backendProcess === nextBackendProcess) backendProcess = null;
 
-    if (code !== 0 && restartCount < MAX_RESTARTS) {
+    if (!stoppingBackend && code !== 0 && restartCount < MAX_RESTARTS) {
       restartCount++;
       logInfo(`尝试自动重启后端 (${restartCount}/${MAX_RESTARTS})...`);
-      startBackend(port).catch((err) => {
+      startBackend(port, bootId).catch((err) => {
         logError('后端自动重启失败', err);
       });
     }
   });
 
   return {
-    process: backendProcess,
+    process: nextBackendProcess,
     port,
-    token,
+    token: backendEnvironment.runtimeToken,
+    bootId,
     baseUrl: `http://127.0.0.1:${port}`
   };
 }
@@ -132,6 +177,26 @@ export async function startBackend(port: number): Promise<BackendRuntime> {
 export function stopBackend(): void {
   if (!backendProcess) return;
   logInfo('正在停止后端进程...');
+  stoppingBackend = true;
   backendProcess.kill();
-  backendProcess = null;
+}
+
+export async function stopBackendAndWait(timeout = 10_000): Promise<void> {
+  if (!backendProcess) return;
+  const wait = backendExitPromise;
+  stopBackend();
+  await Promise.race([wait, new Promise<void>((resolve) => setTimeout(resolve, timeout))]);
+}
+
+export async function restartBackend(): Promise<BackendRuntime> {
+  await stopBackendAndWait();
+  const port = await findAvailablePort();
+  const runtime = await startBackend(port);
+  try {
+    await waitForBackend(runtime.baseUrl, 180_000, runtime.bootId);
+    return runtime;
+  } catch (error) {
+    stopBackend();
+    throw error;
+  }
 }

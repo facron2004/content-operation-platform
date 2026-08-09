@@ -10,8 +10,11 @@ import type {
 } from '@content/shared';
 import client from '../http-client';
 import { cachedGet, clearCache } from '../cache.service';
+
+type GenerateCopyApiRequest = Omit<GenerateCopyRequest, 'createdBy'>;
+
 export async function generateCopies(
-  payload: GenerateCopyRequest
+  payload: GenerateCopyApiRequest
 ): Promise<GenerateCopiesResponse> {
   const { data } = await client.post('/content/generate', payload);
   clearCache('/content/copies');

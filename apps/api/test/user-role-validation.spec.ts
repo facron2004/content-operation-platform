@@ -1,13 +1,21 @@
 import { BadRequestException } from '@nestjs/common';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-// Mock bcrypt before importing UserService
+// Mock bcrypt before importing the user application services.
 vi.mock('bcrypt', () => ({
   hash: vi.fn(async (p: string) => `bcrypt:${p}`),
   compare: vi.fn(async () => true)
 }));
 
-import { UserService } from '../src/user-access/user.service';
+import { UserCommandService } from '../src/user-access/application/user-application.service';
+
+const TENANT_ID = 'tenant-a';
+
+function commandOptions(
+  overrides: { allowAdminRole?: boolean; allowUnrestrictedRoles?: boolean } = {}
+) {
+  return { tenantId: TENANT_ID, ...overrides };
+}
 
 function makePrisma() {
   const users = new Map<string, Record<string, unknown>>();
@@ -19,8 +27,11 @@ function makePrisma() {
       // Params end with: ..., userId, excludeUserId
       // deactivate: [now, userId, excludeId]
       // update: [...fieldValues, now, userId, excludeId]
-      const excludeId = String(params[params.length - 1] ?? '');
-      const userId = String(params[params.length - 2] ?? '');
+      const tenantScoped = sql.includes('"tenantId" = ?');
+      const isParameterizedUpdate = sql.includes('"isActive" = ?');
+      const excludeOffset = tenantScoped ? (isParameterizedUpdate ? 3 : 2) : 1;
+      const excludeId = String(params[params.length - excludeOffset] ?? '');
+      const userId = String(params[params.length - (tenantScoped ? 4 : 2)] ?? '');
       let peerAdmins = 0;
       for (const [uid, list] of roles.entries()) {
         if (uid === excludeId) continue;
@@ -39,7 +50,7 @@ function makePrisma() {
       return row;
     }
     // Non-admin deactivate / plain update — last param is userId
-    const userId = String(params[params.length - 1] ?? '');
+    const userId = String(params[params.length - (sql.includes('"tenantId" = ?') ? 2 : 1)] ?? '');
     const row = users.get(userId);
     if (!row) return null;
     // Heuristic: if SQL sets isActive=0 (deactivate path without EXISTS)
@@ -78,7 +89,9 @@ function makePrisma() {
     }
     if (sql.includes('FROM "AppUser" WHERE "userId"')) {
       const id = String(params[0]);
-      return users.has(id) ? [users.get(id)] : [];
+      const tenantId = String(params[1] ?? '');
+      const row = users.get(id);
+      return row && row.tenantId === tenantId ? [row] : [];
     }
     // Last-admin guard: COUNT other active users with admin binding.
     if (sql.includes('COUNT(*)') && sql.includes('"role" = \'admin\'')) {
@@ -106,7 +119,8 @@ function makePrisma() {
 
   const executeRawUnsafe = vi.fn(async (sql: string, ...params: unknown[]) => {
     if (sql.startsWith('INSERT INTO "AppUser"')) {
-      const [userId, username, passwordHash, displayName, email, phone] = params as string[];
+      const [userId, username, passwordHash, displayName, email, phone, tenantId] =
+        params as string[];
       users.set(userId, {
         userId,
         username,
@@ -114,6 +128,7 @@ function makePrisma() {
         displayName,
         email,
         phone,
+        tenantId,
         isActive: 1,
         tokenVersion: 0,
         lastLoginAt: null,
@@ -162,22 +177,47 @@ function makePrisma() {
   };
 }
 
-describe('UserService role binding validation', () => {
-  let service: UserService;
+describe('UserCommandService role binding validation', () => {
+  let service: UserCommandService;
 
   beforeEach(() => {
     const { prisma } = makePrisma();
-    service = new UserService(prisma as never);
+    service = new UserCommandService(prisma as never);
   });
 
   it('rejects inventing arbitrary roles on create', async () => {
     await expect(
-      service.create({
-        username: 'evil',
-        password: 'secret12',
-        roles: [{ role: 'superadmin' as never }]
-      })
+      service.create(
+        {
+          username: 'evil',
+          password: 'secret12',
+          roles: [{ role: 'superadmin' as never }]
+        },
+        commandOptions()
+      )
     ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('rejects user commands without a usable tenant context', async () => {
+    await expect(
+      service.create({ username: 'missing-tenant', password: 'secret12' }, undefined as never)
+    ).rejects.toThrow('会话缺少租户信息');
+    await expect(service.update('u1', {}, '  ')).rejects.toThrow('会话缺少租户信息');
+    await expect(service.deactivate('u1', '  ')).rejects.toThrow('会话缺少租户信息');
+    await expect(service.updateRoles('u1', [], undefined as never)).rejects.toThrow(
+      '会话缺少租户信息'
+    );
+  });
+
+  it('does not mutate a user through a different tenant', async () => {
+    const created = await service.create(
+      { username: 'tenant-owned', password: 'secret12' },
+      commandOptions()
+    );
+
+    await expect(
+      service.update(created.userId, { displayName: 'cross-tenant' }, 'tenant-b')
+    ).rejects.toThrow(`用户 ${created.userId} 不存在`);
   });
 
   it('rejects platform_operator granting admin role', async () => {
@@ -188,7 +228,7 @@ describe('UserService role binding validation', () => {
           password: 'secret12',
           roles: [{ role: 'admin' }]
         },
-        { allowAdminRole: false, allowUnrestrictedRoles: false }
+        commandOptions({ allowAdminRole: false, allowUnrestrictedRoles: false })
       )
     ).rejects.toBeInstanceOf(BadRequestException);
   });
@@ -201,7 +241,7 @@ describe('UserService role binding validation', () => {
           password: 'secret12',
           roles: [{ role: 'platform_operator' }]
         },
-        { allowAdminRole: false, allowUnrestrictedRoles: false }
+        commandOptions({ allowAdminRole: false, allowUnrestrictedRoles: false })
       )
     ).rejects.toBeInstanceOf(BadRequestException);
     await expect(
@@ -211,21 +251,21 @@ describe('UserService role binding validation', () => {
           password: 'secret12',
           roles: [{ role: 'auditor' }]
         },
-        { allowAdminRole: false, allowUnrestrictedRoles: false }
+        commandOptions({ allowAdminRole: false, allowUnrestrictedRoles: false })
       )
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('allows admin to grant admin role', async () => {
     const { prisma, roles } = makePrisma();
-    service = new UserService(prisma as never);
+    service = new UserCommandService(prisma as never);
     const user = await service.create(
       {
         username: 'new-admin',
         password: 'secret12',
         roles: [{ role: 'admin' }]
       },
-      { allowAdminRole: true, allowUnrestrictedRoles: true }
+      commandOptions({ allowAdminRole: true, allowUnrestrictedRoles: true })
     );
     // Residual #170: slim shell — assert write side effects via store.
     expect(user.success).toBe(true);
@@ -236,41 +276,50 @@ describe('UserService role binding validation', () => {
 
   it('rejects scoped role without matching scopeId', async () => {
     await expect(
-      service.create({
-        username: 'no-scope',
-        password: 'secret12',
-        roles: [{ role: 'area_operator' }]
-      })
+      service.create(
+        {
+          username: 'no-scope',
+          password: 'secret12',
+          roles: [{ role: 'area_operator' }]
+        },
+        commandOptions()
+      )
     ).rejects.toBeInstanceOf(BadRequestException);
     await expect(
-      service.create({
-        username: 'wrong-scope',
-        password: 'secret12',
-        roles: [{ role: 'merchant_operator', scopeType: 'area', scopeId: 'a1' }]
-      })
+      service.create(
+        {
+          username: 'wrong-scope',
+          password: 'secret12',
+          roles: [{ role: 'merchant_operator', scopeType: 'area', scopeId: 'a1' }]
+        },
+        commandOptions()
+      )
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('rejects invalid scopeType', async () => {
     await expect(
-      service.create({
-        username: 'scoped',
-        password: 'secret12',
-        roles: [{ role: 'area_operator', scopeType: 'galaxy' as never, scopeId: 'x' }]
-      })
+      service.create(
+        {
+          username: 'scoped',
+          password: 'secret12',
+          roles: [{ role: 'area_operator', scopeType: 'galaxy' as never, scopeId: 'x' }]
+        },
+        commandOptions()
+      )
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('rejects invalid roles on updateRoles', async () => {
     const created = await service.create(
       { username: 'op', password: 'secret12', roles: [{ role: 'platform_operator' }] },
-      { allowAdminRole: true, allowUnrestrictedRoles: true }
+      commandOptions({ allowAdminRole: true, allowUnrestrictedRoles: true })
     );
     await expect(
       service.updateRoles(
         created.userId,
         { roles: [{ role: 'root' as never }] },
-        { allowAdminRole: true, allowUnrestrictedRoles: true }
+        commandOptions({ allowAdminRole: true, allowUnrestrictedRoles: true })
       )
     ).rejects.toBeInstanceOf(BadRequestException);
   });
@@ -278,33 +327,33 @@ describe('UserService role binding validation', () => {
   it('rejects stripping the last active admin role binding', async () => {
     const solo = await service.create(
       { username: 'solo-admin', password: 'secret12', roles: [{ role: 'admin' }] },
-      { allowAdminRole: true, allowUnrestrictedRoles: true }
+      commandOptions({ allowAdminRole: true, allowUnrestrictedRoles: true })
     );
     await expect(
       service.updateRoles(
         solo.userId,
         { roles: [{ role: 'platform_operator' }] },
-        { allowAdminRole: true, allowUnrestrictedRoles: true }
+        commandOptions({ allowAdminRole: true, allowUnrestrictedRoles: true })
       )
     ).rejects.toThrow(/最后一个有效 admin/);
   });
 
   it('allows demoting admin when another active admin remains', async () => {
     const { prisma, roles, users } = makePrisma();
-    service = new UserService(prisma as never);
+    service = new UserCommandService(prisma as never);
     const a = await service.create(
       { username: 'admin-a', password: 'secret12', roles: [{ role: 'admin' }] },
-      { allowAdminRole: true, allowUnrestrictedRoles: true }
+      commandOptions({ allowAdminRole: true, allowUnrestrictedRoles: true })
     );
     await service.create(
       { username: 'admin-b', password: 'secret12', roles: [{ role: 'admin' }] },
-      { allowAdminRole: true, allowUnrestrictedRoles: true }
+      commandOptions({ allowAdminRole: true, allowUnrestrictedRoles: true })
     );
     // Residual #169: slim shell — assert side effects via store, not body roles.
     const updated = await service.updateRoles(
       a.userId,
       { roles: [{ role: 'platform_operator' }] },
-      { allowAdminRole: true, allowUnrestrictedRoles: true }
+      commandOptions({ allowAdminRole: true, allowUnrestrictedRoles: true })
     );
     expect(updated.success).toBe(true);
     expect(updated.userId).toBe(a.userId);
@@ -315,65 +364,71 @@ describe('UserService role binding validation', () => {
   it('rejects deactivating the last active admin account', async () => {
     const solo = await service.create(
       { username: 'solo-admin-2', password: 'secret12', roles: [{ role: 'admin' }] },
-      { allowAdminRole: true, allowUnrestrictedRoles: true }
+      commandOptions({ allowAdminRole: true, allowUnrestrictedRoles: true })
     );
-    await expect(service.deactivate(solo.userId)).rejects.toThrow(/最后一个有效 admin/);
-    await expect(service.update(solo.userId, { isActive: false })).rejects.toThrow(
+    await expect(service.deactivate(solo.userId, TENANT_ID)).rejects.toThrow(/最后一个有效 admin/);
+    await expect(service.update(solo.userId, { isActive: false }, TENANT_ID)).rejects.toThrow(
       /最后一个有效 admin/
     );
   });
 
   it('rejects scoped role with non-existent scopeId', async () => {
     await expect(
-      service.create({
-        username: 'ghost-area',
-        password: 'secret12',
-        roles: [{ role: 'area_operator', scopeType: 'area', scopeId: 'no-such-area' }]
-      })
+      service.create(
+        {
+          username: 'ghost-area',
+          password: 'secret12',
+          roles: [{ role: 'area_operator', scopeType: 'area', scopeId: 'no-such-area' }]
+        },
+        commandOptions()
+      )
     ).rejects.toThrow(/区域 scopeId 不存在/);
     await expect(
-      service.create({
-        username: 'ghost-merchant',
-        password: 'secret12',
-        roles: [{ role: 'merchant_operator', scopeType: 'merchant', scopeId: 'no-such-m' }]
-      })
+      service.create(
+        {
+          username: 'ghost-merchant',
+          password: 'secret12',
+          roles: [{ role: 'merchant_operator', scopeType: 'merchant', scopeId: 'no-such-m' }]
+        },
+        commandOptions()
+      )
     ).rejects.toThrow(/商家 scopeId 不存在/);
   });
 
   it('bumps tokenVersion on password reset', async () => {
     const { prisma, users } = makePrisma();
-    service = new UserService(prisma as never);
+    service = new UserCommandService(prisma as never);
     const created = await service.create(
       { username: 'pw-user', password: 'secret12', roles: [{ role: 'platform_operator' }] },
-      { allowAdminRole: true, allowUnrestrictedRoles: true }
+      commandOptions({ allowAdminRole: true, allowUnrestrictedRoles: true })
     );
     expect(Number(users.get(created.userId)?.tokenVersion ?? 0)).toBe(0);
     // Residual #169: slim shell — assert tokenVersion via store.
-    const updated = await service.update(created.userId, { password: 'newsecret9' });
+    const updated = await service.update(created.userId, { password: 'newsecret9' }, TENANT_ID);
     expect(updated.success).toBe(true);
     expect(updated.userId).toBe(created.userId);
     expect(Number(users.get(created.userId)?.tokenVersion ?? 0)).toBe(1);
-    const again = await service.update(created.userId, { password: 'another9x' });
+    const again = await service.update(created.userId, { password: 'another9x' }, TENANT_ID);
     expect(again.success).toBe(true);
     expect(Number(users.get(created.userId)?.tokenVersion ?? 0)).toBe(2);
   });
 
   it('bumps tokenVersion on role demotion so live JWTs are revoked', async () => {
     const { prisma, roles, users } = makePrisma();
-    service = new UserService(prisma as never);
+    service = new UserCommandService(prisma as never);
     const a = await service.create(
       { username: 'admin-tv', password: 'secret12', roles: [{ role: 'admin' }] },
-      { allowAdminRole: true, allowUnrestrictedRoles: true }
+      commandOptions({ allowAdminRole: true, allowUnrestrictedRoles: true })
     );
     await service.create(
       { username: 'admin-tv-b', password: 'secret12', roles: [{ role: 'admin' }] },
-      { allowAdminRole: true, allowUnrestrictedRoles: true }
+      commandOptions({ allowAdminRole: true, allowUnrestrictedRoles: true })
     );
     expect(Number(users.get(a.userId)?.tokenVersion ?? 0)).toBe(0);
     const demoted = await service.updateRoles(
       a.userId,
       { roles: [{ role: 'platform_operator' }] },
-      { allowAdminRole: true, allowUnrestrictedRoles: true }
+      commandOptions({ allowAdminRole: true, allowUnrestrictedRoles: true })
     );
     expect(demoted.success).toBe(true);
     expect((roles.get(a.userId) ?? []).map((r) => r.role)).toEqual(['platform_operator']);
@@ -382,16 +437,16 @@ describe('UserService role binding validation', () => {
 
   it('bumps tokenVersion on deactivate so live JWTs are revoked', async () => {
     const { prisma, users } = makePrisma();
-    service = new UserService(prisma as never);
+    service = new UserCommandService(prisma as never);
     const a = await service.create(
       { username: 'admin-off', password: 'secret12', roles: [{ role: 'admin' }] },
-      { allowAdminRole: true, allowUnrestrictedRoles: true }
+      commandOptions({ allowAdminRole: true, allowUnrestrictedRoles: true })
     );
     await service.create(
       { username: 'admin-off-b', password: 'secret12', roles: [{ role: 'admin' }] },
-      { allowAdminRole: true, allowUnrestrictedRoles: true }
+      commandOptions({ allowAdminRole: true, allowUnrestrictedRoles: true })
     );
-    const off = await service.deactivate(a.userId);
+    const off = await service.deactivate(a.userId, TENANT_ID);
     expect(off.success).toBe(true);
     expect(off.isActive).toBe(false);
     expect(Number(users.get(a.userId)?.isActive)).toBe(0);

@@ -9,10 +9,9 @@ import {
   isRequestCanceled,
   MAX_RETRIES,
   requestKey,
-  responseKey,
+  releaseInFlightController,
   restoreAuth,
   RETRY_DELAY,
-  setAuthorization,
   shouldRetry,
   statusErrorMessage,
   type RetryableConfig
@@ -23,15 +22,14 @@ export async function retryWithRestoredAuth(params: {
   client: AxiosInstance;
   error: AxiosError;
   redirectToLogin: () => void;
-  getAuthRestoreInflight: () => Promise<string | null> | null;
-  setAuthRestoreInflight: (value: Promise<string | null> | null) => void;
+  getAuthRestoreInflight: () => Promise<boolean | null> | null;
+  setAuthRestoreInflight: (value: Promise<boolean | null> | null) => void;
 }): Promise<unknown> {
   params.config.__authRetried__ = true;
   if (!params.getAuthRestoreInflight()) params.setAuthRestoreInflight(restoreAuth());
   try {
-    const token = await params.getAuthRestoreInflight();
-    if (token) {
-      setAuthorization(params.config as InternalAxiosRequestConfig, token);
+    const authenticated = await params.getAuthRestoreInflight();
+    if (authenticated) {
       return params.client(params.config);
     }
     ElMessage.error('自动登录失败，请手动登录');
@@ -49,8 +47,8 @@ export async function handleAuthError(params: {
   client: AxiosInstance;
   error: AxiosError;
   redirectToLogin: () => void;
-  getAuthRestoreInflight: () => Promise<string | null> | null;
-  setAuthRestoreInflight: (value: Promise<string | null> | null) => void;
+  getAuthRestoreInflight: () => Promise<boolean | null> | null;
+  setAuthRestoreInflight: (value: Promise<boolean | null> | null) => void;
   isRedirecting: () => boolean;
 }): Promise<unknown | undefined> {
   if (params.status === 401 && params.config && !params.config.__authRetried__)
@@ -76,13 +74,7 @@ export async function maybeRetryHttpRequest(params: {
   endProgress();
   // Drop the slot only when this error still owns it (newer call may already
   // have replaced the controller for the same method+url key).
-  if (error.config) {
-    const key = responseKey(error.config);
-    const owner = inFlightControllers.get(key);
-    if (owner && error.config.signal && owner.signal === error.config.signal) {
-      inFlightControllers.delete(key);
-    }
-  }
+  if (error.config) releaseInFlightController(inFlightControllers, error.config);
   const config = error.config as RetryableConfig | undefined;
   // Stale request aborted by a newer call to the same endpoint — silent.
   if (isRequestCanceled(error) || axios.isCancel(error)) return Promise.reject(error);
@@ -155,8 +147,8 @@ export async function handleHttpError(params: {
   inFlightControllers: Map<string, AbortController>;
   endProgress: () => void;
   redirectToLogin: () => void;
-  getAuthRestoreInflight: () => Promise<string | null> | null;
-  setAuthRestoreInflight: (value: Promise<string | null> | null) => void;
+  getAuthRestoreInflight: () => Promise<boolean | null> | null;
+  setAuthRestoreInflight: (value: Promise<boolean | null> | null) => void;
   isRedirecting: () => boolean;
 }): Promise<unknown> {
   const {
@@ -201,8 +193,17 @@ export function attachHttpRequestInterceptor(args: {
     async (config: InternalAxiosRequestConfig) => {
       startProgress();
       if (!isAuthEndpoint(config.url)) {
-        const token = await useAuthStore().ensureAuthenticated();
-        if (token) setAuthorization(config, token);
+        await useAuthStore().ensureAuthenticated();
+      }
+      const method = config.method?.toUpperCase();
+      if (['POST', 'PUT', 'PATCH'].includes(method ?? '')) {
+        const headers = config.headers as Record<string, unknown>;
+        if (!headers['Idempotency-Key'] && !headers['idempotency-key']) {
+          headers['Idempotency-Key'] =
+            typeof crypto !== 'undefined' && crypto.randomUUID
+              ? crypto.randomUUID()
+              : `idem_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+        }
       }
       const method = config.method?.toUpperCase();
       if (['POST', 'PUT', 'PATCH'].includes(method ?? '')) {
@@ -240,8 +241,8 @@ export function attachHttpInterceptors(args: {
   startProgress: () => void;
   endProgress: () => void;
   redirectToLogin: () => void;
-  getAuthRestoreInflight: () => Promise<string | null> | null;
-  setAuthRestoreInflight: (value: Promise<string | null> | null) => void;
+  getAuthRestoreInflight: () => Promise<boolean | null> | null;
+  setAuthRestoreInflight: (value: Promise<boolean | null> | null) => void;
   isRedirecting: () => boolean;
 }) {
   const {
@@ -258,7 +259,7 @@ export function attachHttpInterceptors(args: {
   client.interceptors.response.use(
     (response) => {
       endProgress();
-      inFlightControllers.delete(responseKey(response.config));
+      releaseInFlightController(inFlightControllers, response.config);
       return response;
     },
     async (error: AxiosError) =>

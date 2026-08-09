@@ -32,10 +32,8 @@ export function resolveRefundWindow(
     const end = yearEnd < today ? yearEnd : today;
     return { start: yearStart, end: end < yearStart ? yearStart : end };
   }
-  const periodStart =
-    window === 'week' ? startOfWeekKey(anchor) : `${anchor.slice(0, 7)}-01`;
-  const periodEnd =
-    window === 'week' ? shiftDateKey(periodStart, 6) : endOfMonthKey(anchor);
+  const periodStart = window === 'week' ? startOfWeekKey(anchor) : `${anchor.slice(0, 7)}-01`;
+  const periodEnd = window === 'week' ? shiftDateKey(periodStart, 6) : endOfMonthKey(anchor);
   const end = periodEnd < today ? periodEnd : today;
   return { start: periodStart, end: end < periodStart ? periodStart : end };
 }
@@ -78,8 +76,8 @@ export async function fetchTopMerchantsRaw(
   const orderColumn = sortBy === 'verifyDesc' ? '"verifyFen"' : '"refundFen"';
   const metricFilter =
     sortBy === 'verifyDesc'
-      ? 'oh."verifyTime" IS NOT NULL AND oh."verifyAmountFen" > 0'
-      : 'oh."refundAmountFen" > 0';
+      ? 'COALESCE(SUM(CASE WHEN oh."verifyTime" IS NOT NULL THEN oh."verifyAmountFen" ELSE 0 END), 0) > 0'
+      : 'COALESCE(SUM(oh."refundAmountFen"), 0) > 0';
   return (await prisma.$queryRawUnsafe(
     `SELECT COALESCE(NULLIF(oh."merchantName", ''), oh."merchantId") AS "merchantName", oh."merchantId", COALESCE(SUM(${SQL_GMV_OH}), 0) AS "gmvFen", COALESCE(SUM(oh."refundAmountFen"), 0) AS "refundFen", COALESCE(SUM(CASE WHEN oh."verifyTime" IS NOT NULL THEN oh."verifyAmountFen" ELSE 0 END), 0) AS "verifyFen", COUNT(CASE WHEN oh."paidTime" IS NOT NULL THEN 1 END) AS "paidOrderCount", COUNT(CASE WHEN oh."refundAmountFen" > 0 THEN 1 END) AS "refundCount", COUNT(CASE WHEN oh."verifyTime" IS NOT NULL THEN 1 END) AS "verifyCount" FROM "OrderHeader" oh WHERE ${sqlDatetimeExclusiveRange('oh."paidTime"')} AND oh."merchantId" IS NOT NULL GROUP BY oh."merchantId" HAVING ${metricFilter} ORDER BY ${orderColumn} DESC, oh."merchantId" ASC LIMIT ?`,
     startBound,

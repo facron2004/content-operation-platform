@@ -76,6 +76,7 @@ defineEmits<{
   <MerchantSalesEmptyDay
     v-if="!loading && !summary && windowSel === 'day'"
     :exporting="exporting"
+    :window-label="windowLabel"
     @force-refresh="$emit('force-refresh')"
   />
 </template>

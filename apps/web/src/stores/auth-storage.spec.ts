@@ -1,42 +1,52 @@
-import { describe, expect, it } from 'vitest';
-import { parseJwtExp } from './auth-storage';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { clearStoredAuth, readStoredAuth, writeStoredAuth } from './auth-storage';
 
-/** Build a fake JWT with a base64url payload (no signature verification). */
-function fakeJwt(payload: Record<string, unknown>, useUrlSafe = false): string {
-  const json = JSON.stringify(payload);
-  let b64 = Buffer.from(json, 'utf8').toString('base64');
-  if (useUrlSafe) {
-    b64 = b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+const values = new Map<string, string>();
+const storage = {
+  getItem(key: string) {
+    return values.get(key) ?? null;
+  },
+  setItem(key: string, value: string) {
+    values.set(key, value);
+  },
+  removeItem(key: string) {
+    values.delete(key);
   }
-  return `hdr.${b64}.sig`;
-}
+};
 
-describe('parseJwtExp', () => {
-  it('reads exp from standard base64 payload', () => {
-    const expSec = 1_800_000_000;
-    expect(parseJwtExp(fakeJwt({ exp: expSec }))).toBe(expSec * 1000);
+describe('cookie-only auth storage', () => {
+  beforeEach(() => {
+    values.clear();
+    vi.stubGlobal('localStorage', storage);
   });
 
-  it('reads exp from base64url payload (JWT wire form)', () => {
-    // Craft payload that forces '+'/'/' in standard base64 so url-safe matters.
-    const payload = { exp: 1_800_000_001, note: '>>>???' };
-    expect(parseJwtExp(fakeJwt(payload, true))).toBe(1_800_000_001 * 1000);
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
-  it('returns null for malformed tokens', () => {
-    expect(parseJwtExp('')).toBeNull();
-    expect(parseJwtExp('not-a-jwt')).toBeNull();
-    expect(parseJwtExp('a.b')).toBeNull();
-    expect(parseJwtExp('a.!!!notbase64!!!.c')).toBeNull();
+  it('removes a legacy token while reading the display identity', () => {
+    values.set('auth_token', 'legacy-token');
+    values.set('auth_user', 'admin');
+
+    expect(readStoredAuth()).toEqual({ username: 'admin' });
+    expect(values.has('auth_token')).toBe(false);
   });
 
-  it('returns null when exp is missing or non-numeric', () => {
-    expect(parseJwtExp(fakeJwt({ sub: 'x' }))).toBeNull();
-    expect(parseJwtExp(fakeJwt({ exp: 'soon' }))).toBeNull();
+  it('persists only the display identity when a session is established', () => {
+    values.set('auth_token', 'legacy-token');
+
+    writeStoredAuth('operator');
+
+    expect(values.get('auth_user')).toBe('operator');
+    expect(values.has('auth_token')).toBe(false);
   });
 
-  it('rejects oversized payload segments', () => {
-    const huge = 'a'.repeat(5000);
-    expect(parseJwtExp(`hdr.${huge}.sig`)).toBeNull();
+  it('clears both the display identity and any legacy token', () => {
+    values.set('auth_token', 'legacy-token');
+    values.set('auth_user', 'operator');
+
+    clearStoredAuth();
+
+    expect(values.size).toBe(0);
   });
 });

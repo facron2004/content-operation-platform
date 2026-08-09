@@ -25,26 +25,37 @@ describe('residual #167 packageGeo fold into getTaskRow / detail / schedule / pu
   it('getTaskRow / getById expose packageGeo; controller passes it and strips from SPA body', async () => {
     const fs = await import('fs/promises');
     const path = await import('path');
-    const service = await fs.readFile(
-      path.join(__dirname, '..', 'src', 'distribution-task', 'distribution-task.service.ts'),
+    const read = await fs.readFile(
+      path.join(__dirname, '..', 'src', 'distribution-task', 'distribution-task-read.ts'),
       'utf8'
     );
-    const controller = await fs.readFile(
+    const queryController = await fs.readFile(
       path.join(__dirname, '..', 'src', 'distribution-task', 'distribution-task.controller.ts'),
       'utf8'
     );
+    const commandController = await fs.readFile(
+      path.join(
+        __dirname,
+        '..',
+        'src',
+        'distribution-task',
+        'distribution-task-command.controller.ts'
+      ),
+      'utf8'
+    );
+    const controller = `${queryController}\n${commandController}`;
 
-    const rowStart = service.indexOf('async getTaskRow(');
+    const rowStart = read.indexOf('export async function getDistributionTaskRow(');
     expect(rowStart).toBeGreaterThan(0);
-    const rowNext = service.indexOf('\n  /**', rowStart + 10);
-    const rowFn = service.slice(rowStart, rowNext > 0 ? rowNext : rowStart + 800);
+    const rowNext = read.indexOf('\nexport ', rowStart + 10);
+    const rowFn = read.slice(rowStart, rowNext > 0 ? rowNext : rowStart + 800);
     expect(rowFn).toMatch(/packageGeo/);
     expect(rowFn).toMatch(/parseTask\(task/);
 
-    const byIdStart = service.indexOf('async getById(');
+    const byIdStart = read.indexOf('export async function getDistributionTaskById(');
     expect(byIdStart).toBeGreaterThan(0);
-    const byIdNext = service.indexOf('\n  /**', byIdStart + 10);
-    const byIdFn = service.slice(byIdStart, byIdNext > 0 ? byIdNext : byIdStart + 400);
+    const byIdNext = read.indexOf('\nexport ', byIdStart + 10);
+    const byIdFn = read.slice(byIdStart, byIdNext > 0 ? byIdNext : byIdStart + 400);
     expect(byIdFn).toMatch(/packageGeo/);
 
     for (const action of ['getById', 'schedule', 'publish'] as const) {
@@ -59,11 +70,15 @@ describe('residual #167 packageGeo fold into getTaskRow / detail / schedule / pu
         candidates.length ? Math.min(...candidates) : fnStart + 900
       );
       if (action === 'getById') {
-        expect(fn).toMatch(/assertTaskAccess\(detail\.packageId,\s*req,\s*detail\.packageGeo\)/);
+        expect(fn).toMatch(
+          /assertTaskAccess\((?:this\.prisma,\s*)?detail\.packageId,\s*req,\s*detail\.packageGeo\)/
+        );
         // SPA body must not include packageGeo.
         expect(fn).toMatch(/packageGeo:\s*_geo/);
       } else {
-        expect(fn).toMatch(/assertTaskAccess\(task\.packageId,\s*req,\s*task\.packageGeo\)/);
+        expect(fn).toMatch(
+          /assertTaskAccess\((?:this\.prisma,\s*)?task\.packageId,\s*req,\s*task\.packageGeo\)/
+        );
       }
     }
   });

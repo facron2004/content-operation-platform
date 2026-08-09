@@ -49,13 +49,12 @@ describe('residual #82 user scope-id batch assert', () => {
     const fs = await import('fs/promises');
     const path = await import('path');
     const src = await fs.readFile(
-      path.join(__dirname, '..', 'src', 'user-access', 'user.service.ts'),
+      path.join(__dirname, '..', 'src', 'user-access', 'application', 'user-role-policy.ts'),
       'utf8'
     );
-    const fnStart = src.indexOf('async function assertScopeIdsExist');
+    const fnStart = src.indexOf('export async function assertScopeIdsExist');
     expect(fnStart).toBeGreaterThan(0);
-    const next = src.indexOf('\nconst HEX_RE', fnStart + 10);
-    const fn = src.slice(fnStart, next > 0 ? next : undefined);
+    const fn = src.slice(fnStart);
     expect(fn).toMatch(/WHERE "merchantId" IN \(\$\{ph\}\)/);
     expect(fn).toMatch(/WHERE "areaId" IN \(\$\{ph\}\)/);
     // No per-binding sequential SELECT LIMIT 1.

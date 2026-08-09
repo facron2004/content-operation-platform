@@ -7,19 +7,26 @@ import {
   DAILY_METRICS_PURGE_MAX_BATCHES,
   DAILY_METRICS_RETENTION_DAYS
 } from '../common/sql-chunk';
+import { JobRunnerService } from './job-runner.service';
 
 /**
  * Bounded PackageSalesDaily + MerchantDailyMetrics + platform DailyMetrics retention.
  *
  * GMV refresh upserts package/merchant daily forever; platform DailyMetrics is
- * one row per day. Interactive readers clamp to ~90d; older rows only grow SQLite.
+ * one row per day. Free-form range readers clamp to 90d, but the merchant-sales
+ * `year` window spans a full calendar year and is compared year-over-year, so
+ * retention is set to 800d (see DAILY_METRICS_RETENTION_DAYS) — anything older
+ * only grows SQLite and is swept here.
  */
 @Injectable()
 export class DailyMetricsRetentionJob {
   private readonly logger = new Logger(DailyMetricsRetentionJob.name);
   private running = false;
 
-  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(JobRunnerService) private readonly jobRunner: JobRunnerService
+  ) {}
 
   /** Daily retention sweep — staggered after TPD purge (8am). */
   @Cron(CronExpression.EVERY_DAY_AT_9AM)
@@ -29,19 +36,21 @@ export class DailyMetricsRetentionJob {
       return;
     }
     this.running = true;
-    try {
-      const result = await this.purgeOlderThan(DAILY_METRICS_RETENTION_DAYS);
-      if (result.packageSales + result.merchantDaily + result.platformDaily > 0) {
-        this.logger.log(
-          `Purged daily metrics older than ${DAILY_METRICS_RETENTION_DAYS}d ` +
-            `(PackageSalesDaily=${result.packageSales}, MerchantDailyMetrics=${result.merchantDaily}, DailyMetrics=${result.platformDaily})`
-        );
-      }
-    } catch (err) {
-      this.logger.warn(`Daily metrics retention failed: ${err}`);
-    } finally {
-      this.running = false;
-    }
+    await this.jobRunner
+      .runJob('daily-metrics-retention', async (setMeta) => {
+        const result = await this.purgeOlderThan(DAILY_METRICS_RETENTION_DAYS);
+        setMeta({ ...result, retentionDays: DAILY_METRICS_RETENTION_DAYS });
+        if (result.packageSales + result.merchantDaily + result.platformDaily > 0) {
+          this.logger.log(
+            `Purged daily metrics older than ${DAILY_METRICS_RETENTION_DAYS}d ` +
+              `(PackageSalesDaily=${result.packageSales}, MerchantDailyMetrics=${result.merchantDaily}, DailyMetrics=${result.platformDaily})`
+          );
+        }
+        return result.packageSales + result.merchantDaily + result.platformDaily;
+      })
+      .finally(() => {
+        this.running = false;
+      });
   }
 
   /**

@@ -1,7 +1,8 @@
-import { computed, ref, onMounted, onUnmounted } from 'vue';
+import { computed, onMounted, onScopeDispose, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useRoleStore } from '../stores/role';
 import { api } from '../services/api';
+import { extractErrorMessage } from '../services/http-client';
 import { PAGE_TITLES, buildNavTree } from './shell-layout-nav';
 import { collectNavLeafPaths, prefetchNavPaths } from './route-view-cache';
 
@@ -41,29 +42,48 @@ export function useShellLayout() {
   const sidebarCollapsed = ref(false);
   type CookieStatus = Awaited<ReturnType<typeof api.getCookieStatus>>;
   const cookieStatus = ref<CookieStatus | null>(null);
+  const cookieStatusError = ref<string | null>(null);
+  let layoutActive = false;
+  let cookieStatusRequestInFlight = false;
   const navTree = computed(() =>
     buildNavTree(roleStore.hasServerSession ? roleStore.permissions : undefined)
   );
 
   const fetchCookieStatus = async () => {
+    if (!layoutActive || cookieStatusRequestInFlight) return;
+    cookieStatusRequestInFlight = true;
+    cookieStatusError.value = null;
     try {
-      cookieStatus.value = await api.getCookieStatus();
-    } catch {
-      /* interceptor handles toast */
+      const nextStatus = await api.getCookieStatus();
+      if (layoutActive) {
+        cookieStatus.value = nextStatus;
+        cookieStatusError.value = null;
+      }
+    } catch (error) {
+      if (layoutActive) {
+        cookieStatusError.value = extractErrorMessage(error, '读取数据源连接状态失败，请稍后重试');
+      }
+    } finally {
+      cookieStatusRequestInFlight = false;
     }
   };
 
   let cookiePoller: ReturnType<typeof setInterval> | null = null;
   let reflowTimer: ReturnType<typeof setTimeout> | null = null;
+  let cancelNavPrefetch: (() => void) | null = null;
   onMounted(() => {
-    fetchCookieStatus();
-    cookiePoller = setInterval(fetchCookieStatus, 30000);
+    layoutActive = true;
+    void fetchCookieStatus();
+    cookiePoller = setInterval(() => void fetchCookieStatus(), 30000);
     // Idle-warm every sidebar leaf so the first click rarely pays chunk cost.
-    prefetchNavPaths(router, collectNavLeafPaths(navTree.value));
+    cancelNavPrefetch = prefetchNavPaths(router, collectNavLeafPaths(navTree.value));
   });
-  onUnmounted(() => {
+  onScopeDispose(() => {
+    layoutActive = false;
     if (cookiePoller) clearInterval(cookiePoller);
     if (reflowTimer) clearTimeout(reflowTimer);
+    cancelNavPrefetch?.();
+    cancelNavPrefetch = null;
   });
 
   return {
@@ -71,6 +91,7 @@ export function useShellLayout() {
     historyVisible,
     cookieDialogVisible,
     cookieStatus,
+    cookieStatusError,
     navTree,
     sidebarCollapsed,
     toggleSidebarCollapse: () => {

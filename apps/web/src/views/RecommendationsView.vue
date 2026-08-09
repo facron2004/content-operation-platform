@@ -11,8 +11,10 @@
       :area-options="areaOptions"
       :category-options="categoryOptions"
       :loading="loading"
-      @refresh="load(true)"
+      @refresh="refresh"
     />
+    <ErrorAlert :message="loadError" />
+    <ErrorAlert :message="categoryError" />
     <RecommendationsTable
       :loading="loading"
       :items="items"
@@ -31,12 +33,15 @@
 </template>
 <script setup lang="ts">
 import { useRouter } from 'vue-router';
+import ErrorAlert from '../components/ErrorAlert.vue';
 import RecommendationsTable from '../features/recommendations/components/RecommendationsTable.vue';
 import RecommendationsFilterBar from '../features/recommendations/components/RecommendationsFilterBar.vue';
 import { useRecommendationsPage } from '../composables/useRecommendationsPage';
 const router = useRouter();
 const {
   loading,
+  loadError,
+  categoryError,
   items,
   categoryOptions,
   areaOptions,
@@ -47,11 +52,16 @@ const {
   listLimit,
   matchedCount,
   load,
+  loadCategoryOptions,
   loadPage,
   clearFilters,
   openAnalysis,
   goGenerate
 } = useRecommendationsPage();
+
+function refresh() {
+  void Promise.all([load(true), loadCategoryOptions()]);
+}
 
 function goCreateTask(packageId: string) {
   router.push({ name: 'tasks', query: { packageId } });

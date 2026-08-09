@@ -70,7 +70,7 @@ describe('residual #62 loadActiveSkus multi-scope IN chunking', () => {
     const fs = await import('fs/promises');
     const path = await import('path');
     const src = await fs.readFile(
-      path.join(__dirname, '..', 'src', 'movement', 'movement-skus.ts'),
+      path.join(__dirname, '..', 'src', 'movement', 'movement-sku-loaders.ts'),
       'utf8'
     );
     expect(src).toContain('queryInChunks');
@@ -86,10 +86,14 @@ describe('residual #62 dashboard global top-N after chunk merge', () => {
   it('re-sorts chunked rows via takeGlobalTopByCreatedAt', async () => {
     const fs = await import('fs/promises');
     const path = await import('path');
-    const src = await fs.readFile(
-      path.join(__dirname, '..', 'src', 'content', 'dashboard.service.ts'),
-      'utf8'
-    );
+    const [opsSrc, supportSrc] = await Promise.all([
+      fs.readFile(
+        path.join(__dirname, '..', 'src', 'content', 'dashboard-performance-read.ts'),
+        'utf8'
+      ),
+      fs.readFile(path.join(__dirname, '..', 'src', 'content', 'dashboard-ops-support.ts'), 'utf8')
+    ]);
+    const src = `${opsSrc}\n${supportSrc}`;
     expect(src).toContain('takeGlobalTopByCreatedAt');
     expect(src).toMatch(/takeGlobalTopByCreatedAt\(rows,\s*DASHBOARD_COPY_PERF_TAKE\)/);
     expect(src).toMatch(/takeGlobalTopByCreatedAt\(rows,\s*DASHBOARD_GENERATED_COPY_TAKE\)/);

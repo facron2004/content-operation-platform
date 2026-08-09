@@ -16,7 +16,9 @@
       :backfilling="backfilling"
       :backfill-label="backfillLabel"
       :today-text="todayText"
+      :disable-future-date="disableFutureDate"
       @backfill="$emit('backfill', $event)"
+      @backfill-date="$emit('backfill-date', $event)"
     />
     <AppleButton
       variant="secondary"
@@ -34,6 +36,7 @@ import AppleButton from '../../../components/AppleButton.vue';
 import { formatTime } from '../../../utils/labels';
 import GmvCockpitBackfill from './GmvCockpitBackfill.vue';
 import AppleDatePicker from './AppleDatePicker.vue';
+import type { GmvBackfillRange } from '../composables/gmv-cockpit-core';
 defineProps<{
   kpiDate: string;
   todayText: string;
@@ -48,6 +51,7 @@ defineEmits<{
   'update:kpiDate': [value: string];
   'date-change': [];
   backfill: [days: number];
+  'backfill-date': [range: GmvBackfillRange];
   reload: [];
 }>();
 </script>

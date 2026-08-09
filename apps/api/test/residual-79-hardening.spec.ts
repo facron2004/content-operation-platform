@@ -58,13 +58,19 @@ describe('residual #79 campaign + task batch scope IN', () => {
     const fs = await import('fs/promises');
     const path = await import('path');
     const src = await fs.readFile(
-      path.join(__dirname, '..', 'src', 'distribution-task', 'distribution-task.controller.ts'),
+      path.join(
+        __dirname,
+        '..',
+        'src',
+        'distribution-task',
+        'distribution-task-command.controller.ts'
+      ),
       'utf8'
     );
     expect(src).toContain('assertPackagesInScope');
     // batchCreate must call the batch helper (not N sequential single asserts).
     const start = src.indexOf('async batchCreate');
-    const end = src.indexOf('\n  @Get', start);
+    const end = src.indexOf('\n  @Roles(', start);
     const fn = src.slice(start, end > 0 ? end : undefined);
     expect(fn).toContain('assertPackagesInScope');
     expect(fn).not.toMatch(/for \(const item of items\)[\s\S]*assertPackageInScope/);

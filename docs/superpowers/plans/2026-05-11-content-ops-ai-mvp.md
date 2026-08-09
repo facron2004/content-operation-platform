@@ -1,5 +1,7 @@
 # Content Ops AI MVP Implementation Plan
 
+> **归档状态（2026-08-09）**：MVP 计划已完成并作为历史设计/实施记录保留。当前仓库已扩展到更多业务域、IAM、GMV、库存和幂等写入；最新代码与验证口径见 [README](../../../README.md) 和 [文档对齐总览](../../DOCUMENTATION-STATUS.md)。Windows/EXE 不属于当前优化范围。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build a local MVP for sales-driven package recommendation, copy generation, audit, and performance feedback.

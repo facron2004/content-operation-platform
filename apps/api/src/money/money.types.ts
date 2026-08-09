@@ -17,6 +17,7 @@ export type MoneyPrisma = {
       where: { date: string };
       select?: {
         totalGmvFen?: boolean;
+        totalRefundFen?: boolean;
         paidOrderCount?: boolean;
         date?: boolean;
         gmvOnlineFen?: boolean;
@@ -25,6 +26,7 @@ export type MoneyPrisma = {
     }) => Promise<{
       date?: string;
       totalGmvFen: bigint | null;
+      totalRefundFen?: bigint | null;
       paidOrderCount: number;
       gmvOnlineFen?: bigint | null;
       gmvWalletFen?: bigint | null;

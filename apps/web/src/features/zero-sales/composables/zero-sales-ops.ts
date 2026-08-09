@@ -202,7 +202,8 @@ type ZeroSalesActions = ReturnType<typeof buildZeroSalesActions>;
 export function exposeZeroSalesController(
   state: ZeroSalesState,
   reload: () => Promise<void>,
-  actions: ZeroSalesActions
+  actions: ZeroSalesActions,
+  dispose: () => void
 ) {
   return {
     activeTab: state.activeTab,
@@ -225,6 +226,7 @@ export function exposeZeroSalesController(
     skuTruncated: state.skuTruncated,
     skuLimit: state.skuLimit,
     reload,
+    dispose,
     merchantRowClass,
     skuRowClass,
     ...actions
@@ -238,7 +240,7 @@ export function createZeroSalesController(params: {
   watchQuery: (cb: (q: LocationQuery) => void) => void;
 }) {
   const state = createZeroSalesState(params.routeQuery);
-  const { loadMerchants, loadSkus, reload } = createZeroSalesLoaders(state);
+  const { loadMerchants, loadSkus, reload, dispose } = createZeroSalesLoaders(state);
   const syncQuery = buildZeroSalesQuerySync({ state, router: params.router });
   const actions = buildZeroSalesActions({
     state,
@@ -261,5 +263,5 @@ export function createZeroSalesController(params: {
         skuPage: state.skuPage
       })
   });
-  return exposeZeroSalesController(state, reload, actions);
+  return exposeZeroSalesController(state, reload, actions, dispose);
 }

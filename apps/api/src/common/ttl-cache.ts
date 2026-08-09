@@ -68,12 +68,16 @@ export class TtlCache {
     const pending = this.inFlight.get(key) as Promise<T> | undefined;
     if (pending) return pending;
 
+    const flight: { promise: Promise<T> | null } = { promise: null };
     const loadPromise = (async () => {
       const value = await loader();
-      this.set(key, value);
+      // clear(prefix) / clear() may detach this flight while the loader is
+      // running. An orphaned result must not repopulate a newer cache entry.
+      if (this.inFlight.get(key) === flight.promise) this.set(key, value);
       return value;
     })();
 
+    flight.promise = loadPromise;
     this.inFlight.set(key, loadPromise);
     try {
       return await loadPromise;

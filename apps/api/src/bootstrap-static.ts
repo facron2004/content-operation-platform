@@ -70,6 +70,7 @@ export function mountStaticSpa(
     if (
       req.path.startsWith('/api') ||
       req.path.startsWith('/health') ||
+      req.path.startsWith('/ready') ||
       req.path.startsWith('/t/')
     ) {
       return next();

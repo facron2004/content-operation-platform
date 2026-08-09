@@ -7,6 +7,7 @@ import {
   COPY_PERFORMANCE_RETENTION_DAYS
 } from '../common/sql-chunk';
 import { sqlDatetime, toSqliteDateTime } from '../common/sqlite-datetime';
+import { JobRunnerService } from './job-runner.service';
 
 /**
  * Bounded CopyPerformance retention.
@@ -20,7 +21,10 @@ export class CopyPerformanceRetentionJob {
   private readonly logger = new Logger(CopyPerformanceRetentionJob.name);
   private running = false;
 
-  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(JobRunnerService) private readonly jobRunner: JobRunnerService
+  ) {}
 
   /** Daily retention sweep — staggered after alert resolution (10am) → 11am. */
   @Cron(CronExpression.EVERY_DAY_AT_11AM)
@@ -30,18 +34,20 @@ export class CopyPerformanceRetentionJob {
       return;
     }
     this.running = true;
-    try {
-      const deleted = await this.purgeOlderThan(COPY_PERFORMANCE_RETENTION_DAYS);
-      if (deleted > 0) {
-        this.logger.log(
-          `Purged ${deleted} CopyPerformance rows older than ${COPY_PERFORMANCE_RETENTION_DAYS}d`
-        );
-      }
-    } catch (err) {
-      this.logger.warn(`CopyPerformance retention failed: ${err}`);
-    } finally {
-      this.running = false;
-    }
+    await this.jobRunner
+      .runJob('copy-performance-retention', async (setMeta) => {
+        const deleted = await this.purgeOlderThan(COPY_PERFORMANCE_RETENTION_DAYS);
+        setMeta({ deleted, retentionDays: COPY_PERFORMANCE_RETENTION_DAYS });
+        if (deleted > 0) {
+          this.logger.log(
+            `Purged ${deleted} CopyPerformance rows older than ${COPY_PERFORMANCE_RETENTION_DAYS}d`
+          );
+        }
+        return deleted;
+      })
+      .finally(() => {
+        this.running = false;
+      });
   }
 
   /**

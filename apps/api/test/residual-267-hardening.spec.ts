@@ -38,16 +38,20 @@ describe('residual #267 recommend RECOMMEND_CACHE_CAP honesty', () => {
   });
 
   it('SPA sinks honesty fields from getRecommendations', async () => {
-    const src = await readFile(
+    const page = await readFile(
       path.join(webRoot, 'composables', 'useRecommendationsPage.ts'),
       'utf8'
     );
-    expect(src).toMatch(/listTruncated\s*=\s*ref\(false\)/);
-    expect(src).toMatch(/listLimit\s*=\s*ref/);
-    expect(src).toMatch(/matchedCount\s*=\s*ref/);
-    expect(src).toMatch(/data\.truncated/);
-    expect(src).toMatch(/data\.limit/);
-    expect(src).toMatch(/data\.matchedCount/);
+    const loaders = await readFile(
+      path.join(webRoot, 'composables', 'recommendations-page-loaders.ts'),
+      'utf8'
+    );
+    expect(page).toMatch(/listTruncated\s*=\s*ref\(false\)/);
+    expect(page).toMatch(/listLimit\s*=\s*ref/);
+    expect(page).toMatch(/matchedCount\s*=\s*ref/);
+    expect(loaders).toMatch(/data\.truncated/);
+    expect(loaders).toMatch(/data\.limit/);
+    expect(loaders).toMatch(/data\.matchedCount/);
   });
 
   it('RecommendationsTable shows list-cap-hint when truncated', async () => {

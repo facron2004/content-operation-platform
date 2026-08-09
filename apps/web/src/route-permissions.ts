@@ -24,6 +24,7 @@ export const ROUTE_PERMISSIONS = {
   'permission-center': ['iam:roles:read'],
   'audit-logs': ['audit:read'],
   performance: ['analytics:read'],
+  attribution: ['attribution:read'],
   'zero-sales': ['packages:read'],
   'package-analysis': ['packages:read']
 } as const satisfies Record<string, readonly string[]>;
@@ -45,6 +46,7 @@ const NAV_ROUTE_NAMES: Record<string, keyof typeof ROUTE_PERMISSIONS> = {
   '/tasks': 'tasks',
   '/recommendations': 'recommendations',
   '/performance': 'performance',
+  '/attribution': 'attribution',
   '/overview': 'overview',
   '/data-analysis': 'data-analysis',
   '/alerts': 'alerts',

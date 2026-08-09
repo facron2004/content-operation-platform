@@ -1,8 +1,9 @@
-import { computed, reactive, ref } from 'vue';
+import { computed, onScopeDispose, reactive, ref, type Ref } from 'vue';
 import { ElMessage, type FormRules } from 'element-plus';
 import type { DistributionTask, TaskChannel, TaskPriority } from '@content/shared';
 import { api } from '../../../services/api';
 import { extractErrorMessage } from '../../../services/http-client';
+import { resolveSubmissionIntent, type SubmissionIntent } from '../../../services/idempotency-key';
 
 /** Residual #241: CreateTaskDto create-time status only (not full TaskStatus). */
 export type TaskCreateStatus = 'draft' | 'waiting_audit' | 'scheduled';
@@ -97,12 +98,17 @@ function applySeed(form: TaskFormState, seed?: Partial<TaskFormState>) {
 export interface TaskFormOptions {
   // Residual #190: refresh list (+ KPIs) after create/edit success.
   onSaved?: () => void | Promise<void>;
+  writeError?: Ref<string | null>;
 }
 
 export function useTaskForm(existing?: DistributionTask, options: TaskFormOptions = {}) {
   const dialogVisible = ref(false);
   const submitting = ref(false);
   const editingTask = ref<DistributionTask | undefined>(existing);
+  const writeError = options.writeError ?? ref<string | null>(null);
+  let submitSequence = 0;
+  let disposed = false;
+  let createIntent: SubmissionIntent | null = null;
 
   const form = reactive<TaskFormState>({ ...DEFAULT_FORM });
   fillForm(form, existing);
@@ -114,6 +120,8 @@ export function useTaskForm(existing?: DistributionTask, options: TaskFormOption
    * with optional partial seed from list filters / deep-link query.
    */
   function open(task?: DistributionTask, seed?: Partial<TaskFormState>) {
+    writeError.value = null;
+    createIntent = null;
     if (task) {
       editingTask.value = task;
       fillForm(form, task);
@@ -131,6 +139,7 @@ export function useTaskForm(existing?: DistributionTask, options: TaskFormOption
 
   function reset() {
     editingTask.value = undefined;
+    createIntent = null;
     fillForm(form, undefined);
   }
 
@@ -149,6 +158,8 @@ export function useTaskForm(existing?: DistributionTask, options: TaskFormOption
   }
 
   async function submit(): Promise<boolean> {
+    if (disposed || submitting.value) return false;
+    writeError.value = null;
     if (!form.groupId.trim() || !form.packageId.trim()) {
       ElMessage.warning('请填写必填字段:群组 ID 和套餐 ID');
       return false;
@@ -160,6 +171,8 @@ export function useTaskForm(existing?: DistributionTask, options: TaskFormOption
         return false;
       }
     }
+    const submitId = ++submitSequence;
+    const editingTaskSnapshot = editingTask.value;
     submitting.value = true;
     try {
       // Residual #233: forward DTO-ready contentId/risk/fallback/assigneeName.
@@ -183,38 +196,52 @@ export function useTaskForm(existing?: DistributionTask, options: TaskFormOption
         riskLevel: form.riskLevel || undefined,
         fallbackPackageId: form.fallbackPackageId.trim() || undefined
       };
-      if (editingTask.value) {
-        await api.updateTask(editingTask.value.taskId, {
+      if (editingTaskSnapshot) {
+        await api.updateTask(editingTaskSnapshot.taskId, {
           ...identityFields,
           ...optionalFields
         });
-        ElMessage.success('任务已更新');
       } else {
         // Residual #241: create-time status (draft default; waiting_audit/scheduled when valid).
-        await api.createTask({
+        const payload = {
           ...identityFields,
           ...optionalFields,
           status: form.status || 'draft'
-        });
-        ElMessage.success('任务已创建');
+        };
+        createIntent = resolveSubmissionIntent('create-task', payload, createIntent);
+        await api.createTask(payload, createIntent.key);
       }
+      if (disposed || submitId !== submitSequence) return false;
+      ElMessage.success(editingTaskSnapshot ? '任务已更新' : '任务已创建');
       dialogVisible.value = false;
       // Residual #190: prefer options.onSaved; keep mutable slot for legacy assigners.
       await (options.onSaved ?? exported.onSaved)?.();
-      return true;
+      if (!editingTaskSnapshot) createIntent = null;
+      return !disposed && submitId === submitSequence;
     } catch (err) {
-      ElMessage.error(
-        extractErrorMessage(err, editingTask.value ? '更新任务失败' : '创建任务失败')
-      );
+      if (!disposed && submitId === submitSequence) {
+        writeError.value = extractErrorMessage(
+          err,
+          editingTaskSnapshot ? '更新任务失败' : '创建任务失败'
+        );
+        ElMessage.error(writeError.value);
+      }
       return false;
     } finally {
-      submitting.value = false;
+      if (!disposed && submitId === submitSequence) submitting.value = false;
     }
   }
+
+  onScopeDispose(() => {
+    disposed = true;
+    submitSequence += 1;
+    submitting.value = false;
+  });
 
   const exported = {
     dialogVisible,
     submitting,
+    writeError,
     isEdit,
     editingTask,
     form,

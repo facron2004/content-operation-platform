@@ -1,6 +1,7 @@
 <template>
   <div class="cookie-dialog-content">
-    <CookieStatusAlerts :cookie-status="cookieStatus" />
+    <CookieStatusAlerts :cookie-status="cookieStatus" :error="statusError" />
+    <ErrorAlert :message="saveError" />
     <CookieStatusItems :cookie-status="cookieStatus" :format-time="formatTime" />
     <CookieManualUpdate
       :new-cookie-string="newCookieString"
@@ -12,6 +13,7 @@
 import CookieStatusAlerts from './CookieStatusAlerts.vue';
 import CookieStatusItems from './CookieStatusItems.vue';
 import CookieManualUpdate from './CookieManualUpdate.vue';
+import ErrorAlert from './ErrorAlert.vue';
 defineProps<{
   cookieStatus: {
     isValid?: boolean;
@@ -20,6 +22,8 @@ defineProps<{
     cooldownMinutes?: number;
     lastLoginTime?: number | string | null;
   } | null;
+  statusError?: string | null;
+  saveError?: string | null;
   newCookieString: string;
   formatTime: (value: string) => string;
 }>();

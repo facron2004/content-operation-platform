@@ -1,5 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 import { describe, expect, it, vi } from 'vitest';
+import { beijingDateKey } from '@content/shared';
 import { GMV_REFRESH_MAX_DAYS, handleGmvRefresh } from '../src/gmv/gmv.controller';
 import {
   MERCHANT_SALES_REFRESH_MAX_DAYS,
@@ -84,11 +85,21 @@ describe('Merchant-sales refresh range cap', () => {
     const service = { recomputeRange: vi.fn() };
     expect(() =>
       refreshMerchantSales(service as never, {
-        startDate: '2025-01-01',
+        startDate: '2024-01-01',
         endDate: '2025-12-31'
       })
     ).toThrow(BadRequestException);
     expect(service.recomputeRange).not.toHaveBeenCalled();
+  });
+
+  it('accepts a full calendar year recompute (year window repair)', () => {
+    const service = {
+      recomputeRange: vi
+        .fn()
+        .mockReturnValue({ startDate: '2025-01-01', endDate: '2025-12-31', rowsUpserted: 1 })
+    };
+    refreshMerchantSales(service as never, { startDate: '2025-01-01', endDate: '2025-12-31' });
+    expect(service.recomputeRange).toHaveBeenCalledWith('2025-01-01', '2025-12-31');
   });
 
   it('defaults to today when body empty', () => {
@@ -135,12 +146,18 @@ describe('Merchant-sales read window cap', () => {
     ).toThrow(/YYYY-MM-DD/);
   });
 
-  it('collapses year window to trailing 90-day read cap (not full calendar year)', () => {
-    // Inclusive 90 days ending on the provided anchor date (or today when omitted).
-    // Full calendar year was a DoS / unbounded scan path on MerchantDailyMetrics.
-    expect(resolveWindow('year', '2026-07-18')).toEqual({
-      start: '2026-04-20',
-      end: '2026-07-18'
+  it('resolves year window to the calendar year containing the anchor', () => {
+    // Past year: full Jan 1 – Dec 31 (bounded, single calendar year — no multi-year scans).
+    expect(resolveWindow('year', '2024-06-15')).toEqual({
+      start: '2024-01-01',
+      end: '2024-12-31'
+    });
+    // Current year: Jan 1 → today (never includes future days).
+    const today = beijingDateKey(new Date());
+    const year = today.slice(0, 4);
+    expect(resolveWindow('year')).toEqual({
+      start: `${year}-01-01`,
+      end: today
     });
   });
 });

@@ -27,13 +27,13 @@ describe('residual #260 execution timeline LIMIT honesty', () => {
     const src = await readFile(
       path.resolve(
         __dirname,
-        '../../../../../../apps/api/src/distribution-task/distribution-task.service.ts'
+        '../../../../../../apps/api/src/distribution-task/distribution-task-read.ts'
       ),
       'utf8'
     );
-    const getStart = src.indexOf('async getById');
+    const getStart = src.indexOf('export async function getDistributionTaskById');
     expect(getStart).toBeGreaterThanOrEqual(0);
-    const getEnd = src.indexOf('async getTaskRow', getStart + 10);
+    const getEnd = src.indexOf('export async function getDistributionTaskRow', getStart + 10);
     const getFn = src.slice(getStart, getEnd > 0 ? getEnd : getStart + 800);
     expect(getFn).toMatch(/executions:\s*timeline\.items/);
     expect(getFn).toMatch(/executionsTruncated:\s*timeline\.truncated/);

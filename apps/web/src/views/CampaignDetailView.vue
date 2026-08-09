@@ -8,6 +8,9 @@
         返回活动列表
       </AppleButton>
     </div>
+    <ErrorAlert :message="loadError" />
+    <ErrorAlert :message="tasksError" />
+    <ErrorAlert :message="actionError" />
     <CampaignDetailHero
       :campaign="campaign"
       :loading="loading"
@@ -35,6 +38,7 @@
 <script setup lang="ts">
 import { useRoute } from 'vue-router';
 import { ArrowLeft } from '@element-plus/icons-vue';
+import ErrorAlert from '../components/ErrorAlert.vue';
 import { useCampaignDetail } from '../features/campaigns/composables/useCampaignDetail';
 import CampaignDetailHero from '../features/campaigns/components/CampaignDetailHero.vue';
 import CampaignTaskSummary from '../features/campaigns/components/CampaignTaskSummary.vue';
@@ -49,6 +53,8 @@ const campaignId = route.params.campaignId as string;
 // Residual #187/#239: also loads paginated campaign tasks.
 const {
   loading,
+  loadError,
+  actionError,
   campaign,
   performance,
   tasks,
@@ -56,6 +62,7 @@ const {
   tasksPage,
   tasksPageSize,
   tasksLoading,
+  tasksError,
   // Residual #271
   tasksWindowLabel,
   setTasksPage,

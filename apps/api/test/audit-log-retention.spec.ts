@@ -1,5 +1,9 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { createClient } from '@libsql/client';
+import { mkdirSync, readFileSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
 import { AuditLogRetentionJob } from '../src/jobs/audit-log-retention.job';
+import { createJobRunnerMock } from './helpers/job-runner';
 import {
   AUDIT_LOG_PURGE_BATCH,
   AUDIT_LOG_PURGE_MAX_BATCHES,
@@ -14,7 +18,7 @@ describe('AuditLogRetentionJob', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    job = new AuditLogRetentionJob(prisma as never);
+    job = new AuditLogRetentionJob(prisma as never, createJobRunnerMock() as never);
   });
 
   it('exports retention longer than interactive 90d list window', () => {
@@ -88,22 +92,29 @@ describe('AuditLogRetentionJob', () => {
 });
 
 describe('OrderAttribution index DDL (migrations source of truth)', () => {
-  it('migration declares taskId+attributedAt composite index', async () => {
-    // VNext DB-003: seed-data 手写 DDL 已废弃，索引真源为 prisma/migrations。
-    const fs = await import('fs/promises');
-    const path = await import('path');
-    const migPath = path.join(
-      __dirname,
-      '..',
-      '..',
-      '..',
-      'prisma',
-      'migrations',
-      '0001_init',
-      'migration.sql'
-    );
-    const sql = await fs.readFile(migPath, 'utf8');
-    expect(sql).toContain('"OrderAttribution_taskId_attributedAt_idx"');
-    expect(sql).toMatch(/ON "OrderAttribution"\("taskId", "attributedAt"\)/);
+  it('migration creates the taskId+attributedAt composite index', async () => {
+    const root = join(__dirname, '..', '..', '..');
+    const tempDir = join(root, '.tmp-test-db');
+    const databasePath = join(tempDir, 'audit-migration.db');
+    mkdirSync(tempDir, { recursive: true });
+    rmSync(databasePath, { force: true });
+    const client = createClient({ url: `file:${databasePath.replaceAll('\\', '/')}` });
+    try {
+      const migration = readFileSync(
+        join(__dirname, '..', '..', '..', 'prisma', 'migrations', '0001_init', 'migration.sql'),
+        'utf8'
+      );
+      await client.executeMultiple(migration);
+      const result = await client.execute({
+        sql: `SELECT name, sql FROM sqlite_master WHERE type = 'index' AND name = ?`,
+        args: ['OrderAttribution_taskId_attributedAt_idx']
+      });
+      expect(result.rows).toHaveLength(1);
+      expect(String(result.rows[0].sql)).toContain(
+        'ON "OrderAttribution"("taskId", "attributedAt")'
+      );
+    } finally {
+      await client.close();
+    }
   });
 });

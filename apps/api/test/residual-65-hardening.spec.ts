@@ -25,11 +25,11 @@ describe('residual #65 mapPool + data-analysis concurrency', () => {
     expect(started.sort()).toEqual([1, 2, 3, 4, 5]);
   });
 
-  it('data-analysis.service uses mapPool not bare Promise.all for OH matrix', async () => {
+  it('data-analysis report builder uses mapPool not bare Promise.all for OH matrix', async () => {
     const fs = await import('fs/promises');
     const path = await import('path');
     const src = await fs.readFile(
-      path.join(__dirname, '..', 'src', 'data-analysis', 'data-analysis.service.ts'),
+      path.join(__dirname, '..', 'src', 'data-analysis', 'data-analysis-report.ts'),
       'utf8'
     );
     expect(src).toContain('mapPool');
@@ -88,7 +88,7 @@ describe('residual #65 zero-sales filter-first SQL', () => {
     const fs = await import('fs/promises');
     const path = await import('path');
     const src = await fs.readFile(
-      path.join(__dirname, '..', 'src', 'zero-sales', 'zero-sales-loaders.ts'),
+      path.join(__dirname, '..', 'src', 'zero-sales', 'zero-sales-sku-loaders.ts'),
       'utf8'
     );
     // residual #78: candidate + batch enrich (no correlated SELECT SQL builder).
@@ -110,7 +110,7 @@ describe('residual #65 dashboard summary getOrLoad', () => {
     const fs = await import('fs/promises');
     const path = await import('path');
     const src = await fs.readFile(
-      path.join(__dirname, '..', 'src', 'content', 'dashboard.service.ts'),
+      path.join(__dirname, '..', 'src', 'content', 'dashboard-summary.service.ts'),
       'utf8'
     );
     expect(src).toContain('computeDashboardSummary');

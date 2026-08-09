@@ -40,6 +40,7 @@ const {
   merchantName: timelineMerchantName,
   days: timelineDays,
   timeline: timelinePoints,
+  error: timelineError,
   open: openTimeline,
   setDays: setTimelineDays
 } = useZeroSalesTimeline();
@@ -102,6 +103,7 @@ const {
     :merchant-name="timelineMerchantName"
     :days="timelineDays"
     :timeline="timelinePoints"
+    :error="timelineError"
     @change-days="setTimelineDays"
   />
 </template>

@@ -106,8 +106,8 @@ describe('distribution execution + TPD retention constants', () => {
 });
 
 describe('daily metrics + data-analysis export constants', () => {
-  it('keeps daily metrics longer than interactive 90d but bounded', () => {
-    expect(DAILY_METRICS_RETENTION_DAYS).toBe(180);
+  it('keeps daily metrics past a full calendar year but bounded', () => {
+    expect(DAILY_METRICS_RETENTION_DAYS).toBe(800);
     expect(DAILY_METRICS_PURGE_BATCH).toBe(2_000);
     expect(DAILY_METRICS_PURGE_MAX_BATCHES).toBe(25);
   });

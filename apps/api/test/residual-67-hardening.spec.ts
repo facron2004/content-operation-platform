@@ -74,6 +74,28 @@ describe('residual #67 heavy aggregate gate', () => {
     expect(heavyAggregateInFlight()).toBe(0);
     expect(heavyAggregateWaiters()).toBe(0);
   });
+
+  it('allows nested heavy work to reuse its parent slot', async () => {
+    const result = await Promise.race([
+      Promise.all([
+        withHeavyAggregateGate(async () => {
+          await Promise.resolve();
+          return withHeavyAggregateGate(async () => 'nested-1');
+        }),
+        withHeavyAggregateGate(async () => {
+          await Promise.resolve();
+          return withHeavyAggregateGate(async () => 'nested-2');
+        })
+      ]),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('nested heavy gate deadlocked')), 100)
+      )
+    ]);
+
+    expect(result).toEqual(['nested-1', 'nested-2']);
+    expect(heavyAggregateInFlight()).toBe(0);
+    expect(heavyAggregateWaiters()).toBe(0);
+  });
 });
 
 describe('residual #67 filter-first zero-sales candidates', () => {
@@ -98,7 +120,7 @@ describe('residual #67 early LIMIT movement active skus', () => {
     const fs = await import('fs/promises');
     const path = await import('path');
     const src = await fs.readFile(
-      path.join(__dirname, '..', 'src', 'movement', 'movement-skus.ts'),
+      path.join(__dirname, '..', 'src', 'movement', 'movement-sku-loaders.ts'),
       'utf8'
     );
     expect(src).toContain('MOVEMENT_CACHE_CAP');
@@ -114,7 +136,7 @@ describe('residual #67 merchant list prune-before-enrich', () => {
     const fs = await import('fs/promises');
     const path = await import('path');
     const src = await fs.readFile(
-      path.join(__dirname, '..', 'src', 'merchant', 'merchant-list.ts'),
+      path.join(__dirname, '..', 'src', 'merchant', 'merchant-list-queries.ts'),
       'utf8'
     );
     expect(src).toContain('MERCHANT_LIST_CACHE_CAP');
@@ -144,7 +166,7 @@ describe('residual #67 top-offenders stockLeft + rule-config mapPool', () => {
     const fs = await import('fs/promises');
     const path = await import('path');
     const src = await fs.readFile(
-      path.join(__dirname, '..', 'src', 'content', 'rule-config-ops.ts'),
+      path.join(__dirname, '..', 'src', 'content', 'rule-config-read.ts'),
       'utf8'
     );
     expect(src).toContain('mapPool');
@@ -157,7 +179,7 @@ describe('residual #67 top-offenders stockLeft + rule-config mapPool', () => {
     const fs = await import('fs/promises');
     const path = await import('path');
     const src = await fs.readFile(
-      path.join(__dirname, '..', 'src', 'zero-sales', 'zero-sales-loaders.ts'),
+      path.join(__dirname, '..', 'src', 'zero-sales', 'zero-sales-package-loaders.ts'),
       'utf8'
     );
     expect(src).toMatch(

@@ -13,7 +13,10 @@ const fs = require('fs');
 const path = require('path');
 
 const ROOT = path.resolve(__dirname, '..');
-const STAGING_API = path.join(ROOT, 'staging', 'api');
+const stagingRoot = process.env.CONTENT_OPS_STAGING_DIR
+  ? path.resolve(process.env.CONTENT_OPS_STAGING_DIR)
+  : path.join(ROOT, 'staging');
+const STAGING_API = path.join(stagingRoot, 'api');
 const API_DIR = path.join(ROOT, 'apps', 'api');
 
 function log(msg) {

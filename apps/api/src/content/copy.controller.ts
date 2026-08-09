@@ -58,6 +58,7 @@ export class CopyController {
   }
 
   @Get('copies')
+  @RequirePermissions('content:read')
   @Throttle({ long: { limit: 30, ttl: 60000 } })
   listCopies(
     @Query(createDtoPipe(ListCopiesQueryDto)) query: ListCopiesQueryDto,
@@ -90,6 +91,7 @@ export class CopyController {
   }
 
   @Get('copies/:contentId')
+  @RequirePermissions('content:read')
   @Throttle({ long: { limit: 60, ttl: 60000 } })
   @ApiOperation({ summary: '文案详情（含 body/cta）' })
   async getCopy(@Param('contentId') contentId: string, @Req() req: Request) {

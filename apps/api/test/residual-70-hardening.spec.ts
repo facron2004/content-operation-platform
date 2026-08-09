@@ -24,10 +24,17 @@ describe('residual #70 dashboard ops heavy gate', () => {
   it('ops/today + performance + summary cold paths use heavy gate', async () => {
     const fs = await import('fs/promises');
     const path = await import('path');
-    const src = await fs.readFile(
-      path.join(__dirname, '..', 'src', 'content', 'dashboard.service.ts'),
-      'utf8'
-    );
+    const [opsSrc, summarySrc] = await Promise.all([
+      fs.readFile(
+        path.join(__dirname, '..', 'src', 'content', 'dashboard-operations.service.ts'),
+        'utf8'
+      ),
+      fs.readFile(
+        path.join(__dirname, '..', 'src', 'content', 'dashboard-summary.service.ts'),
+        'utf8'
+      )
+    ]);
+    const src = `${opsSrc}\n${summarySrc}`;
     expect(src).toContain('withHeavyAggregateGate');
     expect(src).toMatch(
       /getOrLoad\(cacheKey, false, \(\) =>\s*withHeavyAggregateGate\(\(\) =>\s*this\.computeTodayOperationConsole/
@@ -51,7 +58,7 @@ describe('residual #70 merchant-sales ranking page-less cache', () => {
       'utf8'
     );
     const query = await fs.readFile(
-      path.join(__dirname, '..', 'src', 'merchant-sales', 'merchant-sales-query.ts'),
+      path.join(__dirname, '..', 'src', 'merchant-sales', 'merchant-sales-ranking-query.ts'),
       'utf8'
     );
     const dto = await fs.readFile(

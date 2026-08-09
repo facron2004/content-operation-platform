@@ -46,17 +46,35 @@ export function prefetchRouteComponents(router: Router, path: string): void {
   }
 }
 
-/** Prefetch every leaf path from a nav tree (idle-time warm). */
-export function prefetchNavPaths(router: Router, paths: string[]): void {
+/** Prefetch every leaf path from a nav tree (idle-time warm). Returns owner cleanup. */
+export function prefetchNavPaths(router: Router, paths: string[]): () => void {
   const unique = [...new Set(paths.filter(Boolean))];
+  let disposed = false;
+  let idleId: number | null = null;
+  let timerId: ReturnType<typeof setTimeout> | null = null;
   const run = () => {
+    if (disposed) return;
+    idleId = null;
+    timerId = null;
     for (const path of unique) prefetchRouteComponents(router, path);
   };
   if (typeof requestIdleCallback === 'function') {
-    requestIdleCallback(() => run(), { timeout: 2500 });
+    idleId = requestIdleCallback(run, { timeout: 2500 });
   } else {
-    setTimeout(run, 800);
+    timerId = setTimeout(run, 800);
   }
+  return () => {
+    if (disposed) return;
+    disposed = true;
+    if (idleId !== null && typeof cancelIdleCallback === 'function') {
+      cancelIdleCallback(idleId);
+      idleId = null;
+    }
+    if (timerId !== null) {
+      clearTimeout(timerId);
+      timerId = null;
+    }
+  };
 }
 
 export function collectNavLeafPaths(

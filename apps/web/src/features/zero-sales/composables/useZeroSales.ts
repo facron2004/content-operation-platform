@@ -1,4 +1,4 @@
-import { onMounted, watch } from 'vue';
+import { onMounted, onScopeDispose, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
   STALE_BUCKETS,
@@ -14,7 +14,7 @@ export type { StaleBucket, ZeroSalesMerchantRow, ZeroSalesSkuRow };
 export function useZeroSales() {
   const route = useRoute(),
     router = useRouter();
-  return createZeroSalesController({
+  const controller = createZeroSalesController({
     routeQuery: route.query,
     router,
     onMounted: (cb) => onMounted(cb),
@@ -25,4 +25,6 @@ export function useZeroSales() {
       );
     }
   });
+  onScopeDispose(controller.dispose);
+  return controller;
 }

@@ -18,24 +18,24 @@ export function installRouterGuards(
   progress: {
     start: () => void;
     done: () => void;
-    ensureAuth: () => Promise<string | null | undefined>;
+    ensureAuth: () => Promise<boolean | null | undefined>;
   }
 ) {
   router.beforeEach(async (to, _from, next) => {
     progress.start();
     try {
-      const token = await progress.ensureAuth();
-      if (!to.meta.public && !token) {
+      const authenticated = await progress.ensureAuth();
+      if (!to.meta.public && !authenticated) {
         next({ name: 'login', query: { redirect: to.fullPath } });
         return;
       }
-      if (to.name === 'login' && token) {
+      if (to.name === 'login' && authenticated) {
         next({ path: '/' });
         return;
       }
 
       const roleStore = useRoleStore();
-      if (token && !roleStore.hasServerSession) {
+      if (authenticated && !roleStore.hasServerSession) {
         await hydrateServerSession({
           hasServerSession: roleStore.hasServerSession,
           fetchMe: getMe,

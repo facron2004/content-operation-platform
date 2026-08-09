@@ -20,6 +20,7 @@
       :selected-package="selectedPackage"
       :package-detail="packageDetail"
       :detail-loading="detailLoading"
+      :detail-error="detailError"
       :package-id="form.packageId"
       :feed-facts="feedFacts"
       :feed-checks="feedChecks"

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { RuleConfig } from '@content/shared';
+import ErrorAlert from '../../../components/ErrorAlert.vue';
 import SettingsPanelHeader from './SettingsPanelHeader.vue';
 import SettingsDefaultsBox from './SettingsDefaultsBox.vue';
 import SettingsFilterBar from './SettingsFilterBar.vue';
@@ -14,6 +15,9 @@ export type SettingsPanelBodyProps = {
   ruleTypeLabels: Record<string, string>;
   pretty: (value: unknown) => string;
   loading: boolean;
+  loadError: string | null;
+  defaultsError: string | null;
+  writeError: string | null;
   rules: RuleConfig[];
   formatTime: (value?: string) => string;
   total: number;
@@ -27,6 +31,9 @@ defineEmits<{ create: []; activate: [row: RuleConfig]; remove: [row: RuleConfig]
 </script>
 <template>
   <el-card class="panel" shadow="never">
+    <ErrorAlert :message="loadError" />
+    <ErrorAlert :message="defaultsError" />
+    <ErrorAlert :message="writeError" />
     <SettingsPanelHeader
       :defaults-visible="defaultsVisible"
       @toggle-defaults="defaultsVisible = !defaultsVisible"

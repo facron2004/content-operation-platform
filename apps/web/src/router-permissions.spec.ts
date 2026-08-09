@@ -34,4 +34,9 @@ describe('permission-driven navigation', () => {
       })
     ).toBe('deny');
   });
+
+  it('exposes attribution only to sessions with attribution read permission', () => {
+    expect(leafPaths(buildNavTree(['attribution:read']))).toContain('/attribution');
+    expect(leafPaths(buildNavTree(['tasks:read']))).not.toContain('/attribution');
+  });
 });

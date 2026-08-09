@@ -65,6 +65,23 @@ describe('DetailCache', () => {
     expect(cache.size).toBe(0);
   });
 
+  it('does not repopulate a cleared cache with an orphaned in-flight result', async () => {
+    const detail = makeDetail({ packageId: 'pkg-1' });
+    let resolveLoader!: (value: PackageDetail) => void;
+    const load = cache.getOrLoad(
+      'pkg-1',
+      () =>
+        new Promise<PackageDetail>((resolve) => {
+          resolveLoader = resolve;
+        })
+    );
+
+    cache.clear();
+    resolveLoader(detail);
+    await expect(load).resolves.toBe(detail);
+    expect(cache.get('pkg-1')).toBeNull();
+  });
+
   it('lists all cached keys', () => {
     cache.set('pkg-1', makeDetail());
     cache.set('pkg-2', makeDetail());

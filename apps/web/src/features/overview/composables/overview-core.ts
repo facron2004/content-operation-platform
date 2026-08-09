@@ -1,4 +1,4 @@
-import type { Ref } from 'vue';
+import { onScopeDispose, type Ref } from 'vue';
 import type { Router } from 'vue-router';
 import {
   getOverviewDistribution,
@@ -12,17 +12,20 @@ import {
 import { extractErrorMessage } from '../../../services/http-client';
 
 type Dist = Array<{ key: string; totalSku: number; stockLeft: number }>;
+type IsCurrent = () => boolean;
 
 async function loadOverviewKpis(
   kpi: Ref<OverviewKpi | null>,
   loadError: Ref<string | null>,
   // Residual #224: as-of business day (OverviewKpiQueryDto.date).
-  date?: string
+  date: string | undefined,
+  isCurrent: IsCurrent
 ) {
   try {
-    kpi.value = await getOverviewKpis(date || undefined);
+    const nextKpi = await getOverviewKpis(date || undefined);
+    if (isCurrent()) kpi.value = nextKpi;
   } catch (err) {
-    loadError.value = extractErrorMessage(err, '加载 KPI 失败');
+    if (isCurrent()) loadError.value = extractErrorMessage(err, '加载 KPI 失败');
   }
 }
 
@@ -31,12 +34,14 @@ async function loadOverviewTrend(
   trend: Ref<OverviewTrendPoint[]>,
   loadError: Ref<string | null>,
   // Residual #224: endDate aligns trend window with KPI as-of day.
-  endDate?: string
+  endDate: string | undefined,
+  isCurrent: IsCurrent
 ) {
   try {
-    trend.value = await getOverviewTrend(days, endDate || undefined);
+    const nextTrend = await getOverviewTrend(days, endDate || undefined);
+    if (isCurrent()) trend.value = nextTrend;
   } catch (err) {
-    loadError.value = extractErrorMessage(err, '加载趋势失败');
+    if (isCurrent()) loadError.value = extractErrorMessage(err, '加载趋势失败');
   }
 }
 
@@ -44,6 +49,7 @@ async function loadOverviewDistribution(
   dim: 'stale' | 'area' | 'category',
   distribution: Ref<Dist>,
   loadError: Ref<string | null>,
+  isCurrent: IsCurrent,
   // Residual #288: optional honesty sinks for Top-N distribution head.
   distributionTruncated?: Ref<boolean>,
   distributionLimit?: Ref<number | null>,
@@ -51,6 +57,7 @@ async function loadOverviewDistribution(
 ) {
   try {
     const payload = await getOverviewDistribution(dim, 20);
+    if (!isCurrent()) return;
     distribution.value = payload.items ?? [];
     if (distributionTruncated) distributionTruncated.value = Boolean(payload.truncated);
     if (distributionLimit) {
@@ -64,7 +71,7 @@ async function loadOverviewDistribution(
           : null;
     }
   } catch (err) {
-    loadError.value = extractErrorMessage(err, '加载分布失败');
+    if (isCurrent()) loadError.value = extractErrorMessage(err, '加载分布失败');
   }
 }
 
@@ -72,14 +79,17 @@ async function loadOverviewTopOffenders(
   topOffenders: Ref<OverviewTopOffender[]>,
   offendersLoading: Ref<boolean>,
   loadError: Ref<string | null>,
+  isCurrent: IsCurrent,
   // Residual #287: optional honesty sinks for Top-N head.
   offendersTruncated?: Ref<boolean>,
   offendersLimit?: Ref<number | null>,
   offendersMatched?: Ref<number | null>
 ) {
+  if (!isCurrent()) return;
   offendersLoading.value = true;
   try {
     const payload = await getOverviewTopOffenders(10);
+    if (!isCurrent()) return;
     topOffenders.value = payload.items ?? [];
     if (offendersTruncated) offendersTruncated.value = Boolean(payload.truncated);
     if (offendersLimit) {
@@ -93,9 +103,9 @@ async function loadOverviewTopOffenders(
           : null;
     }
   } catch (err) {
-    loadError.value = extractErrorMessage(err, '加载零动销商家失败');
+    if (isCurrent()) loadError.value = extractErrorMessage(err, '加载零动销商家失败');
   } finally {
-    offendersLoading.value = false;
+    if (isCurrent()) offendersLoading.value = false;
   }
 }
 
@@ -127,17 +137,79 @@ export function createOverviewActions(params: {
   kpiDate: Ref<string>;
   router: Router;
 }) {
+  let disposed = false;
+  let reloadRequestId = 0;
+  let kpiRequestId = 0;
+  let trendRequestId = 0;
+  let distributionRequestId = 0;
+  let offendersRequestId = 0;
+
+  onScopeDispose(() => {
+    disposed = true;
+    reloadRequestId += 1;
+    kpiRequestId += 1;
+    trendRequestId += 1;
+    distributionRequestId += 1;
+    offendersRequestId += 1;
+    params.loading.value = false;
+    params.offendersLoading.value = false;
+  }, true);
+
+  async function loadTrend() {
+    if (disposed) return;
+    const requestId = ++trendRequestId;
+    return loadOverviewTrend(
+      params.trendDays.value,
+      params.trend,
+      params.loadError,
+      params.kpiDate.value || undefined,
+      () => !disposed && requestId === trendRequestId
+    );
+  }
+
+  async function loadDistribution() {
+    if (disposed) return;
+    const requestId = ++distributionRequestId;
+    return loadOverviewDistribution(
+      params.staleDim.value,
+      params.distribution,
+      params.loadError,
+      () => !disposed && requestId === distributionRequestId,
+      params.distributionTruncated,
+      params.distributionLimit,
+      params.distributionMatched
+    );
+  }
+
   async function reload() {
+    if (disposed) return;
+    const currentReloadId = ++reloadRequestId;
+    const currentKpiRequestId = ++kpiRequestId;
+    const currentTrendRequestId = ++trendRequestId;
+    const currentDistributionRequestId = ++distributionRequestId;
+    const currentOffendersRequestId = ++offendersRequestId;
     params.loading.value = true;
     params.loadError.value = null;
     const asOf = params.kpiDate.value || undefined;
     await Promise.all([
-      loadOverviewKpis(params.kpi, params.loadError, asOf),
-      loadOverviewTrend(params.trendDays.value, params.trend, params.loadError, asOf),
+      loadOverviewKpis(
+        params.kpi,
+        params.loadError,
+        asOf,
+        () => !disposed && currentKpiRequestId === kpiRequestId
+      ),
+      loadOverviewTrend(
+        params.trendDays.value,
+        params.trend,
+        params.loadError,
+        asOf,
+        () => !disposed && currentTrendRequestId === trendRequestId
+      ),
       loadOverviewDistribution(
         params.staleDim.value,
         params.distribution,
         params.loadError,
+        () => !disposed && currentDistributionRequestId === distributionRequestId,
         params.distributionTruncated,
         params.distributionLimit,
         params.distributionMatched
@@ -146,31 +218,18 @@ export function createOverviewActions(params: {
         params.topOffenders,
         params.offendersLoading,
         params.loadError,
+        () => !disposed && currentOffendersRequestId === offendersRequestId,
         params.offendersTruncated,
         params.offendersLimit,
         params.offendersMatched
       )
     ]);
-    params.loading.value = false;
+    if (!disposed && currentReloadId === reloadRequestId) params.loading.value = false;
   }
   return {
     reload,
-    loadTrend: () =>
-      loadOverviewTrend(
-        params.trendDays.value,
-        params.trend,
-        params.loadError,
-        params.kpiDate.value || undefined
-      ),
-    loadDistribution: () =>
-      loadOverviewDistribution(
-        params.staleDim.value,
-        params.distribution,
-        params.loadError,
-        params.distributionTruncated,
-        params.distributionLimit,
-        params.distributionMatched
-      ),
+    loadTrend,
+    loadDistribution,
     goZeroSales: (merchantId?: string) =>
       params.router.push({ name: 'zero-sales', query: merchantId ? { merchantId } : undefined }),
     offenderRowClass: overviewOffenderRowClass

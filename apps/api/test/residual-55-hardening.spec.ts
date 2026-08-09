@@ -24,12 +24,12 @@ describe('residual #55 hardening hygiene', () => {
       'community/community.service.ts',
       'audit-log/audit-log.service.ts',
       'zero-sales/zero-sales-list.ts',
-      'movement/movement-skus.ts',
+      'movement/movement-sku-projection.ts',
       'movement/movement.controller.ts',
-      'user-access/user.service.ts',
+      'user-access/application/user-query.service.ts',
       'attribution/attribution.service.ts',
       'distribution-task/distribution-task-query.ts',
-      'merchant/merchant-list.ts'
+      'merchant/merchant-list-projection.ts'
     ];
     for (const rel of files) {
       const src = await fs.readFile(path.join(__dirname, '..', 'src', rel), 'utf8');
@@ -70,7 +70,7 @@ describe('residual #55 hardening hygiene', () => {
     const fs = await import('fs/promises');
     const path = await import('path');
     const src = await fs.readFile(
-      path.join(__dirname, '..', 'src', 'content', 'dashboard.service.ts'),
+      path.join(__dirname, '..', 'src', 'content', 'dashboard-performance-read.ts'),
       'utf8'
     );
     expect(src).toContain('DASHBOARD_COPY_PERF_TAKE');

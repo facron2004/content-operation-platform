@@ -7,7 +7,7 @@ const webRoot = path.join(__dirname, '..', '..', 'web', 'src');
 
 describe('residual #265 GMV + refund top-merchants LIMIT honesty', () => {
   it('pageMerchants emits limit/truncated from GMV_TOP_MERCHANTS_LIMIT', async () => {
-    const src = await readFile(path.join(srcRoot, 'gmv', 'gmv-metrics.ts'), 'utf8');
+    const src = await readFile(path.join(srcRoot, 'gmv', 'gmv-merchant-page.ts'), 'utf8');
     const start = src.indexOf('export function pageMerchants');
     expect(start).toBeGreaterThanOrEqual(0);
     const end = src.indexOf('export function sortAndPageMerchants', start + 10);

@@ -10,10 +10,12 @@ import { tap } from 'rxjs/operators';
 import type { Observable } from 'rxjs';
 import { safeStringifyRedacted } from '../common/redact-sensitive';
 import { AuditLogService } from './audit-log.service';
+import { shouldOmitAuditBodies, shouldSkipAuditPath } from './audit-log-policy';
 
 /**
  * Interceptor that automatically logs mutation requests (POST, PATCH, PUT, DELETE)
- * to the OperationAuditLog table. Fires asynchronously and silently fails.
+ * to the OperationAuditLog table. Fires asynchronously and never blocks the
+ * business response; unexpected write failures are logged for diagnosis.
  * Bodies are redacted so password / cookie / apiKey never land in the audit table.
  */
 @Injectable()
@@ -71,7 +73,13 @@ export class AuditLogInterceptor implements NestInterceptor {
             result: 'success',
             ip: req.ip
           })
-          .catch(() => {});
+          .catch((error: unknown) => {
+            const message = error instanceof Error ? error.message : String(error);
+            this.logger.error(
+              `Audit log write failed for ${action} ${objectType}: ${message}`,
+              error instanceof Error ? error.stack : undefined
+            );
+          });
       })
     );
   }
@@ -82,34 +90,4 @@ function extractIdFromBody(body: unknown): string | undefined {
   const b = body as Record<string, unknown>;
   const candidate = b.id ?? b.userId ?? b.logId ?? b.campaignId ?? b.taskId ?? b.packageId;
   return typeof candidate === 'string' ? candidate : undefined;
-}
-
-/** High-volume public paths that would drown the audit table. */
-function shouldSkipAuditPath(path: string): boolean {
-  return (
-    path.startsWith('/api/tracking') ||
-    path.startsWith('/t/') ||
-    path.includes('/health') ||
-    path.includes('/auth/local-session') ||
-    path.includes('/auth/refresh')
-  );
-}
-
-/**
- * Authenticated bulk endpoints whose request/response bodies embed free-form
- * PII or multi-KB text. Still audit who/when/action; drop before/after payloads.
- */
-function shouldOmitAuditBodies(path: string): boolean {
-  return (
-    path.includes('/import') ||
-    path.includes('/generate') ||
-    path.includes('/soldout-links/collect') ||
-    // Heavy admin jobs already leave who/when/action; bodies are multi-KB or binary-ish.
-    path.includes('/export') ||
-    path.includes('/gmv/refresh') ||
-    path.includes('/merchant-sales/refresh') ||
-    path.includes('/attribution/recompute') ||
-    path.includes('/sync-merchants') ||
-    path.includes('/refresh-addresses')
-  );
 }

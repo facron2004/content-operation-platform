@@ -10,7 +10,9 @@ import {
   Param,
   Post,
   Query,
-  Req
+  Req,
+  UseGuards,
+  UseInterceptors
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
@@ -22,6 +24,9 @@ import { Roles } from '../user-access/role.decorator';
 import { RequireLogin } from '../user-access/iam/route-auth.decorator';
 import { RequirePermissions } from '../user-access/iam/require-permissions.decorator';
 import { assertUnrestrictedAnalytics } from '../user-access/scope-guards';
+import { IdempotencyGuard } from '../idempotency/idempotency.guard';
+import { IdempotencyInterceptor } from '../idempotency/idempotency.interceptor';
+import { RequireIdempotency } from '../idempotency/require-idempotency.decorator';
 import {
   GmvByMerchantQueryDto,
   GmvDistributionQueryDto,
@@ -103,8 +108,8 @@ export function startGmvRefresh(service: GmvService, body: GmvRefreshBodyDto) {
 }
 
 /** Fetch the current state of a refresh job, or 404 if unknown/expired. */
-export function getGmvRefreshJobStatus(service: GmvService, jobId: string) {
-  const job = service.getRefreshJob(jobId);
+export async function getGmvRefreshJobStatus(service: GmvService, jobId: string) {
+  const job = await service.getRefreshJob(jobId);
   if (!job) throw new NotFoundException(`刷新任务不存在或已过期: ${jobId}`);
   return job;
 }
@@ -171,6 +176,9 @@ export class GmvController {
 
   @Roles('admin', 'platform_operator')
   @RequirePermissions('analytics:refresh')
+  @RequireIdempotency('data-backfill')
+  @UseGuards(IdempotencyGuard)
+  @UseInterceptors(IdempotencyInterceptor)
   @Throttle({ long: { limit: 20, ttl: 60000 } })
   @Post('refresh')
   @ApiOperation({
@@ -187,7 +195,7 @@ export class GmvController {
   @Throttle({ long: { limit: 120, ttl: 60000 } })
   @Get('refresh/:jobId')
   @ApiOperation({ summary: '查询 GMV 回填/刷新任务的进度与结果' })
-  refreshStatus(@Param('jobId') jobId: string) {
+  async refreshStatus(@Param('jobId') jobId: string) {
     return getGmvRefreshJobStatus(this.service, jobId);
   }
 

@@ -13,7 +13,13 @@ vi.mock('../stores/auth', () => ({
   })
 }));
 
-import { isRequestCanceled, requestKey, responseKey, shouldRetry } from './http-client-utils';
+import {
+  isRequestCanceled,
+  releaseInFlightController,
+  requestKey,
+  responseKey,
+  shouldRetry
+} from './http-client-utils';
 
 function fakeError(partial: Partial<AxiosError> & { name?: string; code?: string }): AxiosError {
   return {
@@ -34,6 +40,31 @@ describe('requestKey / responseKey', () => {
     });
     expect(a).toBe(b);
     expect(responseKey({ method: 'GET', url: '/data-analysis/summary' })).toBe(a);
+  });
+});
+
+describe('releaseInFlightController', () => {
+  it('keeps a replacement controller when an older response settles', () => {
+    const controllers = new Map<string, AbortController>();
+    const older = new AbortController();
+    const newer = new AbortController();
+    const config = { method: 'GET', url: '/alerts', signal: older.signal };
+
+    controllers.set(requestKey(config), newer);
+    releaseInFlightController(controllers, config);
+
+    expect(controllers.get(requestKey(config))).toBe(newer);
+  });
+
+  it('releases the controller owned by the settling response', () => {
+    const controllers = new Map<string, AbortController>();
+    const controller = new AbortController();
+    const config = { method: 'GET', url: '/alerts', signal: controller.signal };
+
+    controllers.set(requestKey(config), controller);
+    releaseInFlightController(controllers, config);
+
+    expect(controllers.has(requestKey(config))).toBe(false);
   });
 });
 

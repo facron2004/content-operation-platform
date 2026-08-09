@@ -1,4 +1,4 @@
-import { computed, onMounted, ref, type ComputedRef, type Ref } from 'vue';
+import { computed, onMounted, onScopeDispose, ref, type ComputedRef, type Ref } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import type { MarketingCampaign } from '@content/shared';
 import { api } from '../../../services/api';
@@ -35,6 +35,7 @@ export const CAMPAIGN_STATUS_LABELS: Record<MarketingCampaign['status'], string>
 export function useCampaigns(): PagedListReturn<MarketingCampaign, CampaignFilters> & {
   campaigns: PagedListReturn<MarketingCampaign, CampaignFilters>['items'];
   actionLoading: Ref<boolean>;
+  writeError: Ref<string | null>;
   handleDelete: (campaign: MarketingCampaign) => Promise<void>;
   // Residual #207: list-row status transitions (API clients already exist).
   handleStart: (campaign: MarketingCampaign) => Promise<void>;
@@ -86,12 +87,31 @@ export function useCampaigns(): PagedListReturn<MarketingCampaign, CampaignFilte
   );
 
   const actionLoading = ref(false);
+  const writeError = ref<string | null>(null);
+  let disposed = false;
+  let transitionRequestId = 0;
+
+  onScopeDispose(() => {
+    disposed = true;
+    transitionRequestId += 1;
+    actionLoading.value = false;
+  }, true);
 
   async function handleDelete(campaign: MarketingCampaign): Promise<void> {
+    if (disposed) return;
+    writeError.value = null;
     await confirmAndDelete(
       { message: `确认删除活动「${campaign.name}」？此操作不可恢复。` },
-      () => api.deleteCampaign(campaign.campaignId),
-      { successMsg: '活动已删除', errorMsg: '删除活动失败', onSuccess: list.reloadCurrentPage }
+      () => (disposed ? Promise.resolve() : api.deleteCampaign(campaign.campaignId)),
+      {
+        successMsg: '活动已删除',
+        errorMsg: '删除活动失败',
+        isActive: () => !disposed,
+        onSuccess: () => (disposed ? undefined : list.reloadCurrentPage()),
+        onError: (message) => {
+          if (!disposed) writeError.value = message;
+        }
+      }
     );
   }
 
@@ -104,21 +124,31 @@ export function useCampaigns(): PagedListReturn<MarketingCampaign, CampaignFilte
     successText: string,
     failText: string
   ): Promise<void> {
-    if (actionLoading.value) return;
+    if (disposed || actionLoading.value) return;
+    const requestId = ++transitionRequestId;
+    writeError.value = null;
     actionLoading.value = true;
     try {
       await action();
+      if (disposed || requestId !== transitionRequestId) return;
       ElMessage.success(successText);
       await list.reloadCurrentPage();
     } catch (error) {
-      ElMessage.error(extractErrorMessage(error, failText));
+      if (disposed || requestId !== transitionRequestId) return;
+      const message = extractErrorMessage(error, failText);
+      writeError.value = message;
+      ElMessage.error(message);
     } finally {
-      actionLoading.value = false;
+      if (requestId === transitionRequestId) actionLoading.value = false;
     }
   }
 
   async function handleStart(campaign: MarketingCampaign): Promise<void> {
-    await runTransition(() => api.startCampaign(campaign.campaignId), '活动已启动', '启动活动失败');
+    await runTransition(
+      () => api.startCampaign(campaign.campaignId, campaign.updatedAt),
+      '活动已启动',
+      '启动活动失败'
+    );
   }
 
   async function handlePause(campaign: MarketingCampaign): Promise<void> {
@@ -143,6 +173,7 @@ export function useCampaigns(): PagedListReturn<MarketingCampaign, CampaignFilte
     } catch {
       return;
     }
+    if (disposed) return;
     await runTransition(
       () => api.cancelCampaign(campaign.campaignId),
       '活动已取消',
@@ -156,6 +187,7 @@ export function useCampaigns(): PagedListReturn<MarketingCampaign, CampaignFilte
     ...list,
     campaigns: list.items,
     actionLoading,
+    writeError,
     handleDelete,
     handleStart,
     handlePause,

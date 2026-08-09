@@ -9,7 +9,7 @@ const srcRoot = path.resolve(__dirname, '..');
 
 describe('residual #193 audit log date range UI', () => {
   it('AuditFilters + loader send dateFrom/dateTo', async () => {
-    const src = await readFile(path.join(srcRoot, 'views/AuditLogView.vue'), 'utf8');
+    const src = await readFile(path.join(srcRoot, 'features/audit-log/useAuditLogList.ts'), 'utf8');
     expect(src).toMatch(/dateFrom:\s*string/);
     expect(src).toMatch(/dateTo:\s*string/);
     expect(src).toMatch(/params\.dateFrom/);
@@ -27,13 +27,11 @@ describe('residual #193 audit log date range UI', () => {
   });
 
   it('resetFilters clears dateFrom/dateTo', async () => {
-    const src = await readFile(path.join(srcRoot, 'views/AuditLogView.vue'), 'utf8');
-    const fnStart = src.indexOf('function resetFilters');
-    expect(fnStart).toBeGreaterThan(0);
-    const fnEnd = src.indexOf('\nfunction ', fnStart + 10);
-    const fn = src.slice(fnStart, fnEnd > 0 ? fnEnd : undefined);
-    expect(fn).toMatch(/dateFrom:\s*''/);
-    expect(fn).toMatch(/dateTo:\s*''/);
+    const src = await readFile(path.join(srcRoot, 'features/audit-log/useAuditLogList.ts'), 'utf8');
+    expect(src).toMatch(/DEFAULT_AUDIT_FILTERS/);
+    expect(src).toMatch(/dateFrom:\s*''/);
+    expect(src).toMatch(/dateTo:\s*''/);
+    expect(src).toMatch(/paged\.resetFilters\(DEFAULT_AUDIT_FILTERS\)/);
   });
 
   it('listAuditLogs client still accepts dateFrom/dateTo', async () => {

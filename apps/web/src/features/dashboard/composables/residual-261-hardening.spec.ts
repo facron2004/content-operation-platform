@@ -10,13 +10,16 @@ const srcRoot = path.resolve(__dirname, '../../..');
 describe('residual #261 dashboard funnel window honesty', () => {
   it('API computeDashboardSummary returns dateFrom/dateTo (INTERACTIVE_LIST_MAX_DAYS)', async () => {
     const src = await readFile(
-      path.resolve(__dirname, '../../../../../../apps/api/src/content/dashboard.service.ts'),
+      path.resolve(
+        __dirname,
+        '../../../../../../apps/api/src/content/dashboard-summary.service.ts'
+      ),
       'utf8'
     );
     const start = src.indexOf('private async computeDashboardSummary');
     expect(start).toBeGreaterThanOrEqual(0);
     // Next method after computeDashboardSummary return block.
-    const end = src.indexOf('async getPerformance', start + 10);
+    const end = src.indexOf('\n  statusDistribution(', start + 10);
     const block = src.slice(start, end > 0 ? end : start + 2500);
     expect(block).toMatch(/INTERACTIVE_LIST_MAX_DAYS/);
     expect(block).toMatch(/dateFrom/);

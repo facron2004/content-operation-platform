@@ -32,6 +32,6 @@ export function configureAppMiddleware(app: INestApplication): void {
     exposedHeaders: ['X-Export-Truncated', 'X-Export-Limit', 'X-Export-Total']
   });
   app.useGlobalPipes(
-    new ValidationPipe({ whitelist: true, forbidNonWhitelisted: false, transform: true })
+    new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true })
   );
 }

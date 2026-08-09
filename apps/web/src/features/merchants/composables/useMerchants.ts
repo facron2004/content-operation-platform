@@ -1,3 +1,4 @@
+import { computed, onScopeDispose } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
   clampMerchantDetailDays,
@@ -12,12 +13,16 @@ import { bindMerchantRoute, buildMerchantActions } from './merchant-ui';
 export function useMerchants() {
   const route = useRoute();
   const router = useRouter();
+  let disposed = false;
+  let listRequestId = 0;
+  let detailRequestId = 0;
   // Residual #219: seed areaId/sort/search from route query.
   const state = createMerchantState(route.query);
   const {
     loading,
     detailLoading,
-    loadError,
+    listError,
+    detailError,
     merchants,
     search,
     areaId,
@@ -44,6 +49,8 @@ export function useMerchants() {
   } = state;
 
   async function reloadList() {
+    if (disposed) return;
+    const requestId = ++listRequestId;
     await loadMerchantList({
       search,
       areaId,
@@ -52,12 +59,15 @@ export function useMerchants() {
       merchants,
       hasMore,
       loading,
-      loadError,
+      listError,
       listTruncated,
-      listLimit
+      listLimit,
+      isCurrent: () => !disposed && requestId === listRequestId
     });
   }
   async function reloadDetail() {
+    if (disposed) return;
+    const requestId = ++detailRequestId;
     await loadMerchantDetail({
       merchantId: selectedMerchantId.value,
       detailLoading,
@@ -65,7 +75,7 @@ export function useMerchants() {
       trend,
       skuList,
       competitors,
-      loadError,
+      detailError,
       // Residual #235: pass operator-selected window.
       days: detailDays,
       // Residual #250: listSkus LIMIT honesty sinks.
@@ -74,10 +84,12 @@ export function useMerchants() {
       // Residual #285: competitors Top-N honesty sinks.
       competitorsTruncated,
       competitorsLimit,
-      competitorsMatched
+      competitorsMatched,
+      isCurrent: () => !disposed && requestId === detailRequestId
     });
   }
   function selectMerchant(id: string) {
+    if (disposed) return;
     selectedMerchantId.value = id;
     router.replace({
       query: {
@@ -93,11 +105,13 @@ export function useMerchants() {
   }
   // Residual #219: filter change resets page so area/sort/search never empty-page.
   async function onFilterChange() {
+    if (disposed) return;
     page.value = 1;
     await reloadList();
   }
   /** Residual #235: re-fetch trend + skus for the selected window (7–90). */
   async function setDetailDays(next: number) {
+    if (disposed) return;
     const clamped = clampMerchantDetailDays(next);
     if (clamped === detailDays.value) return;
     detailDays.value = clamped;
@@ -110,12 +124,25 @@ export function useMerchants() {
     selectedMerchant,
     merchants,
     reloadList,
-    reloadDetail
+    reloadDetail,
+    isCurrent: () => !disposed
   });
+  function dispose() {
+    if (disposed) return;
+    disposed = true;
+    listRequestId += 1;
+    detailRequestId += 1;
+    loading.value = false;
+    detailLoading.value = false;
+  }
+  onScopeDispose(dispose);
+  const loadError = computed(() => listError.value || detailError.value);
   return {
     loading,
     detailLoading,
     loadError,
+    listError,
+    detailError,
     merchants,
     search,
     areaId,

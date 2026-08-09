@@ -1,4 +1,3 @@
-import { toSqliteDateTime } from '../common/sqlite-datetime';
 import {
   ConflictException,
   Inject,
@@ -9,17 +8,17 @@ import {
   OnModuleDestroy
 } from '@nestjs/common';
 import type { RecommendQuery, RecommendationResult, UserRole } from '@content/shared';
-import { yuanToFen } from '@content/shared';
 import { withHeavyAggregateGate } from '../common';
 import { resolveScopedQuery, type ScopeBinding } from '../user-access/data-scope';
 import { DataSourceService } from './data-source.service';
 import { AICopyService, type AICopyConfigUpdate } from './ai-copy';
 import { DailyInventoryCrawlerService } from './daily-inventory-crawler.service';
+import { ContentMerchantSyncService } from './content-merchant-sync.service';
 import { type PackageAnalysisResult } from './content-recommend-core';
 import { PrismaService } from '../prisma/prisma.service';
-import { upsertMerchants } from '../merchant/merchant-address-updater';
 import { createContentDelegates, loadContentCategories } from './content-facade';
 import { createRecommendationRuntime } from './content-recommendation-runtime';
+import { isDesktopRuntime } from '../config/runtime.config';
 
 export type { RecommendQuery, RecommendationResult, PackageAnalysisResult };
 
@@ -30,11 +29,11 @@ export class ContentService implements OnModuleInit, OnModuleDestroy {
   private readonly dataSource: DataSourceService;
   private readonly aiCopyService: AICopyService;
   private readonly dailyInventoryCrawler: DailyInventoryCrawlerService;
-  /** Single-flight across sync-merchants (loadDataset + multi-batch package upsert). */
-  private merchantSyncRunning = false;
 
   /** Background re-warm timer so the heavy recommend cache never goes cold under users. */
   private warmupTimer?: ReturnType<typeof setInterval>;
+  private warmupStartTimer?: ReturnType<typeof setTimeout>;
+  private warmupRunning = false;
   private readonly logger = new Logger(ContentService.name);
   private static readonly UNRESTRICTED_ROLES: UserRole[] = [
     'admin',
@@ -46,6 +45,8 @@ export class ContentService implements OnModuleInit, OnModuleDestroy {
     @Inject(DataSourceService) dataSource: DataSourceService,
     @Inject(AICopyService) aiCopyService: AICopyService,
     @Inject(DailyInventoryCrawlerService) crawler: DailyInventoryCrawlerService,
+    @Inject(ContentMerchantSyncService)
+    private readonly merchantSyncService: ContentMerchantSyncService,
     @Inject(PrismaService) private readonly prisma: PrismaService
   ) {
     const logger = new Logger(ContentService.name);
@@ -76,26 +77,42 @@ export class ContentService implements OnModuleInit, OnModuleDestroy {
    * cache stays hot all day. Never throws — failures are logged only.
    */
   onModuleInit() {
+    if (isDesktopRuntime() && !process.env.EXTERNAL_API_BASE_URL?.trim()) {
+      this.logger.log('桌面端未配置外部数据源，跳过推荐预热');
+      return;
+    }
     const delay = Number.parseInt(process.env.CONTENT_WARMUP_DELAY_MS ?? '3000', 10);
     const interval = Number.parseInt(process.env.CONTENT_WARMUP_INTERVAL_MS ?? '240000', 10);
-    setTimeout(() => {
-      this.warmRecommendationCaches().catch((err) =>
-        this.logger.warn(`Recommendation prewarm failed: ${String((err as Error)?.message ?? err)}`)
-      );
+    this.warmupStartTimer = setTimeout(() => {
+      this.warmupStartTimer = undefined;
+      void this.runRecommendationWarmup('Recommendation prewarm failed');
     }, delay);
     if (interval > 0) {
       this.warmupTimer = setInterval(() => {
-        this.warmRecommendationCaches().catch((err) =>
-          this.logger.warn(
-            `Recommendation rewarm failed: ${String((err as Error)?.message ?? err)}`
-          )
-        );
+        void this.runRecommendationWarmup('Recommendation rewarm failed');
       }, interval);
     }
   }
 
   onModuleDestroy() {
+    if (this.warmupStartTimer) {
+      clearTimeout(this.warmupStartTimer);
+      this.warmupStartTimer = undefined;
+    }
     if (this.warmupTimer) clearInterval(this.warmupTimer);
+    this.warmupTimer = undefined;
+  }
+
+  private async runRecommendationWarmup(failurePrefix: string): Promise<void> {
+    if (this.warmupRunning) return;
+    this.warmupRunning = true;
+    try {
+      await this.warmRecommendationCaches();
+    } catch (err) {
+      this.logger.warn(`${failurePrefix}: ${String((err as Error)?.message ?? err)}`);
+    } finally {
+      this.warmupRunning = false;
+    }
   }
 
   private async warmRecommendationCaches(): Promise<void> {
@@ -193,135 +210,7 @@ export class ContentService implements OnModuleInit, OnModuleDestroy {
   }
 
   async syncMerchantsFromJeeSite() {
-    const logger = new Logger('ContentService');
-    if (this.merchantSyncRunning) {
-      logger.warn('Skipping merchant sync — previous run still in flight');
-      return {
-        upserted: 0,
-        skipped: true as const,
-        packagesCount: 0,
-        packagesPersisted: 0,
-        note: 'Merchant sync already running'
-      };
-    }
-    this.merchantSyncRunning = true;
-    try {
-      return await this.syncMerchantsFromJeeSiteUnlocked(logger);
-    } finally {
-      this.merchantSyncRunning = false;
-    }
-  }
-
-  private async syncMerchantsFromJeeSiteUnlocked(logger: Logger) {
-    logger.log('Fetching JeeSite dataset with merchant addresses...');
-    const dataset = await this.dataSource.loadDataset({ forceRefresh: true });
-    const result = await upsertMerchants(this.prisma, dataset);
-
-    // Also persist packages to ContentPackage table (with shopId)
-    const BATCH = 100;
-    let pkgCount = 0;
-    const pkgs = dataset.packages.filter((p) => p.packageId && p.merchantId);
-    for (let i = 0; i < pkgs.length; i += BATCH) {
-      const batch = pkgs.slice(i, i + BATCH);
-      const vc = batch
-        .map(() => '(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
-        .join(',');
-      const now = toSqliteDateTime();
-      const params = batch.flatMap((p) => [
-        p.packageId,
-        p.packageName,
-        p.packageType,
-        p.merchantId,
-        p.merchantName,
-        p.areaId,
-        p.areaName,
-        p.category,
-        yuanToFen(p.originalPrice),
-        yuanToFen(p.salePrice),
-        yuanToFen(p.welfarePrice ?? null),
-        p.commissionRate,
-        yuanToFen(p.grossProfit),
-        p.stockTotal,
-        p.stockLeft,
-        p.startTime,
-        p.endTime,
-        JSON.stringify(p.useRules),
-        JSON.stringify(p.sellingPoints),
-        p.miniProgramPath,
-        p.detailSummary ?? null,
-        p.saleStatus ?? null,
-        p.merchantCooperationScore,
-        82,
-        80,
-        82,
-        p.shopId ?? null,
-        p.merchantAddress ?? null,
-        null, // fallbackPackageId
-        now
-      ]);
-      try {
-        await this.prisma.$executeRawUnsafe(
-          `INSERT INTO "ContentPackage" (
-            "packageId","packageName","packageType","merchantId","merchantName",
-            "areaId","areaName","category",
-            "originalPriceFen","salePriceFen",
-            "welfarePriceFen","commissionRate",
-            "grossProfitFen","stockTotal","stockLeft",
-            "startTime","endTime","useRules","sellingPoints",
-            "miniProgramPath","detailSummary","saleStatus","merchantCooperationScore",
-            "areaMatchScore","timeMatchScore","historyScore",
-            "shopId","merchantAddress","fallbackPackageId","updatedAt"
-          ) VALUES ${vc}
-          ON CONFLICT("packageId") DO UPDATE SET
-            "packageName"=excluded."packageName","merchantName"=excluded."merchantName",
-            -- Freeze merchant + geography while any non-terminal DistributionTask
-            -- still references this package. Attribution COALESCE prefers
-            -- package.areaId; merchantId drives scope boards — Jeesite reclass
-            -- must not retarget live money windows.
-            "merchantId"=CASE
-              WHEN EXISTS (
-                SELECT 1 FROM "DistributionTask" t
-                WHERE t."packageId" = "ContentPackage"."packageId"
-                  AND t."status" NOT IN ('completed', 'cancelled', 'failed')
-              ) THEN "ContentPackage"."merchantId"
-              ELSE excluded."merchantId"
-            END,
-            "areaId"=CASE
-              WHEN EXISTS (
-                SELECT 1 FROM "DistributionTask" t
-                WHERE t."packageId" = "ContentPackage"."packageId"
-                  AND t."status" NOT IN ('completed', 'cancelled', 'failed')
-              ) THEN "ContentPackage"."areaId"
-              ELSE excluded."areaId"
-            END,
-            "areaName"=CASE
-              WHEN EXISTS (
-                SELECT 1 FROM "DistributionTask" t
-                WHERE t."packageId" = "ContentPackage"."packageId"
-                  AND t."status" NOT IN ('completed', 'cancelled', 'failed')
-              ) THEN "ContentPackage"."areaName"
-              ELSE excluded."areaName"
-            END,
-            "category"=excluded."category","salePriceFen"=excluded."salePriceFen",
-            "salePriceFen"=excluded."salePriceFen",
-            "stockLeft"=excluded."stockLeft","saleStatus"=excluded."saleStatus",
-            "shopId"=COALESCE(NULLIF(excluded."shopId",''),"ContentPackage"."shopId"),
-            "merchantAddress"=excluded."merchantAddress",
-            "updatedAt"=excluded."updatedAt"`,
-          ...params
-        );
-        pkgCount += batch.length;
-      } catch (err: unknown) {
-        logger.warn(
-          `Package upsert batch error: ${err instanceof Error ? err.message : String(err)}`
-        );
-      }
-    }
-
-    logger.log(
-      `Merchant sync complete: ${result.upserted} merchants, ${pkgCount} packages upserted`
-    );
-    return { ...result, packagesCount: dataset.packages.length, packagesPersisted: pkgCount };
+    return this.merchantSyncService.syncMerchantsFromJeeSite();
   }
 
   getCommunities(

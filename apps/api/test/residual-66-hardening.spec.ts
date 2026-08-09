@@ -38,7 +38,7 @@ describe('residual #66 zero-sales daysSince reuses lastSalesDate', () => {
     const fs = await import('fs/promises');
     const path = await import('path');
     const src = await fs.readFile(
-      path.join(__dirname, '..', 'src', 'zero-sales', 'zero-sales-loaders.ts'),
+      path.join(__dirname, '..', 'src', 'zero-sales', 'zero-sales-sku-loaders.ts'),
       'utf8'
     );
     // residual #78: zeroSalesDaysSince in JS; batch metrics use one MAX per IN-chunk GROUP BY.
@@ -59,7 +59,7 @@ describe('residual #66 GMV today OH mapPool', () => {
     const fs = await import('fs/promises');
     const path = await import('path');
     const src = await fs.readFile(
-      path.join(__dirname, '..', 'src', 'gmv', 'gmv-order-header.ts'),
+      path.join(__dirname, '..', 'src', 'gmv', 'gmv-order-header-today.ts'),
       'utf8'
     );
     expect(src).toContain('mapPool');
@@ -91,7 +91,7 @@ describe('residual #66 external catalog PLATFORM_SCAN_LIMIT cap', () => {
     const fs = await import('fs/promises');
     const path = await import('path');
     const src = await fs.readFile(
-      path.join(__dirname, '..', 'src', 'content', 'data-source.service.ts'),
+      path.join(__dirname, '..', 'src', 'content', 'jeesite-data-source.client.ts'),
       'utf8'
     );
     expect(src).toContain('PLATFORM_SCAN_LIMIT');

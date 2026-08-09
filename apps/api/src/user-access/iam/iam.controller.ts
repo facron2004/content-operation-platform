@@ -17,6 +17,7 @@ import { safePathId } from '../../common/path-id';
 import { JwtStrategy } from '../../auth/jwt.strategy';
 import { IamAccessService } from './iam-access.service';
 import { IamAdminService } from './iam-admin.service';
+import { IamShadowService } from './iam-shadow.service';
 import {
   CloneIamRoleDto,
   CreateIamRoleDto,
@@ -26,12 +27,14 @@ import {
   UpdateOrganizationUnitDto
 } from './iam.dto';
 import { RequirePermissions } from './require-permissions.decorator';
+import { requireTenantId } from '../tenant-context';
 
 @Controller('api/iam')
 export class IamController {
   constructor(
     @Inject(IamAccessService) private readonly accessService: IamAccessService,
     @Inject(IamAdminService) private readonly adminService: IamAdminService,
+    @Inject(IamShadowService) private readonly shadowService: IamShadowService,
     @Optional() @Inject(JwtStrategy) private readonly jwtStrategy?: JwtStrategy
   ) {}
 
@@ -41,18 +44,23 @@ export class IamController {
     return this.accessService.listPermissions();
   }
 
+  @Get('shadow/stats')
+  @RequirePermissions('iam:root')
+  shadowStats() {
+    return this.shadowService.getStats();
+  }
+
   @Get('roles')
   @RequirePermissions('iam:roles:read')
   listRoles(@Req() req: Request) {
-    const tenantId = (req.user as { tenantId?: string } | undefined)?.tenantId;
-    return this.accessService.listRoles(tenantId ?? 'tenant_default');
+    return this.accessService.listRoles(requireTenantId(req.user as { tenantId?: string }));
   }
 
   @Post('roles')
   @RequirePermissions('iam:roles:write')
   createRole(@Body(createDtoPipe(CreateIamRoleDto)) body: CreateIamRoleDto, @Req() req: Request) {
     const user = req.user as { tenantId?: string; userId?: string } | undefined;
-    return this.adminService.createRole(user?.tenantId ?? 'tenant_default', body, user?.userId);
+    return this.adminService.createRole(requireTenantId(user), body, user?.userId);
   }
 
   @Patch('roles/:id')
@@ -63,12 +71,7 @@ export class IamController {
     @Req() req: Request
   ) {
     const user = req.user as { tenantId?: string; userId?: string } | undefined;
-    return this.adminService.updateRole(
-      user?.tenantId ?? 'tenant_default',
-      safePathId(id),
-      body,
-      user?.userId
-    );
+    return this.adminService.updateRole(requireTenantId(user), safePathId(id), body, user?.userId);
   }
 
   @Post('roles/:id/clone')
@@ -79,12 +82,7 @@ export class IamController {
     @Req() req: Request
   ) {
     const user = req.user as { tenantId?: string; userId?: string } | undefined;
-    return this.adminService.cloneRole(
-      user?.tenantId ?? 'tenant_default',
-      safePathId(id),
-      body,
-      user?.userId
-    );
+    return this.adminService.cloneRole(requireTenantId(user), safePathId(id), body, user?.userId);
   }
 
   @Put('roles/:id/permissions')
@@ -96,7 +94,7 @@ export class IamController {
   ) {
     const user = req.user as { tenantId?: string; userId?: string } | undefined;
     return this.adminService.updateRole(
-      user?.tenantId ?? 'tenant_default',
+      requireTenantId(user),
       safePathId(id),
       { permissionCodes: body.permissionCodes ?? [] },
       user?.userId
@@ -106,15 +104,17 @@ export class IamController {
   @Get('organizations')
   @RequirePermissions('iam:org:read')
   listOrganizations(@Req() req: Request) {
-    const tenantId = (req.user as { tenantId?: string } | undefined)?.tenantId;
-    return this.accessService.listOrganizationUnits(tenantId ?? 'tenant_default');
+    return this.accessService.listOrganizationUnits(
+      requireTenantId(req.user as { tenantId?: string })
+    );
   }
 
   @Get('org-units/tree')
   @RequirePermissions('iam:org:read')
   listOrganizationTree(@Req() req: Request) {
-    const tenantId = (req.user as { tenantId?: string } | undefined)?.tenantId;
-    return this.accessService.listOrganizationTree(tenantId ?? 'tenant_default');
+    return this.accessService.listOrganizationTree(
+      requireTenantId(req.user as { tenantId?: string })
+    );
   }
 
   @Post(['organizations', 'org-units'])
@@ -124,11 +124,7 @@ export class IamController {
     @Req() req: Request
   ) {
     const user = req.user as { tenantId?: string; userId?: string } | undefined;
-    return this.adminService.createOrganizationUnit(
-      user?.tenantId ?? 'tenant_default',
-      body,
-      user?.userId
-    );
+    return this.adminService.createOrganizationUnit(requireTenantId(user), body, user?.userId);
   }
 
   @Patch(['organizations/:id', 'org-units/:id'])
@@ -140,7 +136,7 @@ export class IamController {
   ) {
     const user = req.user as { tenantId?: string; userId?: string } | undefined;
     return this.adminService.updateOrganizationUnit(
-      user?.tenantId ?? 'tenant_default',
+      requireTenantId(user),
       safePathId(id),
       body,
       user?.userId
@@ -150,8 +146,8 @@ export class IamController {
   @Get('users/:id/access')
   @RequirePermissions('iam:users:access')
   async getUserAccess(@Param('id') id: string, @Req() req: Request) {
-    const tenantId = (req.user as { tenantId?: string } | undefined)?.tenantId;
-    const access = await this.accessService.getUserAccess(safePathId(id), tenantId);
+    const tenantId = requireTenantId(req.user as { tenantId?: string });
+    const access = await this.accessService.getUserAccess(safePathId(id), tenantId, true);
     if (!access) throw new NotFoundException('用户不存在或不属于当前租户');
     return access;
   }
@@ -165,7 +161,7 @@ export class IamController {
   ) {
     const user = req.user as { tenantId?: string; userId?: string } | undefined;
     const result = await this.adminService.replaceUserAccess(
-      user?.tenantId ?? 'tenant_default',
+      requireTenantId(user),
       safePathId(id),
       body,
       user?.userId

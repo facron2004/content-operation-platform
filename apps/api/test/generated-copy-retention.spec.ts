@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { GeneratedCopyRetentionJob } from '../src/jobs/generated-copy-retention.job';
+import { createJobRunnerMock } from './helpers/job-runner';
 import {
   GENERATED_COPY_PURGE_BATCH,
   GENERATED_COPY_PURGE_MAX_BATCHES,
@@ -14,7 +15,7 @@ describe('GeneratedCopyRetentionJob', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    job = new GeneratedCopyRetentionJob(prisma as never);
+    job = new GeneratedCopyRetentionJob(prisma as never, createJobRunnerMock() as never);
   });
 
   it('exports retention longer than interactive 90d list window', () => {

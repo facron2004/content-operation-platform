@@ -30,17 +30,17 @@ const cards: Array<{
     icon: ShoppingBag
   },
   {
-    key: 'tradeAmount',
-    label: '交易额（含余额）',
+    key: 'netGmv',
+    label: '净 GMV',
     tone: 'cyan',
-    value: (o) => displayMoney(o, 'tradeAmount'),
+    value: (o) => displayMoney(o, 'netGmv'),
     icon: CreditCard
   },
   {
-    key: 'netSales',
-    label: '净销售额',
+    key: 'writeOffAmount',
+    label: '核销额',
     tone: 'indigo',
-    value: (o) => displayMoney(o, 'netSales'),
+    value: (o) => displayMoney(o, 'writeOffAmount'),
     icon: Money
   },
   {

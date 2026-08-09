@@ -16,88 +16,66 @@ describe('DataSourceService', () => {
     process.env.EXTERNAL_PACKAGES_PATH = previousEnv.EXTERNAL_PACKAGES_PATH;
   });
 
-  it('throws when the external backend request fails', async () => {
-    process.env.CONTENT_DATA_SOURCE = 'jeesite';
-    process.env.EXTERNAL_API_BASE_URL = 'https://zdm.zhsh1.cn/a';
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('fetch failed')));
-
-    const service = new DataSourceService({
-      ensureValidCookie: vi.fn().mockResolvedValue(''),
-      clearCache: vi.fn()
-    } as any);
-
-    await expect(service.loadDataset()).rejects.toThrow(/External backend request failed/i);
-  });
-
   it('rejects the old local-life source so runtime data stays on JeeSite', async () => {
     process.env.CONTENT_DATA_SOURCE = 'local-life';
 
-    const service = new DataSourceService({
-      ensureValidCookie: vi.fn().mockResolvedValue(''),
-      clearCache: vi.fn()
-    } as any);
+    const client = { loadDataset: vi.fn() };
+    const service = new DataSourceService(client as any);
 
     await expect(service.loadDataset()).rejects.toThrow(/Unsupported CONTENT_DATA_SOURCE/i);
+    expect(client.loadDataset).not.toHaveBeenCalled();
   });
 
-  it('rebuilds fetch headers after auto login refreshes an expired cookie', async () => {
-    process.env.CONTENT_DATA_SOURCE = 'jeesite';
-    process.env.EXTERNAL_API_BASE_URL = 'https://zdm.zhsh1.cn/a';
-    process.env.EXTERNAL_PACKAGES_PATH = '/bargain/bargainCommodity/listData?pageSize=1&pageNo=1';
+  it('coalesces concurrent loads and reuses the loaded dataset', async () => {
+    const dataset = { packages: [], snapshots: [] };
+    const client = { loadDataset: vi.fn().mockResolvedValue(dataset) };
+    const service = new DataSourceService(client as any);
 
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(new Response(JSON.stringify({ result: 'login' }), { status: 200 }))
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            count: 1,
-            pageSize: 1,
-            list: [
-              {
-                id: 'PKG-REFRESH',
-                commodityName: 'Refresh Cookie Package',
-                bargainState: 10,
-                shopName: 'Refresh Shop',
-                cityName: 'Shenzhen',
-                districtName: 'Nanshan',
-                marketPrice: 100,
-                bargainPrice: 50,
-                bargainCommodityDynamic: {
-                  hasInventory: 5,
-                  initialInventoryTotal: 10,
-                  hasBargainAmount: 5,
-                  hasBargainCount: 5,
-                  hasHeatCount: 100
-                }
-              }
-            ]
-          }),
-          { status: 200 }
-        )
-      );
-    vi.stubGlobal('fetch', fetchMock);
+    const [first, second] = await Promise.all([
+      service.loadDataset({ forceRefresh: true }),
+      service.loadDataset()
+    ]);
 
-    const autoLoginService = {
-      ensureValidCookie: vi
-        .fn()
-        .mockResolvedValueOnce('old-cookie')
-        .mockResolvedValueOnce('new-cookie')
-        .mockResolvedValue('new-cookie'),
-      clearCache: vi.fn()
+    expect(first).toBe(dataset);
+    expect(second).toBe(dataset);
+    expect(client.loadDataset).toHaveBeenCalledTimes(1);
+  });
+
+  it('invalidates cached data so the next load uses the current external session', async () => {
+    const firstDataset = { packages: [{ id: 'old' }], snapshots: [] };
+    const secondDataset = { packages: [{ id: 'new' }], snapshots: [] };
+    const client = {
+      loadDataset: vi.fn().mockResolvedValueOnce(firstDataset).mockResolvedValueOnce(secondDataset)
     };
-    const service = new DataSourceService(autoLoginService as any);
+    const service = new DataSourceService(client as any);
 
-    const dataset = await service.loadDataset({ forceRefresh: true });
+    await expect(service.loadDataset()).resolves.toBe(firstDataset);
+    service.invalidateCache();
 
-    expect(dataset.packages).toHaveLength(1);
-    expect(autoLoginService.clearCache).toHaveBeenCalledTimes(1);
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect((fetchMock.mock.calls[0][1]?.headers as Record<string, string>).Cookie).toBe(
-      'old-cookie'
-    );
-    expect((fetchMock.mock.calls[1][1]?.headers as Record<string, string>).Cookie).toBe(
-      'new-cookie'
-    );
+    await expect(service.loadDataset()).resolves.toBe(secondDataset);
+    expect(client.loadDataset).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not let an invalidated in-flight result repopulate the cache', async () => {
+    const firstDataset = { packages: [{ id: 'old' }], snapshots: [] };
+    const secondDataset = { packages: [{ id: 'new' }], snapshots: [] };
+    let resolveFirst!: (dataset: typeof firstDataset) => void;
+    const firstLoad = new Promise<typeof firstDataset>((resolve) => {
+      resolveFirst = resolve;
+    });
+    const client = {
+      loadDataset: vi.fn().mockReturnValueOnce(firstLoad).mockResolvedValueOnce(secondDataset)
+    };
+    const service = new DataSourceService(client as any);
+
+    const staleFlight = service.loadDataset();
+    service.invalidateCache();
+    const freshFlight = service.loadDataset();
+    await expect(freshFlight).resolves.toBe(secondDataset);
+
+    resolveFirst(firstDataset);
+    await expect(staleFlight).resolves.toBe(firstDataset);
+    await expect(service.loadDataset()).resolves.toBe(secondDataset);
+    expect(client.loadDataset).toHaveBeenCalledTimes(2);
   });
 });

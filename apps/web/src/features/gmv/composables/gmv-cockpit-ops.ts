@@ -28,74 +28,9 @@ import {
   type GmvHeatPoint
 } from './gmv-cockpit-core';
 import { loadGmvCockpitExtras } from './gmv-cockpit-extras';
+import type { GmvBackfillRange } from './gmv-cockpit-core';
 
-export function createGmvCockpitLoadAll(state: {
-  kpiDate: Ref<string>;
-  kpi: Ref<GmvKpi | null>;
-  loadError: Ref<string | null>;
-  trendGranularity: Ref<GmvTrendGranularity>;
-  trend: Ref<GmvTrendPoint[]>;
-  hourly: Ref<GmvHourlyPoint[]>;
-  distDim: Ref<'area' | 'category'>;
-  distribution: Ref<GmvDistributionRow[]>;
-  merchantSort: Ref<'gmvDesc' | 'refundDesc' | 'verifyDesc'>;
-  merchantPage: Ref<number>;
-  merchantPageSize: Ref<number>;
-  merchantHasMore: Ref<boolean>;
-  topMerchants: Ref<GmvMerchantRow[]>;
-  // Residual #265: GMV_TOP_MERCHANTS_LIMIT honesty sinks.
-  merchantTruncated: Ref<boolean>;
-  merchantLimit: Ref<number | null>;
-  // Residual #289: distribution Top-N honesty sinks.
-  distributionTruncated: Ref<boolean>;
-  distributionLimit: Ref<number | null>;
-  distributionMatched: Ref<number | null>;
-  categories: Ref<GmvCategoryRow[]>;
-  channels: Ref<GmvChannelRow[]>;
-  funnel: Ref<GmvFunnelStage[]>;
-  activities: Ref<GmvActivityRow[]>;
-  heatPoints: Ref<GmvHeatPoint[]>;
-  heatCity: Ref<string>;
-  alerts: Ref<GmvAlertItem[]>;
-}) {
-  return async function loadAll() {
-    // Full reload resets merchant page (sort/date/refresh).
-    state.merchantPage.value = 1;
-    await Promise.all([
-      loadGmvKpis(state.kpiDate.value, state.kpi, state.loadError),
-      loadGmvTrend(state.trendGranularity.value, state.kpiDate.value, state.trend, state.loadError),
-      loadGmvHourly(state.kpiDate.value, state.hourly, state.loadError),
-      loadGmvDistribution(
-        state.distDim.value,
-        state.distribution,
-        state.loadError,
-        state.distributionTruncated,
-        state.distributionLimit,
-        state.distributionMatched
-      ),
-      loadGmvTopMerchants({
-        sort: state.merchantSort.value,
-        page: state.merchantPage.value,
-        pageSize: state.merchantPageSize.value,
-        topMerchants: state.topMerchants,
-        hasMore: state.merchantHasMore,
-        truncated: state.merchantTruncated,
-        limit: state.merchantLimit,
-        loadError: state.loadError
-      })
-    ]);
-    await loadGmvCockpitExtras({
-      kpi: state.kpi,
-      categories: state.categories,
-      channels: state.channels,
-      funnel: state.funnel,
-      activities: state.activities,
-      heatPoints: state.heatPoints,
-      heatCity: state.heatCity,
-      alerts: state.alerts
-    });
-  };
-}
+export { createGmvCockpitLoadAll } from './gmv-cockpit-load';
 
 export type GmvCockpitHandlerArgs = {
   trendGranularity: Ref<GmvTrendGranularity>;
@@ -118,6 +53,7 @@ export type GmvCockpitHandlerArgs = {
   distribution: Ref<GmvDistributionRow[]>;
   topMerchants: Ref<GmvMerchantRow[]>;
   loadError: Ref<string | null>;
+  extrasError: Ref<string | null>;
   todayText: string;
   backfilling: Ref<boolean>;
   backfillStatusText: Ref<string>;
@@ -130,11 +66,18 @@ export type GmvCockpitHandlerArgs = {
   heatPoints: Ref<GmvHeatPoint[]>;
   heatCity: Ref<string>;
   alerts: Ref<GmvAlertItem[]>;
+  beginRequest: () => number;
+  isRequestCurrent: (requestId: number) => boolean;
+  isAlive: () => boolean;
 };
 
 export function createGmvCockpitHandlers(args: GmvCockpitHandlerArgs) {
   async function loadTopMerchants(resetPage = false) {
+    if (!args.isAlive()) return;
     if (resetPage) args.merchantPage.value = 1;
+    const requestId = args.beginRequest();
+    const isCurrent = () => args.isRequestCurrent(requestId);
+    if (!isCurrent()) return;
     await loadGmvTopMerchants({
       sort: args.merchantSort.value,
       page: args.merchantPage.value,
@@ -143,6 +86,7 @@ export function createGmvCockpitHandlers(args: GmvCockpitHandlerArgs) {
       hasMore: args.merchantHasMore,
       truncated: args.merchantTruncated,
       limit: args.merchantLimit,
+      isCurrent,
       loadError: args.loadError
     });
   }
@@ -152,60 +96,117 @@ export function createGmvCockpitHandlers(args: GmvCockpitHandlerArgs) {
       today.setHours(23, 59, 59, 999);
       return date.getTime() > today.getTime();
     },
-    loadTrend: () =>
-      loadGmvTrend(args.trendGranularity.value, args.kpiDate.value, args.trend, args.loadError),
-    loadHourly: () => loadGmvHourly(args.kpiDate.value, args.hourly, args.loadError),
-    loadDistribution: () =>
-      loadGmvDistribution(
+    loadTrend: async () => {
+      const requestId = args.beginRequest();
+      const isCurrent = () => args.isRequestCurrent(requestId);
+      if (!isCurrent()) return;
+      await loadGmvTrend(
+        args.trendGranularity.value,
+        args.kpiDate.value,
+        args.trend,
+        args.loadError,
+        isCurrent
+      );
+    },
+    loadHourly: async () => {
+      const requestId = args.beginRequest();
+      const isCurrent = () => args.isRequestCurrent(requestId);
+      if (!isCurrent()) return;
+      await loadGmvHourly(args.kpiDate.value, args.hourly, args.loadError, isCurrent);
+    },
+    loadDistribution: async () => {
+      const requestId = args.beginRequest();
+      const isCurrent = () => args.isRequestCurrent(requestId);
+      if (!isCurrent()) return;
+      await loadGmvDistribution(
         args.distDim.value,
         args.distribution,
         args.loadError,
         args.distributionTruncated,
         args.distributionLimit,
-        args.distributionMatched
-      ),
+        args.distributionMatched,
+        isCurrent
+      );
+    },
     // Sort change resets to page 1.
     loadTopMerchants: () => loadTopMerchants(true),
     prevMerchantPage() {
+      if (!args.isAlive()) return;
       if (args.merchantPage.value > 1) {
         args.merchantPage.value -= 1;
         void loadTopMerchants(false);
       }
     },
     nextMerchantPage() {
+      if (!args.isAlive()) return;
       if (args.merchantHasMore.value) {
         args.merchantPage.value += 1;
         void loadTopMerchants(false);
       }
     },
     onKpiDateChange: async () => {
+      const requestId = args.beginRequest();
+      const isCurrent = () => args.isRequestCurrent(requestId);
+      if (!isCurrent()) return;
       await Promise.all([
-        loadGmvKpis(args.kpiDate.value, args.kpi, args.loadError),
-        loadGmvTrend(args.trendGranularity.value, args.kpiDate.value, args.trend, args.loadError),
-        loadGmvHourly(args.kpiDate.value, args.hourly, args.loadError)
+        loadGmvKpis(args.kpiDate.value, args.kpi, args.loadError, isCurrent),
+        loadGmvTrend(
+          args.trendGranularity.value,
+          args.kpiDate.value,
+          args.trend,
+          args.loadError,
+          isCurrent
+        ),
+        loadGmvHourly(args.kpiDate.value, args.hourly, args.loadError, isCurrent)
       ]);
+      if (!isCurrent()) return;
       // KPI 变了之后重算支付构成 / 漏斗 / 预警
       await loadGmvCockpitExtras({
         kpi: args.kpi,
+        extrasError: args.extrasError,
         categories: args.categories,
         channels: args.channels,
         funnel: args.funnel,
         activities: args.activities,
         heatPoints: args.heatPoints,
         heatCity: args.heatCity,
-        alerts: args.alerts
+        alerts: args.alerts,
+        isCurrent
       });
     },
-    onBackfillCommand: (days: number) =>
-      backfillGmvHistory({
+    onBackfillCommand: (days: number) => {
+      if (!args.isAlive()) return;
+      // A long-running backfill invalidates older view loads, but keeps its
+      // own lifecycle guard so it can refresh the page once done.
+      args.beginRequest();
+      return backfillGmvHistory({
         todayText: args.todayText,
         days,
         backfilling: args.backfilling,
         statusText: args.backfillStatusText,
         loadError: args.loadError,
         kpiDate: args.kpiDate,
-        loadAll: args.loadAll
-      })
+        loadAll: args.loadAll,
+        isCurrent: args.isAlive
+      });
+    },
+    onBackfillDate: (range: GmvBackfillRange) => {
+      if (!args.isAlive()) return;
+      // 按日期区间回填：回填 [startDate, endDate] 区间全部订单并重算汇总。
+      // 复用同一套幂等拉单 + 重算流程，回填后切到结束日期并刷新看板。
+      args.beginRequest();
+      return backfillGmvHistory({
+        todayText: args.todayText,
+        startDate: range.startDate,
+        endDate: range.endDate,
+        backfilling: args.backfilling,
+        statusText: args.backfillStatusText,
+        loadError: args.loadError,
+        kpiDate: args.kpiDate,
+        loadAll: args.loadAll,
+        isCurrent: args.isAlive
+      });
+    }
   };
 }
 

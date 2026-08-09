@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import { CircleCheck, InfoFilled, Timer, Warning } from '@element-plus/icons-vue';
 import GmvKpiRow from './GmvKpiRow.vue';
 import GmvInsightRow from './GmvInsightRow.vue';
 import GmvCockpitCharts from './GmvCockpitCharts.vue';
@@ -17,7 +16,6 @@ import type { GmvTrendGranularity, GmvTrendMode } from '../composables/gmv-chart
 import { GMV_DIST_OPTIONS } from './gmv-cockpit-charts-ui';
 
 import type { GmvKpi, GmvHourlyPoint } from '../../../services/api/gmv.api';
-import { readFen } from '../../../utils/format';
 import type { GmvTopMerchant } from './gmv-cockpit-charts-ui';
 import type {
   GmvActivityRow,
@@ -27,6 +25,7 @@ import type {
   GmvFunnelStage,
   GmvHeatPoint
 } from '../composables/gmv-cockpit-core';
+import { buildGmvInsights } from '../composables/gmv-insights';
 
 export type GmvCockpitBodyProps = {
   kpi: GmvKpi | null;
@@ -72,88 +71,13 @@ defineEmits<{
   'merchants-next': [];
 }>();
 
-const insightsData = computed(() => {
-  const kpi = props.kpi;
-  const items: Array<{
-    key: string;
-    tone: 'blue' | 'orange' | 'green' | 'purple';
-    icon: unknown;
-    title: string;
-    desc: string;
-  }> = [];
-
-  // 1. 成交高峰时段（from hourly）
-  const hourly = props.hourly;
-  if (hourly.length > 0) {
-    let peak = hourly[0];
-    let total = 0;
-    for (const p of hourly) {
-      const v = Number(readFen(p, 'totalGmv') ?? 0);
-      total += v;
-      if (v > Number(readFen(peak, 'totalGmv') ?? 0)) peak = p;
-    }
-    const peakVal = Number(readFen(peak, 'totalGmv') ?? 0);
-    const share = total > 0 ? ((peakVal / total) * 100).toFixed(1) : '0.0';
-    items.push({
-      key: 'peak',
-      tone: 'blue',
-      icon: Timer,
-      title: `${peak.label} 成交高峰`,
-      desc: `该时段GMV占比${share}%`
-    });
-  }
-
-  // 2. 核销率变化
-  if (kpi) {
-    const vr = kpi.verifyRate;
-    const delta = kpi.compare?.verifyRate;
-    if (vr > 0) {
-      const pp = delta != null ? Math.abs(delta * 100).toFixed(2) : null;
-      const down = delta != null && delta < 0;
-      items.push({
-        key: 'verify',
-        tone: down ? 'orange' : 'green',
-        icon: down ? Warning : CircleCheck,
-        title: down ? '核销率较昨日下降' : '核销率表现稳健',
-        desc: pp
-          ? `核销率${(vr * 100).toFixed(2)}%，较昨日${down ? '↓' : '↑'}${pp}pp`
-          : `核销率${(vr * 100).toFixed(2)}%`
-      });
-    }
-  }
-
-  // 3. 品类亮点
-  const cats = props.categories;
-  if (cats.length > 0) {
-    const top = [...cats].sort((a, b) => b.share - a.share)[0];
-    items.push({
-      key: 'top-category',
-      tone: 'green',
-      icon: CircleCheck,
-      title: `${top.name}表现亮眼`,
-      desc: `${top.name}品类GMV占比${(top.share * 100).toFixed(1)}%`
-    });
-  }
-
-  // 4. 退款率
-  if (kpi) {
-    const rr = kpi.refundRate;
-    const delta = kpi.compare?.refundRate;
-    const pp = delta != null ? Math.abs(delta * 100).toFixed(2) : null;
-    const down = delta != null && delta < 0;
-    items.push({
-      key: 'refund',
-      tone: 'purple',
-      icon: InfoFilled,
-      title: rr < 0.05 ? '退款率稳定' : '退款率偏高',
-      desc: pp
-        ? `退款率${(rr * 100).toFixed(2)}%，环比${down ? '下降' : '上升'}${pp}pp`
-        : `退款率${(rr * 100).toFixed(2)}%`
-    });
-  }
-
-  return items;
-});
+const insightsData = computed(() =>
+  buildGmvInsights({
+    kpi: props.kpi,
+    hourly: props.hourly,
+    categories: props.categories
+  })
+);
 </script>
 
 <template>

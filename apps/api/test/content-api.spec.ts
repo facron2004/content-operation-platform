@@ -93,8 +93,7 @@ describe('content API', () => {
         packageId: first.packageId,
         channel: 'wechat_group',
         tone: '真实群主口吻',
-        copyCount: 2,
-        createdBy: 'api-test'
+        copyCount: 2
       })
       .expect(201);
 

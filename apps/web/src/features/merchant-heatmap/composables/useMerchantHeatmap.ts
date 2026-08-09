@@ -1,8 +1,9 @@
-import { ref, computed } from 'vue';
+import { computed, onScopeDispose, ref } from 'vue';
 import {
   getMerchantHeatmap,
   type MerchantHeatmapResponse
 } from '../../../services/api/merchant.api';
+import { extractErrorMessage } from '../../../services/http-client';
 
 export type IntensityMode = 'count' | 'gmv';
 
@@ -11,6 +12,8 @@ export function useMerchantHeatmap() {
   const error = ref<string | null>(null);
   const data = ref<MerchantHeatmapResponse | null>(null);
   const intensityMode = ref<IntensityMode>('count');
+  let disposed = false;
+  let requestId = 0;
 
   const points = computed(() => {
     if (!data.value) return [];
@@ -37,21 +40,41 @@ export function useMerchantHeatmap() {
   const truncated = computed(() => Boolean(data.value?.truncated));
   const limit = computed(() => data.value?.limit ?? null);
 
-  async function load() {
+  async function load(): Promise<void> {
+    if (disposed || loading.value) return;
+    const currentRequestId = ++requestId;
     loading.value = true;
     error.value = null;
     try {
-      data.value = await getMerchantHeatmap();
+      const nextData = await getMerchantHeatmap();
+      if (disposed || currentRequestId !== requestId) return;
+      data.value = nextData;
     } catch (e) {
-      error.value = e instanceof Error ? e.message : '加载热力图数据失败';
+      if (!disposed && currentRequestId === requestId) {
+        error.value = extractErrorMessage(e, '加载热力图数据失败，请稍后重试');
+      }
     } finally {
-      loading.value = false;
+      if (!disposed && currentRequestId === requestId) loading.value = false;
     }
   }
 
   function toggleMode() {
+    if (disposed) return;
     intensityMode.value = intensityMode.value === 'count' ? 'gmv' : 'count';
   }
+
+  function isActive(): boolean {
+    return !disposed;
+  }
+
+  function dispose(): void {
+    if (disposed) return;
+    disposed = true;
+    requestId += 1;
+    loading.value = false;
+  }
+
+  onScopeDispose(dispose);
 
   return {
     loading,
@@ -68,6 +91,7 @@ export function useMerchantHeatmap() {
     limit,
     intensityMode,
     load,
-    toggleMode
+    toggleMode,
+    isActive
   };
 }

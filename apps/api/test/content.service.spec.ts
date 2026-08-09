@@ -3,6 +3,7 @@ import { NotFoundException } from '@nestjs/common';
 import type { ContentPackage, SalesSnapshot } from '@content/shared';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { ContentService } from '../src/content/content.service';
+import { ContentMerchantSyncService } from '../src/content/content-merchant-sync.service';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { DataSourceService } from '../src/content/data-source.service';
 import { PackageDetailService } from '../src/content/package-detail';
@@ -130,6 +131,14 @@ const mockDashboardService = {
   getPerformance: vi.fn().mockResolvedValue({})
 };
 
+const mockMerchantSyncService = {
+  syncMerchantsFromJeeSite: vi.fn().mockResolvedValue({
+    upserted: 0,
+    packagesCount: 0,
+    packagesPersisted: 0
+  })
+};
+
 describe('ContentService', () => {
   let service: ContentService;
 
@@ -144,6 +153,7 @@ describe('ContentService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ContentService,
+        { provide: ContentMerchantSyncService, useValue: mockMerchantSyncService },
         { provide: PrismaService, useValue: mockPrisma },
         { provide: DataSourceService, useValue: mockDataSource },
         { provide: PackageDetailService, useValue: mockPackageDetailService },
@@ -260,6 +270,110 @@ describe('ContentService', () => {
     });
   });
 
+  describe('onModuleInit', () => {
+    it('skips recommendation warmup when desktop external source is unconfigured', async () => {
+      const previousAppRuntime = process.env.APP_RUNTIME;
+      const previousBaseUrl = process.env.EXTERNAL_API_BASE_URL;
+      vi.useFakeTimers();
+      try {
+        process.env.APP_RUNTIME = 'desktop';
+        delete process.env.EXTERNAL_API_BASE_URL;
+
+        service.onModuleInit();
+        await vi.advanceTimersByTimeAsync(3000);
+
+        expect(mockDataSource.loadDataset).not.toHaveBeenCalled();
+      } finally {
+        service.onModuleDestroy();
+        vi.useRealTimers();
+        if (previousAppRuntime === undefined) delete process.env.APP_RUNTIME;
+        else process.env.APP_RUNTIME = previousAppRuntime;
+        if (previousBaseUrl === undefined) delete process.env.EXTERNAL_API_BASE_URL;
+        else process.env.EXTERNAL_API_BASE_URL = previousBaseUrl;
+      }
+    });
+
+    it('cancels delayed recommendation warmup when the module is destroyed', async () => {
+      const previousAppRuntime = process.env.APP_RUNTIME;
+      const previousBaseUrl = process.env.EXTERNAL_API_BASE_URL;
+      const previousDelay = process.env.CONTENT_WARMUP_DELAY_MS;
+      const previousInterval = process.env.CONTENT_WARMUP_INTERVAL_MS;
+      vi.useFakeTimers();
+      try {
+        process.env.APP_RUNTIME = 'development';
+        process.env.EXTERNAL_API_BASE_URL = 'https://example.test';
+        process.env.CONTENT_WARMUP_DELAY_MS = '3000';
+        process.env.CONTENT_WARMUP_INTERVAL_MS = '0';
+
+        service.onModuleInit();
+        service.onModuleDestroy();
+        await vi.advanceTimersByTimeAsync(3000);
+
+        expect(mockDataSource.loadDataset).not.toHaveBeenCalled();
+      } finally {
+        service.onModuleDestroy();
+        vi.useRealTimers();
+        if (previousAppRuntime === undefined) delete process.env.APP_RUNTIME;
+        else process.env.APP_RUNTIME = previousAppRuntime;
+        if (previousBaseUrl === undefined) delete process.env.EXTERNAL_API_BASE_URL;
+        else process.env.EXTERNAL_API_BASE_URL = previousBaseUrl;
+        if (previousDelay === undefined) delete process.env.CONTENT_WARMUP_DELAY_MS;
+        else process.env.CONTENT_WARMUP_DELAY_MS = previousDelay;
+        if (previousInterval === undefined) delete process.env.CONTENT_WARMUP_INTERVAL_MS;
+        else process.env.CONTENT_WARMUP_INTERVAL_MS = previousInterval;
+      }
+    });
+
+    it('does not start another recommendation warmup while one is running', async () => {
+      const previousAppRuntime = process.env.APP_RUNTIME;
+      const previousBaseUrl = process.env.EXTERNAL_API_BASE_URL;
+      const previousDelay = process.env.CONTENT_WARMUP_DELAY_MS;
+      const previousInterval = process.env.CONTENT_WARMUP_INTERVAL_MS;
+      const internals = service as unknown as {
+        warmRecommendationCaches: () => Promise<void>;
+      };
+      let resolveFirst!: () => void;
+      const warmupSpy = vi
+        .spyOn(internals, 'warmRecommendationCaches')
+        .mockImplementationOnce(
+          () =>
+            new Promise<void>((resolve) => {
+              resolveFirst = resolve;
+            })
+        )
+        .mockResolvedValue(undefined);
+      vi.useFakeTimers();
+      try {
+        process.env.APP_RUNTIME = 'development';
+        process.env.EXTERNAL_API_BASE_URL = 'https://example.test';
+        process.env.CONTENT_WARMUP_DELAY_MS = '100';
+        process.env.CONTENT_WARMUP_INTERVAL_MS = '1000';
+
+        service.onModuleInit();
+        await vi.advanceTimersByTimeAsync(100);
+        expect(warmupSpy).toHaveBeenCalledTimes(1);
+
+        await vi.advanceTimersByTimeAsync(1000);
+        expect(warmupSpy).toHaveBeenCalledTimes(1);
+
+        resolveFirst();
+        await Promise.resolve();
+      } finally {
+        service.onModuleDestroy();
+        warmupSpy.mockRestore();
+        vi.useRealTimers();
+        if (previousAppRuntime === undefined) delete process.env.APP_RUNTIME;
+        else process.env.APP_RUNTIME = previousAppRuntime;
+        if (previousBaseUrl === undefined) delete process.env.EXTERNAL_API_BASE_URL;
+        else process.env.EXTERNAL_API_BASE_URL = previousBaseUrl;
+        if (previousDelay === undefined) delete process.env.CONTENT_WARMUP_DELAY_MS;
+        else process.env.CONTENT_WARMUP_DELAY_MS = previousDelay;
+        if (previousInterval === undefined) delete process.env.CONTENT_WARMUP_INTERVAL_MS;
+        else process.env.CONTENT_WARMUP_INTERVAL_MS = previousInterval;
+      }
+    });
+  });
+
   // ---- getCategories ----
 
   describe('getCategories', () => {
@@ -348,6 +462,11 @@ describe('ContentService', () => {
     it('getAICopyStatus delegates to aiCopyService', () => {
       service.getAICopyStatus();
       expect(mockAICopyService.getStatus).toHaveBeenCalled();
+    });
+
+    it('syncMerchantsFromJeeSite delegates to the merchant sync service', async () => {
+      await service.syncMerchantsFromJeeSite();
+      expect(mockMerchantSyncService.syncMerchantsFromJeeSite).toHaveBeenCalled();
     });
   });
 

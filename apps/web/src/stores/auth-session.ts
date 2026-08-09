@@ -1,33 +1,31 @@
 import type { Ref } from 'vue';
-import { requestLocalSessionToken, requestRefreshToken } from './auth-requests';
-import { runExclusiveAuthRequest, type AuthTokenResult } from './auth-session-exclusive';
+import { requestBrowserRefresh, requestLocalAuthSession } from './auth-requests';
+import { runExclusiveAuthRequest, type AuthSessionResult } from './auth-session-exclusive';
 type AuthOpts = {
-  inflight: { current: Promise<AuthTokenResult> | null };
-  setAuth: (accessToken: string, user: string) => void;
+  inflight: { current: Promise<AuthSessionResult> | null };
+  setAuth: (user: string) => void;
 };
-async function applyToken(
+async function applySession(
   o: AuthOpts,
-  fetch: () => Promise<{ access_token?: string; username?: string } | null>,
+  fetch: () => Promise<{ authenticated?: boolean; username?: string } | null>,
   fallbackUser: string
-): Promise<AuthTokenResult> {
+): Promise<AuthSessionResult> {
   return runExclusiveAuthRequest(o.inflight, async () => {
-    const data = await fetch(),
-      t = data?.access_token,
-      u = data?.username ?? fallbackUser;
-    if (!t) return null;
-    o.setAuth(t, u);
-    return t;
+    const data = await fetch();
+    if (!data || data.authenticated === false) return null;
+    const user = data.username ?? fallbackUser;
+    if (!user) return null;
+    o.setAuth(user);
+    return true;
   });
 }
-export async function refreshAuthToken(
-  options: AuthOpts & { token: Ref<string | null>; username: Ref<string | null> }
-): Promise<AuthTokenResult> {
-  const current = options.token.value;
-  if (!current) return null;
-  return applyToken(options, () => requestRefreshToken(current), options.username.value ?? '');
+export async function refreshAuthSession(
+  options: AuthOpts & { username: Ref<string | null> }
+): Promise<AuthSessionResult> {
+  return applySession(options, requestBrowserRefresh, options.username.value ?? '');
 }
-export async function loginLocalAuthSession(options: AuthOpts): Promise<AuthTokenResult> {
-  return applyToken(options, requestLocalSessionToken, 'admin');
+export async function loginLocalAuthSession(options: AuthOpts): Promise<AuthSessionResult> {
+  return applySession(options, requestLocalAuthSession, 'admin');
 }
 export { runExclusiveAuthRequest };
-export type { AuthTokenResult };
+export type { AuthSessionResult };

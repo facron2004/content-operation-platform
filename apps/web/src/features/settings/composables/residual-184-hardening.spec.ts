@@ -15,45 +15,50 @@ describe('residual #184 user role edit SPA wire-up', () => {
     expect(src).toMatch(/roles:\s*\{\s*role:\s*string/);
   });
 
-  it('UserManagementView has role button + handleEditRoles', async () => {
-    const src = await readFile(path.join(srcRoot, 'views/UserManagementView.vue'), 'utf8');
-    expect(src).toMatch(/handleEditRoles/);
-    expect(src).toMatch(/@click="handleEditRoles\(row\)"/);
-    // Role dialog state.
-    expect(src).toMatch(/rolesDialogVisible/);
-    expect(src).toMatch(/roleDrafts/);
+  it('UserManagementView exposes an IAM access drawer from the user table', async () => {
+    const page = await readFile(path.join(srcRoot, 'views/UserManagementView.vue'), 'utf8');
+    const table = await readFile(
+      path.join(srcRoot, 'features/user-management/UserTable.vue'),
+      'utf8'
+    );
+    const drawer = await readFile(
+      path.join(srcRoot, 'features/user-management/UserAccessDrawer.vue'),
+      'utf8'
+    );
+    expect(page).toMatch(/UserAccessDrawer/);
+    expect(table).toMatch(/@click="\$emit\('access', row\)"/);
+    expect(drawer).toMatch(/el-tree/);
+    expect(drawer).toMatch(/replaceIamUserAccess/);
+    expect(drawer).toMatch(/ErrorAlert :message="loadErrorMessage"/);
+    expect(drawer).toMatch(/重新加载授权/);
+    expect(drawer).toMatch(/ErrorAlert :message="writeError"/);
   });
 
-  it('role submit calls api.updateUserRoles with scoped bindings', async () => {
-    const src = await readFile(path.join(srcRoot, 'views/UserManagementView.vue'), 'utf8');
-    const submitStart = src.indexOf('async function handleRolesSubmit');
-    expect(submitStart).toBeGreaterThan(0);
-    const submitEnd = src.indexOf('async function handleDeactivate', submitStart + 10);
-    const submitFn = src.slice(submitStart, submitEnd > 0 ? submitEnd : undefined);
-    expect(submitFn).toMatch(/api\.updateUserRoles\(/);
-    // Residual #244: shared mapRoleDrafts forces scopeType + scopeId for scoped roles.
-    expect(submitFn).toMatch(/mapRoleDrafts\(roleDrafts\.value\)/);
-    expect(src).toMatch(/function mapRoleDrafts/);
-    expect(src).toMatch(/scopeType:\s*expectedScopeType\(b\.role\)!/);
-    expect(src).toMatch(/scopeId:\s*b\.scopeId!\.trim\(\)/);
+  it('access submit sends organization-backed scope bindings', async () => {
+    const src = await readFile(
+      path.join(srcRoot, 'features/user-management/UserAccessDrawer.vue'),
+      'utf8'
+    );
+    expect(src).toMatch(/api\.replaceIamUserAccess\(/);
+    expect(src).toMatch(/organizationUnitIds:\s*membershipDraft\.value/);
+    expect(src).toMatch(/assignment\.orgUnitId/);
   });
 
-  it('validateRoleDrafts requires scopeId for area/merchant operators', async () => {
-    const src = await readFile(path.join(srcRoot, 'views/UserManagementView.vue'), 'utf8');
-    expect(src).toMatch(/SCOPED_ROLES/);
+  it('create-time compatibility roles still require scopeId for scoped operators', async () => {
+    const src = await readFile(
+      path.join(srcRoot, 'features/user-management/UserFormDialog.vue'),
+      'utf8'
+    );
+    const types = await readFile(path.join(srcRoot, 'features/user-management/types.ts'), 'utf8');
+    expect(types).toMatch(/merchant_operator/);
     expect(src).toMatch(/area_operator/);
-    expect(src).toMatch(/merchant_operator/);
-    const validateStart = src.indexOf('function validateRoleDrafts');
-    expect(validateStart).toBeGreaterThan(0);
-    const validateEnd = src.indexOf('async function handleRolesSubmit', validateStart + 10);
-    const validateFn = src.slice(validateStart, validateEnd > 0 ? validateEnd : undefined);
-    expect(validateFn).toMatch(/必须填写 scopeId/);
-    expect(validateFn).toMatch(/needsScope\(b\.role\)/);
+    expect(src).toMatch(/必须填写 scopeId/);
+    expect(src).toMatch(/needsScope\(binding\.role\)/);
   });
 
   it('role tags render scopeId when present', async () => {
-    const src = await readFile(path.join(srcRoot, 'views/UserManagementView.vue'), 'utf8');
+    const src = await readFile(path.join(srcRoot, 'features/user-management/types.ts'), 'utf8');
     expect(src).toMatch(/formatRoleTag/);
-    expect(src).toMatch(/\$\{label\}\(\$\{r\.scopeId\}\)/);
+    expect(src).toMatch(/\$\{label\}\(\$\{binding\.scopeId\}\)/);
   });
 });

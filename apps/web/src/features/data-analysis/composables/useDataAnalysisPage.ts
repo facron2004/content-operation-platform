@@ -1,4 +1,4 @@
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, onScopeDispose, reactive, ref } from 'vue';
 import { ElMessage } from 'element-plus';
 import {
   getDataAnalysisExportUrl,
@@ -74,6 +74,7 @@ function createDataAnalysisState() {
   const loading = ref(false);
   const exporting = ref(false);
   const loadError = ref<string | null>(null);
+  const exportError = ref<string | null>(null);
   const preset = ref<DataAnalysisPreset>('last30');
   const customStart = ref(shiftYmd(beijingTodayKey(), -29));
   const customEnd = ref(beijingTodayKey());
@@ -85,8 +86,10 @@ function createDataAnalysisState() {
 
   /** Monotonic id so a superseded reload never clears the newer result / shows cancel as error. */
   let reloadSeq = 0;
+  let disposed = false;
 
   async function reload() {
+    if (disposed) return;
     const seq = ++reloadSeq;
     loading.value = true;
     loadError.value = null;
@@ -97,10 +100,10 @@ function createDataAnalysisState() {
         date: q.date,
         endDate: q.endDate
       });
-      if (seq !== reloadSeq) return; // superseded by a newer range
+      if (disposed || seq !== reloadSeq) return; // superseded by a newer range or disposal
       summary.value = next;
     } catch (err) {
-      if (seq !== reloadSeq) return;
+      if (disposed || seq !== reloadSeq) return;
       // In-flight abort from a newer date/preset change is not a load failure.
       const canceled =
         (err as { code?: string; name?: string } | null)?.code === 'ERR_CANCELED' ||
@@ -110,13 +113,14 @@ function createDataAnalysisState() {
       summary.value = null;
       loadError.value = extractErrorMessage(err, '加载数据分析预览失败');
     } finally {
-      if (seq === reloadSeq) loading.value = false;
+      if (!disposed && seq === reloadSeq) loading.value = false;
     }
   }
 
   async function onExport() {
-    if (exporting.value) return;
+    if (disposed || exporting.value) return;
     exporting.value = true;
+    exportError.value = null;
     try {
       const q = queryParams.value;
       const range = summary.value ? `${summary.value.date}_${summary.value.endDate}` : q.window;
@@ -128,21 +132,22 @@ function createDataAnalysisState() {
         }),
         `砍价订单数据分析_${range}.xlsx`
       );
-      ElMessage.success('Excel 已开始下载');
+      if (!disposed) ElMessage.success('Excel 已开始下载');
     } catch (err) {
-      ElMessage.error(extractErrorMessage(err, '导出 Excel 失败'));
+      if (!disposed) exportError.value = extractErrorMessage(err, '导出 Excel 失败');
     } finally {
-      exporting.value = false;
+      if (!disposed) exporting.value = false;
     }
   }
 
   function onPresetChange(next: DataAnalysisPreset) {
+    if (disposed) return;
     preset.value = next;
     if (next !== 'custom') void reload();
   }
 
   function onCustomRangeChange(range: [string, string] | null) {
-    if (!range) return;
+    if (disposed || !range) return;
     customStart.value = range[0];
     customEnd.value = range[1];
     preset.value = 'custom';
@@ -165,14 +170,24 @@ function createDataAnalysisState() {
   const timeSlotOption = computed(() => buildTimeSlotOption(summary.value?.timeSlots ?? []));
   const hourlyOption = computed(() => buildHourlyOption(summary.value?.hourly ?? []));
 
+  function dispose() {
+    if (disposed) return;
+    disposed = true;
+    reloadSeq += 1;
+    loading.value = false;
+    exporting.value = false;
+  }
+
+  onScopeDispose(dispose);
   onMounted(() => {
-    void reload();
+    if (!disposed) void reload();
   });
 
   return {
     loading,
     exporting,
     loadError,
+    exportError,
     preset,
     customStart,
     customEnd,

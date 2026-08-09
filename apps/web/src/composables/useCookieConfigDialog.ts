@@ -1,68 +1,80 @@
-import { ref, onUnmounted } from 'vue';
+import { onScopeDispose, ref } from 'vue';
 import { ElMessage } from 'element-plus';
 import { api } from '../services/api';
+import { extractErrorMessage } from '../services/http-client';
 
-async function fetchCookieStatus() {
-  try {
-    return await api.getCookieStatus();
-  } catch {
-    return null;
-  }
-}
-
-async function saveCookieString(cookie: string): Promise<boolean> {
-  try {
-    const res = await api.updateCookie(cookie);
-    if (res.success) {
-      ElMessage.success('Cookie 更新成功，连接已恢复！');
-      return true;
-    }
-    ElMessage.error(res.error || '更新失败，请检查 Cookie 是否有效');
-    return false;
-  } catch {
-    return false;
-  }
-}
-
-function startCookieStatusPoller(
-  refreshStatus: () => Promise<void>,
-  intervalMs = 30000
-): () => void {
-  const cookiePoller = setInterval(refreshStatus, intervalMs);
-  return () => clearInterval(cookiePoller);
-}
-
-type CookieStatus = Awaited<ReturnType<typeof fetchCookieStatus>>;
+type CookieStatus = Awaited<ReturnType<typeof api.getCookieStatus>>;
 
 export function useCookieConfigDialog(emit: (e: 'update:visible', value: boolean) => void) {
   const cookieStatus = ref<CookieStatus | null>(null),
+    statusError = ref<string | null>(null),
+    saveError = ref<string | null>(null),
     updatingCookie = ref(false),
     newCookieString = ref('');
+  let disposed = false;
+  let statusRequestId = 0;
+  let saveRequestId = 0;
+  const isCurrentSave = (requestId: number) => !disposed && requestId === saveRequestId;
+
+  onScopeDispose(() => {
+    disposed = true;
+    statusRequestId += 1;
+    saveRequestId += 1;
+    updatingCookie.value = false;
+  });
+
   const refreshStatus = async () => {
-    cookieStatus.value = await fetchCookieStatus();
+    if (disposed) return;
+    const requestId = ++statusRequestId;
+    statusError.value = null;
+    try {
+      const nextStatus = await api.getCookieStatus();
+      if (!disposed && requestId === statusRequestId) cookieStatus.value = nextStatus;
+    } catch (error) {
+      if (!disposed && requestId === statusRequestId) {
+        statusError.value = extractErrorMessage(error, '读取数据源连接状态失败，请稍后重试');
+      }
+    }
   };
   const onOpen = async () => {
+    if (disposed) return;
     newCookieString.value = '';
+    saveError.value = null;
     await refreshStatus();
   };
   const saveCookie = async () => {
-    if (!newCookieString.value.trim()) {
+    if (disposed || updatingCookie.value) return;
+    const cookie = newCookieString.value.trim();
+    if (!cookie) {
       ElMessage.warning('请输入 Cookie 字符串');
       return;
     }
+    const requestId = ++saveRequestId;
+    statusRequestId += 1;
+    saveError.value = null;
     updatingCookie.value = true;
     try {
-      if (await saveCookieString(newCookieString.value.trim())) {
-        emit('update:visible', false);
-        await refreshStatus();
+      const res = await api.updateCookie(cookie);
+      if (!isCurrentSave(requestId)) return;
+      if (!res?.success) {
+        saveError.value = res?.error || '更新失败，请稍后重试';
+        return;
+      }
+      ElMessage.success('Cookie 更新成功，连接已恢复！');
+      emit('update:visible', false);
+      await refreshStatus();
+    } catch (error) {
+      if (isCurrentSave(requestId)) {
+        saveError.value = extractErrorMessage(error, '更新失败，请稍后重试');
       }
     } finally {
-      updatingCookie.value = false;
+      if (isCurrentSave(requestId)) updatingCookie.value = false;
     }
   };
-  onUnmounted(startCookieStatusPoller(refreshStatus));
   return {
     cookieStatus,
+    statusError,
+    saveError,
     updatingCookie,
     newCookieString,
     onOpen,

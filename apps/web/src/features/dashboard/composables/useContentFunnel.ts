@@ -1,88 +1,70 @@
-import { ref, onMounted } from 'vue';
+import { onMounted, onScopeDispose, ref } from 'vue';
 import { api } from '../../../services/api';
+import { extractErrorMessage } from '../../../services/http-client';
+import { emptyContentFunnel, mapContentFunnelSummary } from './dashboard-summary';
+import type { ContentFunnelSummary } from './dashboard-summary';
 
-/** Residual #213: platform content-funnel counters from GET /content/dashboard/summary. */
-export interface ContentFunnelSummary {
-  generatedCount: number;
-  approvedCount: number;
-  pushedCount: number;
-  pendingCount: number;
-  riskCount: number;
-  totalClickCount: number;
-  totalOrderCount: number;
-  totalVerifyCount: number;
-  totalGmv: number;
-  contentConversionRate: number;
-  verifyConversionRate: number;
-  /** Residual #261: INTERACTIVE_LIST_MAX_DAYS window from API (optional pre-upgrade). */
+export { emptyContentFunnel, mapContentFunnelSummary } from './dashboard-summary';
+export type { ContentFunnelSummary } from './dashboard-summary';
+
+type LegacyDashboardSummaryContract = Pick<
+  ContentFunnelSummary,
+  'generatedCount' | 'pendingCount' | 'totalGmv' | 'contentConversionRate'
+> & {
   dateFrom?: string;
   dateTo?: string;
-}
-
-export const emptyContentFunnel: ContentFunnelSummary = {
-  generatedCount: 0,
-  approvedCount: 0,
-  pushedCount: 0,
-  pendingCount: 0,
-  riskCount: 0,
-  totalClickCount: 0,
-  totalOrderCount: 0,
-  totalVerifyCount: 0,
-  totalGmv: 0,
-  contentConversionRate: 0,
-  verifyConversionRate: 0
 };
 
-function num(v: unknown): number {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : 0;
+function str(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
 }
 
-function str(v: unknown): string | undefined {
-  return typeof v === 'string' && v.trim() ? v.trim() : undefined;
-}
-
-function mapSummary(raw: Record<string, unknown> | null | undefined): ContentFunnelSummary {
-  if (!raw || typeof raw !== 'object') return { ...emptyContentFunnel };
+function mapSummary(
+  raw: Record<string, unknown> | null | undefined
+): ContentFunnelSummary & LegacyDashboardSummaryContract {
+  const summary = mapContentFunnelSummary(raw);
+  if (!raw || typeof raw !== 'object') return summary;
   return {
-    generatedCount: num(raw.generatedCount),
-    approvedCount: num(raw.approvedCount),
-    pushedCount: num(raw.pushedCount),
-    pendingCount: num(raw.pendingCount),
-    riskCount: num(raw.riskCount),
-    totalClickCount: num(raw.totalClickCount),
-    totalOrderCount: num(raw.totalOrderCount),
-    totalVerifyCount: num(raw.totalVerifyCount),
-    totalGmv: num(raw.totalGmv),
-    contentConversionRate: num(raw.contentConversionRate),
-    verifyConversionRate: num(raw.verifyConversionRate),
-    // Residual #261: surface API window bounds for funnel title.
+    ...summary,
     dateFrom: str(raw.dateFrom),
     dateTo: str(raw.dateTo)
   };
 }
 
-/**
- * Soft-fail load of platform content funnel. Scoped actors get zeros from API —
- * still safe to render (tiles show 0).
- */
+/** Scoped actors may legitimately receive zeroes; transport failures remain visible. */
 export function useContentFunnel() {
   const loading = ref(false);
+  const loadError = ref<string | null>(null);
   const funnel = ref<ContentFunnelSummary>({ ...emptyContentFunnel });
+  const requestId = ref(0);
+  let disposed = false;
+
+  onScopeDispose(() => {
+    disposed = true;
+    requestId.value += 1;
+    loading.value = false;
+  }, true);
 
   async function load() {
+    if (disposed) return;
+    const currentRequestId = ++requestId.value;
     loading.value = true;
+    loadError.value = null;
     try {
       const data = await api.getDashboardSummary();
+      if (disposed || currentRequestId !== requestId.value) return;
       funnel.value = mapSummary(data as Record<string, unknown>);
-    } catch {
-      funnel.value = { ...emptyContentFunnel };
+    } catch (error) {
+      if (disposed || currentRequestId !== requestId.value) return;
+      loadError.value = extractErrorMessage(error, '内容漏斗加载失败，请稍后重试');
     } finally {
-      loading.value = false;
+      if (!disposed && currentRequestId === requestId.value) loading.value = false;
     }
   }
 
-  onMounted(load);
+  onMounted(() => {
+    void load();
+  });
 
-  return { loading, funnel, load };
+  return { loading, loadError, funnel, load };
 }

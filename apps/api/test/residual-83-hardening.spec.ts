@@ -28,10 +28,17 @@ describe('residual #83 dashboard dual queryInChunks mapPool', () => {
   it('ops console + performance load CP/GC under mapPool helper', async () => {
     const fs = await import('fs/promises');
     const path = await import('path');
-    const src = await fs.readFile(
-      path.join(__dirname, '..', 'src', 'content', 'dashboard.service.ts'),
-      'utf8'
-    );
+    const [consoleSrc, performanceSrc] = await Promise.all([
+      fs.readFile(
+        path.join(__dirname, '..', 'src', 'content', 'dashboard-operations-read.ts'),
+        'utf8'
+      ),
+      fs.readFile(
+        path.join(__dirname, '..', 'src', 'content', 'dashboard-performance-read.ts'),
+        'utf8'
+      )
+    ]);
+    const src = `${consoleSrc}\n${performanceSrc}`;
     expect(src).toContain('loadDashboardPerfAndCopies');
     expect(src).toMatch(/mapPool\(jobs,\s*QUERY_IN_CHUNKS_CONCURRENCY/);
     // Both cold paths call the helper (not bare Promise.all of two queryInChunks).

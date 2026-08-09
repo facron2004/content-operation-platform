@@ -119,7 +119,7 @@ describe('residual #56 response body ceilings', () => {
     const path = await import('path');
     const files = [
       'content/package-detail/html-fetcher.ts',
-      'content/data-source.service.ts',
+      'content/jeesite-data-source.client.ts',
       'content/auto-login-client.ts'
     ];
     for (const rel of files) {
@@ -138,13 +138,13 @@ describe('residual #56 single-flight + indexes', () => {
       path.join(__dirname, '..', 'src', 'merchant', 'merchant-geocoder.ts'),
       'utf8'
     );
-    const content = await fs.readFile(
-      path.join(__dirname, '..', 'src', 'content', 'content.service.ts'),
+    const contentSync = await fs.readFile(
+      path.join(__dirname, '..', 'src', 'content', 'content-merchant-sync.service.ts'),
       'utf8'
     );
     expect(geo).toContain('geocodeRunning');
     expect(geo).toContain('skippedInFlight');
-    expect(content).toContain('merchantSyncRunning');
+    expect(contentSync).toContain('merchantSyncRunning');
   });
 
   it('migration creates residual #56 stockLeft + createdAt indexes (VNext DB-003: no runtime DDL)', async () => {

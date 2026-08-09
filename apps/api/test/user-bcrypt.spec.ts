@@ -6,7 +6,7 @@ import {
   isLegacyHash,
   verifyLegacyPassword,
   verifyPassword
-} from '../src/user-access/user.service';
+} from '../src/user-access/application/auth-utils';
 
 function makeLegacyHash(password: string): string {
   const salt = randomBytes(16).toString('hex');

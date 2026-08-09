@@ -5,6 +5,7 @@
     width="480px"
     :close-on-click-modal="false"
     @open="handleOpen"
+    @closed="handleClosed"
   >
     <el-form ref="formRef" :model="form" :rules="rules" label-width="100px">
       <el-form-item label="失败原因" prop="failReason">
@@ -68,6 +69,7 @@ const emit = defineEmits<{
   confirm: [
     data: { failReason: string; failCategory?: string; evidenceUrl?: string; note?: string }
   ];
+  closed: [];
 }>();
 
 const dialogVisible = computed({
@@ -112,6 +114,10 @@ function handleOpen() {
   form.evidenceUrl = '';
   form.note = '';
   formRef.value?.clearValidate();
+}
+
+function handleClosed() {
+  emit('closed');
 }
 
 async function handleConfirm() {

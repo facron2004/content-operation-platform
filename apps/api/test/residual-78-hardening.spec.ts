@@ -180,7 +180,7 @@ describe('residual #78 ZS SKU movement-style candidate path', () => {
     const fs = await import('fs/promises');
     const path = await import('path');
     const loaders = await fs.readFile(
-      path.join(__dirname, '..', 'src', 'zero-sales', 'zero-sales-loaders.ts'),
+      path.join(__dirname, '..', 'src', 'zero-sales', 'zero-sales-sku-loaders.ts'),
       'utf8'
     );
     const list = await fs.readFile(

@@ -8,7 +8,7 @@ const webRoot = path.join(__dirname, '..', '..', 'web', 'src');
 describe('residual #264 merchant-sales ranking LIMIT honesty', () => {
   it('paginateRankingRows emits limit/truncated/totalMerchants (#250/#263 parity)', async () => {
     const src = await readFile(
-      path.join(srcRoot, 'merchant-sales', 'merchant-sales-query.ts'),
+      path.join(srcRoot, 'merchant-sales', 'merchant-sales-ranking-query.ts'),
       'utf8'
     );
     const start = src.indexOf('export function paginateRankingRows');

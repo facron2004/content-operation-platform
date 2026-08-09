@@ -71,7 +71,7 @@ describe('residual #81 movement + zero-sales page Max 100', () => {
     const path = await import('path');
     const files = [
       path.join(__dirname, '..', 'src', 'movement', 'movement.controller.ts'),
-      path.join(__dirname, '..', 'src', 'movement', 'movement-skus.ts'),
+      path.join(__dirname, '..', 'src', 'movement', 'movement-sku-projection.ts'),
       path.join(__dirname, '..', 'src', 'zero-sales', 'zero-sales-list.ts')
     ];
     for (const f of files) {

@@ -14,10 +14,11 @@ describe('residual #209 community detail today recommendations', () => {
     expect(src).toMatch(/\/content\/communities\/\$\{encodeURIComponent\(groupId\)\}/);
   });
 
-  it('useCommunityDetail open also fetches getCommunityRecommendations soft-fail', async () => {
+  it('useCommunityDetail open also fetches getCommunityRecommendations independently', async () => {
     const src = await readFile(path.join(__dirname, 'useCommunityDetail.ts'), 'utf8');
     expect(src).toMatch(/api\.getCommunityRecommendations\s*\(/);
-    expect(src).toMatch(/getCommunityRecommendations\([^)]+\)\.catch/);
+    expect(src).toMatch(/Promise\.allSettled/);
+    expect(src).toMatch(/packagesError\.value/);
     expect(src).toMatch(/packages\.value/);
     expect(src).toMatch(/packagesLoading/);
     // Prefer top-level packages, fall back to group.todayRecommendedPackages.

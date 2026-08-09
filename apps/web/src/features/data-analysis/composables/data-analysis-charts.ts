@@ -6,12 +6,12 @@ import type {
 } from '../../../services/api/data-analysis.api';
 import { readFen } from '../../../utils/format';
 
-/** Dual-line daily sales trend: net sales + trade amount. */
+/** Dual-line daily sales trend: net sales + net GMV. */
 export function buildDailyTrendOption(points: DataAnalysisDailyPoint[]) {
   if (!points.length) return {};
   const dates = points.map((p) => p.date.slice(5)); // MM-DD
-  const net = points.map((p) => Number(readFen(p, 'netSales') ?? 0) / 100);
-  const trade = points.map((p) => Number(readFen(p, 'tradeAmount') ?? 0) / 100);
+  const net = points.map((p) => Number(readFen(p, 'writeOffAmount') ?? 0) / 100);
+  const netGmv = points.map((p) => Number(readFen(p, 'netGmv') ?? 0) / 100);
   return {
     color: ['#2563eb', '#10b981'],
     tooltip: {
@@ -46,7 +46,7 @@ export function buildDailyTrendOption(points: DataAnalysisDailyPoint[]) {
     },
     series: [
       {
-        name: '净销售额',
+        name: '核销额',
         type: 'line',
         smooth: true,
         showSymbol: false,
@@ -67,11 +67,11 @@ export function buildDailyTrendOption(points: DataAnalysisDailyPoint[]) {
         }
       },
       {
-        name: '交易额(含余额)',
+        name: '净 GMV',
         type: 'line',
         smooth: true,
         showSymbol: false,
-        data: trade,
+        data: netGmv,
         lineStyle: { width: 2 }
       }
     ]

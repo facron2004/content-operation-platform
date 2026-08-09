@@ -12,7 +12,8 @@ import {
   Put,
   Query,
   Req,
-  UseGuards
+  UseGuards,
+  UseInterceptors
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
@@ -33,6 +34,8 @@ import { ImportCommunityRawDto } from './dto/import-community.dto';
 import { plainToInstance } from 'class-transformer';
 import { validateSync } from 'class-validator';
 import { IdempotencyGuard } from '../idempotency/idempotency.guard';
+import { IdempotencyInterceptor } from '../idempotency/idempotency.interceptor';
+import { RequireIdempotency } from '../idempotency/require-idempotency.decorator';
 
 type AuthUser = {
   userId: string;
@@ -44,11 +47,13 @@ type AuthUser = {
 @ApiTags('communities')
 // Dual path: canonical /api/communities + web client alias /api/community-library
 @RequireLogin()
+@UseInterceptors(IdempotencyInterceptor)
 @Controller(['api/communities', 'api/community-library'])
 export class CommunityController {
   constructor(@Inject(CommunityService) private readonly svc: CommunityService) {}
 
   @Get()
+  @RequirePermissions('community:read')
   @Throttle({ long: { limit: 30, ttl: 60000 } })
   @ApiOperation({
     summary: 'List community groups',
@@ -87,7 +92,6 @@ export class CommunityController {
 
   @Roles('admin', 'platform_operator')
   @RequirePermissions('community:write')
-  @UseGuards(IdempotencyGuard)
   @Throttle({ long: { limit: 20, ttl: 60000 } })
   @Post()
   @ApiOperation({ summary: 'Create community group' })
@@ -99,6 +103,7 @@ export class CommunityController {
 
   @Roles('admin', 'platform_operator')
   @RequirePermissions('community:write')
+  @RequireIdempotency('batch-import')
   @UseGuards(IdempotencyGuard)
   @Throttle({ long: { limit: 5, ttl: 60000 } })
   @Post('import')
@@ -133,6 +138,7 @@ export class CommunityController {
   }
 
   @Get(':id')
+  @RequirePermissions('community:read')
   @Throttle({ long: { limit: 60, ttl: 60000 } })
   @ApiOperation({ summary: 'Get community group detail' })
   async getById(@Param('id') id: string, @Req() req: Request) {
@@ -202,6 +208,7 @@ export class CommunityController {
   }
 
   @Get(':id/performance')
+  @RequirePermissions('community:read')
   @Throttle({ long: { limit: 30, ttl: 60000 } })
   @ApiOperation({
     summary: 'Community performance',
@@ -216,6 +223,7 @@ export class CommunityController {
   }
 
   @Get(':id/tasks')
+  @RequirePermissions('community:read')
   @Throttle({ long: { limit: 30, ttl: 60000 } })
   @ApiOperation({
     summary: 'Community tasks',

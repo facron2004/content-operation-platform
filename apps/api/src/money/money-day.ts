@@ -1,5 +1,10 @@
 import { beijingDateKey } from '@content/shared';
-import { beijingDayRangeSqlite, SQL_GMV_OH, sqlDatetimeExclusiveRange } from '../common';
+import {
+  beijingDayRangeSqlite,
+  SQL_GMV_OH,
+  sqlDatetimeExclusiveRange,
+  toFenBigInt
+} from '../common';
 import type { MoneyDayTotals, MoneyPrisma } from './money.types';
 
 /** True when `date` is the current Beijing calendar day. */
@@ -20,29 +25,31 @@ export async function loadDayGmvFromOrderHeader(
      WHERE ${sqlDatetimeExclusiveRange('"paidTime"')}`,
     start,
     end
-  )) as Array<{ totalGmvFen: unknown; paidOrderCount: number }>;
+  )) as Array<{ totalGmvFen: bigint | number | null; paidOrderCount: number }>;
 
   return {
     date,
-    totalGmvFen: BigInt(Number(row?.totalGmvFen ?? 0)),
+    totalGmvFen: toFenBigInt(row?.totalGmvFen),
     paidOrderCount: Number(row?.paidOrderCount ?? 0),
     dataSource: 'OrderHeader'
   };
 }
 
-/** DailyMetrics row as money day totals when present. */
+/** DailyMetrics row as net money day totals when present. Its stored total is gross. */
 export async function loadDayGmvFromDailyMetrics(
   prisma: Pick<MoneyPrisma, 'dailyMetrics'>,
   date: string
 ): Promise<MoneyDayTotals | null> {
   const dm = await prisma.dailyMetrics.findUnique({
     where: { date },
-    select: { totalGmvFen: true, paidOrderCount: true }
+    select: { totalGmvFen: true, totalRefundFen: true, paidOrderCount: true }
   });
   if (!dm) return null;
+  const totalGmvFen =
+    dm.totalGmvFen == null ? null : BigInt(dm.totalGmvFen) - BigInt(dm.totalRefundFen ?? 0);
   return {
     date,
-    totalGmvFen: dm.totalGmvFen,
+    totalGmvFen,
     paidOrderCount: Number(dm.paidOrderCount),
     dataSource: 'DailyMetrics'
   };

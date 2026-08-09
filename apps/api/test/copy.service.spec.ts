@@ -1,12 +1,16 @@
 import { Test, type TestingModule } from '@nestjs/testing';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
-import type { ContentPackage, SalesSnapshot } from '@content/shared';
+import type { ContentPackage, GeneratedCopy, SalesSnapshot } from '@content/shared';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { CopyService } from '../src/content/copy.service';
+import { CopyAuditService } from '../src/content/copy-audit.service';
+import { CopyGenerationService } from '../src/content/copy-generation.service';
+import { CopyQueryService } from '../src/content/copy-query.service';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { DataSourceService } from '../src/content/data-source.service';
 import { PackageDetailService } from '../src/content/package-detail';
 import { AICopyService } from '../src/content/ai-copy';
+import { PACKAGE_AUDIT_SELECT, mapPackageForAudit } from '../src/content/mappers';
 
 // ---- fixtures ----
 
@@ -84,6 +88,38 @@ const mockPrisma = {
   $queryRawUnsafe: vi.fn().mockResolvedValue([])
 };
 
+const auditPackageRow = {
+  originalPriceFen: 10000n,
+  salePriceFen: 5000n,
+  temporarySalePriceFen: null,
+  stockTotal: 100,
+  stockLeft: 50,
+  useRules: '提前预约'
+};
+
+function createPreloadedAuditCopy(contentId: string): GeneratedCopy {
+  return {
+    contentId,
+    packageId: 'PKG-COPY-001',
+    areaId: 'A001',
+    merchantId: 'M001',
+    channel: 'wechat_group',
+    scenario: '日常推荐',
+    title: '标题',
+    body: '内容',
+    cta: '购买',
+    copyVersion: 'A',
+    strategyType: 'sprint',
+    riskLevel: 'low',
+    riskTips: [],
+    auditStatus: 'pending',
+    auditRemark: null,
+    createdBy: 'tester',
+    createdAt: '2026-06-09 10:00:00',
+    updatedAt: '2026-06-09 10:00:00'
+  } as GeneratedCopy;
+}
+
 const mockDataSource = {
   loadDataset: vi.fn().mockResolvedValue({
     packages: [fixturePackage],
@@ -99,8 +135,43 @@ const mockAICopyService = {
   generateCopies: vi.fn().mockResolvedValue([])
 };
 
+describe('machine audit package projection', () => {
+  it('keeps only the price, stock, and usage-rule fields at runtime', () => {
+    expect(Object.keys(PACKAGE_AUDIT_SELECT)).toEqual([
+      'originalPriceFen',
+      'salePriceFen',
+      'temporarySalePriceFen',
+      'stockTotal',
+      'stockLeft',
+      'useRules'
+    ]);
+
+    expect(
+      mapPackageForAudit({
+        originalPriceFen: 10000n,
+        salePriceFen: 6500n,
+        temporarySalePriceFen: null,
+        stockTotal: 20,
+        stockLeft: 7,
+        useRules: '提前预约、两人同行'
+      })
+    ).toEqual({
+      originalPrice: 100,
+      salePrice: 65,
+      temporarySalePrice: null,
+      stockTotal: 20,
+      stockLeft: 7,
+      useRules: ['提前预约', '两人同行']
+    });
+  });
+});
+
 describe('CopyService', () => {
   let service: CopyService;
+
+  it('keeps one detail lookup path for package scope', () => {
+    expect('getCopyPackageId' in CopyService.prototype).toBe(false);
+  });
 
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -122,6 +193,9 @@ describe('CopyService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         CopyService,
+        CopyAuditService,
+        CopyGenerationService,
+        CopyQueryService,
         { provide: PrismaService, useValue: mockPrisma },
         { provide: DataSourceService, useValue: mockDataSource },
         { provide: PackageDetailService, useValue: mockPackageDetailService },
@@ -291,6 +365,17 @@ describe('CopyService', () => {
       vi.useRealTimers();
     });
 
+    it('applies area and merchant filters to GeneratedCopy directly', async () => {
+      await service.listCopies({ areaIds: ['A001'], merchantIds: ['M001'] });
+
+      const call = mockPrisma.generatedCopy.findMany.mock.calls[0][0];
+      expect(call.where.OR).toEqual([
+        { areaId: { in: ['A001'] } },
+        { merchantId: { in: ['M001'] } }
+      ]);
+      expect(call.where.package).toBeUndefined();
+    });
+
     it('returns dateFrom/dateTo on pagination for trailing 90d window', async () => {
       vi.useFakeTimers();
       vi.setSystemTime(new Date('2026-07-18T12:00:00+08:00'));
@@ -394,6 +479,115 @@ describe('CopyService', () => {
       expect(mockPrisma.generatedCopy.count).not.toHaveBeenCalled();
       // Happy path must not re-read full row after write (only pre-check findUnique).
       expect(mockPrisma.generatedCopy.findUnique).toHaveBeenCalledTimes(1);
+    });
+
+    it('uses a preloaded copy without issuing a second full-row lookup', async () => {
+      mockPrisma.contentPackage.findUnique.mockResolvedValueOnce({
+        originalPriceFen: 10000n,
+        salePriceFen: 5000n,
+        temporarySalePriceFen: null,
+        stockTotal: 100,
+        stockLeft: 50,
+        useRules: '提前预约'
+      });
+      mockPrisma.$executeRawUnsafe.mockResolvedValueOnce(1);
+
+      const result = await service.auditCopy(
+        'C-preloaded',
+        { auditStatus: 'approved', mintDistributionTask: false },
+        {
+          contentId: 'C-preloaded',
+          packageId: 'PKG-COPY-001',
+          areaId: 'A001',
+          merchantId: 'M001',
+          channel: 'wechat_group',
+          scenario: '日常推荐',
+          title: '标题',
+          body: '内容',
+          cta: '购买',
+          copyVersion: 'A',
+          strategyType: 'sprint',
+          riskLevel: 'low',
+          riskTips: [],
+          auditStatus: 'pending',
+          auditRemark: null,
+          createdBy: 'tester',
+          createdAt: '2026-06-09 10:00:00',
+          updatedAt: '2026-06-09 10:00:00'
+        } as GeneratedCopy
+      );
+
+      expect(result).toMatchObject({
+        success: true,
+        contentId: 'C-preloaded',
+        auditStatus: 'approved'
+      });
+      expect(mockPrisma.generatedCopy.findUnique).not.toHaveBeenCalled();
+      expect(mockPrisma.contentPackage.findUnique).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { packageId: 'PKG-COPY-001' } })
+      );
+    });
+
+    it('does not report a task id when promoting waiting_audit fails', async () => {
+      mockPrisma.contentPackage.findUnique.mockResolvedValueOnce(auditPackageRow);
+      mockPrisma.$queryRawUnsafe.mockResolvedValueOnce([
+        { taskId: 'task-existing', status: 'waiting_audit' }
+      ]);
+      mockPrisma.$executeRawUnsafe
+        .mockResolvedValueOnce(1)
+        .mockRejectedValueOnce(new Error('database is locked'));
+
+      const result = await service.auditCopy(
+        'C-waiting-audit',
+        { auditStatus: 'approved' },
+        createPreloadedAuditCopy('C-waiting-audit')
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.distributionTaskId).toBeUndefined();
+      expect(mockPrisma.$queryRawUnsafe).toHaveBeenCalledTimes(1);
+      expect(mockPrisma.$executeRawUnsafe).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not retry a non-unique task insert failure as a race', async () => {
+      mockPrisma.contentPackage.findUnique.mockResolvedValueOnce(auditPackageRow);
+      mockPrisma.$queryRawUnsafe.mockResolvedValueOnce([]);
+      mockPrisma.$executeRawUnsafe
+        .mockResolvedValueOnce(1)
+        .mockRejectedValueOnce(new Error('database is locked'))
+        .mockResolvedValue(1);
+
+      const result = await service.auditCopy(
+        'C-insert-failure',
+        { auditStatus: 'approved' },
+        createPreloadedAuditCopy('C-insert-failure')
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.distributionTaskId).toBeUndefined();
+      expect(mockPrisma.$queryRawUnsafe).toHaveBeenCalledTimes(2);
+      expect(mockPrisma.$executeRawUnsafe).toHaveBeenCalledTimes(2);
+    });
+
+    it('still re-reads the winner after a unique task insert race', async () => {
+      mockPrisma.contentPackage.findUnique.mockResolvedValueOnce(auditPackageRow);
+      mockPrisma.$queryRawUnsafe
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([{ taskId: 'task-winner' }]);
+      mockPrisma.$executeRawUnsafe
+        .mockResolvedValueOnce(1)
+        .mockRejectedValueOnce(new Error('UNIQUE constraint failed: DistributionTask.taskId'));
+
+      const result = await service.auditCopy(
+        'C-unique-race',
+        { auditStatus: 'approved' },
+        createPreloadedAuditCopy('C-unique-race')
+      );
+
+      expect(result.distributionTaskId).toBe('task-winner');
+      expect(mockPrisma.$queryRawUnsafe).toHaveBeenCalledTimes(3);
+      expect(mockPrisma.$executeRawUnsafe).toHaveBeenCalledTimes(2);
     });
 
     it('overrides approved to risk when machine audit detects high risk', async () => {
