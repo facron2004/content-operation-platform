@@ -1,5 +1,6 @@
 import { createDtoPipe } from '../common/dto-pipe';
 import {
+  Body,
   Controller,
   ForbiddenException,
   Get,
@@ -8,19 +9,30 @@ import {
   Param,
   Post,
   Query,
-  Req
+  Req,
+  UseGuards,
+  UseInterceptors
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import type { Request } from 'express';
 import { MerchantService } from './merchant.service';
-import { MerchantTrendQueryDto, MerchantsListQueryDto } from './merchant.dto';
+import {
+  CreateMerchantApplicationDto,
+  MerchantApplicationQueryDto,
+  MerchantApplicationReviewDto,
+  MerchantTrendQueryDto,
+  MerchantsListQueryDto
+} from './merchant.dto';
 import { safePathId } from '../common/path-id';
 import { Roles } from '../user-access/role.decorator';
 import { RequireLogin } from '../user-access/iam/route-auth.decorator';
 import { RequirePermissions } from '../user-access/iam/require-permissions.decorator';
-import { resolveScopedQuery } from '../user-access/data-scope';
+import { isResourceInScope, resolveScopedQuery } from '../user-access/data-scope';
 import { PrismaService } from '../prisma/prisma.service';
+import { IdempotencyGuard } from '../idempotency/idempotency.guard';
+import { IdempotencyInterceptor } from '../idempotency/idempotency.interceptor';
+import { RequireIdempotency } from '../idempotency/require-idempotency.decorator';
 
 type AuthUser = {
   userId: string;
@@ -31,6 +43,7 @@ type AuthUser = {
 
 @ApiTags('merchants')
 @RequireLogin()
+@UseInterceptors(IdempotencyInterceptor)
 @Controller('api/merchants')
 export class MerchantController {
   constructor(
@@ -64,6 +77,115 @@ export class MerchantController {
         areaIds: scoped.areaIds
       }
     );
+  }
+
+  @Get('applications')
+  @RequirePermissions('merchant:read')
+  @Throttle({ long: { limit: 30, ttl: 60000 } })
+  @ApiOperation({ summary: '商家入驻申请列表' })
+  listApplications(
+    @Query(createDtoPipe(MerchantApplicationQueryDto)) query: MerchantApplicationQueryDto,
+    @Req() req: Request
+  ) {
+    const actor = req.user as AuthUser | undefined;
+    const scoped = resolveScopedQuery(actor ?? {}, { areaId: query.areaId });
+    if (scoped.emptyScope) {
+      return {
+        items: [],
+        pagination: { page: query.page, pageSize: query.pageSize, total: 0, hasMore: false }
+      };
+    }
+    return this.service.listApplications(query, {
+      areaIds: scoped.areaIds ?? (scoped.areaId ? [scoped.areaId] : undefined),
+      merchantIds: scoped.merchantIds ?? (scoped.merchantId ? [scoped.merchantId] : undefined)
+    });
+  }
+
+  @Get('applications/:applicationId')
+  @RequirePermissions('merchant:read')
+  @Throttle({ long: { limit: 60, ttl: 60000 } })
+  @ApiOperation({ summary: '商家入驻申请详情' })
+  async getApplication(@Param('applicationId') applicationId: string, @Req() req: Request) {
+    const id = safePathId(applicationId);
+    const application = await this.service.getApplication(id);
+    this.assertApplicationAccess(application, req);
+    return application;
+  }
+
+  @Roles('admin', 'platform_operator')
+  @RequirePermissions('merchant:manage')
+  @RequireIdempotency('merchant-application')
+  @UseGuards(IdempotencyGuard)
+  @Throttle({ long: { limit: 20, ttl: 60000 } })
+  @Post('applications')
+  @ApiOperation({ summary: '创建商家入驻申请' })
+  createApplication(
+    @Body(createDtoPipe(CreateMerchantApplicationDto)) body: CreateMerchantApplicationDto,
+    @Req() req: Request
+  ) {
+    return this.service.createApplication(body, {
+      userId: (req.user as AuthUser | undefined)?.userId
+    });
+  }
+
+  @Roles('admin', 'platform_operator')
+  @RequirePermissions('merchant:manage')
+  @RequireIdempotency('merchant-approval')
+  @UseGuards(IdempotencyGuard)
+  @Throttle({ long: { limit: 20, ttl: 60000 } })
+  @Post('applications/:applicationId/qualification-approve')
+  @ApiOperation({ summary: '通过商家资质审核' })
+  approveQualification(
+    @Param('applicationId') applicationId: string,
+    @Body(createDtoPipe(MerchantApplicationReviewDto)) body: MerchantApplicationReviewDto,
+    @Req() req: Request
+  ) {
+    return this.transitionApplication(applicationId, 'qualification_approve', body, req);
+  }
+
+  @Roles('admin', 'platform_operator')
+  @RequirePermissions('merchant:manage')
+  @RequireIdempotency('merchant-approval')
+  @UseGuards(IdempotencyGuard)
+  @Throttle({ long: { limit: 20, ttl: 60000 } })
+  @Post('applications/:applicationId/contract-approve')
+  @ApiOperation({ summary: '通过商家合同审核' })
+  approveContract(
+    @Param('applicationId') applicationId: string,
+    @Body(createDtoPipe(MerchantApplicationReviewDto)) body: MerchantApplicationReviewDto,
+    @Req() req: Request
+  ) {
+    return this.transitionApplication(applicationId, 'contract_approve', body, req);
+  }
+
+  @Roles('admin', 'platform_operator')
+  @RequirePermissions('merchant:manage')
+  @RequireIdempotency('merchant-approval')
+  @UseGuards(IdempotencyGuard)
+  @Throttle({ long: { limit: 20, ttl: 60000 } })
+  @Post('applications/:applicationId/enable')
+  @ApiOperation({ summary: '启用已完成审核的商家' })
+  enableApplication(
+    @Param('applicationId') applicationId: string,
+    @Body(createDtoPipe(MerchantApplicationReviewDto)) body: MerchantApplicationReviewDto,
+    @Req() req: Request
+  ) {
+    return this.transitionApplication(applicationId, 'enable', body, req);
+  }
+
+  @Roles('admin', 'platform_operator')
+  @RequirePermissions('merchant:manage')
+  @RequireIdempotency('merchant-approval')
+  @UseGuards(IdempotencyGuard)
+  @Throttle({ long: { limit: 20, ttl: 60000 } })
+  @Post('applications/:applicationId/reject')
+  @ApiOperation({ summary: '驳回商家入驻申请' })
+  rejectApplication(
+    @Param('applicationId') applicationId: string,
+    @Body(createDtoPipe(MerchantApplicationReviewDto)) body: MerchantApplicationReviewDto,
+    @Req() req: Request
+  ) {
+    return this.transitionApplication(applicationId, 'reject', body, req);
   }
 
   // Static paths before :merchantId/* so they are not captured as ids
@@ -207,5 +329,29 @@ export class MerchantController {
       if (!merchant.length) throw new NotFoundException(`商家不存在: ${id}`);
     }
     throw new ForbiddenException('无权访问该商家');
+  }
+
+  private async transitionApplication(
+    applicationId: string,
+    action: 'qualification_approve' | 'contract_approve' | 'enable' | 'reject',
+    body: MerchantApplicationReviewDto,
+    req: Request
+  ) {
+    const id = safePathId(applicationId);
+    const application = await this.service.getApplication(id);
+    this.assertApplicationAccess(application, req);
+    return this.service.transitionApplication(id, action, body, {
+      userId: (req.user as AuthUser | undefined)?.userId
+    });
+  }
+
+  private assertApplicationAccess(
+    application: { areaId: string | null; merchantId: string | null },
+    req: Request
+  ): void {
+    const actor = req.user as AuthUser | undefined;
+    if (!isResourceInScope(actor ?? {}, application)) {
+      throw new ForbiddenException('无权访问该入驻申请');
+    }
   }
 }

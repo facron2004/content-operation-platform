@@ -3,8 +3,8 @@
 > **目标**：`继续优化，我不说停不准停`  
 > **范围**：NestJS monorepo Content Operation Platform（`apps/api` + `apps/web` + `packages/shared`）  
 > **分支**：`codex/unsold-inventory-links`  
-> **状态截止**：2026-08-09；Residual **#297** 之后的 API/Web 稳定性、P0-03 迁移基线和 P0-04 关键写入幂等均已记录
-> **当前门禁**：非 EXE `typecheck`、API/Web build、API/Web 行为与 legacy 回归、源码完整性、`db:validate`、`db:drift-check`
+> **状态截止**：2026-08-09；Residual **#297** 之后的 API/Web 稳定性、P0-03 迁移基线、P0-04 关键写入幂等和 P1-05 Outbox 真闭环均已记录
+> **当前门禁**：非 EXE `typecheck`、API/Web build、API/Web 行为与 legacy 回归、源码完整性、`db:validate`；0015 应用到开发库后再恢复 `db:drift-check` 作为当前门禁
 > **日期跨度**：2026-07-22 → 2026-08-09（含多次 compaction 续跑）
 
 > **范围边界**：本轮不执行 Windows Desktop、EXE、安装器、`win-unpacked` 或安装后真实进程 smoke。桌面源代码与发布流程的历史完成项不等于当前 Windows 发布已验收；统一口径见 [文档对齐总览](DOCUMENTATION-STATUS.md)。
@@ -757,6 +757,8 @@ Residual #297 已完成：浏览器登录、本地会话和刷新改用 Cookie-o
 2026-08-09 PRD P0-01/P0-02 Desktop 单一路径与运行时凭据收口已完成：正式入口统一为 `apps/desktop` + `electron-builder.yml`，删除旧 `electron/`、`electron-builder.json`、`scripts/package-electron.js` 与 `start-electron.bat`，开发命令固定从 `apps/desktop` 启动；API/Desktop 统一以 `APP_RUNTIME=desktop` 识别桌面环境，后端仅绑定 `127.0.0.1`，主进程每次启动随机生成运行令牌、JWT secret 与本地认证密码，业务请求必须携带主进程写入的 HttpOnly/SameSite Cookie，桌面令牌缺失时 API fail-closed。Desktop 源码契约 `2/2`、运行时安全 `4/4`、数据库迁移/路径/锁/恢复 `11/11`、发布契约 `10/10`、API unit `999/999`、API integration `38/38`、typecheck、Desktop build、定向 Lint/Prettier、源码完整性 `1069/0` 和 `git diff --check` 均通过；最新源码审查白名单 `1490` 个文件且安全违规 `0`。本切片未修改项目开发数据库；尚未执行安装包或真实 EXE 启动烟测，继续作为后续 Windows 发布验收门禁。
 
 2026-08-09 PRD P0-04 非 EXE 关键写操作幂等已完成：新增 `@RequireIdempotency` 路由元数据，任务创建/批量创建/发布、活动启动、社群导入和 GMV 回填显式声明 Required；缺少 `Idempotency-Key` 返回 `400`，同 Key 同 Payload 重放首个响应，同 Key 不同 Payload 返回 `409`，数据库唯一键竞争与失败记录原子重获保证并发最多一个请求进入业务写入。服务端请求哈希递归排序 JSON 键，`IdempotencyRecord` 过期记录由每日 2 点、带作业单飞保护的 retention job 自动清理；Web 端为任务/活动版本、回填日期+sourceVersion 和导入/创建提交生成业务意图键，保留同一 Payload 的重试键并在 Payload 改变时轮换，任务详情发布处理器补充同步重复点击锁。P0-04 focused API `4` 个文件 `34/34`，Web behavior `71` 个文件 `360/360`、Web legacy `85` 个文件 `351/351`，根 typecheck、API build、Web build（`3190` modules transformed）、定向 ESLint（0 errors/0 warnings）、Prettier、源码完整性 `1077/0` 和 `git diff --check` 均通过；API legacy 全量仍保留两个与本切片无关的旧静态 pin 失败（residual #268/#289），相关文件未修改。本切片未读取或修改项目开发数据库，未触碰 EXE/Desktop/安装包或打包发布代码。
+
+2026-08-09 非 EXE PRD P1-05 Outbox 真闭环已落地：`OutboxService` 新增 typed handler registry 与 JSON payload 校验，`OutboxProcessorJob` 只有 handler dispatch 成功后才允许 `markProcessed`；任务发布在同一 Prisma transaction 中写入状态、`DistributionExecution` 和 `task.published` 事件，真实 handler 以 `OperationAuditLog` 形成持久副作用。新增 0015 migration 持久化 `nextRetryAt`，指数退避后达到 5 次进入 `failed`；API 聚焦单测 `26/26`、API unit `130` 个文件 `1020/1020`、API integration `9` 个文件 `38/38`、root typecheck/build、lint、`db:validate`、迁移历史→Schema `No difference detected` 和源码完整性 `1078/0` 均通过。当前开发 API 仍占用 `prisma/dev.db`，0015 尚未应用，`db:migrate`/实际库 drift 留待停机窗口重跑；本轮未执行 EXE、安装器、`win-unpacked` 或 Desktop 发布验收。
 
 ## 10. 一句话结论
 

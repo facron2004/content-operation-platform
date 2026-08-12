@@ -4,22 +4,47 @@ import { extractErrorMessage as extractErrorMessageBase } from '@content/shared'
 import { useAuthStore } from '../stores/auth';
 import { router } from '../router';
 
-/**
- * In-flight de-dupe key: method + url only (no params).
- * Same endpoint with different query (e.g. date range change) must share one
- * slot so the newer call can abort the older one cleanly.
- */
-export function requestKey(config: { method?: string; url?: string }): string {
-  return `${(config.method ?? 'get').toLowerCase()}:${config.url ?? ''}`;
+type RequestKeyConfig = { method?: string; url?: string; params?: unknown };
+
+function stableParamValue(value: unknown): string {
+  if (value === null) return 'null';
+  if (value instanceof Date) return JSON.stringify(value.toISOString());
+  if (Array.isArray(value)) return `[${value.map(stableParamValue).join(',')}]`;
+  if (typeof value === 'object') {
+    return `{${Object.entries(value as Record<string, unknown>)
+      .filter(([, item]) => item !== undefined)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, item]) => `${JSON.stringify(key)}:${stableParamValue(item)}`)
+      .join(',')}}`;
+  }
+  return JSON.stringify(value) ?? String(value);
 }
-export function responseKey(config: { method?: string; url?: string }): string {
+
+function paramsKey(params: unknown): string {
+  if (params == null) return '';
+  if (typeof URLSearchParams !== 'undefined' && params instanceof URLSearchParams) {
+    return params.toString();
+  }
+  return stableParamValue(params);
+}
+
+/**
+ * In-flight de-dupe key: method + url + a stable representation of params.
+ * Requests for different filters/date windows must not cancel each other;
+ * repeated requests for the same query still share one slot.
+ */
+export function requestKey(config: RequestKeyConfig): string {
+  const params = paramsKey(config.params);
+  return `${(config.method ?? 'get').toLowerCase()}:${config.url ?? ''}${params ? `?${params}` : ''}`;
+}
+export function responseKey(config: RequestKeyConfig): string {
   return requestKey(config);
 }
 
 /** Remove an in-flight slot only when the settling response still owns it. */
 export function releaseInFlightController(
   inFlightControllers: Map<string, AbortController>,
-  config: { method?: string; url?: string; signal?: unknown }
+  config: RequestKeyConfig & { signal?: unknown }
 ): void {
   const key = responseKey(config);
   const owner = inFlightControllers.get(key);

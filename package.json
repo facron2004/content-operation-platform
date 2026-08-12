@@ -50,6 +50,7 @@
     "db:purge-mock": "tsx scripts/purge-mock-data.ts",
     "db:reconcile": "tsx scripts/reconcile-money-fen.ts",
     "db:reconcile:fix": "tsx scripts/reconcile-money-fen.ts --fix",
+    "db:refetch-categories": "tsx scripts/refetch-categories.ts",
     "iam:backfill:report": "tsx scripts/iam-backfill-report.ts",
     "prepare:db": "npm run db:migrate",
     "check:schema": "tsx scripts/check-schema.ts",

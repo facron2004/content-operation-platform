@@ -9,9 +9,10 @@ import { CancelTaskService } from './application/cancel-task.service';
 import { UpdateTaskService } from './application/update-task.service';
 import { DeleteTaskService } from './application/delete-task.service';
 import { IdempotencyModule } from '../idempotency/idempotency.module';
+import { OutboxModule } from '../outbox/outbox.module';
 
 @Module({
-  imports: [IdempotencyModule],
+  imports: [IdempotencyModule, OutboxModule],
   controllers: [DistributionTaskController, DistributionTaskCommandController],
   providers: [
     DistributionTaskService,

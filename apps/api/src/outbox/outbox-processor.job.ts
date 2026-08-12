@@ -32,11 +32,10 @@ export class OutboxProcessorJob {
         let successCount = 0;
         for (const event of pending) {
           try {
-            // Process asynchronous payload according to eventType
             this.logger.log(
               `Processing OutboxEvent [${event.id}]: ${event.aggregateType}.${event.eventType}`
             );
-            // Standard dispatch (e.g. notifications / downstream derived sync)
+            await this.outboxSvc.dispatch(event);
             await this.outboxSvc.markProcessed(event.id);
             successCount++;
           } catch (err: unknown) {
@@ -46,7 +45,11 @@ export class OutboxProcessorJob {
           }
         }
 
-        setMeta({ totalFetched: pending.length, successCount });
+        setMeta({
+          totalFetched: pending.length,
+          successCount,
+          failedCount: pending.length - successCount
+        });
         return successCount;
       })
       .finally(() => {

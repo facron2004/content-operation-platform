@@ -68,4 +68,30 @@ describe('DailyMetrics net GMV read projections', () => {
     expect(refund).toMatchObject({ totalGmv: 80, refundRate: 0.5 });
     expect(verify).toMatchObject({ totalGmv: 80, verifyRate: 0.5 });
   });
+
+  it('floors net GMV at 0 when refunds exceed recognized GMV (no negative GMV)', async () => {
+    const prisma = {
+      dailyMetrics: {
+        findUnique: vi.fn().mockResolvedValue({
+          date: '2026-07-31',
+          totalGmvFen: 1000n, // 毛 GMV 10 元
+          totalRefundFen: 3000n, // 退款 30 元 > 毛 GMV
+          refundRate: 3,
+          refundCount: 3,
+          totalVerifyFen: 0n,
+          verifyRate: 0,
+          verifyCount: 0,
+          paidOrderCount: 1,
+          updatedAt: new Date('2026-07-31T00:00:00Z')
+        })
+      },
+      $queryRawUnsafe: vi.fn().mockResolvedValue([])
+    } as unknown as PrismaService;
+
+    const refund = await refundTodayFromDailyMetrics(prisma, '2026-07-31');
+    const verify = await verifyTodayFromDailyMetrics(prisma, '2026-07-31');
+
+    expect(refund).toMatchObject({ totalGmv: 0 });
+    expect(verify).toMatchObject({ totalGmv: 0 });
+  });
 });

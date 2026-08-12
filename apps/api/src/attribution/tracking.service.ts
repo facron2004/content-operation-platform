@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { RecordVisitDto } from './dto/record-visit.dto';
 import { newEntityId } from '../common/id';
@@ -17,8 +17,6 @@ type LiveTaskRow = {
 
 @Injectable()
 export class TrackingService {
-  private readonly logger = new Logger(TrackingService.name);
-
   constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
 
   /**

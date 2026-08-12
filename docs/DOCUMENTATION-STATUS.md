@@ -12,11 +12,12 @@
 
 | 项目 | 当前状态 | 证据 |
 |------|----------|------|
-| P0-03 数据库迁移基线 | 已完成非 EXE 基线 | `npm run db:validate`、`npm run db:drift-check`；迁移历史、Schema、实际数据库三路径均无漂移，14 条迁移登记一致 |
+| P0-03 数据库迁移基线 | 0015 源码基线已落地，开发库待应用 | `npm run db:validate`、迁移历史→Schema `No difference detected`；新增 Outbox `nextRetryAt` 的 0015 已纳入 schema/policy。当前运行中的 API 占用 `prisma/dev.db`，`db:migrate`/实际库 drift 需在停机窗口重跑 |
 | P0-04 关键写入幂等 | 已完成 | `@RequireIdempotency`、400 缺失键、409 负载冲突、同键重放、竞态保护、失败记录重取、每日清理任务及前端业务意图键 |
+| P1-05 Outbox 真闭环 | 代码与聚焦验收完成，开发库迁移待应用 | handler registry、`task.published` 事务 producer、真实审计 handler、失败重试/`nextRetryAt`/`failed`；API 聚焦 `26/26`，API build 通过 |
 | API 行为 | 当前聚焦回归通过 | P0-04 API focused `34/34`；其余完整 API 结果以 `docs/CONTINUOUS-OPTIMIZATION-SUMMARY.md` 的最新条目为准 |
 | Web 行为 | 当前聚焦与兼容回归通过 | Web behavior `360/360`、legacy `351/351`（本轮 P0-04 基线） |
-| 类型、构建、完整性 | 当前非 EXE 门禁通过 | `npm run typecheck`、`npm run build`、`npm run check:integrity`（1077 个源码文件，未解析导入 0） |
+| 类型、构建、完整性 | 当前非 EXE 门禁通过 | `npm run typecheck`、`npm run build`、`npm run check:integrity`（1078 个源码文件，未解析导入 0） |
 | 格式与静态检查 | 本轮改动文件通过 | Prettier 全部 Markdown 通过；P0-04 变更文件 ESLint `0 errors/0 warnings` |
 | Windows 发布 | 延期 | 不执行 `build:exe`、`package:exe`、安装器、`win-unpacked` 或 EXE smoke |
 
@@ -33,8 +34,11 @@ npm run test:behavior -w @content/web
 npm run test:legacy -w @content/web
 npm run check:integrity
 npm run db:validate
+npm run db:migrate
 npm run db:drift-check
 ```
+
+`db:migrate` 与 `db:drift-check` 必须在 API 停止、数据库可获得迁移锁的维护窗口执行；当前 0015 已完成源码/schema/policy 对齐，但运行中的开发 API 占用 `prisma/dev.db`，暂不把未应用的实际库状态写成“已通过”。
 
 `npm test` 仍是完整测试入口，但不能用历史文档中的固定文件/用例数量替代实际输出；当前 API legacy 中若出现历史静态 pin 失败，应按持续优化报告中的残差说明单独归因，不把它误报成 P0-03/P0-04 回归。
 

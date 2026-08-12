@@ -82,10 +82,13 @@ export async function getZeroSalesMerchants(params: {
   search?: string;
   page?: number;
   pageSize?: number;
+  signal?: AbortSignal;
 }) {
+  const { signal, ...query } = params;
   return (
     await client.get<ZeroSalesListResponse<ZeroSalesMerchantRow>>('/zero-sales/merchants', {
-      params
+      params: query,
+      signal
     })
   ).data;
 }
@@ -99,9 +102,15 @@ export async function getZeroSalesSkus(params: {
   sort?: 'lastSalesDateAsc' | 'staleDesc' | 'gmvDesc';
   page?: number;
   pageSize?: number;
+  signal?: AbortSignal;
 }) {
-  return (await client.get<ZeroSalesListResponse<ZeroSalesSkuRow>>('/zero-sales/skus', { params }))
-    .data;
+  const { signal, ...query } = params;
+  return (
+    await client.get<ZeroSalesListResponse<ZeroSalesSkuRow>>('/zero-sales/skus', {
+      params: query,
+      signal
+    })
+  ).data;
 }
 
 export async function getZeroSalesTimeline(packageId: string, days = 30) {

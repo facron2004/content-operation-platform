@@ -1,5 +1,5 @@
 import { createDtoPipe } from '../common/dto-pipe';
-import { Controller, Get, Param, Query, Inject, Logger } from '@nestjs/common';
+import { Controller, Get, Param, Query, Inject } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { Roles } from '../user-access/role.decorator';
@@ -11,8 +11,6 @@ import { RequirePermissions } from '../user-access/iam/require-permissions.decor
 @ApiTags('audit-logs')
 @Controller('api/audit-logs')
 export class AuditLogController {
-  private readonly logger = new Logger(AuditLogController.name);
-
   constructor(@Inject(AuditLogService) private readonly auditLogService: AuditLogService) {}
 
   @Roles('admin', 'platform_operator', 'auditor')

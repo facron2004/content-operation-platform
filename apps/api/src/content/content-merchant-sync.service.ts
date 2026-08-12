@@ -126,7 +126,7 @@ export class ContentMerchantSyncService {
               ELSE excluded."areaName"
             END,
             "category"=excluded."category","salePriceFen"=excluded."salePriceFen",
-            "salePriceFen"=excluded."salePriceFen",
+            "stockTotal"=excluded."stockTotal",
             "stockLeft"=excluded."stockLeft","saleStatus"=excluded."saleStatus",
             "shopId"=COALESCE(NULLIF(excluded."shopId",''),"ContentPackage"."shopId"),
             "merchantAddress"=excluded."merchantAddress",

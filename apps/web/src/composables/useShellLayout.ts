@@ -106,6 +106,8 @@ export function useShellLayout() {
     openCookieDialog: () => {
       cookieDialogVisible.value = true;
     },
-    pageTitle: computed(() => PAGE_TITLES[String(route.name)] ?? '本地生活运营中台')
+    pageTitle: computed(
+      () => PAGE_TITLES[String(route.name)] ?? route.meta.title ?? '本地生活运营中台'
+    )
   };
 }

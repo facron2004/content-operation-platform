@@ -1,6 +1,6 @@
 ﻿/** Consolidated refund module. */
 import { shiftDateKey } from '@content/shared';
-import { rateByCount } from '../common';
+import { floorNonNegativeFen, rateByCount } from '../common';
 import { PrismaService } from '../prisma/prisma.service';
 import { topRefundMerchants, topVerifyMerchants } from './refund-order-header';
 import type {
@@ -11,7 +11,9 @@ import type {
 } from './refund.dto';
 
 function netGmvFen(totalGmvFen: bigint | null, totalRefundFen: bigint | null): bigint {
-  return (totalGmvFen ?? 0n) - (totalRefundFen ?? 0n);
+  // Net GMV can never be negative in a KPI — floor at 0 so the refund/verify
+  // card does not show a negative GMV when refunds exceed recognized sales.
+  return floorNonNegativeFen((totalGmvFen ?? 0n) - (totalRefundFen ?? 0n));
 }
 
 // --- refund-trend-points.ts ---

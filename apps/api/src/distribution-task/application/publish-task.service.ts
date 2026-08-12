@@ -9,6 +9,8 @@ import { findTaskRow, parseTask } from '../distribution-task-query';
 import { assertOptionalTaskFks } from '../distribution-task-fk';
 import { PublishTaskDto } from '../dto/publish-task.dto';
 import { FailTaskDto } from '../dto/fail-task.dto';
+import { OutboxService } from '../../outbox/outbox.service';
+import type { Tx } from '../repositories/task.repository';
 
 type PreloadedPublishTask = {
   status: string;
@@ -27,7 +29,8 @@ export class PublishTaskService {
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(DistributionExecutionService)
-    private readonly executionService: DistributionExecutionService
+    private readonly executionService: DistributionExecutionService,
+    @Inject(OutboxService) private readonly outbox?: OutboxService
   ) {}
 
   async publish(
@@ -129,13 +132,7 @@ export class PublishTaskService {
       throw new BadRequestException('发布失败：任务缺少 contentId 或 body');
     }
 
-    const returned = await transitionPublished(
-      this.prisma,
-      id,
-      publishTitle,
-      publishBody,
-      publishCta
-    );
+    const returned = await this.commitPublish(id, publishTitle, publishBody, publishCta, dto);
     if (!returned) {
       const latestStatus = await getStatus(this.prisma, id);
       throw new BadRequestException(
@@ -194,5 +191,60 @@ export class PublishTaskService {
     if (!row) throw new NotFoundException('Distribution task not found');
     const { packageGeo: _packageGeo, ...task } = row;
     return task;
+  }
+
+  private async commitPublish(
+    id: string,
+    publishTitle: string | null,
+    publishBody: string | null,
+    publishCta: string | null,
+    dto: PublishTaskDto & { operatorId?: string; operatorName?: string }
+  ) {
+    const execution = {
+      taskId: id,
+      action: 'publish' as const,
+      operatorId: dto.operatorId,
+      operatorName: dto.operatorName,
+      evidenceUrl: dto.evidenceUrl,
+      note: dto.note
+    };
+    const publish = async (db: Tx) => {
+      const returned = await transitionPublished(db, id, publishTitle, publishBody, publishCta);
+      if (!returned) return null;
+
+      await this.executionService.create(execution, db);
+      if (this.outbox) {
+        await this.outbox.publishEvent(db, 'DistributionTask', id, 'task.published', {
+          taskId: id,
+          operatorId: dto.operatorId ?? null,
+          operatorName: dto.operatorName ?? null
+        });
+      }
+      return returned;
+    };
+
+    // Real Prisma always exposes $transaction. The fallback keeps lightweight
+    // command-service test doubles backwards compatible without weakening the
+    // production atomic write path.
+    if (typeof this.prisma.$transaction === 'function') {
+      return this.prisma.$transaction((tx) => publish(tx));
+    }
+    const returned = await transitionPublished(
+      this.prisma,
+      id,
+      publishTitle,
+      publishBody,
+      publishCta
+    );
+    if (!returned) return null;
+    await this.executionService.create(execution);
+    if (this.outbox) {
+      await this.outbox.publishEvent(this.prisma, 'DistributionTask', id, 'task.published', {
+        taskId: id,
+        operatorId: dto.operatorId ?? null,
+        operatorName: dto.operatorName ?? null
+      });
+    }
+    return returned;
   }
 }

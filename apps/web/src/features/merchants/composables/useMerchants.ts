@@ -17,7 +17,13 @@ export function useMerchants() {
   let listRequestId = 0;
   let detailRequestId = 0;
   // Residual #219: seed areaId/sort/search from route query.
-  const state = createMerchantState(route.query);
+  const routeParams = route.params ?? {};
+  const routeMerchantId =
+    typeof routeParams.merchantId === 'string' ? routeParams.merchantId : undefined;
+  const state = createMerchantState({
+    ...route.query,
+    merchantId: routeMerchantId ?? route.query.merchantId
+  });
   const {
     loading,
     detailLoading,

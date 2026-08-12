@@ -231,7 +231,8 @@ export async function loadGmvCockpitExtras(params: {
   if (categoryResult.error) {
     errors.push(`品类分布：${extractErrorMessage(categoryResult.error, '加载品类分布失败')}`);
   } else {
-    params.categories.value = mapCategoryRows(categoryResult.payload?.items ?? empty);
+    const categoryPayload = categoryResult.payload;
+    params.categories.value = mapCategoryRows(categoryPayload?.items ?? empty);
   }
   if (areaResult.error) {
     errors.push(`区域热力：${extractErrorMessage(areaResult.error, '加载区域热力失败')}`);

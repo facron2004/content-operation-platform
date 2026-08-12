@@ -56,6 +56,38 @@
     {
       "name": "0014_add_merchant_daily_metrics_counts",
       "sha256": "dfb043bee4b0a3850ea6b7570f8d5478b956e376a3a3cd59838ac699871c6bed"
+    },
+    {
+      "name": "0015_outbox_retry_schedule",
+      "sha256": "8293b63b3a23532c9841a56ad5a1471d141391facf18fd7c483124ceca8e7f53"
+    },
+    {
+      "name": "0016_v2_transaction_core",
+      "sha256": "641f4b11baa11cb0be3f9ad84d4442e51a63f7696a62a754ad4bea31e3efb8fa"
+    },
+    {
+      "name": "0017_order_permissions",
+      "sha256": "668902115f4c6582636335c7f8cbffa3c45d3e719649580dd824c9938ac95e52"
+    },
+    {
+      "name": "0018_product_merchant_write_chain",
+      "sha256": "585811a553b9e73f2a76b41fb41ca637e85f8bc60ef7f49d7b1143475eab9b71"
+    },
+    {
+      "name": "0019_finance_asset_and_reconciliation",
+      "sha256": "b6133afddbe73ae3483b546310da33874ed6d6c442bf377f9a92d2b66e210903"
+    },
+    {
+      "name": "0020_marketing_private_foundation",
+      "sha256": "2e0132286aaf99ce484ef70e3a4b8b9d0c336e5ebde27459fcbe0cf9c1fc418a"
+    },
+    {
+      "name": "0021_marketing_relations_and_tracking",
+      "sha256": "23e7948f57612ffe80db3a8113d5c7ef6332c5542771aa7e8db1d8f07a62e1f2"
+    },
+    {
+      "name": "0022_v2_gap_center_entities",
+      "sha256": "17f00e1eed36614bf990f89d5907b2ecf298fef324797a2b400c17f265b4ce69"
     }
   ],
   "sourceEquivalences": [

@@ -11,7 +11,24 @@ import { copyTextToClipboard } from '../utils/clipboard';
 import type { useAICopyConfig } from './useAICopyConfig';
 import type { usePackageDetail } from './usePackageDetail';
 
-export { buildUseGenerateReturn } from './generate-return';
+import { buildUseGenerateReturn as buildGenerateReturn } from './generate-return';
+
+/** Keep the original module-level adapter export stable after the return-shape split. */
+export function buildUseGenerateReturn(
+  p: Parameters<typeof buildGenerateReturn>[0] & {
+    listTruncated?: Ref<boolean>;
+    listLimit?: Ref<number | null>;
+    matchedCount?: Ref<number | null>;
+  }
+) {
+  const result = buildGenerateReturn(p);
+  return {
+    ...result,
+    listTruncated: p.listTruncated,
+    listLimit: p.listLimit,
+    matchedCount: p.matchedCount
+  };
+}
 
 export const GENERATE_CHANNEL_OPTIONS = [
   { label: '微信群', value: 'wechat_group' },

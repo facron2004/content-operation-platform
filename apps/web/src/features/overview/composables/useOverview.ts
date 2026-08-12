@@ -1,5 +1,5 @@
 import { computed, onMounted, ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import type {
   OverviewKpi,
   OverviewTopOffender,
@@ -11,6 +11,7 @@ import { createOverviewActions } from './overview-core';
 import { buildOverviewDistributionOption, buildOverviewTrendOption } from './overview-chart';
 
 export function useOverview() {
+  const route = useRoute();
   const router = useRouter();
   const loading = ref(false);
   const loadError = ref<string | null>(null);
@@ -31,7 +32,12 @@ export function useOverview() {
   // Residual #224: as-of business day for overview KPIs (client already accepts date).
   const kpiDate = ref(todayText);
   const trendDays = ref<7 | 30>(7);
-  const staleDim = ref<'stale' | 'area' | 'category'>('stale');
+  const initialDim = route.path.endsWith('/region')
+    ? 'area'
+    : route.path.endsWith('/category')
+      ? 'category'
+      : 'stale';
+  const staleDim = ref<'stale' | 'area' | 'category'>(initialDim);
   const actions = createOverviewActions({
     loading,
     loadError,

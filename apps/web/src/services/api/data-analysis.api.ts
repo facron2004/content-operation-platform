@@ -190,6 +190,7 @@ export function getDataAnalysisExportUrl(params: GetDataAnalysisSummaryParams) {
   if (params.endDate) q.set('endDate', params.endDate);
   if (params.detailLimit) q.set('detailLimit', String(params.detailLimit));
   if (params.rankingLimit) q.set('rankingLimit', String(params.rankingLimit));
-  q.set('_', String(Date.now()));
+  // No `_` cache-buster: the export DTO uses forbidNonWhitelisted, so an unknown
+  // query param returns 400. The backend already sends Cache-Control: no-store.
   return `/data-analysis/export?${q.toString()}`;
 }

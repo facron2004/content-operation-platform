@@ -109,6 +109,59 @@ describe('canonical distribution-task command services', () => {
     expect(result).toBe(returned);
   });
 
+  it('writes the task transition, execution, and outbox event in one transaction', async () => {
+    const tx = {
+      $queryRawUnsafe: vi.fn(),
+      $executeRawUnsafe: vi.fn()
+    };
+    const transaction = vi.fn(async (callback: (client: typeof tx) => Promise<unknown>) =>
+      callback(tx)
+    );
+    const prisma = { ...makePrisma(), $transaction: transaction };
+    const execution = makeExecutionService();
+    const outbox = { publishEvent: vi.fn().mockResolvedValue('evt-publish') };
+    const returned = { taskId: 'task-atomic', status: 'published' };
+    prisma.$queryRawUnsafe.mockResolvedValue([
+      {
+        contentId: 'copy-atomic',
+        packageId: 'pkg-1',
+        auditStatus: 'approved',
+        title: '原子标题',
+        body: '原子正文',
+        cta: '查看'
+      }
+    ]);
+    mocks.transitionPublished.mockResolvedValue(returned);
+
+    const service = new PublishTaskService(prisma as never, execution as never, outbox as never);
+    const result = await service.publish(
+      'task-atomic',
+      { operatorId: 'user-1', operatorName: 'Alice', note: '已复核' },
+      { status: 'scheduled', packageId: 'pkg-1', contentId: 'copy-atomic' }
+    );
+
+    expect(transaction).toHaveBeenCalledTimes(1);
+    expect(mocks.transitionPublished).toHaveBeenCalledWith(
+      tx,
+      'task-atomic',
+      '原子标题',
+      '原子正文',
+      '查看'
+    );
+    expect(execution.create).toHaveBeenCalledWith(
+      expect.objectContaining({ taskId: 'task-atomic', action: 'publish' }),
+      tx
+    );
+    expect(outbox.publishEvent).toHaveBeenCalledWith(
+      tx,
+      'DistributionTask',
+      'task-atomic',
+      'task.published',
+      { taskId: 'task-atomic', operatorId: 'user-1', operatorName: 'Alice' }
+    );
+    expect(result).toBe(returned);
+  });
+
   it('fails a scheduled task and records the confirmation details', async () => {
     const prisma = makePrisma();
     const execution = makeExecutionService();

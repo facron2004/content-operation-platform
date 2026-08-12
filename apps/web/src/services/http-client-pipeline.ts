@@ -221,6 +221,14 @@ export function attachHttpRequestInterceptor(args: {
           prev = inFlightControllers.get(key);
         if (prev && !prev.signal.aborted) prev.abort();
         const controller = new AbortController();
+        const callerSignal = config.signal;
+        if (callerSignal) {
+          if (callerSignal.aborted) {
+            controller.abort();
+          } else {
+            callerSignal.addEventListener?.('abort', () => controller.abort(), { once: true });
+          }
+        }
         inFlightControllers.set(key, controller);
         config.signal = controller.signal;
       }

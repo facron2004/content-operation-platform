@@ -90,7 +90,6 @@ body,
 .panel,
 .table-card,
 .metric-tile,
-.page-hero,
 .empty-state,
 .table-skeleton .skeleton-row,
 .sidebar,
@@ -151,7 +150,6 @@ body,
 }
 
 [data-theme='dark'] .metric-tile,
-[data-theme='dark'] .page-hero,
 [data-theme='dark'] .panel,
 [data-theme='dark'] .table-card,
 [data-theme='dark'] .copy-item,
@@ -261,7 +259,6 @@ html[data-theme='dark'] .apple-btn[data-tone='success'].apple-btn--tinted {
 }
 
 [data-theme='dark'] .panel-head p,
-[data-theme='dark'] .page-hero p,
 [data-theme='dark'] .review-card p,
 [data-theme='dark'] .task-row span,
 [data-theme='dark'] .task-row p,
@@ -277,7 +274,6 @@ html[data-theme='dark'] .apple-btn[data-tone='success'].apple-btn--tinted {
   color: var(--muted);
 }
 
-[data-theme='dark'] .page-hero h2,
 [data-theme='dark'] .panel-head h2,
 [data-theme='dark'] .ops-card strong,
 [data-theme='dark'] .copy-item h3,

@@ -1,4 +1,4 @@
-import { BadRequestException, Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { beijingDateKey, shiftDateKey } from '@content/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateCommunityDto } from './dto/create-community.dto';
@@ -75,8 +75,6 @@ function parseCommunity(row: CommunityRow) {
 
 @Injectable()
 export class CommunityService {
-  private readonly logger = new Logger(CommunityService.name);
-
   constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
 
   async list(query: CommunityQueryDto & { areaIds?: string[] }) {

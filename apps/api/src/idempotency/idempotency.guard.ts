@@ -25,13 +25,37 @@ export const IDEMPOTENT_OPERATIONS = [
   'create-task',
   'batch-create-tasks',
   'publish-task',
+  'verification',
   'refund',
+  'product-edit',
+  'inventory-adjustment',
+  'merchant-application',
+  'merchant-approval',
+  'asset-adjustment',
+  'settlement',
+  'profit-sharing',
+  'reconciliation',
   'amount-settlement',
   'data-backfill',
   'task-rerun',
   'message-consume',
   'campaign-start',
-  'batch-import'
+  'batch-import',
+  'marketing-tag',
+  'audience',
+  'marketing-campaign',
+  'coupon',
+  'automation',
+  'private-domain',
+  'sms-task',
+  'benefit-grant',
+  'package-combination',
+  'store',
+  'merchant-score',
+  'crm-lead',
+  'delivery',
+  'card-batch',
+  'card-redeem'
 ] as const;
 
 export type IdempotentOperation = (typeof IDEMPOTENT_OPERATIONS)[number];
@@ -226,6 +250,7 @@ export class IdempotencyGuard implements CanActivate {
       return 'create-task';
     }
     if (path.includes('/refund')) return 'refund';
+    if (path.includes('/verify')) return 'verification';
     if (path.includes('/campaigns')) {
       if (path.endsWith('/start') || path.endsWith('/approve')) return 'campaign-start';
       return 'batch-import';

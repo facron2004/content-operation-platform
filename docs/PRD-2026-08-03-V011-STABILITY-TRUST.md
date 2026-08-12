@@ -15,9 +15,10 @@
 | 领域 | 当前结论 |
 |------|----------|
 | 本轮范围 | API、Web、shared、Prisma、脚本和文档；不执行 Windows Desktop、EXE、安装器、`win-unpacked` 或安装后真实进程验收 |
-| P0-03 迁移基线 | `npm run db:validate` 与 `npm run db:drift-check` 当前通过；迁移历史、Schema、实际数据库三路径无漂移，源码与数据库均登记 14 条迁移，兼容基线策略已记录 |
+| P0-03 迁移基线 | 0015 Outbox retry migration 已加入源码/schema/policy，迁移历史→Schema 无差异；当前 `prisma/dev.db` 仍登记 14 条，因开发 API 占用数据库，`db:migrate`/实际库 drift 待停机窗口重跑 |
 | P0-04 写入幂等 | 已完成：关键命令使用 `@RequireIdempotency`，缺失键 400、负载冲突 409、成功重放、竞态保护、失败记录重取、每日清理和前端业务意图键均已实现并回归 |
-| 当前回归 | P0-04 API focused `34/34`；Web behavior `360/360`；Web legacy `351/351`；typecheck、API/Web build、源码完整性 `1077/0` 已通过 |
+| P1-05 Outbox | 已完成代码切片与 API 聚焦验收 `26/26`；`task.published` 事务 producer、真实审计 handler、retryCount/nextRetryAt/failed 已落地，开发库迁移待应用 |
+| 当前回归 | P0-04 API focused `34/34`；Web behavior `360/360`；Web legacy `351/351`；typecheck、API/Web build、源码完整性 `1078/0` 已通过 |
 | Windows 发布 | 明确延期；本文件中的桌面/安装器条目保留为后续发布门禁，不能当作本轮完成证据 |
 
 ## 已落地的运行时契约
@@ -49,8 +50,8 @@
 ### 数据库迁移可信度
 
 - `RolePermission.updatedAt` 的 SQLite 可空历史定义已由 `0013_role_permission_updated_at_required` 通过临时表重建为非空列，迁移时使用 `COALESCE` 保护既有数据。
-- `db:drift-check` 现在覆盖三条只读路径：迁移历史 → Schema、实际数据库 → Schema、实际数据库 `_prisma_migrations` → 源码 migration checksum；2026-08-09 三条路径均通过。
-- 当前源码和数据库均登记 14 条迁移；`0004` 的尾换行、`0005` 的手工幂等记录、`0014` 的编码规范化均按已记录兼容基线校验，不通过改写 checksum 绕过检查。
+- `db:drift-check` 现在覆盖三条只读路径：迁移历史 → Schema、实际数据库 → Schema、实际数据库 `_prisma_migrations` → 源码 migration checksum；0015 加入前的基线三条路径曾通过，当前开发库需先应用 0015 再恢复全绿。
+- 当前源码登记 15 条迁移，开发库仍登记 14 条；`0004` 的尾换行、`0005` 的手工幂等记录、`0014` 的编码规范化均按已记录兼容基线校验，新增 `0015_outbox_retry_schedule` 已同步 `schema.prisma` 与 `migration-policy.json`，不通过改写 checksum 绕过检查。
 - 新增只读 `db:history-report` 证据报告：同时记录源码 migration 清单、数据库登记行、数据库/WAL/SHM 文件状态和处置结论；缺失数据库不会被命令创建，报告不会写入 `_prisma_migrations`，checksum 异常只输出“需备份、来源复核和干净 Windows 证据”的建议，不执行修复。
 
 ### 数据分析查询分层
@@ -84,15 +85,18 @@
 - `npm.cmd run test:migration-history-report`：checksum 异常证据、源码/登记行快照、WAL/SHM 状态、缺失数据库不创建和只读处置结论 3 个测试通过
 - `DATABASE_URL=file:<临时 SQLite> npm.cmd run db:history-report`：CI 临时库输出完整迁移证据并通过；历史库报告仍是只读证据，不执行修复
 - `npm.cmd run test:db-backup`：临时 SQLite 源库/备份完整性、SHA-256 审计记录、reason 解析、备份名冲突和远程 URL 拒绝 2 个测试通过；未执行真实开发库备份
-- 新建空 SQLite fixture 后执行 `db:migrate` + `db:drift-check`：14 个 migration 全部应用，三条检查均通过；CI schema job 已采用同样的临时 fixture 门禁
-- `npm.cmd run db:drift-check`：迁移历史 → Schema、实际数据库 → Schema、实际数据库 → 迁移历史均通过；兼容基线记录为 `0004`、`0005`、`0014`，未改写数据库元数据
+- 新建空 SQLite fixture 的迁移历史→Schema diff 已通过；0015 的真实 `db:migrate` 与实际开发库 drift 待停机窗口重跑，避免打断当前 API 进程
+- `npm.cmd run db:drift-check`：在 0015 应用前暂不宣称通过；停机应用后需重新取得迁移历史 → Schema、实际数据库 → Schema、实际数据库 → 迁移历史三条证据
+- `npx prisma migrate diff --from-migrations prisma/migrations --to-schema-datamodel prisma/schema.prisma --shadow-database-url <isolated-file> --exit-code`：`No difference detected`
+- `npx vitest run --config vitest.unit.config.ts test/job-runner-and-outbox.spec.ts test/distribution-task-command-services.spec.ts --pool=forks --maxWorkers=1 --minWorkers=1`：Outbox/发布事务聚焦 `26/26`
+- `npm.cmd run db:migrate`：当前开发 API 占用 `prisma/dev.db`，Prisma schema engine 未返回可诊断错误而退出；未强制终止进程或手工改写 `_prisma_migrations`
 - `npm.cmd run iam:backfill:report`：`users=2`、`memberships=3`、`assignments=2`、`unknownRoles=0`、`invalidScopes=0`、`missingAssignments=0`、`ready=true`
-- `npm.cmd run check:integrity`：1077 个源文件、0 个未解析导入
+- `npm.cmd run check:integrity`：1078 个源文件、0 个未解析导入
 - 2026-08-08 首次非 EXE 工作树复跑证据：本轮任务绩效查询拆分聚焦行为 `4/4`、相关 legacy `25/25`、typecheck、API integration `7/32`、全栈 build（Web `3173 modules`）、治理（静态 pin `188/188`）、Lint（0 errors，1 条既有 warning）通过；API unit `115/932` 中 `928` 通过、4 个既有净 GMV/退款失败；API legacy `103/408` 中 `407` 通过、1 个既有 refund top-merchants 静态契约失败；全量 format check 仍有 10 个既有金额/退款文件未格式化；本轮未触碰 EXE/Desktop/打包发布代码
 - 2026-08-08 非 EXE 金额/退款测试契约收口复跑：按当前统一的 `refundCount / paidOrderCount`、`verifyCount / paidOrderCount` 口径迁移 3 个遗留净 GMV 测试断言并补齐 `MerchantDailyMetrics` SQLite 夹具；residual #72 已同步带周期、无分页参数的 refund top-merchants cache key；API unit `115/932`、API legacy `103/408`、API integration `7/32`、`test:coverage`、typecheck、全栈 build（Web `3173 modules`）、治理（静态 pin `188/188`）、源码完整性（`963/0`）和 Lint（0 errors，1 条既有 warning）均通过；全量 format check 仍有 10 个既有金额/退款文件未格式化；本轮未触碰 EXE/Desktop/打包发布代码
 - 2026-08-08 非 EXE Content 商家同步职责分层复跑：新增 `content-merchant-sync.service.ts`，将 JeeSite 商家同步、单飞保护、商家 upsert 和当前 fen-only `ContentPackage` 批量持久化从 `ContentService` 收敛出去；保留 `ContentService.syncMerchantsFromJeeSite()` 兼容入口及刷新参数、跳过返回值、日志和 SQL 语义；同步行为 `2/2`、API unit `116/935`、API legacy `103/408`、API integration `7/32`、Web behavior `53/235`、`test:coverage`、typecheck、全栈 build（Web `3173 modules`）、治理静态 pin `188/188`、源码完整性（`964/0`）和 Lint（0 errors，1 条既有 warning）通过；本轮目标文件定向格式化通过，全量 format check 仍有 10 个既有金额/退款文件未格式化；本轮未触碰 EXE/Desktop/打包发布代码
 - 2026-08-08 非 EXE Content 推荐分析职责分层复跑：将推荐计算、库存趋势合并、推荐评分前置过滤与套餐分析从 `content-facade.ts` 收敛至 `content-recommendation-facade.ts`；旧 facade 继续 re-export 原函数，`ContentService`、推荐缓存/限额、社群与 Battle Card 调用入口保持兼容，社区业务实现未改动；推荐纯逻辑行为 `36/36`、推荐 cap legacy `8/8`、API unit `116/935`、API legacy `103/408`、API integration `7/32`、Web behavior `53/235`、`test:coverage`、typecheck、全栈 build（Web `3173 modules`）、治理静态 pin `188/188`、源码完整性（`965/0`）和 Lint（0 errors，1 条既有 warning）通过；拆分后两个普通 TypeScript 模块分别为 `250` 与 `187` 行；本轮未触碰 EXE/Desktop/打包发布代码
-- `npm.cmd run test:unit -w @content/api`：114 个行为文件、924 个测试；任务状态命令 canonical 行为测试 4/4；任务更新冻结策略行为测试 4/4；桌面数据库路径隔离测试 2/2；JobRun 最新状态 SQLite 行为测试 1/1；Outbox/幂等显式投影行为测试 2/2；幂等缓存回放、null 响应、operation 路由和 pending 并发保护行为测试 4/4；IAM 权限别名行为测试 9/9；JWT 租户缓存失效行为测试 1/1；`/ready` 数据库/迁移/Web 失败模式、ReleaseManifest 资源读取失败与 Nest 注入测试 8/8；ReleaseManifest 运行时校验测试 4/4；退款 paidTime 跨日趋势行为覆盖支付窗口、全量支付分母和退款率计算，并显式覆盖支付窗口内但 refundTime 窗口外应计入、支付窗口外但 refundTime 窗口内应排除；旧 `/api/users` 仓储租户条件行为测试 2/2；system-version 运行态版本解析测试 1/1；历史 DailyMetrics 日 GMV 读取行为测试覆盖毛 GMV 减退款后与 OrderHeader 净 GMV 口径一致；商家销售汇总/趋势/CSV 与排行净 GMV 口径 SQLite 行为测试 1/1；GMV 商家 fen 排行防止净 GMV 二次扣退款行为测试 1/1；GMV 趋势与分布渠道金额保持 fen 级净 GMV 对账行为测试 3/3；DailyMetrics 历史退款/核销净 GMV 与净比例读模型行为测试 2/2；GMV DailyMetrics/OrderHeader 趋势及周聚合按净 GMV 计算退款率/核销率行为测试 9/9；DailyMetrics 重算写入净比例行为测试 1/1；GMV fen 读取路径超过 JavaScript 安全整数边界仍保持精确行为测试 1/1；IAM 委派范围防扩权行为测试 1/1；Dashboard 推荐源覆盖元数据行为测试 1/1；DTO 白名单全局/显式管道行为测试 3/3；严格 CSP 响应头行为测试 1/1；GMV 查询 DTO cache-control 行为测试 2/2；认证 Cookie 序列化/解析行为测试 2/2；认证 AppUser-only 边界行为测试 15/15（AuthService 4/4、JwtStrategy 11/11）
+- `npm.cmd run test:unit -w @content/api`：当前全量 130 个文件、1020 个测试全部通过；其中新增 Outbox/发布事务聚焦 `26/26`，并覆盖 handler dispatch、失败重试、`nextRetryAt` 退避和 failed dead-letter；其余历史行为证据保持不变。
 - 本轮非 EXE 任务切片：`DistributionTaskService` 移除 create/batchCreate 及 publish/fail/cancel/schedule/complete/reassign 六组重复职责，控制器直接使用 `CreateTaskService`、`PublishTaskService` / `CancelTaskService`；本轮进一步将更新/删除与三类元数据探针收敛到 `task.repository`，将更新/reassign 的单用户指派解析收敛到 `distribution-task-fk`（创建路径仍保留批量 map 解析），并将更新冻结策略提取到 `domain/task-update-policy`，删除状态复用状态机定义；保留服务层兼容入口和 NotFound 语义；FK/创建/状态行为共 35/35 通过，策略行为 4/4，相关静态契约同步通过
 - 本轮 Web IAM 行为修复：授权范围切换至 `ALL/NONE` 时清除残留 `orgUnitId`，组织范围切换保留 `orgUnitId`；新增行为测试 2/2，并将 residual #181 对齐当前 `controller -> CancelTaskService` 状态命令边界
 - 本轮 IAM 组织树缓存一致性修复：`IamAccessService` 与 `JwtStrategy` 增加租户级缓存失效，组织单元创建/更新后立即清理访问与 JWT 状态缓存；新增行为测试 3/3，IAM 集成测试 11/11
@@ -518,11 +522,11 @@
 2. 候选目录 `release_candidate_v011_latest2/` 仅作为此前生成和扫描的保留证据；本轮 API/Web 变更后未重新打包，旧工作树 `release/` 中已有产物包含 `.env` / `.cookie.cache`，不能作为新包证据，也不应擅自删除用户资产；仍需在干净 Windows 环境安装、启动并验证候选安装器。
 3. 本地开发浏览器已完成登录、`/api/users/me`、数据库业务路由、权限中心和数据分析链路；仍需在干净安装包环境复核同一链路。
 4. IAM shadow 报告接口和零差异集成用例已完成；仍需在干净安装包运行链路重采样报告，并完成退款 `paidTime` 跨日的发布环境证据。
-5. Windows 发布恢复后仍需在备份、来源和干净安装包证据齐全时复核迁移、旧库导入与 `/ready`；当前非 EXE `db:drift-check` 已通过，不应把历史开发库报告误写成当前漂移失败。
+5. Windows 发布恢复后仍需在备份、来源和干净安装包证据齐全时复核迁移、旧库导入与 `/ready`；当前开发库尚未应用 0015，不应把待迁移状态误写成代码/schema 漂移。
 
 ## 已满足的发布前门禁
 
-- 当前非 EXE 门禁：`typecheck`、API/Web build、API/Web focused/legacy 回归、`check:integrity`、`db:validate` 和 `db:drift-check` 已按本文件顶部状态基线复核。
+- 当前非 EXE 门禁：`typecheck`、API/Web build、API/Web focused/legacy 回归、`check:integrity`、`db:validate` 已按本文件顶部状态基线复核；0015 应用后再补 `db:drift-check`。
 - 旧 pin 已隔离为 API/Web legacy suite，行为套件与 legacy 均由 CI 独立执行；数据分析限额、CSV 限额、审计路径策略、保留任务、扫描上限和数据库启动/迁移检查，以及本轮文案、社群、活动、任务和用户投影护栏，已改为行为覆盖；当前精确统计为 API `103`、Web `85`、合计 `188` 个静态 pin，已达到治理目标。
 - CI 已独立执行 API 行为/legacy、API 集成、Web 行为/legacy、schema、覆盖率、构建、源码完整性和发布契约任务；`typecheck` job 同时检查 API 生产源码、API 测试源码和 Web 类型；数据库备份及旧安装包回退说明已保留在 `docs/PACKAGING.md`，并由 `release-contracts` job 校验。
 

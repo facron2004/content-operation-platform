@@ -132,7 +132,8 @@ export function getMerchantSalesExportUrl(params: {
   if (params.date) q.set('date', params.date);
   if (params.endDate) q.set('endDate', params.endDate);
   if (params.sortBy) q.set('sortBy', params.sortBy);
-  q.set('_', String(Date.now()));
+  // No `_` cache-buster: the export DTO uses forbidNonWhitelisted, so an unknown
+  // query param returns 400. The backend already sends Cache-Control: no-store.
   // Relative path: axios client baseURL already includes /api.
   return `/merchant-sales/export?${q.toString()}`;
 }

@@ -3,6 +3,7 @@ import { newEntityId } from '../common/id';
 import { EXECUTION_SNAPSHOT_MAX_CHARS, EXECUTION_TIMELINE_LIMIT } from '../common/sql-chunk';
 import { toSqliteDateTime } from '../common/sqlite-datetime';
 import { PrismaService } from '../prisma/prisma.service';
+import type { Tx } from './repositories/task.repository';
 
 export interface CreateExecutionInput {
   taskId: string;
@@ -34,7 +35,7 @@ interface ExecutionRow {
 export class DistributionExecutionService {
   constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
 
-  async create(input: CreateExecutionInput) {
+  async create(input: CreateExecutionInput, db: Tx = this.prisma) {
     const executionId = this.generateId();
     const now = toSqliteDateTime();
     // Cap snapshotJson so a future writer cannot pin SQLite with multi-MB dumps.
@@ -43,7 +44,7 @@ export class DistributionExecutionService {
     if (snapshot != null && snapshot.length > EXECUTION_SNAPSHOT_MAX_CHARS) {
       snapshot = `${snapshot.slice(0, EXECUTION_SNAPSHOT_MAX_CHARS)}…[truncated]`;
     }
-    await this.prisma.$executeRawUnsafe(
+    await db.$executeRawUnsafe(
       `INSERT INTO "DistributionExecution" ("executionId", "taskId", "action", "operatorId", "operatorName", "evidenceUrl", "failReason", "failCategory", "note", "snapshotJson", "createdAt")
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       executionId,

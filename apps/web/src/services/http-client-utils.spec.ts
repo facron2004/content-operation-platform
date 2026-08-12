@@ -32,14 +32,32 @@ function fakeError(partial: Partial<AxiosError> & { name?: string; code?: string
 }
 
 describe('requestKey / responseKey', () => {
-  it('keys by method+url only so date param changes share one in-flight slot', () => {
-    const a = requestKey({ method: 'GET', url: '/data-analysis/summary' });
+  it('keeps different query windows independent while normalizing param order', () => {
+    const a = requestKey({
+      method: 'GET',
+      url: '/data-analysis/summary',
+      params: { startDate: '2026-08-01', endDate: '2026-08-07' }
+    });
     const b = requestKey({
       method: 'get',
-      url: '/data-analysis/summary'
+      url: '/data-analysis/summary',
+      params: { endDate: '2026-08-07', startDate: '2026-08-01' }
     });
     expect(a).toBe(b);
-    expect(responseKey({ method: 'GET', url: '/data-analysis/summary' })).toBe(a);
+    expect(
+      requestKey({
+        method: 'GET',
+        url: '/data-analysis/summary',
+        params: { startDate: '2026-08-02', endDate: '2026-08-08' }
+      })
+    ).not.toBe(a);
+    expect(
+      responseKey({
+        method: 'GET',
+        url: '/data-analysis/summary',
+        params: { startDate: '2026-08-01', endDate: '2026-08-07' }
+      })
+    ).toBe(a);
   });
 });
 

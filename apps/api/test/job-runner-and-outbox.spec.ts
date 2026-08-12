@@ -2,6 +2,9 @@ import { createClient, type InValue } from '@libsql/client';
 import { describe, it, expect, vi } from 'vitest';
 import { JobRunnerService } from '../src/jobs/job-runner.service';
 import { OutboxService } from '../src/outbox/outbox.service';
+import { OutboxProcessorJob } from '../src/outbox/outbox-processor.job';
+import type { OutboxEventContext, OutboxEventRow } from '../src/outbox/outbox.service';
+import { TaskPublishedOutboxHandler } from '../src/outbox/task-published.handler';
 import { IdempotencyService } from '../src/idempotency/idempotency.service';
 import { PrismaService } from '../src/prisma/prisma.service';
 
@@ -270,6 +273,145 @@ describe('JobRunner and Outbox Services Unit Tests', () => {
     );
   });
 
+  it('dispatches a registered handler and rejects unknown event types', async () => {
+    const outbox = new OutboxService({} as PrismaService);
+    const handler = vi.fn();
+    outbox.registerHandler('task.published', handler);
+
+    const event: OutboxEventRow = {
+      id: 'evt_dispatch',
+      aggregateType: 'DistributionTask',
+      aggregateId: 'task-100',
+      eventType: 'task.published',
+      payloadJson: JSON.stringify({ taskId: 'task-100', operatorId: 'user-1' }),
+      status: 'pending',
+      retryCount: 0,
+      errorMessage: null,
+      nextRetryAt: null,
+      createdAt: '2026-08-04 00:00:00',
+      processedAt: null
+    };
+
+    await outbox.dispatch(event);
+    expect(handler).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'evt_dispatch',
+        payload: { taskId: 'task-100', operatorId: 'user-1' }
+      })
+    );
+
+    await expect(outbox.dispatch({ ...event, eventType: 'campaign.started' })).rejects.toThrow(
+      "No Outbox handler registered for event type 'campaign.started'"
+    );
+  });
+
+  it('registers task.published and writes a durable audit side effect', async () => {
+    const registerHandler = vi.fn();
+    const auditLog = { log: vi.fn().mockResolvedValue(undefined) };
+    const handler = new TaskPublishedOutboxHandler({ registerHandler } as never, auditLog as never);
+
+    handler.onModuleInit();
+    expect(registerHandler).toHaveBeenCalledWith('task.published', expect.any(Function));
+
+    const registered = registerHandler.mock.calls[0][1] as (
+      event: OutboxEventContext
+    ) => Promise<void>;
+    await registered({
+      id: 'evt_handler',
+      aggregateType: 'DistributionTask',
+      aggregateId: 'task-100',
+      eventType: 'task.published',
+      payloadJson: JSON.stringify({ taskId: 'task-100', operatorId: 'user-1' }),
+      status: 'pending',
+      retryCount: 0,
+      errorMessage: null,
+      nextRetryAt: null,
+      createdAt: '2026-08-04 00:00:00',
+      processedAt: null,
+      payload: { taskId: 'task-100', operatorId: 'user-1' }
+    });
+
+    expect(auditLog.log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'outbox.task.published',
+        objectType: 'DistributionTask',
+        objectId: 'task-100',
+        result: 'processed'
+      })
+    );
+  });
+
+  it('processes an event before marking it processed', async () => {
+    const event = {
+      id: 'evt_success',
+      aggregateType: 'DistributionTask',
+      aggregateId: 'task-100',
+      eventType: 'task.published',
+      payloadJson: '{}',
+      status: 'pending',
+      retryCount: 0,
+      errorMessage: null,
+      nextRetryAt: null,
+      createdAt: '2026-08-04 00:00:00',
+      processedAt: null
+    } satisfies OutboxEventRow;
+    const outbox = {
+      fetchPending: vi.fn().mockResolvedValue([event]),
+      dispatch: vi.fn().mockResolvedValue(undefined),
+      markProcessed: vi.fn().mockResolvedValue(undefined),
+      markFailed: vi.fn().mockResolvedValue(undefined)
+    };
+    const runJob = vi.fn(
+      async (
+        _name: string,
+        fn: (setMeta: (meta: Record<string, unknown>) => void) => Promise<number | void>
+      ) => {
+        await fn(vi.fn());
+      }
+    );
+
+    await new OutboxProcessorJob(outbox as never, { runJob } as never).processOutboxEvents();
+
+    expect(outbox.dispatch).toHaveBeenCalledWith(event);
+    expect(outbox.markProcessed).toHaveBeenCalledWith('evt_success');
+    expect(outbox.markFailed).not.toHaveBeenCalled();
+  });
+
+  it('records a handler failure for retry without marking the event processed', async () => {
+    const event = {
+      id: 'evt_retry',
+      aggregateType: 'DistributionTask',
+      aggregateId: 'task-100',
+      eventType: 'task.published',
+      payloadJson: '{}',
+      status: 'pending',
+      retryCount: 0,
+      errorMessage: null,
+      nextRetryAt: null,
+      createdAt: '2026-08-04 00:00:00',
+      processedAt: null
+    } satisfies OutboxEventRow;
+    const outbox = {
+      fetchPending: vi.fn().mockResolvedValue([event]),
+      dispatch: vi.fn().mockRejectedValue(new Error('downstream unavailable')),
+      markProcessed: vi.fn().mockResolvedValue(undefined),
+      markFailed: vi.fn().mockResolvedValue(undefined)
+    };
+    const runJob = vi.fn(
+      async (
+        _name: string,
+        fn: (setMeta: (meta: Record<string, unknown>) => void) => Promise<number | void>
+      ) => {
+        await fn(vi.fn());
+      }
+    );
+
+    await new OutboxProcessorJob(outbox as never, { runJob } as never).processOutboxEvents();
+
+    expect(outbox.markFailed).toHaveBeenCalledWith('evt_retry', 'downstream unavailable');
+    expect(outbox.markProcessed).not.toHaveBeenCalled();
+  });
+
   it('OutboxService fetches only the public event projection', async () => {
     const client = createClient({ url: 'file::memory:?cache=shared' });
     await client.execute(`
@@ -282,6 +424,7 @@ describe('JobRunner and Outbox Services Unit Tests', () => {
         "status" TEXT NOT NULL,
         "retryCount" INTEGER NOT NULL,
         "errorMessage" TEXT,
+        "nextRetryAt" TEXT,
         "createdAt" TEXT NOT NULL,
         "processedAt" TEXT,
         "internalToken" TEXT
@@ -318,10 +461,59 @@ describe('JobRunner and Outbox Services Unit Tests', () => {
         status: 'pending',
         retryCount: 0,
         errorMessage: null,
+        nextRetryAt: null,
         createdAt: '2026-08-04 00:00:00',
         processedAt: null
       });
       expect(event).not.toHaveProperty('internalToken');
+    } finally {
+      await client.close();
+    }
+  });
+
+  it('persists retry backoff and dead-letters after the maximum attempts', async () => {
+    const client = createClient({ url: 'file::memory:?cache=shared' });
+    await client.execute('DROP TABLE IF EXISTS "OutboxEvent"');
+    await client.execute(`
+      CREATE TABLE "OutboxEvent" (
+        "id" TEXT PRIMARY KEY,
+        "retryCount" INTEGER NOT NULL,
+        "errorMessage" TEXT,
+        "nextRetryAt" TEXT,
+        "status" TEXT NOT NULL
+      )
+    `);
+    await client.execute({
+      sql: `INSERT INTO "OutboxEvent" ("id", "retryCount", "status") VALUES (?, 0, 'pending')`,
+      args: ['evt_retry_schedule']
+    });
+    const prisma = {
+      $executeRawUnsafe: async (sql: string, ...args: InValue[]) =>
+        (await client.execute({ sql, args })).rowsAffected
+    } as unknown as PrismaService;
+
+    try {
+      const outbox = new OutboxService(prisma);
+      await outbox.markFailed('evt_retry_schedule', 'temporary failure');
+      const first = await client.execute(
+        `SELECT "retryCount", "status", "nextRetryAt" FROM "OutboxEvent" WHERE "id" = ?`,
+        ['evt_retry_schedule']
+      );
+      expect(first.rows[0]).toMatchObject({ retryCount: 1, status: 'pending' });
+      expect(first.rows[0].nextRetryAt).toEqual(expect.any(String));
+
+      for (let attempt = 1; attempt < 5; attempt += 1) {
+        await outbox.markFailed('evt_retry_schedule', 'temporary failure');
+      }
+      const deadLetter = await client.execute(
+        `SELECT "retryCount", "status", "nextRetryAt" FROM "OutboxEvent" WHERE "id" = ?`,
+        ['evt_retry_schedule']
+      );
+      expect(deadLetter.rows[0]).toEqual({
+        retryCount: 5,
+        status: 'failed',
+        nextRetryAt: null
+      });
     } finally {
       await client.close();
     }

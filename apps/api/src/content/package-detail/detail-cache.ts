@@ -1,9 +1,7 @@
-import { Logger } from '@nestjs/common';
 import type { PackageDetail } from './types';
 import { MS_PER_DAY } from '../../domain/utils';
 
 export class DetailCache {
-  private readonly logger = new Logger(DetailCache.name);
   private readonly cache = new Map<string, { data: PackageDetail; expiry: number }>();
   private readonly inFlight = new Map<string, Promise<PackageDetail | null>>();
   private readonly cacheTTL = MS_PER_DAY; // 24 hours

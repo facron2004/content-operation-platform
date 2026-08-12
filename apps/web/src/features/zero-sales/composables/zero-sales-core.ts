@@ -145,6 +145,7 @@ export async function loadZeroSalesSkus(params: {
   // Residual #266: optional honesty sinks for ZERO_SALES_SKUS_CACHE_CAP.
   skuTruncated?: Ref<boolean>;
   skuLimit?: Ref<number | null>;
+  signal?: AbortSignal;
   isCurrent?: () => boolean;
 }) {
   const isCurrent = params.isCurrent ?? (() => true);
@@ -159,7 +160,8 @@ export async function loadZeroSalesSkus(params: {
       // Residual #217: forward sort (default lastSalesDateAsc server-side when omitted).
       sort: params.sort,
       page: params.page,
-      pageSize: 50
+      pageSize: 50,
+      signal: params.signal
     });
     if (!isCurrent()) return;
     params.skuRows.value = result.items;
@@ -188,6 +190,7 @@ export async function loadZeroSalesMerchants(params: {
   // Residual #266: optional honesty sinks for ZERO_SALES_MERCHANTS_CACHE_CAP.
   merchantTruncated?: Ref<boolean>;
   merchantLimit?: Ref<number | null>;
+  signal?: AbortSignal;
   isCurrent?: () => boolean;
 }) {
   const isCurrent = params.isCurrent ?? (() => true);
@@ -199,7 +202,8 @@ export async function loadZeroSalesMerchants(params: {
       areaId: params.areaId,
       search: params.search,
       page: params.page,
-      pageSize: 20
+      pageSize: 20,
+      signal: params.signal
     });
     if (!isCurrent()) return;
     params.merchantRows.value = result.items;
@@ -217,13 +221,23 @@ export async function loadZeroSalesMerchants(params: {
 }
 export function createZeroSalesLoaders(state: ZeroSalesState) {
   let disposed = false;
+  let active = true;
   let merchantRequestId = 0;
   let skuRequestId = 0;
   let reloadRequestId = 0;
+  let merchantAbortController: AbortController | null = null;
+  let skuAbortController: AbortController | null = null;
+
+  const abortController = (controller: AbortController | null) => {
+    controller?.abort();
+  };
 
   const loadMerchants = (): Promise<void> => {
-    if (disposed) return Promise.resolve();
+    if (disposed || !active) return Promise.resolve();
     const currentRequestId = ++merchantRequestId;
+    abortController(merchantAbortController);
+    const controller = new AbortController();
+    merchantAbortController = controller;
     return loadZeroSalesMerchants({
       ...zeroSalesFilterParams(state),
       page: state.merchantPage.value,
@@ -233,12 +247,18 @@ export function createZeroSalesLoaders(state: ZeroSalesState) {
       loadError: state.loadError,
       merchantTruncated: state.merchantTruncated,
       merchantLimit: state.merchantLimit,
+      signal: controller.signal,
       isCurrent: () => !disposed && currentRequestId === merchantRequestId
+    }).finally(() => {
+      if (merchantAbortController === controller) merchantAbortController = null;
     });
   };
   const loadSkus = (): Promise<void> => {
-    if (disposed) return Promise.resolve();
+    if (disposed || !active) return Promise.resolve();
     const currentRequestId = ++skuRequestId;
+    abortController(skuAbortController);
+    const controller = new AbortController();
+    skuAbortController = controller;
     return loadZeroSalesSkus({
       ...zeroSalesFilterParams(state),
       page: state.skuPage.value,
@@ -248,11 +268,14 @@ export function createZeroSalesLoaders(state: ZeroSalesState) {
       loadError: state.loadError,
       skuTruncated: state.skuTruncated,
       skuLimit: state.skuLimit,
+      signal: controller.signal,
       isCurrent: () => !disposed && currentRequestId === skuRequestId
+    }).finally(() => {
+      if (skuAbortController === controller) skuAbortController = null;
     });
   };
   const reload = async () => {
-    if (disposed) return;
+    if (disposed || !active) return;
     const currentReloadRequestId = ++reloadRequestId;
     merchantRequestId += 1;
     skuRequestId += 1;
@@ -262,17 +285,31 @@ export function createZeroSalesLoaders(state: ZeroSalesState) {
     await Promise.all([activeTab === 'merchant' ? loadMerchants() : loadSkus()]);
     if (!disposed && currentReloadRequestId === reloadRequestId) state.loading.value = false;
   };
-  const dispose = () => {
+  const pause = () => {
     if (disposed) return;
-    disposed = true;
+    active = false;
     merchantRequestId += 1;
     skuRequestId += 1;
     reloadRequestId += 1;
+    abortController(merchantAbortController);
+    abortController(skuAbortController);
+    merchantAbortController = null;
+    skuAbortController = null;
     state.loading.value = false;
     state.merchantLoading.value = false;
     state.skuLoading.value = false;
   };
-  return { loadMerchants, loadSkus, reload, dispose };
+  const resume = () => {
+    if (disposed || active) return Promise.resolve();
+    active = true;
+    return reload();
+  };
+  const dispose = () => {
+    if (disposed) return;
+    pause();
+    disposed = true;
+  };
+  return { loadMerchants, loadSkus, reload, pause, resume, dispose };
 }
 export function bindZeroSalesRouteWatch(params: {
   reload: () => Promise<void>;

@@ -8,6 +8,8 @@ export const IAM_PERMISSION_CODES = [
   'packages:write',
   'packages:export',
   'packages:refresh',
+  'orders:read',
+  'orders:manage',
   'campaigns:read',
   'campaigns:write',
   'campaigns:export',

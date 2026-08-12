@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { beijingDateKey, shiftDateKey, yuanToFen } from '@content/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateCampaignDto } from './dto/create-campaign.dto';
@@ -77,8 +77,6 @@ const VALID_TRANSITIONS: Record<string, string[]> = {
 
 @Injectable()
 export class CampaignService {
-  private readonly logger = new Logger(CampaignService.name);
-
   constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
 
   async list(

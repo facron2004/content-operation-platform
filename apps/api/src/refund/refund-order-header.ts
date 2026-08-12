@@ -2,6 +2,7 @@
 import { shiftDateKey } from '@content/shared';
 import {
   beijingDayRangeSqlite,
+  floorNonNegativeFen,
   rateByCount,
   SQL_GMV_OH,
   sqlBeijingDate,
@@ -116,7 +117,8 @@ export async function topRefundMerchants(prisma: PrismaService, w: Window, limit
     amountAlias: 'refundFen'
   });
   return rows.map((r) => {
-    const gmv = Number(r.gmvFen ?? 0) / 100;
+    // Net GMV floored at 0 (refund can exceed recognized GMV for 0-paid orders).
+    const gmv = Number(floorNonNegativeFen(toFenBigInt(r.gmvFen))) / 100;
     const refund = Number(r.refundFen ?? 0) / 100;
     const paidOrderCount = Number(r.paidOrderCount ?? 0);
     return {
@@ -146,7 +148,8 @@ export async function computeRefundFromOrderHeader(
   return {
     date: w.end,
     totalRefund: Number(totalRefundFen) / 100,
-    totalGmv: Number(totalGmvFen) / 100,
+    // Net GMV (gross − refund) floored at 0 so the card never shows negative.
+    totalGmv: Number(floorNonNegativeFen(totalGmvFen)) / 100,
     // Unified 单数口径: 退款单数 / 支付单数.
     refundRate: rateByCount(refundCount, paidOrderCount),
     refundCount,
@@ -161,7 +164,8 @@ export async function topVerifyMerchants(prisma: PrismaService, w: Window, limit
     amountAlias: 'verifyFen'
   });
   return rows.map((r) => {
-    const gmv = Number(r.gmvFen ?? 0) / 100;
+    // Net GMV floored at 0 (refund can exceed recognized GMV for 0-paid orders).
+    const gmv = Number(floorNonNegativeFen(toFenBigInt(r.gmvFen))) / 100;
     const verify = Number(r.verifyFen ?? 0) / 100;
     const paidOrderCount = Number(r.paidOrderCount ?? 0);
     return {
@@ -184,7 +188,8 @@ export async function computeVerifyFromOrderHeader(
   return {
     date: w.end,
     totalVerify: Number(totalVerifyFen) / 100,
-    totalGmv: Number(totalGmvFen) / 100,
+    // Net GMV (gross − refund) floored at 0 so the card never shows negative.
+    totalGmv: Number(floorNonNegativeFen(totalGmvFen)) / 100,
     // Unified 单数口径: 核销单数 / 支付单数.
     verifyRate: rateByCount(verifyCount, paidOrderCount),
     verifyCount,

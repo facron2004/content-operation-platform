@@ -12,7 +12,13 @@ import { MerchantModule } from './merchant/merchant.module';
 import { MerchantSalesModule } from './merchant-sales/merchant-sales.module';
 import { MovementModule } from './movement/movement.module';
 import { OverviewModule } from './overview/overview.module';
+import { OperationModule } from './operation/operation.module';
+import { UserCenterModule } from './user-center/user-center.module';
+import { OrderCenterModule } from './order-center/order-center.module';
+import { ProductCenterModule } from './product-center/product-center.module';
+import { FinanceCenterModule } from './finance-center/finance-center.module';
 import { DataAnalysisModule } from './data-analysis/data-analysis.module';
+import { WelfarePointModule } from './welfare-point/welfare-point.module';
 import { RefundModule } from './refund/refund.module';
 import { ZeroSalesModule } from './zero-sales/zero-sales.module';
 import { CampaignModule } from './campaign/campaign.module';
@@ -31,6 +37,9 @@ import { appThrottlerConfig } from './app-throttler.config';
 import { SystemVersionController } from './common/system-version.controller';
 import { HealthController } from './common/health.controller';
 import { ReadinessService } from './common/readiness.service';
+import { InventoryModule } from './inventory/inventory.module';
+import { MarketingPrivateModule } from './marketing-private/marketing-private.module';
+import { GapCenterModule } from './gap-center/gap-center.module';
 
 @Module({
   imports: [
@@ -42,7 +51,14 @@ import { ReadinessService } from './common/readiness.service';
     MerchantSalesModule,
     MovementModule,
     OverviewModule,
+    OperationModule,
+    UserCenterModule,
+    OrderCenterModule,
+    InventoryModule,
+    ProductCenterModule,
+    FinanceCenterModule,
     DataAnalysisModule,
+    WelfarePointModule,
     RefundModule,
     ZeroSalesModule,
     CampaignModule,
@@ -54,6 +70,8 @@ import { ReadinessService } from './common/readiness.service';
     AuditLogModule,
     IdempotencyModule,
     OutboxModule,
+    MarketingPrivateModule,
+    GapCenterModule,
     ThrottlerModule.forRoot(appThrottlerConfig)
   ],
   controllers: [SystemVersionController, HealthController],

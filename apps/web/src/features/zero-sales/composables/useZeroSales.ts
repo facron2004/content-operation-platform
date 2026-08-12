@@ -1,4 +1,4 @@
-import { onMounted, onScopeDispose, watch } from 'vue';
+import { onActivated, onDeactivated, onMounted, onScopeDispose, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
   STALE_BUCKETS,
@@ -25,6 +25,10 @@ export function useZeroSales() {
       );
     }
   });
+  onActivated(() => {
+    void controller.resume();
+  });
+  onDeactivated(controller.pause);
   onScopeDispose(controller.dispose);
   return controller;
 }

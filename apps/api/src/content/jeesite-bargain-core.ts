@@ -238,11 +238,18 @@ export function readBargainCore(row: AnyRecord): BargainCoreValues | null {
       orderCount
     )
   );
+  // 库存字段全部位于 JeeSite 响应的 bargainCommodityDynamic 嵌套 JSON 内：
+  //   hasInventory            = 当前剩余库存（-1 表示不限制/未启用库存）
+  //   inventoryTotal          = 当前总库存（随销售扣减）
+  //   initialInventoryTotal   = 初始总库存（上架时设定）
+  // 顶层 stockLeft/surplusStock/remainingStock 字段在 JeeSite 响应中不存在，
+  // 仅作兜底保留，不作为主路径。
   const stockTotalFromRow = Math.round(
     rowNumber(
       row,
       [
         'bargainCommodityDynamic.initialInventoryTotal',
+        'bargainCommodityDynamic.inventoryTotal',
         'stockTotal',
         'stock_total',
         'totalStock',
@@ -256,7 +263,7 @@ export function readBargainCore(row: AnyRecord): BargainCoreValues | null {
     )
   );
   const dailyInventory = Math.round(
-    rowNumber(row, ['hasInventory', 'bargainCommodityDynamic.hasInventory'], Number.NaN)
+    rowNumber(row, ['bargainCommodityDynamic.hasInventory', 'hasInventory'], Number.NaN)
   );
   const stockLeftFromRow =
     Number.isFinite(dailyInventory) && dailyInventory >= 0
@@ -265,6 +272,7 @@ export function readBargainCore(row: AnyRecord): BargainCoreValues | null {
           rowNumber(
             row,
             [
+              'inventory',
               'stockLeft',
               'stock_left',
               'surplusStock',

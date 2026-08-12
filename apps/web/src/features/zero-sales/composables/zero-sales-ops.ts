@@ -203,6 +203,8 @@ export function exposeZeroSalesController(
   state: ZeroSalesState,
   reload: () => Promise<void>,
   actions: ZeroSalesActions,
+  pause: () => void,
+  resume: () => Promise<void>,
   dispose: () => void
 ) {
   return {
@@ -226,6 +228,8 @@ export function exposeZeroSalesController(
     skuTruncated: state.skuTruncated,
     skuLimit: state.skuLimit,
     reload,
+    pause,
+    resume,
     dispose,
     merchantRowClass,
     skuRowClass,
@@ -240,7 +244,7 @@ export function createZeroSalesController(params: {
   watchQuery: (cb: (q: LocationQuery) => void) => void;
 }) {
   const state = createZeroSalesState(params.routeQuery);
-  const { loadMerchants, loadSkus, reload, dispose } = createZeroSalesLoaders(state);
+  const { loadMerchants, loadSkus, reload, pause, resume, dispose } = createZeroSalesLoaders(state);
   const syncQuery = buildZeroSalesQuerySync({ state, router: params.router });
   const actions = buildZeroSalesActions({
     state,
@@ -263,5 +267,5 @@ export function createZeroSalesController(params: {
         skuPage: state.skuPage
       })
   });
-  return exposeZeroSalesController(state, reload, actions, dispose);
+  return exposeZeroSalesController(state, reload, actions, pause, resume, dispose);
 }

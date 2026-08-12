@@ -1,4 +1,4 @@
-import { BadRequestException, Inject, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable } from '@nestjs/common';
 import { JeeSiteDataSourceClient } from './jeesite-data-source.client';
 import type { ContentDataset, LoadDatasetOptions } from './data-source.types';
 
@@ -6,7 +6,6 @@ export type { ContentDataset, LoadDatasetOptions } from './data-source.types';
 
 @Injectable()
 export class DataSourceService {
-  private readonly logger = new Logger(DataSourceService.name);
   private cache: { key: string; expiresAt: number; data: ContentDataset } | null = null;
   /** Any in-flight load (force or non-force). Non-force waiters always join. */
   private inFlight: Promise<ContentDataset> | null = null;
