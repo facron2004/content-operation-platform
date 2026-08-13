@@ -190,26 +190,6 @@ export class UserController {
     return result;
   }
 
-  @Put(':id/access')
-  @RequirePermissions('iam:users:access')
-  async replaceUserAccess(
-    @Param('id') id: string,
-    @Body(createDtoPipe(ReplaceUserAccessDto)) body: ReplaceUserAccessDto,
-    @Req() req: Request
-  ) {
-    if (!this.iamAdminService) throw new ForbiddenException('IAM 服务未启用');
-    const actor = req.user as AuthUser | undefined;
-    const safeId = safePathId(id);
-    const result = await this.iamAdminService.replaceUserAccess(
-      actor?.tenantId ?? 'tenant_default',
-      safeId,
-      body,
-      actor?.userId
-    );
-    this.jwtStrategy?.invalidateStatus(safeId);
-    return result;
-  }
-
   @Get(':id')
   @Roles('admin', 'platform_operator')
   @RequirePermissions('iam:user:read')

@@ -205,16 +205,6 @@ export function attachHttpRequestInterceptor(args: {
               : `idem_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
         }
       }
-      const method = config.method?.toUpperCase();
-      if (['POST', 'PUT', 'PATCH'].includes(method ?? '')) {
-        const headers = config.headers as Record<string, unknown>;
-        if (!headers['Idempotency-Key'] && !headers['idempotency-key']) {
-          headers['Idempotency-Key'] =
-            typeof crypto !== 'undefined' && crypto.randomUUID
-              ? crypto.randomUUID()
-              : `idem_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-        }
-      }
       const retryConfig = config as RetryableConfig;
       if (!retryConfig.__authRetried__) {
         const key = requestKey(config),
