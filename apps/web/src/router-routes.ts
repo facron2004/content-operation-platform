@@ -230,7 +230,7 @@ const cockpitRoutes: RouteRecordRaw[] = [
   {
     path: 'gmv-cockpit',
     name: 'gmv-cockpit',
-    component: lazyView(() => import('./views/GmvCockpitView.vue')),
+    redirect: '/operation/gmv',
     meta: {
       title: 'GMV看板',
       icon: 'DataLine',
@@ -311,32 +311,36 @@ const cockpitRoutes: RouteRecordRaw[] = [
  * V2 视图和 API 组合，避免菜单入口与实际业务页面脱节。
  */
 const v2PageRoutes: RouteRecordRaw[] = [
-  route(
-    'operation',
-    'operation-root',
-    '经营中心',
-    'DataBoard',
-    'operations',
-    1,
-    () => import('./views/OperationWorkbenchView.vue'),
-    false,
-    PLATFORM_ROLES
-  ),
-  route(
-    'operation/dashboard',
-    'operation-dashboard',
-    '经营驾驶舱',
-    'DataBoard',
-    'operations',
-    2,
-    () => import('./views/OperationWorkbenchView.vue'),
-    false,
-    PLATFORM_ROLES
-  ),
+  {
+    path: 'operation',
+    name: 'operation-root',
+    redirect: '/operation/gmv',
+    meta: {
+      title: '经营中心',
+      icon: 'DataBoard',
+      group: 'operations',
+      order: 1,
+      roles: [...PLATFORM_ROLES],
+      permissions: permissionsForRoute('operation-root')
+    }
+  },
+  {
+    path: 'operation/dashboard',
+    name: 'operation-dashboard',
+    redirect: '/operation/gmv',
+    meta: {
+      title: '经营驾驶舱',
+      icon: 'DataBoard',
+      group: 'operations',
+      order: 2,
+      roles: [...PLATFORM_ROLES],
+      permissions: permissionsForRoute('operation-dashboard')
+    }
+  },
   route(
     'operation/realtime',
     'operation-realtime',
-    '实时经营',
+    '今日运营',
     'DataLine',
     'operations',
     3,
@@ -356,24 +360,35 @@ const v2PageRoutes: RouteRecordRaw[] = [
     PLATFORM_ROLES
   ),
   route(
-    'operation/region',
-    'operation-region',
-    '区域分析',
+    'operation/analysis',
+    'operation-analysis',
+    '区域 / 类目分析',
     'MapLocation',
     'operations',
     5,
-    () => import('./views/OverviewView.vue'),
+    () => import('./views/OperationAnalysisView.vue'),
+    false,
+    PLATFORM_ROLES
+  ),
+  route(
+    'operation/region',
+    'operation-region',
+    '区域 / 类目分析',
+    'MapLocation',
+    'operations',
+    99,
+    () => import('./views/OperationAnalysisView.vue'),
     false,
     PLATFORM_ROLES
   ),
   route(
     'operation/category',
     'operation-category',
-    '类目分析',
+    '区域 / 类目分析',
     'Histogram',
     'operations',
-    6,
-    () => import('./views/OverviewView.vue'),
+    99,
+    () => import('./views/OperationAnalysisView.vue'),
     false,
     PLATFORM_ROLES
   ),
@@ -383,8 +398,8 @@ const v2PageRoutes: RouteRecordRaw[] = [
     '经营预警',
     'Warning',
     'operations',
-    7,
-    () => import('./views/AlertsView.vue'),
+    6,
+    () => import('./views/OperationAlertsView.vue'),
     false,
     PLATFORM_ROLES
   ),
@@ -406,7 +421,7 @@ const v2PageRoutes: RouteRecordRaw[] = [
     'TrendCharts',
     'growth',
     10,
-    () => import('./views/UserCenterView.vue'),
+    () => import('./views/UserLifecycleView.vue'),
     false,
     PLATFORM_ROLES
   ),
@@ -1033,7 +1048,7 @@ const operationsDataRoutes: RouteRecordRaw[] = [
     'User',
     'growth',
     7,
-    () => import('./views/MarketingPrivateView.vue'),
+    () => import('./views/UserTagsView.vue'),
     false,
     PLATFORM_ROLES
   ),
@@ -1258,7 +1273,7 @@ const operationsDataRoutes: RouteRecordRaw[] = [
 
 // ── Combined exports ───────────────────────────────
 export const appRoutes: RouteRecordRaw[] = [
-  { path: '', redirect: '/operation/dashboard' },
+  { path: '', redirect: '/operation/gmv' },
   operationWorkbenchRoute,
   ...contentLegacyRoutes,
   ...cockpitRoutes,

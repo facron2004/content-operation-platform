@@ -38,9 +38,17 @@ const roleStore = useRoleStore(),
     data,
     error: loadError,
     load
-  } = useApiFetch<CommunitiesResponse>(() => api.getCommunities({ role: roleStore.currentRole }), {
-    errorMessage: '社群数据加载失败，请稍后重试'
-  }),
+  } = useApiFetch<CommunitiesResponse>(
+    (force) =>
+      api.getCommunities({
+        role: roleStore.currentRole,
+        ...(force ? { force: true } : {})
+      }),
+    {
+      errorMessage: '社群数据加载失败，请稍后重试',
+      cacheKeyPattern: '/content/communities'
+    }
+  ),
   communities = computed(() => data.value?.items ?? []),
   pushRows = computed(() => buildCommunityPushRows(communities.value)),
   // Residual #278
@@ -57,7 +65,7 @@ const roleStore = useRoleStore(),
 onMounted(() => load());
 watch(
   () => roleStore.currentRole,
-  () => load(true)
+  () => load()
 );
 </script>
 <style src="../styles/views/communities.css" scoped></style>

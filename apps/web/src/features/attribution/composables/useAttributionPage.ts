@@ -3,6 +3,7 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import { useRoleStore } from '../../../stores/role';
 import { api } from '../../../services/api';
 import { extractErrorMessage } from '../../../services/http-client';
+import { canManageAttribution } from '../../write-action-permissions';
 import { EMPTY_UNMATCHED_ORDERS, mapUnmatchedOrdersResponse } from './attribution-core';
 import type { UnmatchedOrder } from '../../../services/api/attribution.api';
 
@@ -26,7 +27,9 @@ export function useAttributionPage() {
   const requestId = ref(0);
   let disposed = false;
   let actionRequestId = 0;
-  const canManage = computed(() => roleStore.permissions.includes('attribution:manage'));
+  const canManage = computed(() =>
+    canManageAttribution(roleStore.effectiveRoles, roleStore.permissions)
+  );
 
   async function load() {
     if (disposed) return;
@@ -85,6 +88,7 @@ export function useAttributionPage() {
 
   function setBindDialogVisible(value: boolean) {
     if (value) {
+      if (!canManage.value) return;
       bindDialogVisible.value = true;
       return;
     }
@@ -96,7 +100,7 @@ export function useAttributionPage() {
   }
 
   async function manualBind() {
-    if (disposed || actionLoading.value) return;
+    if (disposed || !canManage.value || actionLoading.value) return;
     const order = bindOrder.value;
     const taskId = bindTaskId.value.trim();
     if (!order || !taskId) {
@@ -133,7 +137,7 @@ export function useAttributionPage() {
     } catch {
       return;
     }
-    if (disposed) return;
+    if (disposed || !canManage.value) return;
     actionError.value = null;
     const currentActionRequestId = ++actionRequestId;
     actionLoading.value = true;

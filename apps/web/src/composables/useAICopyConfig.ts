@@ -47,10 +47,11 @@ function validateAICopyConfig(form: AICopyConfigForm, status: AICopyStatus | nul
 async function loadAICopyStatusRequest(
   aiStatus: Ref<AICopyStatus | null>,
   sync: (status: AICopyStatus) => void,
-  isCurrent: () => boolean
+  isCurrent: () => boolean,
+  force: boolean
 ) {
   if (!isCurrent()) return;
-  const status = await api.getAICopyStatus();
+  const status = await api.getAICopyStatus(force);
   if (!isCurrent()) return;
   aiStatus.value = status;
   sync(status);
@@ -113,7 +114,7 @@ export function useAICopyConfig() {
     aiStatusError,
     configError,
     configForm,
-    loadAICopyStatus: async () => {
+    loadAICopyStatus: async (force = false) => {
       if (disposed || configSaving.value) return;
       const requestId = ++statusRequestId;
       aiStatusError.value = null;
@@ -121,7 +122,8 @@ export function useAICopyConfig() {
         await loadAICopyStatusRequest(
           aiStatus,
           (status) => syncAICopyConfigForm(configForm, status),
-          () => !disposed && !configSaving.value && requestId === statusRequestId
+          () => !disposed && !configSaving.value && requestId === statusRequestId,
+          force
         );
       } catch (error) {
         if (!disposed && requestId === statusRequestId) {

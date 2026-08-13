@@ -88,7 +88,7 @@ function createDataAnalysisState() {
   let reloadSeq = 0;
   let disposed = false;
 
-  async function reload() {
+  async function reload(force = false) {
     if (disposed) return;
     const seq = ++reloadSeq;
     loading.value = true;
@@ -98,7 +98,8 @@ function createDataAnalysisState() {
       const next = await getDataAnalysisSummary({
         window: q.window,
         date: q.date,
-        endDate: q.endDate
+        endDate: q.endDate,
+        force
       });
       if (disposed || seq !== reloadSeq) return; // superseded by a newer range or disposal
       summary.value = next;
@@ -143,7 +144,7 @@ function createDataAnalysisState() {
   function onPresetChange(next: DataAnalysisPreset) {
     if (disposed) return;
     preset.value = next;
-    if (next !== 'custom') void reload();
+    if (next !== 'custom') void reload(false);
   }
 
   function onCustomRangeChange(range: [string, string] | null) {
@@ -151,7 +152,7 @@ function createDataAnalysisState() {
     customStart.value = range[0];
     customEnd.value = range[1];
     preset.value = 'custom';
-    void reload();
+    void reload(false);
   }
 
   const windowRange = computed(() => {
@@ -180,7 +181,7 @@ function createDataAnalysisState() {
 
   onScopeDispose(dispose);
   onMounted(() => {
-    if (!disposed) void reload();
+    if (!disposed) void reload(false);
   });
 
   return {

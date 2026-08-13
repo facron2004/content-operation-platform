@@ -27,7 +27,12 @@
         <AppleButton size="sm" variant="primary" @click="$emit('open-detail', row)">
           处理卡
         </AppleButton>
-        <AppleButton size="sm" variant="secondary" @click="$emit('resolve', row.alertId)">
+        <AppleButton
+          v-if="canResolve"
+          size="sm"
+          variant="secondary"
+          @click="$emit('resolve', row.alertId)"
+        >
           标记处理
         </AppleButton>
       </div>
@@ -38,6 +43,7 @@
 import type { OperationAlert } from '@content/shared';
 import AppleButton from '../../../components/AppleButton.vue';
 import { alertTypeLabels, riskTagType, levelText } from '../../../utils/labels';
+defineProps<{ canResolve: boolean }>();
 defineEmits<{
   'open-detail': [alert: OperationAlert & { priorityScore?: number }];
   resolve: [alertId: string];

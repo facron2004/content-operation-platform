@@ -9,7 +9,7 @@ defineProps<{
 }>();
 </script>
 <template>
-  <el-table-column label="GMV" width="120" align="right">
+  <el-table-column label="净 GMV" width="120" align="right">
     <template #default="{ row }">¥ {{ formatNumber(row.gmv) }}</template>
   </el-table-column>
   <el-table-column

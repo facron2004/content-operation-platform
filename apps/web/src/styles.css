@@ -231,6 +231,29 @@ select {
   vertical-align: middle;
 }
 
+/* Slim page toolbar that replaces the bulky hero panels. Holds only functional
+   controls (date picker, window toggle, reload, export) right-aligned. */
+.page-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.page-toolbar__group {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.page-toolbar__label {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 500;
+}
+
 .action-cell .apple-btn,
 .button-row .apple-btn {
   flex-shrink: 0;

@@ -12,7 +12,7 @@
     <div v-else class="gmv-channel-table">
       <div class="gmv-channel-thead">
         <span>支付方式</span>
-        <span class="align-right">GMV（元）</span>
+        <span class="align-right">净 GMV（元）</span>
         <span class="align-right">占比</span>
       </div>
       <ul class="gmv-channel-rows">

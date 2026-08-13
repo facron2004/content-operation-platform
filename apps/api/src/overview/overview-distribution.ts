@@ -46,11 +46,13 @@ export async function loadDimDistribution(
 export async function loadOverviewDistribution(
   prisma: PrismaService,
   dim: 'area' | 'category' | 'stale',
-  limit: number
+  limit: number,
+  date?: string,
+  force = false
 ): Promise<OverviewDistributionPayload> {
   const safeLimit = Math.max(1, Math.floor(limit) || 20);
   if (dim === 'area' || dim === 'category') return loadDimDistribution(prisma, dim, safeLimit);
-  const stats = await aggregateStaleBucketStats(prisma);
+  const stats = await aggregateStaleBucketStats(prisma, date, force);
   const all = (['stale_60d', 'stale_30d', 'stale_15d', 'stale_7d', 'normal'] as const)
     .map((bucket) => ({ key: bucket, totalSku: stats[bucket] ?? 0, stockLeft: 0 }))
     .filter((r) => r.totalSku > 0);

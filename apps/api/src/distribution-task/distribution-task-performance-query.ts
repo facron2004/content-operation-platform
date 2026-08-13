@@ -1,4 +1,5 @@
 import { beijingDateKey, shiftDateKey } from '@content/shared';
+import { rateByCount } from '../common';
 import { beijingDayRangeSqlite, sqlDatetimeExclusiveRange } from '../common/sqlite-datetime';
 import { INTERACTIVE_LIST_MAX_DAYS } from '../common/list-date-span';
 import type { PrismaService } from '../prisma/prisma.service';
@@ -97,8 +98,8 @@ export async function getTaskPerformance(prisma: PrismaQuery, taskId: string) {
     visits,
     orders,
     gmv,
-    verifyRate: orders > 0 ? verifyCount / orders : 0,
-    refundRate: orders > 0 ? refundCount / orders : 0,
+    verifyRate: rateByCount(verifyCount, orders),
+    refundRate: rateByCount(refundCount, orders),
     conversionRate: Number(r.conversionRate),
     dateFrom,
     dateTo

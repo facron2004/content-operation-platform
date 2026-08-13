@@ -15,8 +15,29 @@ export interface MarketingTag {
   description: string | null;
   status: string;
   memberCount: number;
+  ruleJson: unknown | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface TagRulePreview {
+  matchedCount: number;
+  sample: Array<{
+    memberId: string;
+    nickname: string | null;
+    phone: string | null;
+    level: string | null;
+    paidOrderCount: number;
+    paidGmvFen: string | null;
+  }>;
+}
+
+export interface TagRuleEvaluation {
+  tag: MarketingTag;
+  matchedCount: number;
+  addedCount: number;
+  removedCount: number;
+  evaluatedAt: string;
 }
 
 export interface UserCoupon {
@@ -234,13 +255,34 @@ export async function listMarketingTags(params: {
 }
 
 export async function createMarketingTag(
-  payload: { name: string; code: string; category: string; tagType?: string; description?: string },
+  payload: {
+    name: string;
+    code: string;
+    category: string;
+    tagType?: string;
+    ruleJson?: string;
+    description?: string;
+  },
   key: string
 ) {
   return (
     await client.post<MarketingTag>(
       '/marketing-private/tags',
       payload,
+      writeHeaders('marketing-tag', key)
+    )
+  ).data;
+}
+
+export async function previewMarketingTagRule(ruleJson: string) {
+  return (await client.post<TagRulePreview>('/marketing-private/tags/preview', { ruleJson })).data;
+}
+
+export async function evaluateMarketingTag(tagId: string, key: string) {
+  return (
+    await client.post<TagRuleEvaluation>(
+      `/marketing-private/tags/${encodeURIComponent(tagId)}/evaluate`,
+      {},
       writeHeaders('marketing-tag', key)
     )
   ).data;
@@ -291,7 +333,6 @@ export async function createMarketingAudience(
     description?: string;
     audienceType: string;
     ruleJson: string;
-    estimatedCount?: number;
   },
   key: string
 ) {
@@ -304,7 +345,7 @@ export async function createMarketingAudience(
   ).data;
 }
 
-export async function refreshMarketingAudience(audienceId: string, key: string) {
+export async function recalculateMarketingAudience(audienceId: string, key: string) {
   return (
     await client.post<Audience>(
       `/marketing-private/audiences/${encodeURIComponent(audienceId)}/refresh`,

@@ -4,36 +4,6 @@
   gap: 16px;
 }
 
-.wp-hero {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-}
-.wp-title {
-  margin: 0;
-  font-size: 20px;
-  font-weight: 700;
-  color: var(--ink, #1d1d1f);
-}
-.wp-sub {
-  margin: 4px 0 0;
-  font-size: 13px;
-  color: var(--muted, #6e6e73);
-}
-.wp-cached {
-  margin-left: 8px;
-  padding: 1px 8px;
-  border-radius: 999px;
-  background: rgba(255, 159, 10, 0.14);
-  color: #ff9f0a;
-  font-size: 11px;
-}
-.wp-actions {
-  display: flex;
-  gap: 8px;
-}
-
 .wp-kpi-row {
   display: grid;
   grid-template-columns: repeat(6, 1fr);

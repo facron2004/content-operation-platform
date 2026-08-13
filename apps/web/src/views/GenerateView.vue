@@ -6,12 +6,7 @@
     <ErrorAlert :message="battleCardError" />
     <ErrorAlert :message="generationError" />
     <ErrorAlert :message="copyError" />
-    <GenerateHeroWorkflow
-      :package-name="selectedPackage?.packageName"
-      :mode-label="generationModeLabel"
-      :copy-count="copies.length"
-      :steps="workflowSteps"
-    />
+    <GenerateWorkflowStrip :steps="workflowSteps" />
     <GenerateConsoleGrid
       v-model:form="form"
       v-model:config-form="configForm"
@@ -31,7 +26,7 @@
       :truncated="listTruncated"
       :limit="listLimit"
       :matched-count="matchedCount"
-      @refresh-status="loadAICopyStatus"
+      @refresh-status="loadAICopyStatus(true)"
       @save-config="saveAICopyConfig"
       @generate="generate"
       @refresh-detail="refreshDetail"
@@ -49,7 +44,7 @@
 import ErrorAlert from '../components/ErrorAlert.vue';
 import BattleCardPanel from '../components/BattleCardPanel.vue';
 import CopyResultsPanel from '../components/CopyResultsPanel.vue';
-import GenerateHeroWorkflow from '../features/generate/components/GenerateHeroWorkflow.vue';
+import GenerateWorkflowStrip from '../features/generate/components/GenerateWorkflowStrip.vue';
 import GenerateConsoleGrid from '../features/generate/components/GenerateConsoleGrid.vue';
 import { useGeneratePage } from '../features/generate/composables/useGeneratePage';
 const {
@@ -88,7 +83,6 @@ const {
   formatDetailItems,
   copyText,
   riskTagType,
-  generationModeLabel,
   workflowSteps
 } = useGeneratePage();
 </script>

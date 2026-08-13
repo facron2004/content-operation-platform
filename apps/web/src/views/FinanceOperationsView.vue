@@ -1,18 +1,10 @@
 <template>
   <section v-loading="loading" class="page-stack finance-operations-view">
-    <div class="finance-operations-hero panel">
-      <div>
-        <p class="eyebrow">V2.0 / FINANCE OPERATIONS</p>
-        <h1>{{ pageMeta.title }}</h1>
-        <p class="hero-description">{{ pageMeta.description }}</p>
-      </div>
-      <div class="finance-operations-hero__actions">
-        <span class="source-pill">Account → AssetLedger</span>
-        <el-button :loading="loading" @click="loadData">
-          <el-icon><Refresh /></el-icon>
-          刷新
-        </el-button>
-      </div>
+    <div class="page-toolbar">
+      <el-button :loading="loading" @click="loadData">
+        <el-icon><Refresh /></el-icon>
+        刷新
+      </el-button>
     </div>
 
     <ErrorAlert :message="error" />

@@ -34,7 +34,7 @@ export interface MovementTodayPayload {
   stagnantSkus: number;
   movingRate: number;
   bucketDistribution: Array<{ bucket: StaleBucket; totalSku: number }>;
-  updatedAt: string;
+  updatedAt: string | null;
 }
 
 export interface MovementSkuRow {

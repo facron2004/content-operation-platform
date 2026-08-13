@@ -1,13 +1,16 @@
 import { computed, onScopeDispose, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { ElMessage } from 'element-plus';
 import {
   getProductCenterProduct,
   getProductCenterProducts,
+  syncMerchantsFromJeeSite,
   type ProductCenterDetailResponse,
   type ProductCenterItem,
   type ProductCenterListResponse,
   type ProductInventoryStatus
 } from '../../services/api/product-center.api';
+import { useRoleStore } from '../../stores/role';
 import { formatFenYuan } from '../../utils/format';
 
 const PAGE_SIZE = 20;
@@ -15,6 +18,7 @@ const PAGE_SIZE = 20;
 export function useProductCenter() {
   const route = useRoute();
   const router = useRouter();
+  const roleStore = useRoleStore();
   const search = ref(typeof route.query.search === 'string' ? route.query.search : '');
   const inventoryStatus = ref<ProductInventoryStatus>(
     typeof route.query.inventoryStatus === 'string' &&
@@ -25,6 +29,7 @@ export function useProductCenter() {
   const page = ref(Number(route.query.page) > 0 ? Number(route.query.page) : 1);
   const loading = ref(false);
   const detailLoading = ref(false);
+  const syncing = ref(false);
   const error = ref<string | null>(null);
   const detailError = ref<string | null>(null);
   const items = ref<ProductCenterItem[]>([]);
@@ -89,6 +94,41 @@ export function useProductCenter() {
     } finally {
       if (!disposed && requestId === listRequestId) loading.value = false;
     }
+  }
+
+  /**
+   * 「同步并刷新」：admin 先触发 JeeSite 同步把 ContentPackage 写到最新，再 reload 本地列表。
+   * 非 admin 或同步失败时降级为仅 reload 本地数据，保证按钮始终可用。
+   */
+  async function syncAndReload() {
+    if (disposed || syncing.value) return;
+    if (!roleStore.isAdmin) {
+      await reload();
+      return;
+    }
+    syncing.value = true;
+    try {
+      ElMessage.info('正在从 JeeSite 同步套餐数据…');
+      const result = await syncMerchantsFromJeeSite();
+      if (disposed) return;
+      if (result.skipped) {
+        ElMessage.info('JeeSite 同步正在进行中，已重新加载本地数据');
+      } else {
+        ElMessage.success(
+          `已同步 ${result.packagesPersisted} 条套餐` +
+            (result.upserted ? `，${result.upserted} 家商家` : '')
+        );
+      }
+    } catch (cause) {
+      if (disposed) return;
+      ElMessage.warning(
+        `JeeSite 同步失败：${cause instanceof Error ? cause.message : '未知错误'}；已重新加载本地数据`
+      );
+    } finally {
+      if (!disposed) syncing.value = false;
+    }
+    if (disposed) return;
+    await reload();
   }
 
   async function loadDetail(packageId: string) {
@@ -200,6 +240,7 @@ export function useProductCenter() {
     page,
     loading,
     detailLoading,
+    syncing,
     error,
     detailError,
     items,
@@ -209,6 +250,7 @@ export function useProductCenter() {
     summary,
     pagination,
     reload,
+    syncAndReload,
     applyFilters,
     setPage,
     selectProduct,

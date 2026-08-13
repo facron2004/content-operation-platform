@@ -6,6 +6,7 @@ export type MoneyDayTotals = {
   date: string;
   totalGmvFen: bigint | null;
   paidOrderCount: number;
+  updatedAt: string | null;
   dataSource: MoneyDataSource;
   emptyReason?: string;
 };
@@ -19,6 +20,7 @@ export type MoneyPrisma = {
         totalGmvFen?: boolean;
         totalRefundFen?: boolean;
         paidOrderCount?: boolean;
+        updatedAt?: boolean;
         date?: boolean;
         gmvOnlineFen?: boolean;
         gmvWalletFen?: boolean;
@@ -28,6 +30,7 @@ export type MoneyPrisma = {
       totalGmvFen: bigint | null;
       totalRefundFen?: bigint | null;
       paidOrderCount: number;
+      updatedAt: Date;
       gmvOnlineFen?: bigint | null;
       gmvWalletFen?: bigint | null;
     } | null>;

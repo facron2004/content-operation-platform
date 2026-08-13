@@ -42,7 +42,7 @@ export class WelfarePointService {
 
   /** List (paginated + filtered) raw records. */
   async query(q: WelfarePointQueryDto): Promise<WelfarePointQueryResult> {
-    const { rows } = await this.getDataset(Boolean(q.reload));
+    const { rows } = await this.getDataset(false);
     const filtered = this.applyFilters(rows, q);
     const total = filtered.length;
     const page = q.page ?? 1;
@@ -54,14 +54,20 @@ export class WelfarePointService {
 
   /** Dashboard aggregations over the (filtered) dataset. */
   async summary(q: WelfarePointQueryDto): Promise<WelfarePointSummary> {
-    const { rows, cached } = await this.getDataset(Boolean(q.reload));
+    const { rows, cached } = await this.getDataset(false);
     return this.aggregate(this.applyFilters(rows, q), cached);
   }
 
   /** Full filtered record set (for CSV export / offline use). */
   async exportRows(q: WelfarePointQueryDto): Promise<WelfarePointRecord[]> {
-    const { rows } = await this.getDataset(Boolean(q.reload));
+    const { rows } = await this.getDataset(false);
     return this.applyFilters(rows, q);
+  }
+
+  /** Refreshes the one shared dataset before summary/list reads are issued. */
+  async refresh(): Promise<{ total: number; refreshedAt: string }> {
+    const { rows } = await this.getDataset(true);
+    return { total: rows.length, refreshedAt: new Date().toISOString() };
   }
 
   // ---- internals ------------------------------------------------------------
@@ -69,7 +75,9 @@ export class WelfarePointService {
   /** Returns the dataset plus whether it was served from the in-memory snapshot.
    *  `cached` must reflect a real cache hit — callers surface it in the UI, so
    *  deriving it from the `reload` flag alone would mislabel the first pull. */
-  private async getDataset(force: boolean): Promise<{ rows: WelfarePointRecord[]; cached: boolean }> {
+  private async getDataset(
+    force: boolean
+  ): Promise<{ rows: WelfarePointRecord[]; cached: boolean }> {
     if (!force) {
       const hit = this.datasetCache.get<WelfarePointRecord[]>(DATASET_KEY);
       if (hit) return { rows: hit, cached: true };
@@ -113,7 +121,11 @@ export class WelfarePointService {
       }
     };
 
-    const readPage = async (pageNo: number, useCookie: string, retries = 1): Promise<JeeSiteEnvelope> => {
+    const readPage = async (
+      pageNo: number,
+      useCookie: string,
+      retries = 1
+    ): Promise<JeeSiteEnvelope> => {
       for (let attempt = 0; attempt <= retries; attempt++) {
         try {
           return await fetchPage(pageNo, useCookie);
@@ -124,7 +136,9 @@ export class WelfarePointService {
             if (fresh) return readPage(pageNo, fresh, retries - 1);
           }
           if (attempt === retries) {
-            throw new ServiceUnavailableException(`拉取福利金第 ${pageNo} 页失败: ${describeError(err)}`);
+            throw new ServiceUnavailableException(
+              `拉取福利金第 ${pageNo} 页失败: ${describeError(err)}`
+            );
           }
         }
       }
@@ -151,21 +165,21 @@ export class WelfarePointService {
           if (r.status === 'fulfilled' && Array.isArray(r.value.data?.list)) {
             merged.push(...r.value.data!.list!);
           } else if (r.status === 'rejected') {
-            this.logger.warn(`福利金分页拉取部分失败: ${describeError((r as PromiseRejectedResult).reason)}`);
+            this.logger.warn(
+              `福利金分页拉取部分失败: ${describeError((r as PromiseRejectedResult).reason)}`
+            );
           }
         }
       }
     }
 
-    this.logger.log(`福利金数据集拉取完成: ${merged.length} 条 (count=${count}, pages=${totalPages})`);
+    this.logger.log(
+      `福利金数据集拉取完成: ${merged.length} 条 (count=${count}, pages=${totalPages})`
+    );
     return normalizeWelfarePointList(merged as never);
   }
 
-  private async postWithTimeout(
-    url: string,
-    cookie: string,
-    pageNo: number
-  ): Promise<Response> {
+  private async postWithTimeout(url: string, cookie: string, pageNo: number): Promise<Response> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
     try {
@@ -185,10 +199,7 @@ export class WelfarePointService {
     }
   }
 
-  private applyFilters(
-    rows: WelfarePointRecord[],
-    q: WelfarePointQueryDto
-  ): WelfarePointRecord[] {
+  private applyFilters(rows: WelfarePointRecord[], q: WelfarePointQueryDto): WelfarePointRecord[] {
     const phone = q.phone?.trim();
     const pointType = q.pointType;
     const sourceType = q.sourceType?.trim();
@@ -264,7 +275,12 @@ export class WelfarePointService {
       // by type
       let bt = byTypeMap.get(r.pointType);
       if (!bt) {
-        bt = { key: r.pointType, label: POINT_TYPE_LABELS[r.pointType] ?? String(r.pointType), amount: 0, count: 0 };
+        bt = {
+          key: r.pointType,
+          label: POINT_TYPE_LABELS[r.pointType] ?? String(r.pointType),
+          amount: 0,
+          count: 0
+        };
         byTypeMap.set(r.pointType, bt);
       }
       bt.amount += amount;

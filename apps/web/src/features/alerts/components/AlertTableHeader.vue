@@ -3,6 +3,7 @@
     <template #actions>
       <span class="muted-cell">共 {{ total }} 条，当前页 {{ pageCount }} 条</span>
       <AppleButton
+        v-if="canResolve"
         variant="success"
         :disabled="!pageCount"
         :loading="resolving"
@@ -26,6 +27,7 @@ defineProps<{
   total: number;
   pageCount: number;
   resolving: boolean;
+  canResolve: boolean;
   currentPageDangerCount: number;
   currentPageWarningCount: number;
   currentPageAvgScore: number | string;

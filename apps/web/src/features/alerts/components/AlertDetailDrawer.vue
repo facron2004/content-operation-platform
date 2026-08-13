@@ -2,6 +2,7 @@
   <el-drawer v-model="visible" title="预警处理卡" size="440px" class="alert-drawer">
     <AlertDetailBody
       :alert="alert"
+      :can-resolve="canResolve"
       @close="visible = false"
       @go-analysis="emit('go-analysis', $event)"
       @go-battle="emit('go-battle', $event)"
@@ -16,6 +17,7 @@ import AlertDetailBody from './AlertDetailBody.vue';
 const props = defineProps<{
   modelValue: boolean;
   alert: (OperationAlert & { priorityScore?: number }) | null;
+  canResolve: boolean;
 }>();
 const emit = defineEmits<{
   (e: 'update:modelValue', value: boolean): void;

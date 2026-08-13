@@ -13,6 +13,7 @@ import { resolveScopedQuery } from '../user-access/data-scope';
 import { assertPackageInScope, assertPackagesInScope } from '../user-access/scope-guards';
 import { PrismaService } from '../prisma/prisma.service';
 import { createDtoPipe } from '../common/dto-pipe';
+import { hasForceSignal } from '../common/force-signal';
 
 type AuthUser = {
   userId: string;
@@ -82,6 +83,7 @@ export class AlertController {
       areaIds: scoped.areaIds,
       merchantIds: scoped.merchantIds
     };
+    const force = hasForceSignal(req, query);
     return this.alertService.getOperationAlerts(
       {
         role: query.role,
@@ -93,19 +95,23 @@ export class AlertController {
         pageSize: query.pageSize
       },
       (q) =>
-        this.contentService.getRecommendations({
-          ...q,
-          // Prefer alert query date so inventory window matches the as-of day
-          // operators are inspecting (not always "today").
-          date: query.date ?? q.date,
-          areaId: scope.areaId ?? q.areaId,
-          merchantId: scope.merchantId ?? q.merchantId,
-          areaIds: scope.areaIds,
-          merchantIds: scope.merchantIds
-        }),
+        this.contentService.getRecommendations(
+          {
+            ...q,
+            // Prefer alert query date so inventory window matches the as-of day
+            // operators are inspecting (not always "today").
+            date: query.date ?? q.date,
+            areaId: scope.areaId ?? q.areaId,
+            merchantId: scope.merchantId ?? q.merchantId,
+            areaIds: scope.areaIds,
+            merchantIds: scope.merchantIds
+          },
+          force
+        ),
       // Scope must be part of the alert aggregate key so multi-tenant operators
       // never share a ranked list (recommend callback already scopes packages).
-      scope
+      scope,
+      force
     );
   }
 

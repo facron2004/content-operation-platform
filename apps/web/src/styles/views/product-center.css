@@ -2,18 +2,12 @@
   gap: var(--page-gap);
 }
 
-.product-center-hero {
+.product-center-topbar {
   display: flex;
-  align-items: stretch;
-  justify-content: space-between;
-  gap: 18px;
-  padding: 16px 18px;
-  background:
-    radial-gradient(circle at 92% 0%, rgba(var(--accent-rgb), 0.12), transparent 34%),
-    linear-gradient(180deg, var(--panel) 0%, var(--soft) 100%);
+  align-items: center;
+  justify-content: flex-end;
 }
 
-.product-center-hero h1,
 .section-heading h2,
 .product-detail-header h2 {
   margin: 4px 0 0;
@@ -22,26 +16,6 @@
   letter-spacing: -0.02em;
 }
 
-.product-center-hero h1 {
-  font-size: 24px;
-}
-
-.hero-description {
-  max-width: 62ch;
-  margin: 8px 0 0;
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.5;
-}
-
-.product-center-hero__actions {
-  display: flex;
-  align-items: flex-end;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.source-pill,
 .section-meta {
   display: inline-flex;
   align-items: center;
@@ -380,10 +354,6 @@
 }
 
 @media (max-width: 760px) {
-  .product-center-hero {
-    flex-direction: column;
-  }
-
   .product-center-metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }

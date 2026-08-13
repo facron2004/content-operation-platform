@@ -68,8 +68,20 @@ export class CreateTagDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(8000)
+  ruleJson?: string;
+
+  @IsOptional()
+  @IsString()
   @MaxLength(200)
   description?: string;
+}
+
+export class PreviewTagRuleDto {
+  @IsString()
+  @MinLength(2)
+  @MaxLength(8000)
+  ruleJson!: string;
 }
 
 export class AudienceQueryDto extends MarketingPageQueryDto {
@@ -105,13 +117,6 @@ export class CreateAudienceDto {
   @MinLength(2)
   @MaxLength(4000)
   ruleJson!: string;
-
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(0)
-  @Max(100000000)
-  estimatedCount?: number;
 }
 
 export class CampaignQueryDto extends MarketingPageQueryDto {

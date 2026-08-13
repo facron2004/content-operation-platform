@@ -243,7 +243,7 @@ export async function refreshGmvCockpit(options: {
   const isCurrent = options.isCurrent ?? (() => true);
   if (!isCurrent()) return;
   options.loading.value = true;
-  options.statusText.value = '准备刷新…';
+  options.statusText.value = '准备同步…';
   options.loadError.value = null;
   try {
     // 使用当前看板日期刷新，避免用户查看历史日期时只刷新了今天。
@@ -261,17 +261,20 @@ export async function refreshGmvCockpit(options: {
       throw new Error(job.error ?? '刷新失败');
     }
     const etlResult = job.result;
-    if (!etlResult) throw new Error('刷新任务未完成');
+    if (!etlResult) throw new Error('同步任务未完成');
     const warningSummary = refreshWarningSummary(etlResult);
     if (warningSummary) {
-      ElMessage.warning(`刷新完成，但${warningSummary}，当前页面可能仍是旧数据`);
+      ElMessage.warning(`同步完成，但${warningSummary}，当前页面可能仍是旧数据`);
     } else if (etlResult.upserted > 0) {
       ElMessage.success(`已拉取 ${etlResult.upserted} 单 (${etlResult.pagesFetched} 页)`);
     } else {
-      ElMessage.info('刷新完成，JeSite 没有返回新增订单');
+      ElMessage.info('同步完成，JeeSite 没有返回新增订单');
     }
-  } catch {
-    if (isCurrent()) ElMessage.warning('拉取 JeSite 失败,使用本地数据');
+  } catch (error) {
+    if (isCurrent()) {
+      options.loadError.value = `${extractErrorMessage(error, '同步 JeeSite 失败')}；已重新加载本地数据`;
+      ElMessage.warning(options.loadError.value);
+    }
   }
   if (!isCurrent()) return;
   try {

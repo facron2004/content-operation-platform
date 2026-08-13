@@ -2,10 +2,10 @@
 import { shiftDateKey } from '@content/shared';
 import {
   beijingDayRangeSqlite,
-  floorNonNegativeFen,
   rateByCount,
   SQL_GMV_OH,
   sqlBeijingDate,
+  sqlDatetime,
   sqlDatetimeExclusiveRange,
   toFenBigInt
 } from '../common';
@@ -31,18 +31,35 @@ function bounds(w: Window): { startBound: string; endBound: string } {
 export async function loadOrderHeaderRangeGmv(
   prisma: PrismaService,
   w: Window
-): Promise<{ totalGmvFen: bigint; paidOrderCount: number }> {
+): Promise<{ totalGmvFen: bigint; paidOrderCount: number; sourceUpdatedAt: string | null }> {
   const { startBound, endBound } = bounds(w);
   const dayRows = (await prisma.$queryRawUnsafe(
-    `SELECT COALESCE(SUM(${SQL_GMV_OH}), 0) AS "totalGmvFen", COUNT(CASE WHEN "paidTime" IS NOT NULL THEN 1 END) AS "paidOrderCount" FROM "OrderHeader" WHERE ${sqlDatetimeExclusiveRange('"paidTime"')}`,
+    `SELECT COALESCE(SUM(${SQL_GMV_OH}), 0) AS "totalGmvFen", COUNT(CASE WHEN "paidTime" IS NOT NULL THEN 1 END) AS "paidOrderCount", MAX(${sqlDatetime('"updatedAt"')}) AS "sourceUpdatedAt" FROM "OrderHeader" WHERE ${sqlDatetimeExclusiveRange('"paidTime"')}`,
     startBound,
     endBound
-  )) as Array<{ totalGmvFen: bigint | null; paidOrderCount: number }>;
-  const r = dayRows[0] ?? { totalGmvFen: 0n, paidOrderCount: 0 };
+  )) as Array<{
+    totalGmvFen: bigint | null;
+    paidOrderCount: number;
+    sourceUpdatedAt: string | Date | null;
+  }>;
+  const r = dayRows[0] ?? { totalGmvFen: 0n, paidOrderCount: 0, sourceUpdatedAt: null };
   return {
     totalGmvFen: toFenBigInt(r.totalGmvFen),
-    paidOrderCount: Number(r.paidOrderCount ?? 0)
+    paidOrderCount: Number(r.paidOrderCount ?? 0),
+    sourceUpdatedAt: sourceUpdatedAtIso(r.sourceUpdatedAt)
   };
+}
+
+/** SQLite datetime() returns UTC without a zone suffix; normalize it for the API contract. */
+function sourceUpdatedAtIso(value: string | Date | null | undefined): string | null {
+  if (value == null || value === '') return null;
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value.toISOString();
+  const raw = String(value).trim();
+  if (!raw) return null;
+  const normalized = raw.includes('T') ? raw : raw.replace(' ', 'T');
+  const hasZone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(normalized);
+  const parsed = new Date(hasZone ? normalized : `${normalized}Z`);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
 }
 
 // --- refund-order-header-range-events.ts ---
@@ -117,8 +134,7 @@ export async function topRefundMerchants(prisma: PrismaService, w: Window, limit
     amountAlias: 'refundFen'
   });
   return rows.map((r) => {
-    // Net GMV floored at 0 (refund can exceed recognized GMV for 0-paid orders).
-    const gmv = Number(floorNonNegativeFen(toFenBigInt(r.gmvFen))) / 100;
+    const gmv = Number(toFenBigInt(r.gmvFen)) / 100;
     const refund = Number(r.refundFen ?? 0) / 100;
     const paidOrderCount = Number(r.paidOrderCount ?? 0);
     return {
@@ -143,19 +159,19 @@ export async function computeRefundFromOrderHeader(
   w: Window,
   topRefundMerchants: TopRefundFn
 ): Promise<RefundTodayPayload> {
-  const { totalGmvFen, paidOrderCount } = await loadOrderHeaderRangeGmv(prisma, w);
+  const { totalGmvFen, paidOrderCount, sourceUpdatedAt } = await loadOrderHeaderRangeGmv(prisma, w);
   const { totalRefundFen, refundCount } = await loadOrderHeaderRangeRefundTotals(prisma, w);
   return {
     date: w.end,
     totalRefund: Number(totalRefundFen) / 100,
-    // Net GMV (gross − refund) floored at 0 so the card never shows negative.
-    totalGmv: Number(floorNonNegativeFen(totalGmvFen)) / 100,
+    // Preserve signed net GMV so refunds exceeding recognized sales remain auditable.
+    totalGmv: Number(totalGmvFen) / 100,
     // Unified 单数口径: 退款单数 / 支付单数.
     refundRate: rateByCount(refundCount, paidOrderCount),
     refundCount,
     paidOrderCount,
     topRefundMerchants: await topRefundMerchants(w, 5),
-    updatedAt: new Date().toISOString()
+    updatedAt: sourceUpdatedAt
   };
 }
 export async function topVerifyMerchants(prisma: PrismaService, w: Window, limit: number) {
@@ -164,8 +180,7 @@ export async function topVerifyMerchants(prisma: PrismaService, w: Window, limit
     amountAlias: 'verifyFen'
   });
   return rows.map((r) => {
-    // Net GMV floored at 0 (refund can exceed recognized GMV for 0-paid orders).
-    const gmv = Number(floorNonNegativeFen(toFenBigInt(r.gmvFen))) / 100;
+    const gmv = Number(toFenBigInt(r.gmvFen)) / 100;
     const verify = Number(r.verifyFen ?? 0) / 100;
     const paidOrderCount = Number(r.paidOrderCount ?? 0);
     return {
@@ -183,19 +198,19 @@ export async function computeVerifyFromOrderHeader(
   w: Window,
   topVerifyMerchants: TopVerifyFn
 ): Promise<RefundVerifyTodayPayload> {
-  const { totalGmvFen, paidOrderCount } = await loadOrderHeaderRangeGmv(prisma, w);
+  const { totalGmvFen, paidOrderCount, sourceUpdatedAt } = await loadOrderHeaderRangeGmv(prisma, w);
   const { totalVerifyFen, verifyCount } = await loadOrderHeaderRangeVerifyTotals(prisma, w);
   return {
     date: w.end,
     totalVerify: Number(totalVerifyFen) / 100,
-    // Net GMV (gross − refund) floored at 0 so the card never shows negative.
-    totalGmv: Number(floorNonNegativeFen(totalGmvFen)) / 100,
+    // Preserve signed net GMV so the verify view uses the same GMV denominator.
+    totalGmv: Number(totalGmvFen) / 100,
     // Unified 单数口径: 核销单数 / 支付单数.
     verifyRate: rateByCount(verifyCount, paidOrderCount),
     verifyCount,
     paidOrderCount,
     topVerifyMerchants: await topVerifyMerchants(w, 5),
-    updatedAt: new Date().toISOString()
+    updatedAt: sourceUpdatedAt
   };
 }
 

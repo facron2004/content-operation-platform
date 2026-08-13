@@ -21,6 +21,7 @@ import {
   CreateMerchantApplicationDto,
   MerchantApplicationQueryDto,
   MerchantApplicationReviewDto,
+  MerchantForceQueryDto,
   MerchantTrendQueryDto,
   MerchantsListQueryDto
 } from './merchant.dto';
@@ -33,6 +34,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { IdempotencyGuard } from '../idempotency/idempotency.guard';
 import { IdempotencyInterceptor } from '../idempotency/idempotency.interceptor';
 import { RequireIdempotency } from '../idempotency/require-idempotency.decorator';
+import { hasForceSignal } from '../common/force-signal';
 
 type AuthUser = {
   userId: string;
@@ -75,7 +77,8 @@ export class MerchantController {
       {
         merchantIds: scoped.merchantIds ?? (scoped.merchantId ? [scoped.merchantId] : undefined),
         areaIds: scoped.areaIds
-      }
+      },
+      hasForceSignal(req, query)
     );
   }
 
@@ -225,10 +228,14 @@ export class MerchantController {
   @RequirePermissions('merchant:read')
   @Throttle({ long: { limit: 30, ttl: 60000 } })
   @ApiOperation({ summary: '商家画像' })
-  async profile(@Param('merchantId') merchantId: string, @Req() req: Request) {
+  async profile(
+    @Param('merchantId') merchantId: string,
+    @Query(createDtoPipe(MerchantForceQueryDto)) query: MerchantForceQueryDto,
+    @Req() req: Request
+  ) {
     const id = safePathId(merchantId);
     await this.assertMerchantAccess(id, req);
-    return this.service.getProfile(id);
+    return this.service.getProfile(id, hasForceSignal(req, query));
   }
 
   @Get(':merchantId/trend')
@@ -256,7 +263,7 @@ export class MerchantController {
   ) {
     const id = safePathId(merchantId);
     await this.assertMerchantAccess(id, req);
-    return this.service.listSkus(id, query);
+    return this.service.listSkus(id, query, hasForceSignal(req, query));
   }
 
   @Get(':merchantId/competitors')

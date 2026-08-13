@@ -54,7 +54,7 @@ export class ContentService implements OnModuleInit, OnModuleDestroy {
     this.aiCopyService = aiCopyService;
     this.dailyInventoryCrawler = crawler;
     this.delegates = createContentDelegates({
-      getRecommendations: (q) => this.getRecommendations(q),
+      getRecommendations: (q, force) => this.getRecommendations(q, force),
       dataSource,
       dailyInventoryCrawler: crawler,
       warn: (msg) => logger.warn(msg)
@@ -168,9 +168,9 @@ export class ContentService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  async getRecommendations(query: RecommendQuery) {
+  async getRecommendations(query: RecommendQuery, force = false) {
     try {
-      return await this.runtime.getRecommendations(query);
+      return await this.runtime.getRecommendations(query, force);
     } catch (err) {
       if (err instanceof Error && err.name === 'HeavyAggregateQueueFullError') {
         throw new ConflictException('推荐计算繁忙，请稍后再试');
@@ -215,9 +215,10 @@ export class ContentService implements OnModuleInit, OnModuleDestroy {
 
   getCommunities(
     role?: UserRole,
-    scope?: { areaId?: string; merchantId?: string; areaIds?: string[]; merchantIds?: string[] }
+    scope?: { areaId?: string; merchantId?: string; areaIds?: string[]; merchantIds?: string[] },
+    force = false
   ) {
-    return this.delegates.getCommunities(role, scope);
+    return this.delegates.getCommunities(role, scope, force);
   }
 
   getCommunityRecommendations(

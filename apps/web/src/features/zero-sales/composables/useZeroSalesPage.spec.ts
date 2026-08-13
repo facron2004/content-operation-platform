@@ -123,6 +123,20 @@ describe('zero sales summary request lifecycle', () => {
     expect(page.summaryLoading.value).toBe(false);
   });
 
+  it('forces every overview summary request on manual reload', async () => {
+    scope = effectScope();
+    const page = scope.run(() => useZeroSalesPage())!;
+    await page.loadDim('category');
+    mocks.getOverviewKpis.mockClear();
+    mocks.getOverviewDistribution.mockClear();
+
+    await page.reloadAll();
+
+    expect(mocks.getOverviewKpis).toHaveBeenCalledWith(undefined, true);
+    expect(mocks.getOverviewDistribution).toHaveBeenCalledWith('stale', 10, undefined, true);
+    expect(mocks.getOverviewDistribution).toHaveBeenCalledWith('category', 12, undefined, true);
+  });
+
   it('keeps the latest dimension distribution when the operator switches quickly', async () => {
     const first = createDeferred<OverviewDistributionResponse>();
     const second = createDeferred<OverviewDistributionResponse>();
@@ -135,6 +149,8 @@ describe('zero sales summary request lifecycle', () => {
 
     const firstLoad = page.loadDim('area');
     const secondLoad = page.loadDim('category');
+    expect(mocks.getOverviewDistribution).toHaveBeenNthCalledWith(1, 'area', 12);
+    expect(mocks.getOverviewDistribution).toHaveBeenNthCalledWith(2, 'category', 12);
     second.resolve(distribution('category-new'));
     await secondLoad;
     first.resolve(distribution('area-old'));

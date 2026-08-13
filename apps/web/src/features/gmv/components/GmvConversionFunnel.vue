@@ -1,12 +1,12 @@
 <template>
   <section class="panel chart-card gmv-funnel-card">
     <header class="gmv-funnel-header">
-      <h3>转化漏斗（今日）</h3>
+      <h3>履约与退款（所选经营日）</h3>
     </header>
     <EmptyState
       v-if="stages.length === 0"
-      title="暂无转化数据"
-      description="订单支付和核销数据同步后自动计算转化漏斗"
+      title="暂无履约数据"
+      description="订单支付、核销和退款数据同步后自动计算"
     />
     <div v-else class="gmv-funnel-visual">
       <!-- Funnel pyramid visualization -->
@@ -19,7 +19,7 @@
           :style="{ background: stage.color, width: widthFor(stage) + '%' }"
         >
           <span class="funnel-tier-label">{{ stage.label }}</span>
-          <strong class="funnel-tier-value">{{ formatNumber(stage.value) }}</strong>
+          <strong class="funnel-tier-value">¥ {{ formatNumber(stage.value) }}</strong>
         </div>
       </div>
       <!-- Detail rows -->
@@ -27,7 +27,7 @@
         <li v-for="(stage, idx) in stages" :key="stage.label" class="gmv-funnel-row">
           <div class="gmv-funnel-meta-cell">
             <span class="gmv-funnel-stage-label">{{ stage.label }}</span>
-            <span class="gmv-funnel-stage-value">{{ formatNumber(stage.value) }}</span>
+            <span class="gmv-funnel-stage-value">¥ {{ formatNumber(stage.value) }}</span>
           </div>
           <div class="gmv-funnel-bar-wrap">
             <div
@@ -36,10 +36,11 @@
             />
           </div>
           <span class="gmv-funnel-rate">
-            {{ idx === 0 ? '100%' : formatPercentRaw(stage.rate * 100) }}
-          </span>
-          <span v-if="idx > 0" class="gmv-funnel-delta" :class="deltaClass(stage)">
-            较上阶 {{ stageDelta(stage) }}
+            {{
+              idx === 0
+                ? stage.rateLabel
+                : `${stage.rateLabel} ${formatPercentRaw(stage.rate * 100)}`
+            }}
           </span>
         </li>
       </ul>
@@ -56,6 +57,7 @@ type FunnelStage = {
   label: string;
   value: number;
   rate: number;
+  rateLabel: string;
   color: string;
 };
 
@@ -66,17 +68,6 @@ const top = computed(() => props.stages[0]?.value ?? 0);
 function widthFor(stage: FunnelStage) {
   if (!top.value) return 20;
   return Math.max(18, (stage.value / top.value) * 100);
-}
-
-function stageDelta(stage: FunnelStage): string {
-  const pct = (stage.rate * 100).toFixed(1);
-  return `${pct}%`;
-}
-
-function deltaClass(stage: FunnelStage): string {
-  if (stage.rate >= 0.6) return 'delta-good';
-  if (stage.rate >= 0.3) return 'delta-warn';
-  return 'delta-bad';
 }
 </script>
 
@@ -167,7 +158,7 @@ function deltaClass(stage: FunnelStage): string {
 
 .gmv-funnel-row {
   display: grid;
-  grid-template-columns: 90px 1fr 48px auto;
+  grid-template-columns: 100px 1fr minmax(110px, auto);
   gap: 10px;
   align-items: center;
   min-width: 0;
@@ -214,22 +205,5 @@ function deltaClass(stage: FunnelStage): string {
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   text-align: right;
-}
-
-.gmv-funnel-delta {
-  font-size: 11px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-.delta-good {
-  color: #12b76a;
-}
-.delta-warn {
-  color: #f79009;
-}
-.delta-bad {
-  color: #f04438;
 }
 </style>

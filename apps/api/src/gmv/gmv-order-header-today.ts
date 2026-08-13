@@ -120,11 +120,23 @@ export function buildOrderHeaderTodayPayload(
     monthGmvFen,
     monthGmvOnlineFen,
     monthGmvWalletFen,
-    platformCommission: 0,
     compare,
-    updatedAt: new Date().toISOString(),
+    updatedAt: sourceUpdatedAtIso(gmvRow.sourceUpdatedAt),
     dataSource: 'OrderHeader'
   };
+}
+
+/** SQLite datetime() returns UTC without a zone suffix; normalize it for the API contract. */
+function sourceUpdatedAtIso(value: string | Date | null | undefined): string | null {
+  if (value == null || value === '') return null;
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value.toISOString();
+
+  const raw = String(value).trim();
+  if (!raw) return null;
+  const normalized = raw.includes('T') ? raw : raw.replace(' ', 'T');
+  const hasZone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(normalized);
+  const parsed = new Date(hasZone ? normalized : `${normalized}Z`);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
 }
 
 // Small helper to keep the month wallet assignment readable and typo-safe.

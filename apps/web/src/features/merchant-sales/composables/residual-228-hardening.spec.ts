@@ -26,16 +26,11 @@ describe('residual #228 merchant-sales as-of date', () => {
     expect(src).toMatch(/postMerchantSalesRefresh\(\{ startDate: start, endDate: end \}/);
   });
 
-  it('MerchantSalesHero exposes date picker', async () => {
-    const src = await readFile(path.join(__dirname, '../components/MerchantSalesHero.vue'), 'utf8');
-    expect(src).toMatch(/el-date-picker/);
-    expect(src).toMatch(/update:kpiDate/);
-    expect(src).toMatch(/date-change/);
-  });
-
-  it('MerchantSalesView wires kpiDate v-model + date-change reload', async () => {
+  it('MerchantSalesView exposes date picker + reload in toolbar', async () => {
     const src = await readFile(path.join(srcRoot, 'views/MerchantSalesView.vue'), 'utf8');
-    expect(src).toMatch(/v-model:kpi-date="page\.kpiDate"/);
-    expect(src).toMatch(/@date-change="page\.reload"/);
+    expect(src).toMatch(/el-date-picker/);
+    expect(src).toMatch(/onKpiDateChange/);
+    expect(src).toMatch(/page\.kpiDate = next/);
+    expect(src).toMatch(/page\.reload/);
   });
 });

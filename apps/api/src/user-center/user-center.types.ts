@@ -1,5 +1,8 @@
 export interface UserCenterMemberItem {
   memberId: string;
+  inviteCode: string | null;
+  parentInviteCode: string | null;
+  downlineCount: number;
   nickname: string | null;
   phone: string | null;
   level: string | null;

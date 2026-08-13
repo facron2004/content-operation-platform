@@ -36,25 +36,28 @@ export class MovementService {
 
   constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
 
-  getToday(date?: string) {
-    return loadMovementToday(this.prisma, this.cache, date);
+  getToday(date?: string, force = false) {
+    return loadMovementToday(this.prisma, this.cache, date, force);
   }
 
-  async listMoving(p: {
-    days: 1 | 7 | 30;
-    page: number;
-    pageSize: number;
-    merchantId?: string;
-    merchantIds?: string[];
-    category?: string;
-    areaId?: string;
-    areaIds?: string[];
-    search?: string;
-  }) {
+  async listMoving(
+    p: {
+      days: 1 | 7 | 30;
+      page: number;
+      pageSize: number;
+      merchantId?: string;
+      merchantIds?: string[];
+      category?: string;
+      areaId?: string;
+      areaIds?: string[];
+      search?: string;
+    },
+    force = false
+  ) {
     const today = beijingDateKey(new Date());
     const key = movingSkusCacheKey(p, today);
     try {
-      const rows = await this.cache.getOrLoad<MovementSkuRow[]>(key, false, () =>
+      const rows = await this.cache.getOrLoad<MovementSkuRow[]>(key, force, () =>
         withHeavyAggregateGate(() => computeMovingSkus(this.prisma, p, today))
       );
       return paginateMovementSkuRows(rows, p.page, p.pageSize);
@@ -66,11 +69,11 @@ export class MovementService {
     }
   }
 
-  async listStagnant(q: MovementSkusQueryDto) {
+  async listStagnant(q: MovementSkusQueryDto, force = false) {
     const today = beijingDateKey(new Date());
     const key = stagnantSkusCacheKey(q, today);
     try {
-      const rows = await this.cache.getOrLoad<MovementSkuRow[]>(key, false, () =>
+      const rows = await this.cache.getOrLoad<MovementSkuRow[]>(key, force, () =>
         withHeavyAggregateGate(() => computeStagnantSkus(this.prisma, q, today))
       );
       return paginateMovementSkuRows(rows, q.page, q.pageSize);

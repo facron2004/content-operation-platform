@@ -1,9 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { effectScope, type EffectScope } from 'vue';
 
+const mocks = vi.hoisted(() => ({ clearCache: vi.fn() }));
+
 vi.mock('../services/http-client', () => ({
   extractErrorMessage: (_error: unknown, fallback: string) => fallback
 }));
+vi.mock('../services/cache.service', () => ({ clearCache: mocks.clearCache }));
 
 import { useApiFetch } from './useApiFetch';
 
@@ -29,6 +32,24 @@ describe('useApiFetch request lifecycle', () => {
   afterEach(() => {
     scope?.stop();
     scope = undefined;
+    mocks.clearCache.mockReset();
+  });
+
+  it('scopes cache eviction and forwards force only for a manual load', async () => {
+    const fetcher = vi.fn(async (force: boolean) => (force ? 'fresh' : 'cached'));
+    scope = effectScope();
+    const state = scope.run(() =>
+      useApiFetch(fetcher, { cacheKeyPattern: '/content/communities' })
+    )!;
+
+    await state.load();
+    expect(fetcher).toHaveBeenLastCalledWith(false);
+    expect(mocks.clearCache).not.toHaveBeenCalled();
+
+    await state.load(true);
+    expect(mocks.clearCache).toHaveBeenCalledWith('/content/communities');
+    expect(fetcher).toHaveBeenLastCalledWith(true);
+    expect(state.data.value).toBe('fresh');
   });
 
   it('keeps the latest response when an earlier request resolves late', async () => {

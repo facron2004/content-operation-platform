@@ -60,13 +60,15 @@ export async function loadMerchantSalesSummary(
   summaryError: Ref<string | null>,
   // Residual #228: as-of anchor day.
   date?: string,
-  isCurrent: MerchantSalesRequestGuard = alwaysCurrent
+  isCurrent: MerchantSalesRequestGuard = alwaysCurrent,
+  force = false
 ) {
   if (isCurrent()) summaryError.value = null;
   try {
     const result = await getMerchantSalesSummary({
       window: windowSel,
-      date: date || undefined
+      date: date || undefined,
+      ...(force ? { force: true } : {})
     });
     if (isCurrent()) summary.value = result;
   } catch (err) {
@@ -80,7 +82,8 @@ export async function loadMerchantSalesTrend(
   trendError: Ref<string | null>,
   // Residual #228: as-of anchor day.
   date?: string,
-  isCurrent: MerchantSalesRequestGuard = alwaysCurrent
+  isCurrent: MerchantSalesRequestGuard = alwaysCurrent,
+  force = false
 ) {
   if (windowSel === 'day') {
     if (isCurrent()) {
@@ -94,7 +97,8 @@ export async function loadMerchantSalesTrend(
     const result = (
       await getMerchantSalesTrend({
         window: windowSel as Exclude<MerchantSalesWindow, 'day'>,
-        date: date || undefined
+        date: date || undefined,
+        ...(force ? { force: true } : {})
       })
     ).items;
     if (isCurrent()) trend.value = result;
@@ -114,6 +118,7 @@ export async function loadMerchantSalesRanking(params: {
   // Residual #228: as-of anchor day.
   date?: string;
   isCurrent?: MerchantSalesRequestGuard;
+  force?: boolean;
 }) {
   const isCurrent = params.isCurrent ?? alwaysCurrent;
   if (!isCurrent()) return;
@@ -125,7 +130,8 @@ export async function loadMerchantSalesRanking(params: {
       sortBy: params.sortBy,
       page: params.page,
       pageSize: params.pageSize,
-      date: params.date || undefined
+      date: params.date || undefined,
+      ...(params.force ? { force: true } : {})
     });
     if (isCurrent()) params.ranking.value = result;
   } catch (err) {
@@ -182,6 +188,7 @@ export async function reloadMerchantSales(options: {
   kpiDate?: Ref<string>;
   isCurrent?: MerchantSalesRequestGuard;
   isRankingCurrent?: MerchantSalesRequestGuard;
+  force?: boolean;
 }) {
   const isCurrent = options.isCurrent ?? alwaysCurrent;
   const isRankingCurrent = options.isRankingCurrent ?? isCurrent;
@@ -198,14 +205,16 @@ export async function reloadMerchantSales(options: {
       options.summary,
       options.summaryError,
       asOf,
-      isCurrent
+      isCurrent,
+      options.force
     ),
     loadMerchantSalesTrend(
       options.windowSel.value,
       options.trend,
       options.trendError,
       asOf,
-      isCurrent
+      isCurrent,
+      options.force
     ),
     loadMerchantSalesRanking({
       windowSel: options.windowSel.value,
@@ -216,7 +225,8 @@ export async function reloadMerchantSales(options: {
       listLoading: options.listLoading,
       rankingError: options.rankingError,
       date: asOf,
-      isCurrent: isRankingCurrent
+      isCurrent: isRankingCurrent,
+      force: options.force
     })
   ]);
   if (isCurrent()) options.loading.value = false;

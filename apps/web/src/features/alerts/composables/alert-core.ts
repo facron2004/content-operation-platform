@@ -99,7 +99,8 @@ export async function loadAlertsPage(p: {
       // Residual #221: forward as-of date when set.
       date: date || undefined,
       page: pg.page,
-      pageSize: pg.pageSize
+      pageSize: pg.pageSize,
+      force: force || undefined
     })) as AlertResponse;
     if (rid !== cur()) return;
     setResponse(data);

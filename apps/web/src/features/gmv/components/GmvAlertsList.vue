@@ -2,7 +2,6 @@
   <section class="panel chart-card gmv-alerts-card">
     <header class="gmv-alerts-header">
       <h3>异常预警</h3>
-      <a class="gmv-alerts-more" href="javascript:void(0)">查看全部 ›</a>
     </header>
     <EmptyState
       v-if="alerts.length === 0"
@@ -23,7 +22,7 @@
           <div class="gmv-alerts-title">{{ alert.title }}</div>
           <div class="gmv-alerts-desc">{{ alert.desc || '请关注' }}</div>
         </div>
-        <span class="gmv-alerts-time">{{ alert.time }}</span>
+        <span v-if="alert.time" class="gmv-alerts-time">数据更新 {{ alert.time }}</span>
       </li>
     </ul>
   </section>
@@ -82,15 +81,6 @@ function badgeLabel(tone: AlertTone): string {
   color: #101828;
   font-size: 15px;
   font-weight: 700;
-}
-
-.gmv-alerts-more {
-  color: #667085;
-  font-size: 12px;
-  text-decoration: none;
-}
-.gmv-alerts-more:hover {
-  color: #2e90fa;
 }
 
 .gmv-alerts-list {

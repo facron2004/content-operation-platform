@@ -9,12 +9,14 @@ import {
 import { paidTimeBounds } from './data-analysis-window';
 import {
   IS_EXPIRED,
+  IS_PENDING_VERIFY,
   IS_VERIFIED,
   PAID_WHERE,
   type PrismaLike,
-  REFUND_COMPONENTS_FEN,
+  REFUND_AMOUNT_FEN,
   n,
-  rate
+  rate,
+  rateByCount
 } from './data-analysis-query.shared';
 
 /** Qualified paidTime range for the refund subquery in queryOverview. */
@@ -73,10 +75,11 @@ export async function queryOverview(
        COALESCE(SUM("paidAmountWalletFen") / 100.0, 0) AS "walletAmount",
        COALESCE(SUM(CASE WHEN ${IS_VERIFIED} THEN "paidAmountFen" + "paidAmountWalletFen" ELSE 0 END) / 100.0, 0) AS "writeOffAmount",
        COALESCE(SUM("orderAmountFen") / 100.0, 0) AS "faceAmount",
-       (SELECT COALESCE(SUM(${REFUND_COMPONENTS_FEN('r.')}) / 100.0, 0) FROM "OrderHeader" r WHERE ${REFUND_PAID_WHERE} AND r."refundAmountFen" > 0) AS "refundAmount",
+       (SELECT COALESCE(SUM(${REFUND_AMOUNT_FEN('r.')}) / 100.0, 0) FROM "OrderHeader" r WHERE ${REFUND_PAID_WHERE} AND r."refundAmountFen" > 0) AS "refundAmount",
        COALESCE(SUM(CASE WHEN ${IS_VERIFIED} THEN "verifyAmountFen" ELSE 0 END) / 100.0, 0) AS "verifyAmount",
        COALESCE(SUM(CASE WHEN ${IS_VERIFIED} THEN 1 ELSE 0 END), 0) AS "verifiedCount",
        COALESCE(SUM(CASE WHEN ${IS_EXPIRED} THEN 1 ELSE 0 END), 0) AS "expiredCount",
+       COALESCE(SUM(CASE WHEN ${IS_PENDING_VERIFY} THEN 1 ELSE 0 END), 0) AS "pendingVerifyCount",
        COALESCE(SUM(CASE WHEN "refundAmountFen" > 0 THEN 1 ELSE 0 END), 0) AS "refundCount",
        COUNT(DISTINCT NULLIF(TRIM("merchantName"), '')) AS "merchantCount",
        COUNT(DISTINCT NULLIF(TRIM("salesman"), '')) AS "salesmanCount"
@@ -96,6 +99,7 @@ export async function queryOverview(
     verifyAmount: number | null;
     verifiedCount: number | null;
     expiredCount: number | null;
+    pendingVerifyCount: number | null;
     refundCount: number | null;
     merchantCount: number | null;
     salesmanCount: number | null;
@@ -110,7 +114,7 @@ export async function queryOverview(
   const verifiedCount = n(r?.verifiedCount);
   const expiredCount = n(r?.expiredCount);
   const refundCount = n(r?.refundCount);
-  const pendingVerifyCount = Math.max(0, orderCount - verifiedCount - expiredCount);
+  const pendingVerifyCount = n(r?.pendingVerifyCount);
   const tradeAmount = salesAmount + walletAmount;
   const netGmv = tradeAmount - refundAmount;
   const target = DATA_ANALYSIS_TARGET_AMOUNT;
@@ -125,14 +129,14 @@ export async function queryOverview(
     faceAmount: n(r?.faceAmount),
     refundAmount,
     verifyAmount,
-    verifyRate: rate(verifiedCount, orderCount),
+    verifyRate: rateByCount(verifiedCount, orderCount),
     // 单数口径: 退款率 = 退款单数 / 总订单数 (不再用金额 refundAmount/salesAmount).
-    refundRate: rate(refundCount, orderCount),
+    refundRate: rateByCount(refundCount, orderCount),
     // verifyAmount = settledAmount (paid + wallet) on verified orders, so
     // denominator must be the gross tradeAmount (same unit). Using salesAmount alone
     // inflates the rate above 100% whenever wallet deduction is non-zero.
     settlementRate: rate(verifyAmount, tradeAmount),
-    avgOrderValue: rate(salesAmount, orderCount),
+    avgOrderValue: rate(netGmv, orderCount),
     targetRatio: rate(salesAmount, target),
     targetRatioWithWallet: rate(tradeAmount, target),
     netGmvTargetRatio: rate(netGmv, target),

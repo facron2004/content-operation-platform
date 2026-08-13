@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { newEntityId } from '../common/id';
+import { loadMemberBehaviorFacts, type MemberBehaviorFact } from '../common/member-behavior-facts';
 import { FinanceAssetService } from '../finance-center/finance-asset.service';
 import { PrismaService } from '../prisma/prisma.service';
 import type {
@@ -29,6 +30,7 @@ import type {
   GrantBenefitDto,
   IssueCouponDto,
   MarketingPageQueryDto,
+  PreviewTagRuleDto,
   PrivateDomainChannelQueryDto,
   SmsTaskQueryDto,
   SmsTemplateQueryDto,
@@ -48,10 +50,19 @@ import type {
   PrivateDomainChannelView,
   SmsTaskView,
   SmsTemplateView,
+  TagRuleEvaluationView,
+  TagRulePreviewView,
   UserCouponView,
   WeComCustomerView,
   WeComGroupView
 } from './marketing-private.types';
+import {
+  matchesUserTagRule,
+  parseUserTagRule,
+  USER_TAG_RULE_TYPE,
+  type UserTagRule
+} from './user-tag-rules';
+import { parseAudienceTagRule, type AudienceTagRule } from './audience-rules';
 
 type MarketingActor = { userId?: string };
 
@@ -125,19 +136,45 @@ function asBigInt(value: string | undefined, field: string): bigint {
   }
 }
 
-function mapTag(row: {
-  tagId: string;
-  name: string;
-  code: string;
-  category: string;
-  tagType: string;
-  description: string | null;
-  status: string;
-  memberCount: number;
-  createdAt: Date;
-  updatedAt: Date;
-}): MarketingTagView {
-  return { ...row, createdAt: row.createdAt.toISOString(), updatedAt: row.updatedAt.toISOString() };
+function userTagRuleConfigId(tagId: string) {
+  return `user-tag-rule:${tagId}`;
+}
+
+function ruleConfigValue(
+  raw: string | null | undefined
+): { tagId: string; rule: UserTagRule } | null {
+  const parsed = jsonValue(raw);
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+  const value = parsed as { tagId?: unknown; rule?: unknown };
+  if (typeof value.tagId !== 'string' || value.rule === undefined) return null;
+  try {
+    return { tagId: value.tagId, rule: parseUserTagRule(value.rule) };
+  } catch {
+    return null;
+  }
+}
+
+function mapTag(
+  row: {
+    tagId: string;
+    name: string;
+    code: string;
+    category: string;
+    tagType: string;
+    description: string | null;
+    status: string;
+    memberCount: number;
+    createdAt: Date;
+    updatedAt: Date;
+  },
+  ruleJson: unknown | null = null
+): MarketingTagView {
+  return {
+    ...row,
+    ruleJson,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString()
+  };
 }
 
 function mapAudience(row: {
@@ -433,25 +470,181 @@ export class MarketingPrivateService {
       this.prisma.userTag.count({ where }),
       this.prisma.userTag.findMany({ where, orderBy: { createdAt: 'desc' }, skip, take: pageSize })
     ]);
-    return pageResult(page, pageSize, total, rows.map(mapTag));
+    const ruleConfigs = rows.some((row) => row.tagType === 'rule')
+      ? await this.prisma.ruleConfig.findMany({ where: { type: USER_TAG_RULE_TYPE } })
+      : [];
+    const ruleByTagId = new Map(
+      ruleConfigs
+        .map((config) => ruleConfigValue(config.payload))
+        .filter((value): value is { tagId: string; rule: UserTagRule } => Boolean(value))
+        .map((value) => [value.tagId, value.rule])
+    );
+    return pageResult(
+      page,
+      pageSize,
+      total,
+      rows.map((row) => mapTag(row, ruleByTagId.get(row.tagId) ?? null))
+    );
   }
 
   async createTag(dto: CreateTagDto): Promise<MarketingTagView> {
+    const tagType = dto.tagType ?? 'manual';
+    const rule = tagType === 'rule' ? this.parseTagRule(dto.ruleJson) : null;
     const row = await this.prisma.userTag.create({
       data: {
         tagId: newEntityId('tag'),
         name: dto.name.trim(),
         code: dto.code.trim(),
         category: dto.category.trim(),
-        tagType: dto.tagType ?? 'manual',
+        tagType,
         description: dto.description?.trim() || null
       }
     });
-    return mapTag(row);
+    if (!rule) return mapTag(row);
+
+    await this.prisma.ruleConfig.create({
+      data: {
+        id: userTagRuleConfigId(row.tagId),
+        type: USER_TAG_RULE_TYPE,
+        name: row.name,
+        version: 1,
+        isActive: true,
+        payload: JSON.stringify({ tagId: row.tagId, rule })
+      }
+    });
+    await this.syncRuleTag(row.tagId, rule);
+    const updated = await this.prisma.userTag.findUniqueOrThrow({ where: { tagId: row.tagId } });
+    return mapTag(updated, rule);
+  }
+
+  async previewTagRule(dto: PreviewTagRuleDto): Promise<TagRulePreviewView> {
+    const rule = this.parseTagRule(dto.ruleJson);
+    const facts = await loadMemberBehaviorFacts(this.prisma);
+    const matched = facts.filter((fact) => matchesUserTagRule(fact, rule));
+    return {
+      matchedCount: matched.length,
+      sample: matched.slice(0, 10).map((fact) => ({
+        memberId: fact.memberId,
+        nickname: fact.nickname,
+        phone: fact.phone ? `${fact.phone.slice(0, 3)}****${fact.phone.slice(-4)}` : null,
+        level: fact.level,
+        paidOrderCount: fact.paidOrderCount,
+        paidGmvFen: fact.paidGmvFen?.toString() ?? null
+      }))
+    };
+  }
+
+  async evaluateTag(tagId: string): Promise<TagRuleEvaluationView> {
+    const tag = await this.prisma.userTag.findUnique({ where: { tagId } });
+    if (!tag) throw new NotFoundException('标签不存在');
+    const rule = await this.loadTagRule(tagId);
+    const result = await this.syncRuleTag(tagId, rule);
+    const updated = await this.prisma.userTag.findUniqueOrThrow({ where: { tagId } });
+    return {
+      tag: mapTag(updated, rule),
+      ...result,
+      evaluatedAt: new Date().toISOString()
+    };
+  }
+
+  async syncActiveRuleTags() {
+    const tags = await this.prisma.userTag.findMany({
+      where: { tagType: 'rule', status: 'active' }
+    });
+    if (!tags.length) return { tagCount: 0, evaluatedCount: 0, skippedCount: 0, matchedCount: 0 };
+    const configs = await this.prisma.ruleConfig.findMany({ where: { type: USER_TAG_RULE_TYPE } });
+    const rules = new Map(
+      configs
+        .map((config) => ruleConfigValue(config.payload))
+        .filter((value): value is { tagId: string; rule: UserTagRule } => Boolean(value))
+        .map((value) => [value.tagId, value.rule])
+    );
+    const facts = await loadMemberBehaviorFacts(this.prisma);
+    let evaluatedCount = 0;
+    let skippedCount = 0;
+    let matchedCount = 0;
+    for (const tag of tags) {
+      const rule = rules.get(tag.tagId);
+      if (!rule) {
+        skippedCount += 1;
+        continue;
+      }
+      const result = await this.syncRuleTag(tag.tagId, rule, facts);
+      evaluatedCount += 1;
+      matchedCount += result.matchedCount;
+    }
+    return { tagCount: tags.length, evaluatedCount, skippedCount, matchedCount };
+  }
+
+  private parseTagRule(raw: string | undefined): UserTagRule {
+    try {
+      return parseUserTagRule(raw ?? '');
+    } catch (error) {
+      throw new BadRequestException(error instanceof Error ? error.message : '用户标签规则无效');
+    }
+  }
+
+  private async loadTagRule(tagId: string): Promise<UserTagRule> {
+    const config = await this.prisma.ruleConfig.findUnique({
+      where: { id: userTagRuleConfigId(tagId) }
+    });
+    const value = ruleConfigValue(config?.payload);
+    if (!value || value.tagId !== tagId) {
+      throw new BadRequestException('该规则标签缺少有效的规则配置');
+    }
+    return value.rule;
+  }
+
+  private async syncRuleTag(
+    tagId: string,
+    rule: UserTagRule,
+    facts?: MemberBehaviorFact[]
+  ): Promise<{ matchedCount: number; addedCount: number; removedCount: number }> {
+    const matchedMemberIds = (facts ?? (await loadMemberBehaviorFacts(this.prisma)))
+      .filter((fact) => matchesUserTagRule(fact, rule))
+      .map((fact) => fact.memberId);
+    const matchedSet = new Set(matchedMemberIds);
+
+    return this.prisma.$transaction(async (tx) => {
+      const existing = await tx.userTagRelation.findMany({
+        where: { tagId },
+        select: { relationId: true, memberId: true }
+      });
+      const existingByMember = new Map(existing.map((relation) => [relation.memberId, relation]));
+      const addedMemberIds = matchedMemberIds.filter((memberId) => !existingByMember.has(memberId));
+      const removedRelationIds = existing
+        .filter((relation) => !matchedSet.has(relation.memberId))
+        .map((relation) => relation.relationId);
+
+      if (addedMemberIds.length) {
+        await tx.userTagRelation.createMany({
+          data: addedMemberIds.map((memberId) => ({
+            relationId: newEntityId('tag-rel'),
+            tagId,
+            memberId,
+            source: 'rule'
+          }))
+        });
+      }
+      if (removedRelationIds.length) {
+        await tx.userTagRelation.deleteMany({ where: { relationId: { in: removedRelationIds } } });
+      }
+      await tx.userTag.update({
+        where: { tagId },
+        data: { memberCount: matchedMemberIds.length }
+      });
+      return {
+        matchedCount: matchedMemberIds.length,
+        addedCount: addedMemberIds.length,
+        removedCount: removedRelationIds.length
+      };
+    });
   }
 
   async assignTag(tagId: string, dto: AssignTagDto): Promise<MarketingTagView> {
-    const member = await this.prisma.member.findUnique({ where: { memberId: dto.memberId.trim() } });
+    const member = await this.prisma.member.findUnique({
+      where: { memberId: dto.memberId.trim() }
+    });
     if (!member) throw new BadRequestException('会员不存在，不能建立标签关系');
     return this.prisma.$transaction(async (tx) => {
       const tag = await tx.userTag.findUnique({ where: { tagId } });
@@ -461,7 +654,12 @@ export class MarketingPrivateService {
       });
       if (!existing) {
         await tx.userTagRelation.create({
-          data: { relationId: newEntityId('tag-rel'), tagId, memberId: dto.memberId.trim(), source: dto.source ?? 'manual' }
+          data: {
+            relationId: newEntityId('tag-rel'),
+            tagId,
+            memberId: dto.memberId.trim(),
+            source: dto.source ?? 'manual'
+          }
         });
         await tx.userTag.update({ where: { tagId }, data: { memberCount: { increment: 1 } } });
       }
@@ -493,38 +691,138 @@ export class MarketingPrivateService {
   }
 
   async createAudience(dto: CreateAudienceDto, actor: MarketingActor): Promise<AudienceView> {
-    const rule = parseJson(dto.ruleJson, 'ruleJson');
-    if (!rule || typeof rule !== 'object' || Array.isArray(rule)) {
-      throw new BadRequestException('ruleJson 必须是 JSON 对象');
-    }
-    const row = await this.prisma.audience.create({
-      data: {
-        audienceId: newEntityId('aud'),
-        audienceNo: newEntityId('AUD'),
-        name: dto.name.trim(),
-        description: dto.description?.trim() || null,
-        audienceType: dto.audienceType,
-        ruleJson: JSON.stringify(rule),
-        estimatedCount: dto.estimatedCount ?? 0,
-        snapshotCount: dto.audienceType === 'SNAPSHOT' ? (dto.estimatedCount ?? 0) : 0,
-        createdBy: actor.userId ?? null
+    const rule = this.parseAudienceRule(dto.ruleJson);
+    const memberIds = await this.resolveAudienceMemberIds(rule);
+    const audienceId = newEntityId('aud');
+    const row = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.audience.create({
+        data: {
+          audienceId,
+          audienceNo: newEntityId('AUD'),
+          name: dto.name.trim(),
+          description: dto.description?.trim() || null,
+          audienceType: dto.audienceType,
+          ruleJson: JSON.stringify(rule),
+          estimatedCount: memberIds.length,
+          snapshotCount: dto.audienceType === 'SNAPSHOT' ? memberIds.length : 0,
+          createdBy: actor.userId ?? null
+        }
+      });
+      if (memberIds.length) {
+        await tx.audienceMember.createMany({
+          data: memberIds.map((memberId) => ({
+            membershipId: newEntityId('aud-member'),
+            audienceId,
+            memberId,
+            source: dto.audienceType === 'SNAPSHOT' ? 'snapshot' : 'dynamic'
+          }))
+        });
       }
+      return created;
     });
     return mapAudience(row);
   }
 
-  async refreshAudience(audienceId: string): Promise<AudienceView> {
+  async recalculateAudience(audienceId: string): Promise<AudienceView> {
     const existing = await this.prisma.audience.findUnique({ where: { audienceId } });
     if (!existing) throw new NotFoundException('人群不存在');
-    const row = await this.prisma.audience.update({
-      where: { audienceId },
-      data: {
-        status: 'active',
-        snapshotCount:
-          existing.audienceType === 'SNAPSHOT' ? existing.estimatedCount : existing.snapshotCount
+
+    const rule = this.parseAudienceRule(existing.ruleJson);
+    const memberIds = await this.resolveAudienceMemberIds(rule);
+    const selected = new Set(memberIds);
+    const source = existing.audienceType === 'SNAPSHOT' ? 'snapshot' : 'dynamic';
+    const row = await this.prisma.$transaction(async (tx) => {
+      const memberships = await tx.audienceMember.findMany({
+        where: { audienceId },
+        select: { memberId: true, exitedAt: true }
+      });
+      const existingMembers = new Set(memberships.map((membership) => membership.memberId));
+      const retainedMemberIds = memberIds.filter((memberId) => existingMembers.has(memberId));
+      const addedMemberIds = memberIds.filter((memberId) => !existingMembers.has(memberId));
+      const exitedMemberIds = memberships
+        .filter((membership) => membership.exitedAt === null && !selected.has(membership.memberId))
+        .map((membership) => membership.memberId);
+
+      if (exitedMemberIds.length) {
+        await tx.audienceMember.updateMany({
+          where: { audienceId, memberId: { in: exitedMemberIds } },
+          data: { exitedAt: new Date() }
+        });
       }
+      if (retainedMemberIds.length) {
+        await tx.audienceMember.updateMany({
+          where: { audienceId, memberId: { in: retainedMemberIds } },
+          data: { exitedAt: null, source }
+        });
+      }
+      if (addedMemberIds.length) {
+        await tx.audienceMember.createMany({
+          data: addedMemberIds.map((memberId) => ({
+            membershipId: newEntityId('aud-member'),
+            audienceId,
+            memberId,
+            source
+          }))
+        });
+      }
+
+      return tx.audience.update({
+        where: { audienceId },
+        data: {
+          estimatedCount: memberIds.length,
+          snapshotCount: existing.audienceType === 'SNAPSHOT' ? memberIds.length : 0
+        }
+      });
     });
     return mapAudience(row);
+  }
+
+  private parseAudienceRule(raw: string): AudienceTagRule {
+    try {
+      return parseAudienceTagRule(raw);
+    } catch (error) {
+      throw new BadRequestException(error instanceof Error ? error.message : '人群规则无效');
+    }
+  }
+
+  private async resolveAudienceMemberIds(rule: AudienceTagRule): Promise<string[]> {
+    if (!rule.tags.length) return [];
+    const tags = await this.prisma.userTag.findMany({
+      where: {
+        status: 'active',
+        OR: [{ tagId: { in: rule.tags } }, { code: { in: rule.tags } }]
+      },
+      select: { tagId: true, code: true }
+    });
+    const selectedTagIds = [
+      ...new Set(
+        rule.tags.map((key) => {
+          const matches = tags.filter((tag) => tag.tagId === key || tag.code === key);
+          if (matches.length !== 1) {
+            throw new BadRequestException(`标签 ${key} 不存在、未启用或标识不唯一`);
+          }
+          return matches[0].tagId;
+        })
+      )
+    ];
+    const relations = await this.prisma.userTagRelation.findMany({
+      where: { tagId: { in: selectedTagIds } },
+      select: { tagId: true, memberId: true }
+    });
+    if (rule.logic === 'or') {
+      return [...new Set(relations.map((relation) => relation.memberId))].sort();
+    }
+
+    const tagIdsByMember = new Map<string, Set<string>>();
+    for (const relation of relations) {
+      const tagIds = tagIdsByMember.get(relation.memberId) ?? new Set<string>();
+      tagIds.add(relation.tagId);
+      tagIdsByMember.set(relation.memberId, tagIds);
+    }
+    return [...tagIdsByMember.entries()]
+      .filter(([, tagIds]) => tagIds.size === selectedTagIds.length)
+      .map(([memberId]) => memberId)
+      .sort();
   }
 
   private channelInputs(
@@ -645,12 +943,18 @@ export class MarketingPrivateService {
     return mapCampaign(row);
   }
 
-  async recordAttribution(campaignId: string, dto: CreateAttributionDto): Promise<CampaignAttributionView> {
+  async recordAttribution(
+    campaignId: string,
+    dto: CreateAttributionDto
+  ): Promise<CampaignAttributionView> {
     const campaign = await this.prisma.marketingCampaign.findUnique({ where: { campaignId } });
     if (!campaign) throw new NotFoundException('活动不存在');
     if (dto.channelId) {
-      const channel = await this.prisma.privateDomainChannel.findUnique({ where: { channelId: dto.channelId } });
-      if (!channel || channel.campaignId !== campaignId) throw new BadRequestException('渠道不属于当前活动');
+      const channel = await this.prisma.privateDomainChannel.findUnique({
+        where: { channelId: dto.channelId }
+      });
+      if (!channel || channel.campaignId !== campaignId)
+        throw new BadRequestException('渠道不属于当前活动');
     }
     const row = await this.prisma.campaignAttribution.create({
       data: {
@@ -666,12 +970,20 @@ export class MarketingPrivateService {
     return mapAttribution(row);
   }
 
-  async listAttributions(campaignId: string, query: MarketingPageQueryDto): Promise<MarketingPage<CampaignAttributionView>> {
+  async listAttributions(
+    campaignId: string,
+    query: MarketingPageQueryDto
+  ): Promise<MarketingPage<CampaignAttributionView>> {
     const { page, pageSize, skip } = pageParams(query);
     const where: Prisma.CampaignAttributionWhereInput = { campaignId };
     const [total, rows] = await Promise.all([
       this.prisma.campaignAttribution.count({ where }),
-      this.prisma.campaignAttribution.findMany({ where, orderBy: { createdAt: 'desc' }, skip, take: pageSize })
+      this.prisma.campaignAttribution.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: pageSize
+      })
     ]);
     return pageResult(page, pageSize, total, rows.map(mapAttribution));
   }
@@ -741,7 +1053,11 @@ export class MarketingPrivateService {
     return mapCoupon(row);
   }
 
-  async issueCoupon(couponId: string, dto: IssueCouponDto, requestId: string): Promise<UserCouponView> {
+  async issueCoupon(
+    couponId: string,
+    dto: IssueCouponDto,
+    requestId: string
+  ): Promise<UserCouponView> {
     if (!requestId) throw new BadRequestException('缺少发券幂等键');
     const expiredAt = dateValue(dto.expiredAt, 'expiredAt');
     return this.prisma.$transaction(async (tx) => {
@@ -766,7 +1082,13 @@ export class MarketingPrivateService {
       const issuedQuantity = coupon.issuedQuantity + 1;
       await tx.couponTemplate.update({
         where: { couponId },
-        data: { issuedQuantity, status: coupon.totalQuantity > 0 && issuedQuantity >= coupon.totalQuantity ? 'exhausted' : 'active' }
+        data: {
+          issuedQuantity,
+          status:
+            coupon.totalQuantity > 0 && issuedQuantity >= coupon.totalQuantity
+              ? 'exhausted'
+              : 'active'
+        }
       });
       const row = await tx.userCoupon.create({
         data: {
@@ -1076,7 +1398,11 @@ export class MarketingPrivateService {
       if (member) {
         await tx.benefitAccount.upsert({
           where: { memberId: dto.memberId.trim() },
-          create: { benefitAccountId: newEntityId('benefit'), memberId: dto.memberId.trim(), accountId: account.id },
+          create: {
+            benefitAccountId: newEntityId('benefit'),
+            memberId: dto.memberId.trim(),
+            accountId: account.id
+          },
           update: { accountId: account.id, status: 'active' }
         });
       }

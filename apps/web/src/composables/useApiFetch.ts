@@ -7,7 +7,10 @@ export interface UseApiFetchOptions {
   cacheKeyPattern?: string;
 }
 
-export function useApiFetch<T>(fetcher: () => Promise<T>, options: UseApiFetchOptions = {}) {
+export function useApiFetch<T>(
+  fetcher: (force: boolean) => Promise<T>,
+  options: UseApiFetchOptions = {}
+) {
   const { errorMessage = '数据加载失败，请稍后重试', clearCacheOnForce = true } = options;
   const loading = ref(false),
     data = ref<T | null>(null) as { value: T | null };
@@ -32,7 +35,7 @@ export function useApiFetch<T>(fetcher: () => Promise<T>, options: UseApiFetchOp
         if (disposed) return;
         clearCache(options.cacheKeyPattern);
       }
-      const nextData = await fetcher();
+      const nextData = await fetcher(force);
       if (disposed || currentRequestId !== requestId) return;
       data.value = nextData;
     } catch (err) {

@@ -22,7 +22,8 @@ export async function updateCookie(cookie: string): Promise<CookieUpdateResponse
   clearCache('/content/cookie');
   return data;
 }
-export async function getAICopyStatus(): Promise<AICopyStatus> {
+export async function getAICopyStatus(force = false): Promise<AICopyStatus> {
+  if (force) clearCache('/content/ai-copy/status');
   return cachedGet(
     () => client.get('/content/ai-copy/status').then((res) => res.data),
     '/content/ai-copy/status',

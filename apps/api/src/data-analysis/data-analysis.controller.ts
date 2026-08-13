@@ -3,6 +3,7 @@ import { Controller, Get, Inject, Query, Req, Res } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
+import { hasForceSignal } from '../common';
 import { createDtoPipe } from '../common/dto-pipe';
 import { assertUnrestrictedAnalytics } from '../user-access/scope-guards';
 import { DataAnalysisQueryDto } from './data-analysis.dto';
@@ -45,7 +46,14 @@ export class DataAnalysisController {
     @Req() req: Request
   ) {
     assertUnrestrictedAnalytics(req);
-    return this.service.getSummary(q.window, q.date, q.endDate, q.detailLimit, q.rankingLimit);
+    return this.service.getSummary(
+      q.window,
+      q.date,
+      q.endDate,
+      q.detailLimit,
+      q.rankingLimit,
+      hasForceSignal(req, q)
+    );
   }
 
   @Get('export')

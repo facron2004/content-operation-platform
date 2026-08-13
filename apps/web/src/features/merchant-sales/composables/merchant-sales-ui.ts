@@ -154,7 +154,7 @@ export function createMerchantSalesLoaders(state: MerchantSalesState) {
       isCurrent
     });
   }
-  async function reload() {
+  async function reload(force = false) {
     if (disposed) return;
     const requestId = ++reloadRequestId;
     const rankingId = ++rankingRequestId;
@@ -177,7 +177,8 @@ export function createMerchantSalesLoaders(state: MerchantSalesState) {
       listLoading: state.listLoading,
       kpiDate: state.kpiDate,
       isCurrent,
-      isRankingCurrent
+      isRankingCurrent,
+      force
     });
   }
   async function forceRefresh() {
@@ -217,7 +218,7 @@ export function createMerchantSalesHandlers(args: {
   exporting: Ref<boolean>;
   // Residual #228: as-of anchor day for export/force-refresh.
   kpiDate: Ref<string>;
-  reload: () => Promise<void>;
+  reload: (force?: boolean) => Promise<void>;
   loadRanking: () => Promise<void>;
   forceRefresh: () => Promise<void>;
 }) {

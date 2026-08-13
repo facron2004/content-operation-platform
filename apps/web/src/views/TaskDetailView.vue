@@ -34,6 +34,12 @@
             <span>操作</span>
           </template>
           <div class="action-buttons">
+            <p
+              v-if="!taskCapabilities.manage && !taskCapabilities.publish"
+              class="action-readonly-hint"
+            >
+              当前账号仅可查看任务
+            </p>
             <!-- Residual #180: schedule before publish; complete after publish. -->
             <AppleButton v-if="canSchedule" variant="primary" @click="handleScheduleClick">
               <template #icon>
@@ -111,9 +117,15 @@ import TaskPublishDialog from '../features/task-center/components/TaskPublishDia
 import TaskFailDialog from '../features/task-center/components/TaskFailDialog.vue';
 import AppleButton from '../components/AppleButton.vue';
 import ErrorAlert from '../components/ErrorAlert.vue';
+import { useRoleStore } from '../stores/role';
+import { resolveTaskCommandCapabilities } from '../features/task-center/task-command-permissions';
 
 const route = useRoute();
 const taskId = route.params.taskId as string;
+const roleStore = useRoleStore();
+const taskCapabilities = computed(() =>
+  resolveTaskCommandCapabilities(roleStore.effectiveRoles, roleStore.permissions)
+);
 
 // Mount load lives inside useTaskDetail; mutates route through composable (#127).
 const {
@@ -138,19 +150,29 @@ const {
 // Residual #180: schedule + complete affordances so the lifecycle is not a dead-end.
 const canSchedule = computed(() => {
   const s = task.value?.status;
-  return s === 'draft' || s === 'waiting_audit' || s === 'blocked';
+  return (
+    taskCapabilities.value.manage && (s === 'draft' || s === 'waiting_audit' || s === 'blocked')
+  );
 });
-const canPublish = computed(() => task.value?.status === 'scheduled');
-const canComplete = computed(() => task.value?.status === 'published');
-const canFail = computed(() => task.value?.status === 'scheduled');
+const canPublish = computed(
+  () => taskCapabilities.value.publish && task.value?.status === 'scheduled'
+);
+const canComplete = computed(
+  () => taskCapabilities.value.manage && task.value?.status === 'published'
+);
+const canFail = computed(() => taskCapabilities.value.manage && task.value?.status === 'scheduled');
 const canCancel = computed(
   () =>
+    taskCapabilities.value.manage &&
+    Boolean(task.value) &&
     task.value?.status !== 'completed' &&
     task.value?.status !== 'cancelled' &&
     task.value?.status !== 'failed'
 );
 const canReassign = computed(
   () =>
+    taskCapabilities.value.manage &&
+    Boolean(task.value) &&
     task.value?.status !== 'completed' &&
     task.value?.status !== 'cancelled' &&
     task.value?.status !== 'failed'
@@ -273,6 +295,12 @@ async function handleReassignClick() {
 
 .action-buttons .apple-btn {
   width: 100%;
+}
+
+.action-readonly-hint {
+  margin: 0;
+  color: var(--el-text-color-secondary);
+  font-size: 13px;
 }
 
 h3 {

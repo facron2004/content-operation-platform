@@ -32,7 +32,8 @@ describe('refund paidTime attribution', () => {
         "verifyTime" TEXT,
         "verifyAmountFen" INTEGER,
         "merchantId" TEXT,
-        "merchantName" TEXT
+        "merchantName" TEXT,
+        "updatedAt" TEXT DEFAULT '2026-07-08 00:00:00'
       )
     `);
       await client.execute({
@@ -181,7 +182,8 @@ describe('refund paidTime attribution', () => {
         totalVerify: 90,
         verifyCount: 2,
         paidOrderCount: 4,
-        verifyRate: 0.5
+        verifyRate: 0.5,
+        updatedAt: '2026-07-08T00:00:00.000Z'
       });
 
       const verifyTrend = await computeVerifyTrendFromOrderHeader(

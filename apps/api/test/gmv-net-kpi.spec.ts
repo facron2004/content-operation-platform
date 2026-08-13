@@ -26,7 +26,7 @@ describe('Net GMV calculation (Gross GMV minus Refund)', () => {
       paidOrderCount: 2,
       paidAmountBonusFen: 0n,
       paidAmountWalletFen: 2000n,
-      updatedAt: new Date()
+      updatedAt: new Date('2026-07-30T12:34:56.000Z')
     };
 
     const kpi = mapDailyMetricsToKpi(dmRow, {
@@ -44,6 +44,7 @@ describe('Net GMV calculation (Gross GMV minus Refund)', () => {
     expect(kpi.avgOrderValue).toBe(40);
     expect(kpi.refundRate).toBe(0.5);
     expect(kpi.verifyRate).toBe(0.5);
+    expect(kpi.updatedAt).toBe('2026-07-30T12:34:56.000Z');
   });
 
   it('buildOrderHeaderTodayPayload subtracts refundFen from grossGmv for Net GMV', () => {
@@ -53,7 +54,8 @@ describe('Net GMV calculation (Gross GMV minus Refund)', () => {
       paidAmountBonusFen: 0n,
       paidAmountCardFen: 8000n,
       verifyAmountFen: 4000n,
-      orderCount: 2
+      orderCount: 2,
+      sourceUpdatedAt: '2026-07-31 08:09:10'
     };
 
     const payload = buildOrderHeaderTodayPayload(
@@ -77,10 +79,31 @@ describe('Net GMV calculation (Gross GMV minus Refund)', () => {
     expect(payload.monthGmvOnlineFen).toBe(36000n);
     expect(payload.monthGmvWalletFen).toBe(9000n);
     expect(payload.avgOrderValue).toBe(42.5);
+    expect(payload.updatedAt).toBe('2026-07-31T08:09:10.000Z');
 
     const fallbackPayload = buildOrderHeaderTodayPayload('2026-07-31', gmvRow as never, 1500n);
     expect(fallbackPayload.monthGmvOnlineFen).toBe(6800n);
     expect(fallbackPayload.monthGmvWalletFen).toBe(1700n);
+  });
+
+  it('does not pretend an empty OrderHeader day was updated at GET time', () => {
+    const payload = buildOrderHeaderTodayPayload(
+      '2026-07-31',
+      {
+        paidAmountFen: 0n,
+        paidAmountWalletFen: 0n,
+        paidAmountBonusFen: 0n,
+        paidAmountCardFen: 0n,
+        verifyAmountFen: 0n,
+        orderCount: 0,
+        refundOrderCount: 0,
+        verifyCount: 0,
+        sourceUpdatedAt: null
+      },
+      0n
+    );
+
+    expect(payload.updatedAt).toBeNull();
   });
 
   it('preserves fen amounts above the JavaScript safe-integer boundary', () => {

@@ -189,15 +189,19 @@ export async function resolveGmvHourly(
 export async function resolveGmvDistribution(
   prisma: PrismaLike,
   dim: GmvDistributionDim,
-  limit: number
+  limit: number,
+  date?: string
 ): Promise<GmvDistributionPayload> {
-  return computeDistributionFromOrderHeader(prisma, dim, limit);
+  return computeDistributionFromOrderHeader(prisma, dim, limit, date);
 }
 
 // --- MerchantDailyMetrics top merchants (reuses pre-aggregated data) ---
-export async function computeMerchantsFromMdMetrics(prisma: PrismaLike): Promise<GmvMerchantRow[]> {
-  const todayStr = beijingDateKey(new Date());
-  const weekAgoStr = beijingDateKey(Date.now() - 6 * 86400000);
+export async function computeMerchantsFromMdMetrics(
+  prisma: PrismaLike,
+  date?: string
+): Promise<GmvMerchantRow[]> {
+  const endDate = date ?? beijingDateKey(new Date());
+  const startDate = date ?? beijingDateKey(Date.now() - 6 * 86400000);
   // Cap materialization — page DTO Max(100)×pageSize Max(100) never needs full set.
   // Sort by gmv DESC in SQL so top-N is correct for the default sort; non-gmv sorts
   // re-sort the capped set in memory (still bounded).
@@ -215,8 +219,8 @@ export async function computeMerchantsFromMdMetrics(prisma: PrismaLike): Promise
      GROUP BY "merchantName"
      ORDER BY "gmv" DESC
      LIMIT ?`,
-    weekAgoStr,
-    todayStr,
+    startDate,
+    endDate,
     GMV_TOP_MERCHANTS_LIMIT
   )) as Array<{
     merchantName: string;
@@ -251,9 +255,10 @@ export async function computeMerchantsFromMdMetrics(prisma: PrismaLike): Promise
 /** Full sorted merchant aggregate (no page) — cache across page flips. */
 export async function computeGmvTopMerchants(
   prisma: PrismaLike,
-  sortBy: GmvMerchantSort
+  sortBy: GmvMerchantSort,
+  date?: string
 ): Promise<GmvMerchantRow[]> {
-  const merchants = await computeMerchantsFromMdMetrics(prisma);
+  const merchants = await computeMerchantsFromMdMetrics(prisma, date);
   return sortMerchants(merchants, sortBy);
 }
 
@@ -261,13 +266,14 @@ export async function resolveGmvTopMerchants(
   prisma: PrismaLike,
   sortBy: GmvMerchantSort,
   page: number,
-  pageSize: number
+  pageSize: number,
+  date?: string
 ): Promise<{
   items: GmvMerchantRow[];
   hasMore: boolean;
   limit: number;
   truncated: boolean;
 }> {
-  const sorted = await computeGmvTopMerchants(prisma, sortBy);
+  const sorted = await computeGmvTopMerchants(prisma, sortBy, date);
   return pageMerchants(sorted, page, pageSize);
 }

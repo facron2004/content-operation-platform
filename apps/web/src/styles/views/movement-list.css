@@ -428,16 +428,6 @@
 }
 
 @media (max-width: 900px) {
-  .movement .mv-hero {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .movement .hero-meta {
-    width: 100%;
-    flex-wrap: wrap;
-  }
-
   .movement .health-layout {
     grid-template-columns: 162px minmax(180px, 1fr);
   }

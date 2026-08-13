@@ -956,10 +956,12 @@ describe('overview pure helpers', () => {
       todayGmvFen: 10_000n,
       todayOrderCount: 4,
       staleSkuRows: { stale30SkuCount: 5, distinctMerchants: 2 },
+      moneyUpdatedAt: '2026-07-18T01:02:03.000Z',
       moneyDataSource: 'OrderHeader'
     });
     expect(payload.zeroSalesSkuRatio).toBeCloseTo(0.1);
     expect(payload.zeroSalesMerchants).toBe(2);
+    expect(payload.updatedAt).toBe('2026-07-18T01:02:03.000Z');
     expect(payload.dataSource).toBe('OrderHeader');
 
     const empty = buildOverviewKpiPayload({
@@ -969,6 +971,7 @@ describe('overview pure helpers', () => {
       todayGmvFen: 0n,
       todayOrderCount: 0,
       staleSkuRows: { stale30SkuCount: 0, distinctMerchants: 0 },
+      moneyUpdatedAt: null,
       moneyDataSource: 'OrderHeader'
     });
     expect(empty.zeroSalesSkuRatio).toBe(0);

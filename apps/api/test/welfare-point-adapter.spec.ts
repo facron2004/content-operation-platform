@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
   normalizeWelfarePointList,
-  parseJeeSiteDate,
-  type WelfarePointRaw
+  parseJeeSiteDate
 } from '../src/welfare-point/welfare-point.adapter';
-import { POINT_SOURCE_LABELS, sourceTypeLabel } from '../src/welfare-point/welfare-point.types';
+import {
+  POINT_SOURCE_LABELS,
+  sourceTypeLabel,
+  type WelfarePointRaw
+} from '../src/welfare-point/welfare-point.types';
 
 function raw(overrides: Partial<WelfarePointRaw>): WelfarePointRaw {
   return {

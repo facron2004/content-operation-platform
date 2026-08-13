@@ -1,7 +1,7 @@
 /** Data-analysis report DTOs and types (砍价订单模板). */
 import { Type } from 'class-transformer';
 import { IsIn, IsInt, IsOptional, Max, Min } from 'class-validator';
-import { optionalDateKey } from '../content/dto-decorators';
+import { optionalDateKey, optionalString } from '../content/dto-decorators';
 
 export const DATA_ANALYSIS_WINDOWS = ['day', 'week', 'month', 'year'] as const;
 export type DataAnalysisWindow = (typeof DATA_ANALYSIS_WINDOWS)[number];
@@ -19,6 +19,9 @@ export class DataAnalysisQueryDto {
 
   @optionalDateKey()
   endDate?: string;
+
+  @optionalString(5)
+  force?: boolean | string;
 
   /** Order-detail sheet row cap (default 2000, max 2000). */
   @IsOptional()
@@ -62,7 +65,7 @@ export interface DataAnalysisOverview {
   refundCount: number;
   /** 整体结算率 = verifyAmount / tradeAmount（核销金额含余额，分母须用含余额交易额） */
   settlementRate: number;
-  /** 客单价 = sales / orderCount */
+  /** 客单价 = 净 GMV / 支付订单数 */
   avgOrderValue: number;
   /** 目标达成比 = sales / TARGET */
   targetRatio: number;

@@ -20,7 +20,7 @@ describe('residual #69 overview heavy gate + cache bound', () => {
     expect(svc).toMatch(/HeavyAggregateQueueFullError/);
     expect(svc).toMatch(/总览计算繁忙/);
     // KPI cold path opt-in to heavy gate via 4th arg.
-    expect(svc).toMatch(/loadOverviewKpis\([^)]*true\s*\)/);
+    expect(svc).toMatch(/loadOverviewKpis\([^)]*true,\s*force\s*\)/);
     expect(kpis).toContain('withHeavyAggregateGate');
     expect(kpis).toMatch(/useHeavyGate/);
   });

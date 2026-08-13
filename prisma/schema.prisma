@@ -783,6 +783,8 @@ model ReconciliationDiff {
 
 model Member {
   memberId         String    @id
+  inviteCode       String?   @unique
+  parentInviteCode String?
   nickname         String?
   phone            String?
   level            String?
@@ -807,6 +809,7 @@ model Member {
   @@index([phone])
   @@index([lastOrderAt])
   @@index([level])
+  @@index([parentInviteCode])
 }
 
 model MemberPointLedger {

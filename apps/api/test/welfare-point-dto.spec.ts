@@ -18,8 +18,7 @@ describe('WelfarePointQueryDto', () => {
       sourceType: '5',
       dateFrom: '2026-08-01',
       dateTo: '2026-08-10',
-      keyword: '积分',
-      reload: true
+      keyword: '积分'
     });
     expect(errs).toHaveLength(0);
   });

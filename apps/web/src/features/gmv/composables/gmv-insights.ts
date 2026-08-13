@@ -38,7 +38,7 @@ export function buildGmvInsights({ kpi, hourly, categories }: GmvInsightInput): 
       tone: 'blue',
       icon: Timer,
       title: `${peak.label} 成交高峰`,
-      desc: `该时段GMV占比${share}%`
+      desc: `该时段净 GMV 占比 ${share}%`
     });
   }
 
@@ -69,7 +69,7 @@ export function buildGmvInsights({ kpi, hourly, categories }: GmvInsightInput): 
       tone: 'green',
       icon: CircleCheck,
       title: `${top.name}表现亮眼`,
-      desc: `${top.name}品类GMV占比${(top.share * 100).toFixed(1)}%`
+      desc: `${top.name}品类净 GMV 占比 ${(top.share * 100).toFixed(1)}%`
     });
   }
 

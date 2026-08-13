@@ -18,7 +18,9 @@ describe('residual #235 merchant detail days selectable', () => {
     expect(src).toMatch(/if \(n > 90\) return 90/);
     expect(src).toMatch(/detailDays:\s*ref\(30\)/);
     expect(src).toMatch(/getMerchantTrend\(params\.merchantId,\s*dayCount\)/);
-    expect(src).toMatch(/getMerchantSkus\(params\.merchantId,\s*dayCount\)/);
+    expect(src).toMatch(
+      /getMerchantSkus\(params\.merchantId,\s*dayCount,\s*params\.force === true\)/
+    );
     // Hard-coded 30 must no longer be the only load path.
     expect(src).not.toMatch(/getMerchantTrend\(params\.merchantId,\s*30\)/);
   });

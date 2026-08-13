@@ -7,14 +7,6 @@
   --iam-paper: #fbfcfe;
   gap: 10px;
 }
-.iam-hero {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 20px;
-  padding: 8px 2px 14px;
-}
-.iam-kicker,
 .iam-eyebrow,
 .iam-rail-label {
   margin: 0 0 7px;
@@ -23,38 +15,14 @@
   font-weight: 800;
   letter-spacing: 0.14em;
 }
-.iam-hero h2,
 .iam-section-head h3 {
   margin: 0;
   color: var(--iam-ink);
   letter-spacing: -0.035em;
 }
-.iam-hero h2 {
-  font-size: 26px;
-}
-.iam-subtitle,
 .iam-section-head p {
   margin: 6px 0 0;
   color: var(--iam-muted);
-  font-size: 12px;
-}
-.iam-hero-meta {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-}
-.iam-hero-meta > div {
-  display: grid;
-  gap: 2px;
-  text-align: right;
-}
-.iam-hero-meta span {
-  color: var(--iam-muted);
-  font-size: 11px;
-}
-.iam-hero-meta strong {
-  color: var(--iam-ink);
-  font-family: var(--font-numeric);
   font-size: 12px;
 }
 .iam-layout {
@@ -437,14 +405,6 @@
   }
 }
 @media (max-width: 640px) {
-  .iam-hero {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-  .iam-hero-meta {
-    justify-content: space-between;
-    width: 100%;
-  }
   .permission-grid,
   .dialog-permissions {
     grid-template-columns: 1fr;

@@ -51,7 +51,7 @@ function useZeroSalesSummary(params: { onBucketSelect: (bucket: string) => void 
   let dimRequestId = 0;
   const staleOption = computed(() => buildZeroSalesStaleOption(staleDistribution.value)),
     dimOption = computed(() => buildZeroSalesDimOption(dimDistribution.value, dim.value));
-  async function loadSummary() {
+  async function loadSummary(force = false) {
     if (disposed) return;
     const currentSummaryRequestId = ++summaryRequestId;
     const currentDimRequestId = ++dimRequestId;
@@ -61,9 +61,9 @@ function useZeroSalesSummary(params: { onBucketSelect: (bucket: string) => void 
     try {
       // Residual #288: distribution returns { items, limit, matched, truncated }.
       const [kpi, stale, dimRows] = await Promise.all([
-        getOverviewKpis(),
-        getOverviewDistribution('stale', 10),
-        getOverviewDistribution(currentDim, 12)
+        getOverviewKpis(undefined, force),
+        getOverviewDistribution('stale', 10, undefined, force),
+        getOverviewDistribution(currentDim, 12, undefined, force)
       ]);
       if (disposed || currentSummaryRequestId !== summaryRequestId) return;
       overviewKpi.value = kpi;
@@ -129,7 +129,7 @@ export function useZeroSalesPage() {
     zs.onFilterChange();
   }
   async function reloadAll() {
-    await Promise.all([zs.reload(), summary.loadSummary()]);
+    await Promise.all([zs.reload(), summary.loadSummary(true)]);
   }
   onMounted(() => {
     void summary.loadSummary();

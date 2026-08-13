@@ -92,6 +92,7 @@ export async function loadMerchantList(params: {
   // Residual #266: optional honesty sinks for MERCHANT_LIST_CACHE_CAP.
   listTruncated?: Ref<boolean>;
   listLimit?: Ref<number | null>;
+  force?: boolean;
   isCurrent?: () => boolean;
 }): Promise<void> {
   const isCurrent = params.isCurrent ?? (() => true);
@@ -104,7 +105,8 @@ export async function loadMerchantList(params: {
       areaId: params.areaId.value || undefined,
       sort: params.sort.value,
       page: params.page.value,
-      pageSize: 20
+      pageSize: 20,
+      ...(params.force ? { force: true } : {})
     });
     if (!isCurrent()) return;
     params.merchants.value = result.items;
@@ -137,6 +139,7 @@ export async function loadMerchantDetail(params: {
   competitorsTruncated?: Ref<boolean>;
   competitorsLimit?: Ref<number | null>;
   competitorsMatched?: Ref<number | null>;
+  force?: boolean;
   isCurrent?: () => boolean;
 }): Promise<void> {
   if (!params.merchantId) return;
@@ -148,9 +151,9 @@ export async function loadMerchantDetail(params: {
   );
   try {
     const [p, t, skus, comp] = await Promise.all([
-      getMerchantProfile(params.merchantId),
+      getMerchantProfile(params.merchantId, params.force === true),
       getMerchantTrend(params.merchantId, dayCount),
-      getMerchantSkus(params.merchantId, dayCount),
+      getMerchantSkus(params.merchantId, dayCount, params.force === true),
       getMerchantCompetitors(params.merchantId)
     ]);
     if (!isCurrent()) return;

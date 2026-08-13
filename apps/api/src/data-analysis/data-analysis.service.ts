@@ -75,7 +75,8 @@ export class DataAnalysisService {
     date?: string,
     endDate?: string,
     detailLimit = DEFAULT_DETAIL_LIMIT,
-    rankingLimit = DEFAULT_RANKING_LIMIT
+    rankingLimit = DEFAULT_RANKING_LIMIT,
+    force = false
   ): Promise<DataAnalysisSummary> {
     // Summary is a UI preview — never materialize order-detail rows just to count them.
     // Cap ranking rows for the interactive payload; Excel export uses full rankingLimit.
@@ -90,7 +91,7 @@ export class DataAnalysisService {
     const cacheKey = `da:summary:${window}:${date ?? ''}:${endDate ?? ''}:${uiRanking}:${safeDetailLimit}`;
     try {
       // Cache hits skip the gate; cold multi-OH matrix shares process-wide heavy pool.
-      return await this.summaryCache.getOrLoad(cacheKey, false, () =>
+      return await this.summaryCache.getOrLoad(cacheKey, force, () =>
         withHeavyAggregateGate(() =>
           this.buildSummary(window, date, endDate, detailLimit, uiRanking, safeDetailLimit)
         )

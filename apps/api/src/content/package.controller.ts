@@ -16,7 +16,7 @@ import type { Request } from 'express';
 import type { RecommendPackageItem, UserRole } from '@content/shared';
 import { beijingDateKey, paginate, USER_ROLES } from '@content/shared';
 import { ContentService } from './content.service';
-import { BattleCardGenerateDto, RecommendationsQueryDto } from './content.dto';
+import { BattleCardGenerateDto, CommunitiesQueryDto, RecommendationsQueryDto } from './content.dto';
 import { Public } from '../auth';
 import { Roles } from '../user-access/role.decorator';
 import { RequireLogin } from '../user-access/iam/route-auth.decorator';
@@ -27,6 +27,7 @@ import { nowISO } from '../common/format';
 import { safePathId } from '../common/path-id';
 import { RECOMMEND_CACHE_CAP } from '../common/sql-chunk';
 import { PrismaService } from '../prisma/prisma.service';
+import { hasForceSignal } from '../common/force-signal';
 
 type AuthUser = {
   userId: string;
@@ -77,19 +78,22 @@ export class PackageController {
         truncated: false
       };
     }
-    const result = this.contentService.getRecommendations({
-      date: query.date,
-      areaId: scoped.areaId,
-      merchantId: scoped.merchantId,
-      areaIds: scoped.areaIds,
-      merchantIds: scoped.merchantIds,
-      role: query.role,
-      status: query.status,
-      category: query.category,
-      inventoryMin: query.inventoryMin,
-      inventoryMax: query.inventoryMax,
-      inventoryFlag: query.inventoryFlag
-    });
+    const result = this.contentService.getRecommendations(
+      {
+        date: query.date,
+        areaId: scoped.areaId,
+        merchantId: scoped.merchantId,
+        areaIds: scoped.areaIds,
+        merchantIds: scoped.merchantIds,
+        role: query.role,
+        status: query.status,
+        category: query.category,
+        inventoryMin: query.inventoryMin,
+        inventoryMax: query.inventoryMax,
+        inventoryFlag: query.inventoryFlag
+      },
+      hasForceSignal(req, query)
+    );
     // Always page at the controller — unbounded recommend payloads are a DoS vector
     // for unrestricted roles (full catalog). Default pageSize=50, max 200 via DTO.
     // Residual #267: forward matchedCount + limit/truncated so SPA can warn when the
@@ -196,7 +200,10 @@ export class PackageController {
   @Throttle({ long: { limit: 30, ttl: 60000 } })
   @Get('communities')
   @RequirePermissions('community:read')
-  getCommunities(@Query('role') role: UserRole | undefined, @Req() req: Request) {
+  getCommunities(
+    @Query(createDtoPipe(CommunitiesQueryDto)) query: CommunitiesQueryDto,
+    @Req() req: Request
+  ) {
     const actor = req.user as AuthUser | undefined;
     const scoped = resolveScopedQuery(actor ?? {}, {});
     if (scoped.emptyScope) {
@@ -214,14 +221,19 @@ export class PackageController {
         groupTruncated: false
       };
     }
-    const safeRole = role && (USER_ROLES as readonly string[]).includes(role) ? role : undefined;
+    const safeRole =
+      query.role && (USER_ROLES as readonly string[]).includes(query.role) ? query.role : undefined;
     // JWT scope drives area/merchant clamp; only allow known role enum values.
-    return this.contentService.getCommunities(safeRole, {
-      areaId: scoped.areaId,
-      merchantId: scoped.merchantId,
-      areaIds: scoped.areaIds,
-      merchantIds: scoped.merchantIds
-    });
+    return this.contentService.getCommunities(
+      safeRole,
+      {
+        areaId: scoped.areaId,
+        merchantId: scoped.merchantId,
+        areaIds: scoped.areaIds,
+        merchantIds: scoped.merchantIds
+      },
+      hasForceSignal(req, query)
+    );
   }
 
   @Throttle({ long: { limit: 30, ttl: 60000 } })

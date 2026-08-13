@@ -7,14 +7,14 @@ export interface OverviewKpiPayload {
   zeroSalesSkuRatio: number;
   todayGmvFen: bigint | null;
   todayOrderCount: number;
-  updatedAt: string;
+  updatedAt: string | null;
   /** Money fields use OrderHeader/DailyMetrics; inventory stale is separate. */
   dataSource: 'OrderHeader' | 'DailyMetrics' | 'empty' | string;
 }
 
 export interface OverviewTrendPoint {
   date: string;
-  gmv: number;
+  gmvFen: bigint | null;
   paidOrderCount: number;
 }
 

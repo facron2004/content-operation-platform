@@ -6,9 +6,9 @@ import type { GmvDistributionPayload, GmvDistributionRow } from './gmv.dto';
  * Residual #289: project Top-N named buckets + optional synthetic 其他 long-tail,
  * plus honesty fields so SPA can banner when head is incomplete.
  *
- * limit is the requested named-bucket head (SQL LIMIT). matched is at-least
- * limit + 1 when truncated (long-tail remainder exists) — no extra COUNT(*) of
- * distinct keys. Share denominators stay platform totalGmv (not re-based on head).
+ * Callers query LIMIT+1. This matters for signed net GMV: a negative or zero
+ * tail cannot be detected by testing whether head GMV is below the platform
+ * total. Share denominators stay platform totalGmv (not re-based on head).
  */
 export function mapDistributionRows(
   rows: Array<{
@@ -31,9 +31,10 @@ export function mapDistributionRows(
       ? Math.floor(limit)
       : rows.length;
   const safeTotalGmvFen = toFenBigInt(totalGmvFen);
+  const namedRows = rows.slice(0, safeLimit);
   const getGmvFen = (r: (typeof rows)[number]) => toFenBigInt(r.gmvFen ?? r.gmv);
-  const topGmv = rows.reduce((s, r) => s + getGmvFen(r), 0n);
-  const items: (GmvDistributionRow & { totalGmv?: number })[] = rows.map((r) => {
+  const topGmv = namedRows.reduce((s, r) => s + getGmvFen(r), 0n);
+  const items: (GmvDistributionRow & { totalGmv?: number })[] = namedRows.map((r) => {
     const gmvVal = r.gmvFen ?? r.gmv ?? 0;
     const onlineVal = r.gmvOnlineFen ?? r.gmvOnline ?? 0;
     const walletVal = r.gmvWalletFen ?? r.gmvWallet ?? 0;
@@ -52,28 +53,31 @@ export function mapDistributionRows(
       gmvOnlineFen: netParts.onlineFen,
       gmvWalletFen: netParts.walletFen,
       gmvBonusFen: bonusFen,
-      share: safeTotalGmvFen > 0n ? Number(gmvFen) / Number(safeTotalGmvFen) : 0
+      share: safeTotalGmvFen !== 0n ? Number(gmvFen) / Number(safeTotalGmvFen) : 0
     };
   });
-  // Residual #289: long-tail remainder means head was capped.
-  const truncated = safeTotalGmvFen > 0n && topGmv < safeTotalGmvFen;
+  // Prefer the LIMIT+1 probe. Keep the remainder check for compatibility with
+  // direct callers that still pass only the head rows.
+  const truncated = rows.length > safeLimit || topGmv !== safeTotalGmvFen;
   if (truncated) {
     const otherGmv = safeTotalGmvFen - topGmv;
     items.push({
       key: '其他',
       totalGmv: Number(otherGmv),
       totalGmvFen: otherGmv,
-      gmvOnlineFen: otherGmv,
-      gmvWalletFen: 0n,
-      gmvBonusFen: 0n,
-      share: Number(otherGmv) / Number(safeTotalGmvFen)
+      // The LIMIT+1 probe proves a tail but does not materialize every tail
+      // bucket, so its payment-channel split is intentionally unknown.
+      gmvOnlineFen: null,
+      gmvWalletFen: null,
+      gmvBonusFen: null,
+      share: safeTotalGmvFen !== 0n ? Number(otherGmv) / Number(safeTotalGmvFen) : 0
     });
   }
   return {
     items,
     limit: safeLimit,
-    // When truncated we know at least one extra named bucket exists beyond the head.
-    matched: truncated ? Math.max(safeLimit + 1, rows.length + 1) : rows.length,
+    // LIMIT+1 only proves "at least one more"; it intentionally avoids COUNT(*).
+    matched: truncated ? Math.max(safeLimit + 1, rows.length) : namedRows.length,
     truncated
   };
 }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createClient, type InValue } from '@libsql/client';
+import { safeRatio } from '@content/shared';
 import {
   fixedSnapshotWindows,
   paidTimeBounds,
@@ -22,6 +23,15 @@ import {
   querySalesmanRefunds
 } from '../src/data-analysis/data-analysis-query';
 import type { DataAnalysisReport } from '../src/data-analysis/data-analysis.dto';
+import { rateByCount } from '../src/data-analysis/data-analysis-query.shared';
+
+describe('data-analysis count-rate precision', () => {
+  it('matches the shared four-decimal policy for non-terminating ratios', () => {
+    expect(rateByCount(1, 3)).toBe(0.3333);
+    expect(rateByCount(1, 3)).toBe(safeRatio(1, 3));
+    expect(rateByCount(0, 0)).toBe(0);
+  });
+});
 
 describe('resolvePackageDisplayName', () => {
   it('keeps real package titles', () => {
@@ -137,7 +147,45 @@ describe('data-analysis window', () => {
 });
 
 describe('data-analysis refund paidTime attribution', () => {
-  it('uses paidTime and sums paid plus balance components regardless of refundTime', async () => {
+  it('uses all paid orders as the refund-ranking verify-rate denominator', async () => {
+    const client = createClient({ url: 'file::memory:' });
+    try {
+      await client.execute(`
+        CREATE TABLE "OrderHeader" (
+          "paidTime" TEXT,
+          "refundAmountFen" INTEGER,
+          "verifyTime" TEXT,
+          "merchantName" TEXT,
+          "salesman" TEXT
+        )
+      `);
+      for (const args of [
+        ['2026-08-12 01:00:00', 100, null, '商家A', '业务员A'],
+        ['2026-08-12 02:00:00', 0, '2026-08-12 03:00:00', '商家A', '业务员A'],
+        ['2026-08-12 04:00:00', 0, '2026-08-12 05:00:00', '商家A', '业务员A']
+      ] as InValue[][]) {
+        await client.execute({
+          sql: 'INSERT INTO "OrderHeader" VALUES (?, ?, ?, ?, ?)',
+          args
+        });
+      }
+      const prisma = {
+        $queryRawUnsafe: async <T = unknown>(sql: string, ...args: InValue[]) =>
+          (await client.execute({ sql, args })).rows as T
+      };
+
+      await expect(queryMerchantRefunds(prisma, '2026-08-12', '2026-08-12', 10)).resolves.toEqual([
+        { name: '商家A', orderCount: 1, refundAmount: 1, verifyRate: 0.6667 }
+      ]);
+      await expect(querySalesmanRefunds(prisma, '2026-08-12', '2026-08-12', 10)).resolves.toEqual([
+        { name: '业务员A', orderCount: 1, refundAmount: 1, verifyRate: 0.6667 }
+      ]);
+    } finally {
+      await client.close();
+    }
+  });
+
+  it('uses paidTime and sums the actual refundAmountFen regardless of refundTime', async () => {
     const client = createClient({ url: 'file::memory:?cache=shared' });
     await client.execute(`
       CREATE TABLE "OrderHeader" (
@@ -243,8 +291,10 @@ describe('data-analysis refund paidTime attribution', () => {
         salesAmount: 102,
         walletAmount: 5,
         tradeAmount: 107,
-        netGmv: 0,
-        refundAmount: 107,
+        netGmv: -20,
+        refundAmount: 127,
+        avgOrderValue: -10,
+        pendingVerifyCount: 0,
         // Both fixture orders are unverified (verifyTime IS NULL).
         writeOffAmount: 0
       });
@@ -254,25 +304,25 @@ describe('data-analysis refund paidTime attribution', () => {
           date: '2026-07-02',
           salesAmount: 102,
           tradeAmount: 107,
-          netGmv: 0,
+          netGmv: -20,
           writeOffAmount: 0,
           orderCount: 2,
-          refundAmount: 107
+          refundAmount: 127
         }
       ]);
 
       await expect(queryMerchantRefunds(prisma, '2026-07-02', '2026-07-02', 10)).resolves.toEqual([
-        { name: '商家A', orderCount: 1, refundAmount: 100, verifyRate: 0 },
+        { name: '商家A', orderCount: 1, refundAmount: 120, verifyRate: 0 },
         { name: '商家C', orderCount: 1, refundAmount: 7, verifyRate: 0 }
       ]);
       await expect(querySalesmanRefunds(prisma, '2026-07-02', '2026-07-02', 10)).resolves.toEqual([
-        { name: '业务员A', orderCount: 1, refundAmount: 100, verifyRate: 0 },
+        { name: '业务员A', orderCount: 1, refundAmount: 120, verifyRate: 0 },
         { name: '业务员C', orderCount: 1, refundAmount: 7, verifyRate: 0 }
       ]);
 
       await expect(queryMerchantRanking(prisma, '2026-07-02', '2026-07-02', 10)).resolves.toEqual([
-        expect.objectContaining({ name: '商家A', refundAmount: 100 }),
-        expect.objectContaining({ name: '商家C', refundAmount: 7 })
+        expect.objectContaining({ name: '商家A', refundAmount: 120, avgOrderValue: -20 }),
+        expect.objectContaining({ name: '商家C', refundAmount: 7, avgOrderValue: 0 })
       ]);
     } finally {
       await client.close();
@@ -542,7 +592,14 @@ describe('data-analysis excel builder (砍价订单模板)', () => {
       '退款分析',
       '订单明细'
     ]);
-    expect(wb.getWorksheet('总览')?.getCell('A1').value).toBe('砍价订单数据分析报告');
+    const overviewSheet = wb.getWorksheet('总览');
+    expect(overviewSheet?.getCell('A1').value).toBe('砍价订单数据分析报告');
+    expect(overviewSheet?.getCell('A2').value).toContain('共 3 笔支付订单');
+    expect(overviewSheet?.getCell('A4').value).toBe('支付订单数');
+    expect(overviewSheet?.getCell('A10').value).toBe('净客单价');
+    expect(overviewSheet?.getCell('A16').value).toContain('净客单价=净GMV÷支付订单数');
+    expect(wb.getWorksheet('业务员排行')?.getRow(3).getCell(3).value).toBe('支付订单数');
+    expect(wb.getWorksheet('业务员排行')?.getRow(3).getCell(10).value).toBe('净客单价');
     expect(wb.getWorksheet('订单明细')?.getRow(1).getCell(1).value).toBe('合作商');
   });
 });

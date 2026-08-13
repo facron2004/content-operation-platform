@@ -50,7 +50,7 @@ function kpiFor(date: string): OverviewKpi {
     zeroSalesMerchants: 1,
     zeroSalesSkuCount: 1,
     zeroSalesSkuRatio: 1,
-    todayGmv: 1,
+    todayGmvFen: '100',
     todayOrderCount: 1,
     updatedAt: date,
     dataSource: 'test'
@@ -58,7 +58,7 @@ function kpiFor(date: string): OverviewKpi {
 }
 
 function trendFor(date: string): OverviewTrendPoint[] {
-  return [{ date, gmv: 1, paidOrderCount: 1 }];
+  return [{ date, gmvFen: '100', paidOrderCount: 1 }];
 }
 
 function offenderFor(merchantId: string): OverviewTopOffender {
@@ -204,6 +204,22 @@ describe('overview request lifecycle', () => {
     expect(state.topOffenders.value[0]?.merchantId).toBe('latest');
     expect(state.loadError.value).toBeNull();
     expect(state.loading.value).toBe(false);
+  });
+
+  it('forces every overview read and carries the selected business date on manual reload', async () => {
+    mocks.getOverviewKpis.mockReset().mockResolvedValue(kpiFor('2026-08-05'));
+    mocks.getOverviewTrend.mockReset().mockResolvedValue(trendFor('2026-08-05'));
+    mocks.getOverviewDistribution.mockReset().mockResolvedValue(distributionFor('stale'));
+    mocks.getOverviewTopOffenders.mockReset().mockResolvedValue(offenderResponse('merchant-1'));
+    scope = effectScope();
+    const { actions } = scope.run(() => createState())!;
+
+    await actions.reload(true);
+
+    expect(mocks.getOverviewKpis).toHaveBeenCalledWith('2026-08-05', true);
+    expect(mocks.getOverviewTrend).toHaveBeenCalledWith(7, '2026-08-05', true);
+    expect(mocks.getOverviewDistribution).toHaveBeenCalledWith('stale', 20, '2026-08-05', true);
+    expect(mocks.getOverviewTopOffenders).toHaveBeenCalledWith(10, '2026-08-05', true);
   });
 
   it('ignores late data and blocks new overview requests after scope disposal', async () => {

@@ -4,8 +4,11 @@ import type { AxiosRequestConfig } from 'axios';
 import type { RetryableConfig } from '../http-client-utils';
 import { buildBusinessIntentKey } from '../idempotency-key';
 
+export type GmvFenValue = string | number | null;
+
 export interface GmvCompareDelta {
   totalGmv?: number | null;
+  totalGmvFen?: number | null;
   paidOrderCount?: number | null;
   avgOrderValue?: number | null;
   refundRate?: number | null;
@@ -15,54 +18,90 @@ export interface GmvCompareDelta {
 
 export interface GmvKpi {
   date: string;
-  totalGmv: number;
-  gmvOnline: number;
-  gmvWallet: number;
-  gmvBonus: number;
-  gmvCard: number;
-  totalRefund: number;
+  /** Legacy float fields remain optional during the API money-contract rollout. */
+  totalGmv?: number | null;
+  totalGmvFen?: GmvFenValue;
+  totalGmvDisplay?: string | null;
+  gmvOnline?: number | null;
+  gmvOnlineFen?: GmvFenValue;
+  gmvOnlineDisplay?: string | null;
+  gmvWallet?: number | null;
+  gmvWalletFen?: GmvFenValue;
+  gmvWalletDisplay?: string | null;
+  gmvBonus?: number | null;
+  gmvBonusFen?: GmvFenValue;
+  gmvBonusDisplay?: string | null;
+  gmvCard?: number | null;
+  gmvCardFen?: GmvFenValue;
+  totalRefund?: number | null;
+  totalRefundFen?: GmvFenValue;
+  totalRefundDisplay?: string | null;
   refundRate: number;
   refundOrderCount: number;
-  totalVerify: number;
+  totalVerify?: number | null;
+  totalVerifyFen?: GmvFenValue;
+  totalVerifyDisplay?: string | null;
   verifyRate: number;
   paidOrderCount: number;
-  paidAmountBonus: number;
-  paidAmountWallet: number;
-  avgOrderValue: number;
-  monthGmv: number;
-  monthGmvOnline: number;
-  monthGmvWallet: number;
-  platformCommission: number;
+  paidAmountBonus?: number | null;
+  paidAmountBonusFen?: GmvFenValue;
+  paidAmountWallet?: number | null;
+  paidAmountWalletFen?: GmvFenValue;
+  avgOrderValue?: number | null;
+  monthGmv?: number | null;
+  monthGmvFen?: GmvFenValue;
+  monthGmvDisplay?: string | null;
+  monthGmvOnline?: number | null;
+  monthGmvOnlineFen?: GmvFenValue;
+  monthGmvWallet?: number | null;
+  monthGmvWalletFen?: GmvFenValue;
   compare?: GmvCompareDelta;
-  updatedAt: string;
-  dataSource: 'DailyMetrics' | 'SalesSnapshot' | 'OrderHeader';
+  updatedAt: string | null;
+  dataSource: 'DailyMetrics' | 'OrderHeader' | 'empty';
 }
 
 export interface GmvTrendPoint {
   date: string;
-  totalGmv: number;
-  gmvOnline: number;
-  gmvWallet: number;
-  gmvBonus: number;
-  totalRefund: number;
+  totalGmv?: number | null;
+  totalGmvFen?: GmvFenValue;
+  totalGmvDisplay?: string | null;
+  gmvOnline?: number | null;
+  gmvOnlineFen?: GmvFenValue;
+  gmvWallet?: number | null;
+  gmvWalletFen?: GmvFenValue;
+  gmvBonus?: number | null;
+  gmvBonusFen?: GmvFenValue;
+  totalRefund?: number | null;
+  totalRefundFen?: GmvFenValue;
   refundRate: number;
   verifyRate: number;
   paidOrderCount: number;
+  refundCount?: number;
+  verifyCount?: number;
 }
 
 export interface GmvHourlyPoint {
   hour: number;
   label: string;
-  totalGmv: number;
+  totalGmv?: number | null;
+  totalGmvFen?: GmvFenValue;
+  totalGmvDisplay?: string | null;
   paidOrderCount: number;
 }
 
 export interface GmvDistributionRow {
   key: string;
-  totalGmv: number;
-  gmvOnline: number;
-  gmvWallet: number;
-  gmvBonus: number;
+  totalGmv?: number | null;
+  totalGmvFen?: GmvFenValue;
+  totalGmvDisplay?: string | null;
+  gmvOnline?: number | null;
+  gmvOnlineFen?: GmvFenValue;
+  gmvOnlineDisplay?: string | null;
+  gmvWallet?: number | null;
+  gmvWalletFen?: GmvFenValue;
+  gmvWalletDisplay?: string | null;
+  gmvBonus?: number | null;
+  gmvBonusFen?: GmvFenValue;
   share: number;
 }
 
@@ -78,9 +117,15 @@ export interface GmvMerchantRow {
   merchantId: string;
   merchantName: string;
   areaName: string | null;
-  gmv: number;
-  gmvRefund: number;
-  gmvVerify: number;
+  gmv?: number | null;
+  gmvFen?: GmvFenValue;
+  gmvDisplay?: string | null;
+  gmvRefund?: number | null;
+  gmvRefundFen?: GmvFenValue;
+  gmvRefundDisplay?: string | null;
+  gmvVerify?: number | null;
+  gmvVerifyFen?: GmvFenValue;
+  gmvVerifyDisplay?: string | null;
   refundRate: number;
   verifyRate: number;
   paidOrderCount: number;
@@ -198,28 +243,32 @@ export async function getGmvHourly(date?: string, force = false) {
 export async function getGmvDistribution(
   dim: 'area' | 'category' | 'channel',
   limit = 20,
-  force = false
+  force = false,
+  date?: string
 ) {
+  const dateQuery = date ? `&date=${encodeURIComponent(date)}` : '';
   return (
-    await client.get<GmvDistributionResponse>(withForce(`/gmv/distribution?dim=${dim}`, force), {
-      params: { limit },
-      timeout: 10000
-    })
+    await client.get<GmvDistributionResponse>(
+      withForce(`/gmv/distribution?dim=${dim}${dateQuery}`, force),
+      { params: { limit }, timeout: 10000 }
+    )
   ).data;
 }
 
 export async function getGmvByMerchant(
-  sortBy: 'gmvDesc' | 'refundDesc' | 'verifyDesc' = 'gmvDesc',
+  sortBy: 'gmvDesc' | 'refundDesc' | 'verifyDesc' | 'orderDesc' = 'gmvDesc',
   page = 1,
   pageSize = 20,
-  force = false
+  force = false,
+  date?: string
 ) {
+  const url = date ? `/gmv/by-merchant?date=${encodeURIComponent(date)}` : '/gmv/by-merchant';
   return (
     await client.get<{
       items: GmvMerchantRow[];
       hasMore: boolean;
       limit?: number;
       truncated?: boolean;
-    }>(withForce('/gmv/by-merchant', force), { params: { sortBy, page, pageSize }, timeout: 10000 })
+    }>(withForce(url, force), { params: { sortBy, page, pageSize }, timeout: 10000 })
   ).data;
 }

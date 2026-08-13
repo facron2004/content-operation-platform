@@ -49,4 +49,21 @@ describe('recommendationCacheKey', () => {
     await expect(runtime.getRecommendations(query)).resolves.toBe(freshPayload);
     expect(compute).toHaveBeenCalledTimes(2);
   });
+
+  it('force-refreshes only the requested recommendation key', async () => {
+    const compute = vi.fn(async (query: { category?: string }) =>
+      payload(`${query.category ?? 'all'}-${compute.mock.calls.length}`)
+    );
+    const runtime = createRecommendationRuntime(compute);
+    const food = { status: 'selling' as const, category: 'food' };
+    const hotel = { status: 'selling' as const, category: 'hotel' };
+
+    const firstFood = await runtime.getRecommendations(food);
+    const firstHotel = await runtime.getRecommendations(hotel);
+    await expect(runtime.getRecommendations(food)).resolves.toBe(firstFood);
+    await expect(runtime.getRecommendations(food, true)).resolves.not.toBe(firstFood);
+    await expect(runtime.getRecommendations(hotel)).resolves.toBe(firstHotel);
+
+    expect(compute).toHaveBeenCalledTimes(3);
+  });
 });

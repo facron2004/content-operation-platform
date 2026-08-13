@@ -27,9 +27,10 @@ export class DashboardService {
   getTodayOperationConsole(
     role: UserRole | undefined,
     getRecommendations: GetRecommendationsFn,
-    scope: DashboardOpsScope = {}
+    scope: DashboardOpsScope = {},
+    force = false
   ) {
-    return this.operationsService.getTodayOperationConsole(role, getRecommendations, scope);
+    return this.operationsService.getTodayOperationConsole(role, getRecommendations, scope, force);
   }
 
   getDashboardSummary(

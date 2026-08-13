@@ -6,12 +6,16 @@ const mocks = vi.hoisted(() => ({
   getDataAnalysisSummary: vi.fn(),
   getDataAnalysisExportUrl: vi.fn(() => '/data-analysis/export'),
   downloadBlob: vi.fn(),
-  success: vi.fn()
+  success: vi.fn(),
+  mountedCallbacks: [] as Array<() => void>
 }));
 
 vi.mock('vue', async () => {
   const actual = await vi.importActual<typeof import('vue')>('vue');
-  return { ...actual, onMounted: () => undefined };
+  return {
+    ...actual,
+    onMounted: (callback: () => void) => mocks.mountedCallbacks.push(callback)
+  };
 });
 
 vi.mock('element-plus', () => ({
@@ -58,6 +62,7 @@ describe('data analysis page request lifecycle', () => {
     mocks.downloadBlob.mockReset().mockResolvedValue(undefined);
     mocks.getDataAnalysisExportUrl.mockClear();
     mocks.success.mockReset();
+    mocks.mountedCallbacks.length = 0;
   });
 
   afterEach(() => {
@@ -85,6 +90,35 @@ describe('data analysis page request lifecycle', () => {
     expect(page.summary?.date).toBe('latest');
     expect(page.loadError).toBeNull();
     expect(page.loading).toBe(false);
+  });
+
+  it('uses force only for an explicit manual reload', async () => {
+    scope = effectScope();
+    const page = scope.run(() => useDataAnalysisPage())!;
+
+    await page.reload(true);
+
+    expect(mocks.getDataAnalysisSummary).toHaveBeenCalledWith(
+      expect.objectContaining({ force: true })
+    );
+  });
+
+  it('keeps mount, preset, and custom-range loads on the ordinary path', async () => {
+    scope = effectScope();
+    const page = scope.run(() => useDataAnalysisPage())!;
+
+    mocks.mountedCallbacks[0]?.();
+    await vi.waitFor(() => expect(mocks.getDataAnalysisSummary).toHaveBeenCalledTimes(1));
+    page.onPresetChange('last7');
+    await vi.waitFor(() => expect(mocks.getDataAnalysisSummary).toHaveBeenCalledTimes(2));
+    page.onCustomRangeChange(['2026-08-01', '2026-08-05']);
+    await vi.waitFor(() => expect(mocks.getDataAnalysisSummary).toHaveBeenCalledTimes(3));
+
+    expect(mocks.getDataAnalysisSummary.mock.calls.map(([params]) => params.force)).toEqual([
+      false,
+      false,
+      false
+    ]);
   });
 
   it('ignores late summary data and blocks reload/preset requests after disposal', async () => {

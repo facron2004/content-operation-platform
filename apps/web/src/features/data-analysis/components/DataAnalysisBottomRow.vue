@@ -37,8 +37,8 @@ const metricDefs: Array<{
   { key: 'salesAmount', label: '总销售额（实付）', kind: 'money', deltaKey: 'salesAmount' },
   { key: 'netGmv', label: '净 GMV', kind: 'money', deltaKey: 'netGmv' },
   { key: 'writeOffAmount', label: '核销额', kind: 'money', deltaKey: 'writeOffAmount' },
-  { key: 'orderCount', label: '订单数', kind: 'count', deltaKey: 'orderCount' },
-  { key: 'avgOrderValue', label: '客单价', kind: 'money', deltaKey: 'avgOrderValue' },
+  { key: 'orderCount', label: '支付订单数', kind: 'count', deltaKey: 'orderCount' },
+  { key: 'avgOrderValue', label: '净客单价', kind: 'money', deltaKey: 'avgOrderValue' },
   { key: 'verifyRate', label: '核销率', kind: 'rate', deltaKey: 'verifyRate' },
   { key: 'refundRate', label: '退款率', kind: 'rate', deltaKey: 'refundRate' },
   { key: 'settlementRate', label: '整体结算率', kind: 'rate', deltaKey: 'settlementRate' },
@@ -129,7 +129,7 @@ function displayPackageName(row: DataAnalysisPackageRankRow): string {
         <el-table-column label="销售额" min-width="110" align="right">
           <template #default="{ row }">{{ displayMoney(row, 'salesAmount') }}</template>
         </el-table-column>
-        <el-table-column label="订单数" min-width="80" align="right">
+        <el-table-column label="支付订单数" min-width="100" align="right">
           <template #default="{ row }">{{ formatNumber(row.orderCount, 0) }}</template>
         </el-table-column>
       </el-table>

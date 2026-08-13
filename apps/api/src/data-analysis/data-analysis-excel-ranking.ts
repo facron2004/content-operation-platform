@@ -33,14 +33,14 @@ export function addRankSheet(
   [
     '排名',
     name === '业务员排行' ? '业务员' : '商家',
-    '订单数',
+    '支付订单数',
     '销售额',
     '券面额',
     '余额抵扣',
     '退款金额',
     '核销数',
     '核销率',
-    '客单价'
+    '净客单价'
   ].forEach((h, i) => {
     header.getCell(i + 1).value = h;
   });

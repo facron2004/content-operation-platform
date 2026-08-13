@@ -1,20 +1,10 @@
 <template>
   <section v-loading="loading" class="page-stack order-center-view">
-    <div class="order-center-hero panel">
-      <div>
-        <p class="eyebrow">V2.0.1 / TRADE OPERATIONS</p>
-        <h1>订单中心</h1>
-        <p class="hero-description">
-          统一查看订单状态、支付、核销和退款节点，建立从交易发生到履约回收的可追溯链路。
-        </p>
-      </div>
-      <div class="order-center-hero__actions">
-        <span class="source-pill">OrderHeader + Member + ContentPackage</span>
-        <el-button :loading="loading" @click="reload">
-          <el-icon><Refresh /></el-icon>
-          刷新
-        </el-button>
-      </div>
+    <div class="page-toolbar">
+      <el-button :loading="loading" @click="reload">
+        <el-icon><Refresh /></el-icon>
+        刷新
+      </el-button>
     </div>
 
     <ErrorAlert :message="error" />
@@ -143,21 +133,21 @@
             </el-tag>
             <div class="order-detail-header__actions">
               <el-button
-                v-if="canVerify(selectedOrder.status)"
+                v-if="canManageOrders && canVerify(selectedOrder.status)"
                 type="primary"
                 size="small"
                 :loading="actionLoading"
-                @click="verifyDialogVisible = true"
+                @click="openVerifyDialog"
               >
                 核销
               </el-button>
               <el-button
-                v-if="canRefund(selectedOrder.status)"
+                v-if="canManageOrders && canRefund(selectedOrder.status)"
                 type="danger"
                 plain
                 size="small"
                 :loading="actionLoading"
-                @click="refundDialogVisible = true"
+                @click="openRefundDialog"
               >
                 发起退款
               </el-button>
@@ -284,7 +274,7 @@
                 <div class="transaction-record-actions">
                   <el-tag size="small" effect="plain">{{ item.status }}</el-tag>
                   <el-button
-                    v-if="item.status === 'requested'"
+                    v-if="canManageOrders && item.status === 'requested'"
                     size="small"
                     text
                     type="primary"
@@ -294,7 +284,7 @@
                     审批
                   </el-button>
                   <el-button
-                    v-if="item.status === 'approved'"
+                    v-if="canManageOrders && item.status === 'approved'"
                     size="small"
                     text
                     type="danger"
@@ -316,7 +306,13 @@
       </aside>
     </div>
 
-    <el-dialog v-model="verifyDialogVisible" title="订单核销" width="460px" :close-on-click-modal="false">
+    <el-dialog
+      v-if="canManageOrders"
+      v-model="verifyDialogVisible"
+      title="订单核销"
+      width="460px"
+      :close-on-click-modal="false"
+    >
       <el-form label-position="top">
         <el-form-item label="核销金额（分）">
           <el-input v-model="verifyForm.amountFen" placeholder="留空则核销剩余金额" />
@@ -334,7 +330,13 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="refundDialogVisible" title="发起退款" width="460px" :close-on-click-modal="false">
+    <el-dialog
+      v-if="canManageOrders"
+      v-model="refundDialogVisible"
+      title="发起退款"
+      width="460px"
+      :close-on-click-modal="false"
+    >
       <el-form label-position="top">
         <el-form-item label="退款类型">
           <el-select v-model="refundForm.refundType" style="width: 100%">
@@ -357,7 +359,13 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="completeRefundDialogVisible" title="完成退款" width="460px" :close-on-click-modal="false">
+    <el-dialog
+      v-if="canManageOrders"
+      v-model="completeRefundDialogVisible"
+      title="完成退款"
+      width="460px"
+      :close-on-click-modal="false"
+    >
       <el-form label-position="top">
         <el-form-item label="第三方退款流水号">
           <el-input v-model="completeRefundForm.thirdPartyRefundId" maxlength="120" />
@@ -375,12 +383,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { Refresh } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 import ErrorAlert from '../components/ErrorAlert.vue';
 import { useOrderCenter } from '../features/order-center/useOrderCenter';
+import { canManageOrders as resolveCanManageOrders } from '../features/write-action-permissions';
 import type { OrderCenterItem, RefundRequest } from '../services/api/order-center.api';
+import { useRoleStore } from '../stores/role';
 
 const {
   search,
@@ -412,6 +422,11 @@ const {
   statusType
 } = useOrderCenter();
 
+const roleStore = useRoleStore();
+const canManageOrders = computed(() =>
+  resolveCanManageOrders(roleStore.effectiveRoles, roleStore.permissions)
+);
+
 const formatCount = (value: number) => value.toLocaleString('zh-CN');
 const selectTableOrder = (row: OrderCenterItem) => selectOrder(row.orderId);
 
@@ -431,7 +446,18 @@ function messageOf(cause: unknown): string {
   return cause instanceof Error ? cause.message : '操作失败，请稍后重试';
 }
 
+function openVerifyDialog() {
+  if (!canManageOrders.value) return;
+  verifyDialogVisible.value = true;
+}
+
+function openRefundDialog() {
+  if (!canManageOrders.value) return;
+  refundDialogVisible.value = true;
+}
+
 async function submitVerify() {
+  if (!canManageOrders.value) return;
   try {
     await verifySelectedOrder({
       amountFen: verifyForm.value.amountFen || undefined,
@@ -447,6 +473,7 @@ async function submitVerify() {
 }
 
 async function submitRefund() {
+  if (!canManageOrders.value) return;
   if (!refundForm.value.reason.trim()) {
     ElMessage.warning('请填写退款原因');
     return;
@@ -466,6 +493,7 @@ async function submitRefund() {
 }
 
 async function handleApproveRefund(refund: RefundRequest) {
+  if (!canManageOrders.value) return;
   try {
     await approveSelectedRefund(refund);
     ElMessage.success('退款申请已审批');
@@ -475,12 +503,14 @@ async function handleApproveRefund(refund: RefundRequest) {
 }
 
 function openCompleteRefund(refund: RefundRequest) {
+  if (!canManageOrders.value) return;
   activeRefund.value = refund;
   completeRefundForm.value = { thirdPartyRefundId: '', restoreInventoryQuantity: 0 };
   completeRefundDialogVisible.value = true;
 }
 
 async function submitCompleteRefund() {
+  if (!canManageOrders.value) return;
   if (!activeRefund.value || !completeRefundForm.value.thirdPartyRefundId.trim()) {
     ElMessage.warning('请填写第三方退款流水号');
     return;

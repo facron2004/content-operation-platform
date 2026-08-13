@@ -1,7 +1,7 @@
 /** Consolidated refund module — OH primary, DM secondary, never SalesSnapshot. */
 import { beijingDateKey, shiftDateKey } from '@content/shared';
 import { ConflictException } from '@nestjs/common';
-import { TtlCache, withHeavyAggregateGate } from '../common';
+import { rateByCount, TtlCache, withHeavyAggregateGate } from '../common';
 import { isBeijingToday } from '../money';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -38,9 +38,10 @@ export async function resolveWithCacheFallback<T>(o: {
   secondary?: () => Promise<T | null | undefined>;
   acceptPrimary?: (v: T) => boolean;
   acceptSecondary?: (v: T) => boolean;
+  force?: boolean;
 }): Promise<T> {
   try {
-    return await o.cache.getOrLoad(o.cacheKey, false, () =>
+    return await o.cache.getOrLoad(o.cacheKey, o.force ?? false, () =>
       withHeavyAggregateGate(async () => {
         const primary = await o.primary();
         if (primary != null && (o.acceptPrimary?.(primary) ?? true)) {
@@ -111,7 +112,7 @@ export function aggregateRefundTrendByBucket(
     .map(({ _rc, _po, ...p }) => ({
       ...p,
       // Unified 单数口径: 退款单数 / 支付单数.
-      refundRate: _po > 0 ? _rc / _po : 0
+      refundRate: rateByCount(_rc, _po)
     }));
 }
 
@@ -142,7 +143,7 @@ export function aggregateVerifyTrendByBucket(
     .map(({ _vc, _po, ...p }) => ({
       ...p,
       // Unified 单数口径: 核销单数 / 支付单数.
-      verifyRate: _po > 0 ? _vc / _po : 0
+      verifyRate: rateByCount(_vc, _po)
     }));
 }
 
@@ -157,7 +158,8 @@ function bucketSpanDays(bucket: TrendBucket, days: number): number {
 export function loadRefundToday(
   prisma: PrismaService,
   cache: TtlCache,
-  q: RefundTodayQueryDto
+  q: RefundTodayQueryDto,
+  force = false
 ): Promise<RefundTodayPayload> {
   const target = q.date ?? beijingDateKey(new Date());
   const w = resolveRefundWindow(q.window ?? 'day', target);
@@ -165,6 +167,7 @@ export function loadRefundToday(
   return resolveWithCacheFallback({
     cache,
     cacheKey: `refundToday:${q.window ?? 'day'}:${q.date ?? 'today'}`,
+    force,
     primary: () =>
       computeRefundFromOrderHeader(prisma, w, (w2, n) => topRefundMerchants(prisma, w2, n)),
     // Today: always accept OH (including zeros). History: accept if non-empty else try DM.
@@ -177,7 +180,8 @@ export function loadRefundToday(
 export function loadRefundTrend(
   prisma: PrismaService,
   cache: TtlCache,
-  q: RefundTrendQueryDto
+  q: RefundTrendQueryDto,
+  force = false
 ): Promise<RefundTrendPoint[]> {
   const end = q.endDate ?? beijingDateKey(new Date());
   const bucket = q.bucket ?? 'day';
@@ -186,6 +190,7 @@ export function loadRefundTrend(
   return resolveWithCacheFallback({
     cache,
     cacheKey: `refundTrend:${bucket}:${q.days}:${q.endDate ?? 'today'}`,
+    force,
     primary: () => computeRefundTrendFromOrderHeader(prisma, start, end),
     acceptPrimary: (rows) => rows.some((r) => r.paidOrderCount > 0 || r.totalRefund > 0),
     secondary: () => refundTrendFromDailyMetrics(prisma, start, spanDays)
@@ -195,7 +200,8 @@ export function loadRefundTrend(
 export function loadVerifyToday(
   prisma: PrismaService,
   cache: TtlCache,
-  q: RefundTodayQueryDto
+  q: RefundTodayQueryDto,
+  force = false
 ): Promise<RefundVerifyTodayPayload> {
   const target = q.date ?? beijingDateKey(new Date());
   const w = resolveRefundWindow(q.window ?? 'day', target);
@@ -203,6 +209,7 @@ export function loadVerifyToday(
   return resolveWithCacheFallback({
     cache,
     cacheKey: `verifyToday:${q.window ?? 'day'}:${q.date ?? 'today'}`,
+    force,
     primary: () =>
       computeVerifyFromOrderHeader(prisma, w, (w2, n) => topVerifyMerchants(prisma, w2, n)),
     acceptPrimary: preferOh ? () => true : (oh) => oh.paidOrderCount > 0 || oh.totalVerify > 0,
@@ -213,7 +220,8 @@ export function loadVerifyToday(
 export function loadVerifyTrend(
   prisma: PrismaService,
   cache: TtlCache,
-  q: RefundTrendQueryDto
+  q: RefundTrendQueryDto,
+  force = false
 ): Promise<VerifyTrendPoint[]> {
   const end = q.endDate ?? beijingDateKey(new Date());
   const bucket = q.bucket ?? 'day';
@@ -222,6 +230,7 @@ export function loadVerifyTrend(
   return resolveWithCacheFallback({
     cache,
     cacheKey: `verifyTrend:${bucket}:${q.days}:${q.endDate ?? 'today'}`,
+    force,
     primary: () => computeVerifyTrendFromOrderHeader(prisma, start, end),
     acceptPrimary: (rows) => rows.some((r) => r.paidOrderCount > 0 || r.totalVerify > 0),
     secondary: () => verifyTrendFromDailyMetrics(prisma, start, spanDays)
@@ -230,14 +239,19 @@ export function loadVerifyTrend(
 
 export function createRefundServiceSurface(prisma: PrismaService, cache: TtlCache) {
   return {
-    getRefundToday: (q: RefundTodayQueryDto) => loadRefundToday(prisma, cache, q),
-    getRefundTrend: (q: RefundTrendQueryDto) => loadRefundTrend(prisma, cache, q),
-    getVerifyToday: (q: RefundTodayQueryDto) => loadVerifyToday(prisma, cache, q),
-    getVerifyTrend: (q: RefundTrendQueryDto) => loadVerifyTrend(prisma, cache, q),
-    getTopMerchants: async (q: RefundTopMerchantsQueryDto) => {
+    getRefundToday: (q: RefundTodayQueryDto, force = false) =>
+      loadRefundToday(prisma, cache, q, force),
+    getRefundTrend: (q: RefundTrendQueryDto, force = false) =>
+      loadRefundTrend(prisma, cache, q, force),
+    getVerifyToday: (q: RefundTodayQueryDto, force = false) =>
+      loadVerifyToday(prisma, cache, q, force),
+    getVerifyTrend: (q: RefundTrendQueryDto, force = false) =>
+      loadVerifyTrend(prisma, cache, q, force),
+    getTopMerchants: async (q: RefundTopMerchantsQueryDto, force = false) => {
       const all = await resolveWithCacheFallback({
         cache,
         cacheKey: `refundTopMerchants:${q.sortBy}:${q.window ?? 'week'}:${q.date ?? 'today'}`,
+        force,
         primary: () => queryAllTopMerchants(prisma, q.sortBy, q.window ?? 'week', q.date),
         acceptPrimary: () => true
       });

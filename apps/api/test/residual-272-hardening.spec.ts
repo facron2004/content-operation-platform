@@ -36,9 +36,10 @@ describe('residual #272 task center listTasks INTERACTIVE window honesty', () =>
     expect(src).toMatch(/windowLabel/);
   });
 
-  it('TaskCenterView shows window title + list-window-hint', async () => {
+  it('TaskCenterView shows the creation window + list-window-hint', async () => {
     const src = await readFile(path.join(webRoot, 'views', 'TaskCenterView.vue'), 'utf8');
-    expect(src).toMatch(/任务中心（\{\{\s*windowLabel\s*\}\}）/);
+    expect(src).toMatch(/<h2>任务中心<\/h2>/);
+    expect(src).toMatch(/创建时间范围：\{\{\s*windowLabel\s*\}\}/);
     expect(src).toMatch(/list-window-hint/);
     expect(src).toMatch(/listDateFrom/);
     expect(src).toMatch(/listDateTo/);

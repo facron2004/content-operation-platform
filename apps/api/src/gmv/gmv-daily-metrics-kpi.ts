@@ -105,7 +105,6 @@ export function mapDailyMetricsToKpi(
     monthGmvFen,
     monthGmvOnlineFen,
     monthGmvWalletFen,
-    platformCommission: 0,
     compare,
     updatedAt: dmRow.updatedAt.toISOString(),
     dataSource: 'DailyMetrics'

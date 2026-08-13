@@ -7,14 +7,20 @@ import { useAlerts } from './useAlerts';
 export function useAlertsPage() {
   const router = useRouter(),
     roleStore = useRoleStore(),
-    currentRole = computed(() => roleStore.currentRole);
+    currentRole = computed(() => roleStore.currentRole),
+    canResolve = computed(
+      () =>
+        roleStore.permissions.includes('content:write') &&
+        roleStore.effectiveRoles.some((role) => role === 'admin' || role === 'platform_operator')
+    );
   const drawerVisible = ref(false),
     selectedAlert = ref<(OperationAlert & { priorityScore?: number }) | null>(null),
-    alertsState = useAlerts(currentRole),
+    alertsState = useAlerts(currentRole, canResolve),
     { goAnalysis, goBattleCard } = usePackageNavigation(router);
   onMounted(() => alertsState.load());
   return {
     ...alertsState,
+    canResolve,
     drawerVisible,
     selectedAlert,
     goAnalysis,

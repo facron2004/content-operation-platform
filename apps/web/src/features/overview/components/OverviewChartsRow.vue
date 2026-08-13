@@ -6,7 +6,7 @@
       </template>
     </OverviewChartCard>
     <OverviewChartCard
-      title="零动销阶梯分布"
+      :title="distributionTitle"
       :option="distributionOption"
       :truncated="distributionTruncated"
       :limit="distributionLimit"
@@ -20,6 +20,7 @@
 </template>
 <script setup lang="ts">
 import type { EChartsOption } from 'echarts';
+import { computed } from 'vue';
 import OverviewChartCard from './OverviewChartCard.vue';
 import OverviewTrendControls from './OverviewTrendControls.vue';
 import OverviewStaleControls from './OverviewStaleControls.vue';
@@ -46,6 +47,11 @@ const emit = defineEmits<{
   loadTrend: [];
   loadDistribution: [];
 }>();
+const distributionTitle = computed(() => {
+  if (props.staleDim === 'area') return '区域分布（当前商品主数据）';
+  if (props.staleDim === 'category') return '品类分布（当前商品主数据）';
+  return '零动销阶梯分布（所选经营日）';
+});
 const onTrendChange = (v: string | number | boolean | undefined) => {
   emit('update:trendDays', Number(v) as 7 | 30);
   emit('loadTrend');

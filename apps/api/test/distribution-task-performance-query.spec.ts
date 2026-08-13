@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { getTaskKpi } from '../src/distribution-task/distribution-task-performance-query';
+import {
+  getTaskKpi,
+  getTaskPerformance
+} from '../src/distribution-task/distribution-task-performance-query';
 
 describe('distribution-task performance queries', () => {
   afterEach(() => {
@@ -31,5 +34,25 @@ describe('distribution-task performance queries', () => {
     expect(String(queryRaw.mock.calls[1][0])).toContain('TaskPerformanceDaily');
     expect(String(queryRaw.mock.calls[1][0])).toContain('"gmvFen"');
     expect(queryRaw.mock.calls[1][1]).toBe('2026-08-08');
+  });
+
+  it('uses the shared four-decimal order-rate caliber', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-08T10:00:00+08:00'));
+    const queryRaw = vi.fn().mockResolvedValue([
+      {
+        visitCount: 9,
+        orderCount: 3,
+        gmvFen: 12345n,
+        verifyCount: 1,
+        refundCount: 1,
+        conversionRate: 1 / 3
+      }
+    ]);
+
+    const result = await getTaskPerformance({ $queryRawUnsafe: queryRaw } as never, 'TASK-1');
+
+    expect(result.verifyRate).toBe(0.3333);
+    expect(result.refundRate).toBe(0.3333);
   });
 });

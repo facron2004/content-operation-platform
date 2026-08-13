@@ -1,39 +1,22 @@
 <script setup lang="ts">
-import { formatTime } from '../utils/labels';
 import { useDashboardPage } from '../features/dashboard/composables/useDashboardPage';
 import DashboardMetrics from '../features/dashboard/components/DashboardMetrics.vue';
 import DashboardTaskMetrics from '../features/dashboard/components/DashboardTaskMetrics.vue';
 import DashboardContentFunnel from '../features/dashboard/components/DashboardContentFunnel.vue';
 import DashboardFocusSections from '../features/dashboard/components/DashboardFocusSections.vue';
-import DashboardHero from '../features/dashboard/components/DashboardHero.vue';
 import DashboardFocusToggle from '../features/dashboard/components/DashboardFocusToggle.vue';
 import ErrorAlert from '../components/ErrorAlert.vue';
-const {
-  loading,
-  loadError,
-  consoleData,
-  activeFocus,
-  summary,
-  todayText,
-  load,
-  openAnalysis,
-  goBattleCard,
-  activeFocusLabel
-} = useDashboardPage();
+import AppleButton from '../components/AppleButton.vue';
+const { loading, loadError, consoleData, activeFocus, summary, load, openAnalysis, goBattleCard } =
+  useDashboardPage();
 </script>
 <template>
   <section v-loading="loading" class="page-stack ops-console">
-    <DashboardHero
-      :date-label="consoleData.date || todayText"
-      :data-source="summary.dataSource"
-      :updated-at-label="formatTime(summary.updatedAt)"
-      :avg-score="summary.avgScore"
-      :active-alert-count="summary.activeAlertCount"
-      :resolved-alert-count="summary.resolvedAlertCount"
-      :active-focus-label="activeFocusLabel"
-      :loading="loading"
-      @reload="load(true)"
-    />
+    <div class="page-toolbar">
+      <AppleButton variant="secondary" size="sm" :loading="loading" @click="load(true)">
+        重新加载本地数据
+      </AppleButton>
+    </div>
     <ErrorAlert :message="loadError" />
     <!-- Residual #275: RECOMMEND_CACHE_CAP source undercount honesty. -->
     <p v-if="consoleData.sourceTruncated" class="list-cap-hint">

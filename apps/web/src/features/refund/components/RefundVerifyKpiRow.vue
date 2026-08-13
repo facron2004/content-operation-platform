@@ -55,7 +55,7 @@ const windowLabel = computed(() => REFUND_WINDOW_LABELS[props.kpiWindow] ?? '今
 const amountLabel = computed(
   () => `${windowLabel.value}${props.activeTab === 'refund' ? '退款金额' : '核销金额'}`
 );
-const gmvLabel = computed(() => `${windowLabel.value} GMV`);
+const gmvLabel = computed(() => `${windowLabel.value}净 GMV`);
 const rateLabel = computed(
   () => `${windowLabel.value}${props.activeTab === 'refund' ? '退款率' : '核销率'}`
 );

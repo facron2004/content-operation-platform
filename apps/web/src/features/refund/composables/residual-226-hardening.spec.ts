@@ -12,8 +12,12 @@ describe('residual #226 refund/verify as-of date', () => {
     const src = await readFile(path.join(srcRoot, 'services/api/refund.api.ts'), 'utf8');
     expect(src).toMatch(/getRefundToday\s*=\s*\(date\?:/);
     expect(src).toMatch(/getVerifyToday\s*=\s*\(date\?:/);
-    expect(src).toMatch(/getRefundTrend\s*=\s*\(days:\s*7\s*\|\s*30,\s*endDate\?:/);
-    expect(src).toMatch(/getVerifyTrend\s*=\s*\(days:\s*7\s*\|\s*30,\s*endDate\?:/);
+    expect(src).toMatch(
+      /getRefundTrend\s*=\s*\([\s\S]{0,80}days:\s*7\s*\|\s*30,[\s\S]{0,40}endDate\?:/
+    );
+    expect(src).toMatch(
+      /getVerifyTrend\s*=\s*\([\s\S]{0,80}days:\s*7\s*\|\s*30,[\s\S]{0,40}endDate\?:/
+    );
   });
 
   it('refund-verify-core forwards kpiDate + window/bucket into today + trend', async () => {
@@ -22,28 +26,27 @@ describe('residual #226 refund/verify as-of date', () => {
     expect(src).toMatch(/kpiWindow:\s*ref<RefundWindow>\('day'\)/);
     expect(src).toMatch(/trendBucket:\s*ref<TrendBucket>\('day'\)/);
     // today/trend loaders now carry window/bucket args (open-ended to allow them).
-    expect(src).toMatch(/getRefundToday\(asOf, window\)/);
-    expect(src).toMatch(/getVerifyToday\(asOf, window\)/);
-    expect(src).toMatch(/getRefundTrend\(trendDays,\s*asOf,\s*bucket\)/);
+    expect(src).toMatch(/getRefundToday\(asOf, window, force\)/);
+    expect(src).toMatch(/getVerifyToday\(asOf, window, force\)/);
+    expect(src).toMatch(/getRefundTrend\(trendDays,\s*asOf,\s*bucket,\s*force\)/);
     expect(src).toMatch(/state\.kpiDate\.value/);
     expect(src).toMatch(/state\.kpiWindow\.value/);
   });
 
-  it('RefundVerifyHero exposes date picker + period window selector', async () => {
-    const src = await readFile(path.join(__dirname, '../components/RefundVerifyHero.vue'), 'utf8');
+  it('RefundVerifyView exposes date picker + period window selector in toolbar', async () => {
+    const src = await readFile(path.join(srcRoot, 'views/RefundVerifyView.vue'), 'utf8');
     expect(src).toMatch(/el-date-picker/);
-    expect(src).toMatch(/update:kpiDate/);
-    expect(src).toMatch(/date-change/);
-    expect(src).toMatch(/update:kpiWindow/);
-    expect(src).toMatch(/window-change/);
+    expect(src).toMatch(/onKpiDateChange/);
+    expect(src).toMatch(/el-radio-group/);
+    expect(src).toMatch(/onWindowChange/);
+    expect(src).toMatch(/RefundWindow/);
   });
 
   it('RefundVerifyView wires kpiDate + window + trendBucket through to loaders', async () => {
     const src = await readFile(path.join(srcRoot, 'views/RefundVerifyView.vue'), 'utf8');
-    expect(src).toMatch(/v-model:kpi-date="kpiDate"/);
-    expect(src).toMatch(/@date-change="reload"/);
-    expect(src).toMatch(/v-model:kpi-window="kpiWindow"/);
-    expect(src).toMatch(/@window-change="reload"/);
+    expect(src).toMatch(/kpiDate\.value = next/);
+    expect(src).toMatch(/kpiWindow\.value = value as RefundWindow/);
+    expect(src).toMatch(/reload\(\)/);
     expect(src).toMatch(/:trend-bucket="trendBucket"/);
     expect(src).toMatch(/@update:trend-bucket/);
     expect(src).toMatch(/@change="loadTrend"/);

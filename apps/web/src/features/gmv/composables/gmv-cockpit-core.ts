@@ -35,20 +35,8 @@ export type GmvFunnelStage = {
   label: string;
   value: number;
   rate: number;
+  rateLabel: string;
   color: string;
-};
-
-export type GmvActivityRow = {
-  name: string;
-  dateRange: string;
-  gmv: number;
-  roi: number;
-  verifyRate: number;
-};
-
-export type GmvHeatPoint = {
-  name: string;
-  value: [number, number, number];
 };
 
 export type GmvAlertItem = {
@@ -78,7 +66,7 @@ export function createGmvCockpitState() {
     trendGranularity: ref<GmvTrendGranularity>('day'),
     trendMode: ref<GmvTrendMode>('volume'),
     distDim: ref<'area' | 'category'>('area'),
-    merchantSort: ref<'gmvDesc' | 'refundDesc' | 'verifyDesc'>('gmvDesc'),
+    merchantSort: ref<'gmvDesc' | 'refundDesc' | 'verifyDesc' | 'orderDesc'>('gmvDesc'),
     // Residual #230: top-merchants pagination (API returns hasMore; SPA used page=1 only).
     merchantPage: ref(1),
     merchantPageSize: ref(20),
@@ -98,9 +86,6 @@ export function createGmvCockpitState() {
     categories: ref<GmvCategoryRow[]>([]),
     channels: ref<GmvChannelRow[]>([]),
     funnel: ref<GmvFunnelStage[]>([]),
-    activities: ref<GmvActivityRow[]>([]),
-    heatPoints: ref<GmvHeatPoint[]>([]),
-    heatCity: ref<string>('成都市'),
     alerts: ref<GmvAlertItem[]>([])
   };
 }
@@ -155,6 +140,7 @@ export const loadGmvHourly = (
 
 export async function loadGmvDistribution(
   dim: 'area' | 'category',
+  date: string,
   distribution: Ref<GmvDistributionRow[]>,
   loadError: Ref<string | null>,
   // Residual #289: optional honesty sinks for Top-N distribution head.
@@ -164,7 +150,7 @@ export async function loadGmvDistribution(
   isCurrent: GmvRequestGuard = () => true
 ) {
   try {
-    const payload = await getGmvDistribution(dim, 10, true);
+    const payload = await getGmvDistribution(dim, 10, true, date);
     if (!isCurrent()) return;
     distribution.value = payload.items ?? [];
     if (distributionTruncated) distributionTruncated.value = Boolean(payload.truncated);
@@ -185,7 +171,8 @@ export async function loadGmvDistribution(
 }
 
 export async function loadGmvTopMerchants(params: {
-  sort: 'gmvDesc' | 'refundDesc' | 'verifyDesc';
+  sort: 'gmvDesc' | 'refundDesc' | 'verifyDesc' | 'orderDesc';
+  date: string;
   page: number;
   pageSize: number;
   topMerchants: Ref<GmvMerchantRow[]>;
@@ -198,7 +185,13 @@ export async function loadGmvTopMerchants(params: {
 }) {
   try {
     // Residual #230: honor page/pageSize + hasMore from API.
-    const result = await getGmvByMerchant(params.sort, params.page, params.pageSize, true);
+    const result = await getGmvByMerchant(
+      params.sort,
+      params.page,
+      params.pageSize,
+      true,
+      params.date
+    );
     if (params.isCurrent && !params.isCurrent()) return;
     params.topMerchants.value = result.items;
     params.hasMore.value = !!result.hasMore;

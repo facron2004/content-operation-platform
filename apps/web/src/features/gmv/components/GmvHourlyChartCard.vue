@@ -8,7 +8,7 @@
     </header>
     <div class="proto-chart-legend">
       <span class="legend-dot legend-gmv" />
-      GMV（元）
+      净 GMV（元）
       <span class="legend-dot legend-orders" />
       订单（单）
     </div>

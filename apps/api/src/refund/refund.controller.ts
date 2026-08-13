@@ -8,7 +8,7 @@ import { RefundService } from './refund.service';
 import { assertUnrestrictedAnalytics } from '../user-access/scope-guards';
 import { RequireLogin } from '../user-access/iam/route-auth.decorator';
 import { RequirePermissions } from '../user-access/iam/require-permissions.decorator';
-import { createDtoPipe } from '../common/dto-pipe';
+import { createDtoPipe, hasForceSignal } from '../common';
 
 @ApiTags('refund-verify')
 @RequireLogin()
@@ -22,7 +22,7 @@ export class RefundController {
   @ApiOperation({ summary: '今日退款 KPI + Top 退款商家' })
   today(@Query(createDtoPipe(RefundTodayQueryDto)) q: RefundTodayQueryDto, @Req() req: Request) {
     assertUnrestrictedAnalytics(req);
-    return this.service.getRefundToday(q);
+    return this.service.getRefundToday(q, hasForceSignal(req, q));
   }
 
   @Get('refund/trend')
@@ -31,7 +31,7 @@ export class RefundController {
   @ApiOperation({ summary: '7/30 日退款率趋势' })
   trend(@Query(createDtoPipe(RefundTrendQueryDto)) q: RefundTrendQueryDto, @Req() req: Request) {
     assertUnrestrictedAnalytics(req);
-    return this.service.getRefundTrend(q);
+    return this.service.getRefundTrend(q, hasForceSignal(req, q));
   }
 
   @Get('refund/top-merchants')
@@ -43,7 +43,7 @@ export class RefundController {
     @Req() req: Request
   ) {
     assertUnrestrictedAnalytics(req);
-    return this.service.getTopMerchants(q);
+    return this.service.getTopMerchants(q, hasForceSignal(req, q));
   }
 
   @Get('verify/today')
@@ -55,7 +55,7 @@ export class RefundController {
     @Req() req: Request
   ) {
     assertUnrestrictedAnalytics(req);
-    return this.service.getVerifyToday(q);
+    return this.service.getVerifyToday(q, hasForceSignal(req, q));
   }
 
   @Get('verify/trend')
@@ -67,6 +67,6 @@ export class RefundController {
     @Req() req: Request
   ) {
     assertUnrestrictedAnalytics(req);
-    return this.service.getVerifyTrend(q);
+    return this.service.getVerifyTrend(q, hasForceSignal(req, q));
   }
 }

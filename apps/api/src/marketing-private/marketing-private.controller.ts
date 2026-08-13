@@ -41,6 +41,7 @@ import {
   GrantBenefitDto,
   IssueCouponDto,
   MarketingPageQueryDto,
+  PreviewTagRuleDto,
   PrivateDomainChannelQueryDto,
   SmsTaskQueryDto,
   SmsTemplateQueryDto,
@@ -91,6 +92,12 @@ export class MarketingPrivateController {
     return this.service.createTag(body);
   }
 
+  @Post('tags/preview')
+  @RequirePermissions('campaigns:read')
+  tagRulePreview(@Body(createDtoPipe(PreviewTagRuleDto)) body: PreviewTagRuleDto) {
+    return this.service.previewTagRule(body);
+  }
+
   @Post('tags/:tagId/disable')
   @Roles('admin', 'platform_operator')
   @RequirePermissions('campaigns:write')
@@ -109,15 +116,21 @@ export class MarketingPrivateController {
     return this.service.setTagStatus(safePathId(tagId), 'active');
   }
 
+  @Post('tags/:tagId/evaluate')
+  @Roles('admin', 'platform_operator')
+  @RequirePermissions('campaigns:write')
+  @RequireIdempotency('marketing-tag')
+  @UseGuards(IdempotencyGuard)
+  tagEvaluate(@Param('tagId') tagId: string) {
+    return this.service.evaluateTag(safePathId(tagId));
+  }
+
   @Post('tags/:tagId/members')
   @Roles('admin', 'platform_operator')
   @RequirePermissions('campaigns:write')
   @RequireIdempotency('marketing-tag')
   @UseGuards(IdempotencyGuard)
-  tagAssign(
-    @Param('tagId') tagId: string,
-    @Body(createDtoPipe(AssignTagDto)) body: AssignTagDto
-  ) {
+  tagAssign(@Param('tagId') tagId: string, @Body(createDtoPipe(AssignTagDto)) body: AssignTagDto) {
     return this.service.assignTag(safePathId(tagId), body);
   }
 
@@ -145,7 +158,7 @@ export class MarketingPrivateController {
   @RequireIdempotency('audience')
   @UseGuards(IdempotencyGuard)
   audienceRefresh(@Param('audienceId') audienceId: string) {
-    return this.service.refreshAudience(safePathId(audienceId));
+    return this.service.recalculateAudience(safePathId(audienceId));
   }
 
   @Get('campaigns')

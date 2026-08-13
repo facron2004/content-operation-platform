@@ -9,7 +9,7 @@ export async function getDashboardSummary() {
     30000
   );
 }
-export async function getTodayOperationConsole(params: { role?: string } = {}) {
+export async function getTodayOperationConsole(params: { role?: string; force?: boolean } = {}) {
   return cachedGet<ConsoleResponse>(
     () => client.get('/content/ops/today', { params }).then((res) => res.data),
     '/content/ops/today',

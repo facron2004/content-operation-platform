@@ -11,6 +11,7 @@ export async function getAlerts(
     keyword?: string;
     page?: number;
     pageSize?: number;
+    force?: boolean;
   } = {}
 ) {
   return cachedGet<AlertsResponse>(

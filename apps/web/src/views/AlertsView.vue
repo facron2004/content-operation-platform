@@ -1,6 +1,10 @@
 <template>
   <section v-loading="loading" class="page-stack alerts-page">
-    <AlertsHero :loading="loading" :summary="summary" @reload="load(true)" />
+    <div class="page-toolbar">
+      <AppleButton variant="primary" size="sm" :loading="loading" @click="load(true)">
+        重新加载预警
+      </AppleButton>
+    </div>
     <ErrorAlert :message="loadError" />
     <ErrorAlert :message="actionError" />
     <!-- Residual #274: RESOLVED_ALERT_DAY_LIMIT silent clip honesty. -->
@@ -17,6 +21,7 @@
     <FocusPackageGrid
       :top-packages="topPackages"
       :resolving="resolving"
+      :can-resolve="canResolve"
       :focus-package-truncated="focusPackageTruncated"
       :focus-package-limit="focusPackageLimit"
       :focus-package-matched="focusPackageMatched"
@@ -29,6 +34,7 @@
       :alerts="alerts"
       :pagination="pagination"
       :resolving="resolving"
+      :can-resolve="canResolve"
       @update:keyword="filters.keyword = $event"
       @update:level="filters.level = $event"
       @update:type="filters.type = $event"
@@ -43,6 +49,7 @@
     <AlertDetailDrawer
       v-model="drawerVisible"
       :alert="selectedAlert"
+      :can-resolve="canResolve"
       @go-analysis="goAnalysis"
       @go-battle="goBattleCard"
       @resolve="resolve"
@@ -56,12 +63,13 @@ import AlertMetrics from '../features/alerts/components/AlertMetrics.vue';
 import FocusPackageGrid from '../features/alerts/components/FocusPackageGrid.vue';
 import AlertListSection from '../features/alerts/components/AlertListSection.vue';
 import AlertDetailDrawer from '../features/alerts/components/AlertDetailDrawer.vue';
-import AlertsHero from '../features/alerts/components/AlertsHero.vue';
 import ErrorAlert from '../components/ErrorAlert.vue';
+import AppleButton from '../components/AppleButton.vue';
 const router = useRouter();
 const {
   loading,
   resolving,
+  canResolve,
   loadError,
   actionError,
   alerts,

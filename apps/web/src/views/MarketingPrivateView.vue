@@ -1,17 +1,7 @@
 <template>
   <section v-loading="loading" class="page-stack marketing-private-view">
-    <div class="marketing-private-hero panel">
-      <div>
-        <p class="eyebrow">V2.0 / MARKETING & PRIVATE DOMAIN</p>
-        <h1>{{ pageTitle }}</h1>
-        <p class="hero-description">
-          标签、人群、活动、权益、SOP 触达和私域渠道统一进入可追溯的运营闭环。
-        </p>
-      </div>
-      <div class="marketing-private-hero__actions">
-        <span class="source-pill">Audience → Campaign → Attribution</span>
-        <el-button :loading="loading" @click="loadData">刷新</el-button>
-      </div>
+    <div class="page-toolbar">
+      <el-button :loading="loading" @click="loadData">重新加载</el-button>
     </div>
 
     <ErrorAlert :message="error" />
@@ -85,7 +75,9 @@
           <p class="eyebrow">AUDIENCE CENTER</p>
           <h2>{{ isCreateRoute ? '创建人群' : '人群管理' }}</h2>
         </div>
-        <el-button type="primary" @click="openCreate('audience')">新建人群</el-button>
+        <el-button v-if="canWriteCampaigns" type="primary" @click="openCreate('audience')">
+          新建人群
+        </el-button>
       </div>
       <el-table :data="audiences" row-key="audienceId">
         <el-table-column label="人群" min-width="240">
@@ -96,18 +88,22 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column label="预估人数" width="120" align="right">
+        <el-table-column label="最近计算人数" width="130" align="right">
           <template #default="{ row }">{{ row.estimatedCount }}</template>
         </el-table-column>
         <el-table-column label="快照人数" width="120" align="right">
-          <template #default="{ row }">{{ row.snapshotCount }}</template>
+          <template #default="{ row }">
+            {{ row.audienceType === 'SNAPSHOT' ? row.snapshotCount : '—' }}
+          </template>
         </el-table-column>
         <el-table-column label="更新时间" width="180">
           <template #default="{ row }">{{ displayDate(row.updatedAt) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="150" fixed="right">
+        <el-table-column v-if="canWriteCampaigns" label="操作" width="150" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" @click="refreshAudience(row)">刷新人群</el-button>
+            <el-button link type="primary" @click="recalculateAudience(row)">
+              {{ audienceRecalculateLabel(row.audienceType) }}
+            </el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -227,12 +223,7 @@
         </el-table-column>
         <el-table-column label="操作" width="110" fixed="right">
           <template #default="{ row }">
-            <el-button
-              v-if="row.status === 'draft'"
-              link
-              type="primary"
-              @click="toggleCoupon(row)"
-            >
+            <el-button v-if="row.status === 'draft'" link type="primary" @click="toggleCoupon(row)">
               启用
             </el-button>
             <el-button
@@ -563,11 +554,13 @@
               <el-radio value="SNAPSHOT">快照人群</el-radio>
             </el-radio-group>
           </el-form-item>
-          <el-form-item label="规则 JSON">
-            <el-input v-model="audienceForm.ruleJson" type="textarea" :rows="4" />
-          </el-form-item>
-          <el-form-item label="预估人数">
-            <el-input-number v-model="audienceForm.estimatedCount" :min="0" />
+          <el-form-item label="标签规则 JSON（支持标签 ID 或编码）">
+            <el-input
+              v-model="audienceForm.ruleJson"
+              type="textarea"
+              :rows="4"
+              placeholder='{"tags":["high_frequency"],"logic":"and"}'
+            />
           </el-form-item>
         </template>
         <template v-else-if="dialogKind === 'campaign'">
@@ -733,7 +726,7 @@ import {
   listSmsTemplates,
   listWeComCustomers,
   listWeComGroups,
-  refreshMarketingAudience,
+  recalculateMarketingAudience,
   setAutomationFlowStatus,
   setCouponTemplateStatus,
   setMarketingTagStatus,
@@ -752,6 +745,12 @@ import {
   type WeComGroup
 } from '../services/api/marketing-private.api';
 import { buildBusinessIntentKey } from '../services/idempotency-key';
+import { useRoleStore } from '../stores/role';
+import {
+  audienceRecalculateLabel,
+  audienceRecalculateSuccessMessage,
+  canManageMarketingAudiences
+} from '../features/marketing-private/audience-actions';
 
 type Section =
   | 'tags'
@@ -783,6 +782,7 @@ type DialogKind =
 
 const route = useRoute();
 const router = useRouter();
+const roleStore = useRoleStore();
 const ownerPath = route.path;
 const loading = ref(false);
 const submitting = ref(false);
@@ -830,8 +830,7 @@ const tagForm = reactive({ name: '', code: '', category: '运营', description: 
 const audienceForm = reactive({
   name: '',
   audienceType: 'DYNAMIC',
-  ruleJson: '{"tags":[]}',
-  estimatedCount: 0
+  ruleJson: '{"tags":[],"logic":"and"}'
 });
 const campaignForm = reactive({
   name: '',
@@ -894,24 +893,7 @@ const section = computed<Section>(() => {
 const isCreateRoute = computed(
   () => route.path.endsWith('/create') || route.path.endsWith('/edit')
 );
-const pageTitle = computed(
-  () =>
-    ({
-      tags: '用户标签',
-      audiences: '人群中心',
-      campaigns: '营销活动',
-      coupons: '优惠券',
-      benefits: '权益账户',
-      automation: '自动化运营',
-      'wecom-customers': '企微客户',
-      'wecom-groups': '企微群',
-      channels: '私域渠道',
-      'sms-templates': '短信模板',
-      'sms-tasks': '短信任务',
-      'marketing-analytics': '营销分析',
-      'private-analytics': '私域分析'
-    })[section.value]
-);
+const canWriteCampaigns = computed(() => canManageMarketingAudiences(roleStore.permissions));
 const dialogTitle = computed(
   () =>
     (
@@ -1008,13 +990,10 @@ async function loadData() {
   const sequence = ++loadSequence;
   const targetPath = route.fullPath;
   const targetSection = section.value;
-  const targetCampaignId = route.params.campaignId
-    ? String(route.params.campaignId)
-    : undefined;
+  const targetCampaignId = route.params.campaignId ? String(route.params.campaignId) : undefined;
   loading.value = true;
   error.value = '';
-  const isCurrent = () =>
-    !disposed && sequence === loadSequence && targetPath === route.fullPath;
+  const isCurrent = () => !disposed && sequence === loadSequence && targetPath === route.fullPath;
 
   try {
     const nextSummary = await getMarketingPrivateSummary();
@@ -1241,10 +1220,10 @@ async function toggleTag(row: MarketingTag) {
     error.value = errorMessage(caught);
   }
 }
-async function refreshAudience(row: Audience) {
+async function recalculateAudience(row: Audience) {
   try {
-    await refreshMarketingAudience(row.audienceId, key('audience'));
-    ElMessage.success('人群已刷新');
+    await recalculateMarketingAudience(row.audienceId, key('audience'));
+    ElMessage.success(audienceRecalculateSuccessMessage(row.audienceType));
     await loadData();
   } catch (caught) {
     error.value = errorMessage(caught);

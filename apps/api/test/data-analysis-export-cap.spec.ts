@@ -23,13 +23,15 @@ describe('data-analysis export row caps (residual #52)', () => {
       pipe.transform(
         {
           detailLimit: DATA_ANALYSIS_DETAIL_MAX_ROWS,
-          rankingLimit: DATA_ANALYSIS_RANKING_MAX_ROWS
+          rankingLimit: DATA_ANALYSIS_RANKING_MAX_ROWS,
+          force: 'true'
         },
         metadata
       )
     ).resolves.toMatchObject({
       detailLimit: DATA_ANALYSIS_DETAIL_MAX_ROWS,
-      rankingLimit: DATA_ANALYSIS_RANKING_MAX_ROWS
+      rankingLimit: DATA_ANALYSIS_RANKING_MAX_ROWS,
+      force: 'true'
     });
 
     await expect(

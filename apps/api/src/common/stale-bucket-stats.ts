@@ -76,6 +76,7 @@ export async function computePlatformStaleBucketStats(
            ON s."packageId" = cp."packageId"
           AND s."salesQty" > 0
           AND s."date" >= ?
+          AND s."date" <= ?
          WHERE cp."stockLeft" > 0
          GROUP BY cp."packageId"
        )
@@ -88,7 +89,8 @@ export async function computePlatformStaleBucketStats(
     rules.stale15Days,
     today,
     rules.stale7Days,
-    salesFrom
+    salesFrom,
+    today
   )) as Array<{ bucket: string; totalSku: number }>;
 
   const stats = emptyStaleBucketStats();

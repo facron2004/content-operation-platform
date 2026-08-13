@@ -18,6 +18,7 @@ import {
 import { buildStagnantCsv } from './movement-csv';
 import { createDtoPipe } from '../common/dto-pipe';
 import { clampListPage, clampListPageSize, CSV_EXPORT_MAX_ROWS } from '../common/sql-chunk';
+import { hasForceSignal } from '../common';
 
 type AuthUser = {
   userId: string;
@@ -60,22 +61,26 @@ function listMovingFromQuery(
     areaId?: string;
     areaIds?: string[];
     search?: string;
+    force?: boolean;
   }
 ) {
   // Cap page/pageSize — defense-in-depth even when DTO Max is bypassed.
   const page = clampListPage(query.page, 100);
   const pageSize = clampListPageSize(query.pageSize);
-  return service.listMoving({
-    days: query.days ?? 7,
-    page,
-    pageSize,
-    merchantId: query.merchantId,
-    merchantIds: query.merchantIds,
-    category: query.category,
-    areaId: query.areaId,
-    areaIds: query.areaIds,
-    search: query.search?.trim().slice(0, 100)
-  });
+  return service.listMoving(
+    {
+      days: query.days ?? 7,
+      page,
+      pageSize,
+      merchantId: query.merchantId,
+      merchantIds: query.merchantIds,
+      category: query.category,
+      areaId: query.areaId,
+      areaIds: query.areaIds,
+      search: query.search?.trim().slice(0, 100)
+    },
+    query.force
+  );
 }
 
 async function exportStagnantCsv(service: MovementService, q: MovementSkusQueryDto, res: Response) {
@@ -114,7 +119,7 @@ export class MovementController {
   ) {
     // Platform-wide movement KPIs — scoped roles use list endpoints with area/merchant filters.
     assertUnrestrictedAnalytics(req);
-    return this.service.getToday(q.date);
+    return this.service.getToday(q.date, hasForceSignal(req, q));
   }
 
   // Cold multi-scan aggregate (heavy gate + TTL) — tighter than interactive 30/min.
@@ -139,7 +144,8 @@ export class MovementController {
       category: q.category,
       areaId: scoped.areaId,
       areaIds: scoped.areaIds,
-      search: q.search
+      search: q.search,
+      force: hasForceSignal(req, q)
     });
   }
 
@@ -154,7 +160,7 @@ export class MovementController {
   ) {
     const scoped = applyMovementScope(q, req);
     if (!scoped) return emptyPage(q.page ?? 1, q.pageSize ?? 20);
-    return this.service.listStagnant(scoped);
+    return this.service.listStagnant(scoped, hasForceSignal(req, q));
   }
 
   @Get('skus/stagnant/export')

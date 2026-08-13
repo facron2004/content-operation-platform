@@ -97,12 +97,17 @@ export async function listMerchants(params: {
   sort?: 'stale30Desc' | 'totalSkuDesc' | 'totalGmvDesc';
   page?: number;
   pageSize?: number;
+  force?: boolean;
 }) {
   return (await client.get<MerchantListResponse>('/merchants', { params })).data;
 }
 
-export async function getMerchantProfile(merchantId: string) {
-  return (await client.get<MerchantProfile>(`/merchants/${merchantId}/profile`)).data;
+export async function getMerchantProfile(merchantId: string, force = false) {
+  return (
+    await client.get<MerchantProfile>(`/merchants/${merchantId}/profile`, {
+      params: { force: force || undefined }
+    })
+  ).data;
 }
 
 export async function getMerchantTrend(merchantId: string, days = 30) {
@@ -111,9 +116,9 @@ export async function getMerchantTrend(merchantId: string, days = 30) {
   ).data;
 }
 
-export async function getMerchantSkus(merchantId: string, days = 30) {
+export async function getMerchantSkus(merchantId: string, days = 30, force = false) {
   const res = await client.get<MerchantSkuListResponse>(`/merchants/${merchantId}/skus`, {
-    params: { days }
+    params: { days, force: force || undefined }
   });
   return res.data;
 }

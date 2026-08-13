@@ -24,34 +24,37 @@ export class OverviewService {
 
   constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
 
-  getKpis(date?: string) {
+  getKpis(date?: string, force = false) {
     // loadOverviewKpis already getOrLoad-coalesces; gate only runs on cold loaders.
-    return this.mapQueue(() => loadOverviewKpis(this.prisma, this.cache, date, true));
+    const asOf = date ?? beijingDateKey(new Date());
+    return this.mapQueue(() => loadOverviewKpis(this.prisma, this.cache, asOf, true, force));
   }
 
-  getTrend(days: number, endDate?: string) {
+  getTrend(days: number, endDate?: string, force = false) {
+    const end = endDate ?? beijingDateKey(new Date());
     return this.mapQueue(() =>
-      this.cache.getOrLoad(`trend:${days}:${endDate ?? 'today'}`, false, () =>
+      this.cache.getOrLoad(`trend:${days}:${end}`, force, () =>
         withHeavyAggregateGate(async () => {
-          const end = endDate ?? beijingDateKey(new Date());
           return loadTrendRows(this.prisma, shiftDateKey(end, -(days - 1)), end);
         })
       )
     );
   }
 
-  getDistribution(dim: 'area' | 'category' | 'stale', limit: number) {
+  getDistribution(dim: 'area' | 'category' | 'stale', limit: number, force = false, date?: string) {
+    const asOf = dim === 'stale' ? (date ?? beijingDateKey(new Date())) : undefined;
     return this.mapQueue(() =>
-      this.cache.getOrLoad(`dist:${dim}:${limit}`, false, () =>
-        withHeavyAggregateGate(() => loadOverviewDistribution(this.prisma, dim, limit))
+      this.cache.getOrLoad(`dist:${dim}:${limit}:${asOf ?? 'current-master'}`, force, () =>
+        withHeavyAggregateGate(() => loadOverviewDistribution(this.prisma, dim, limit, asOf, force))
       )
     );
   }
 
-  getTopOffenders(n: number) {
+  getTopOffenders(n: number, force = false, date?: string) {
+    const asOf = date ?? beijingDateKey(new Date());
     return this.mapQueue(() =>
-      this.cache.getOrLoad(`topOffenders:${n}`, false, () =>
-        withHeavyAggregateGate(() => loadTopOffenders(this.prisma, n))
+      this.cache.getOrLoad(`topOffenders:${n}:${asOf}`, force, () =>
+        withHeavyAggregateGate(() => loadTopOffenders(this.prisma, n, asOf))
       )
     );
   }

@@ -32,22 +32,23 @@ export class RefundService {
   constructor(@Inject(PrismaService) prisma: PrismaService) {
     this.surface = createRefundServiceSurface(prisma, this.cache);
   }
-  getRefundToday(q: RefundTodayQueryDto): Promise<RefundTodayPayload> {
-    return this.surface.getRefundToday(q);
+  getRefundToday(q: RefundTodayQueryDto, force = false): Promise<RefundTodayPayload> {
+    return this.surface.getRefundToday(q, force);
   }
-  getRefundTrend(q: RefundTrendQueryDto): Promise<RefundTrendPoint[]> {
-    return this.surface.getRefundTrend(q);
+  getRefundTrend(q: RefundTrendQueryDto, force = false): Promise<RefundTrendPoint[]> {
+    return this.surface.getRefundTrend(q, force);
   }
-  getVerifyToday(q: RefundTodayQueryDto): Promise<RefundVerifyTodayPayload> {
-    return this.surface.getVerifyToday(q);
+  getVerifyToday(q: RefundTodayQueryDto, force = false): Promise<RefundVerifyTodayPayload> {
+    return this.surface.getVerifyToday(q, force);
   }
-  getVerifyTrend(q: RefundTrendQueryDto): Promise<VerifyTrendPoint[]> {
-    return this.surface.getVerifyTrend(q);
+  getVerifyTrend(q: RefundTrendQueryDto, force = false): Promise<VerifyTrendPoint[]> {
+    return this.surface.getVerifyTrend(q, force);
   }
   getTopMerchants(
-    q: RefundTopMerchantsQueryDto
+    q: RefundTopMerchantsQueryDto,
+    force = false
   ): Promise<{ items: import('./refund.dto').TopMerchantRow[]; hasMore: boolean }> {
-    return this.surface.getTopMerchants(q);
+    return this.surface.getTopMerchants(q, force);
   }
   invalidateCache(prefix?: string) {
     this.cache.clear(prefix);

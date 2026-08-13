@@ -135,12 +135,12 @@ export function buildTimeSlotOption(slots: DataAnalysisTimeSlotRow[]) {
       axisLabel: { interval: 0, rotate: 20, fontSize: 11 }
     },
     yAxis: [
-      { type: 'value', name: '订单', position: 'left', minInterval: 1 },
+      { type: 'value', name: '支付订单', position: 'left', minInterval: 1 },
       { type: 'value', name: '销售额', position: 'right' }
     ],
     series: [
       {
-        name: '订单数',
+        name: '支付订单数',
         type: 'bar',
         yAxisIndex: 0,
         data: slots.map((s) => s.orderCount),
@@ -178,12 +178,12 @@ export function buildHourlyOption(hourly: DataAnalysisHourlyRow[]) {
       axisLabel: { interval: 2, fontSize: 11 }
     },
     yAxis: [
-      { type: 'value', name: '订单', position: 'left', minInterval: 1 },
+      { type: 'value', name: '支付订单', position: 'left', minInterval: 1 },
       { type: 'value', name: '销售额', position: 'right' }
     ],
     series: [
       {
-        name: '订单数',
+        name: '支付订单数',
         type: 'bar',
         yAxisIndex: 0,
         data: orders,

@@ -39,13 +39,14 @@ export class DashboardOperationsService {
   async getTodayOperationConsole(
     role: UserRole | undefined,
     getRecommendations: GetRecommendationsFn,
-    scope: DashboardOpsScope = {}
+    scope: DashboardOpsScope = {},
+    force = false
   ) {
     const today = beijingDateKey(new Date());
     const cacheKey = dashboardOpsCacheKey('today', today, role, scope);
     try {
       // Cache hits skip the gate; cold path (recommend + CP/GC chunks) shares heavy pool.
-      return await this.opsCache.getOrLoad(cacheKey, false, () =>
+      return await this.opsCache.getOrLoad(cacheKey, force, () =>
         withHeavyAggregateGate(() => this.computeTodayOperationConsole(role, getRecommendations))
       );
     } catch (err) {

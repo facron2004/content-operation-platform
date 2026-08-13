@@ -17,25 +17,22 @@ import {
   backfillGmvHistory,
   loadGmvDistribution,
   loadGmvHourly,
-  loadGmvKpis,
   loadGmvTopMerchants,
   loadGmvTrend,
-  type GmvActivityRow,
   type GmvAlertItem,
   type GmvCategoryRow,
   type GmvChannelRow,
-  type GmvFunnelStage,
-  type GmvHeatPoint
+  type GmvFunnelStage
 } from './gmv-cockpit-core';
-import { loadGmvCockpitExtras } from './gmv-cockpit-extras';
 import type { GmvBackfillRange } from './gmv-cockpit-core';
+import { readFen } from '../../../utils/format';
 
 export { createGmvCockpitLoadAll } from './gmv-cockpit-load';
 
 export type GmvCockpitHandlerArgs = {
   trendGranularity: Ref<GmvTrendGranularity>;
   distDim: Ref<'area' | 'category'>;
-  merchantSort: Ref<'gmvDesc' | 'refundDesc' | 'verifyDesc'>;
+  merchantSort: Ref<'gmvDesc' | 'refundDesc' | 'verifyDesc' | 'orderDesc'>;
   merchantPage: Ref<number>;
   merchantPageSize: Ref<number>;
   merchantHasMore: Ref<boolean>;
@@ -62,9 +59,6 @@ export type GmvCockpitHandlerArgs = {
   categories: Ref<GmvCategoryRow[]>;
   channels: Ref<GmvChannelRow[]>;
   funnel: Ref<GmvFunnelStage[]>;
-  activities: Ref<GmvActivityRow[]>;
-  heatPoints: Ref<GmvHeatPoint[]>;
-  heatCity: Ref<string>;
   alerts: Ref<GmvAlertItem[]>;
   beginRequest: () => number;
   isRequestCurrent: (requestId: number) => boolean;
@@ -80,6 +74,7 @@ export function createGmvCockpitHandlers(args: GmvCockpitHandlerArgs) {
     if (!isCurrent()) return;
     await loadGmvTopMerchants({
       sort: args.merchantSort.value,
+      date: args.kpiDate.value,
       page: args.merchantPage.value,
       pageSize: args.merchantPageSize.value,
       topMerchants: args.topMerchants,
@@ -120,6 +115,7 @@ export function createGmvCockpitHandlers(args: GmvCockpitHandlerArgs) {
       if (!isCurrent()) return;
       await loadGmvDistribution(
         args.distDim.value,
+        args.kpiDate.value,
         args.distribution,
         args.loadError,
         args.distributionTruncated,
@@ -144,36 +140,7 @@ export function createGmvCockpitHandlers(args: GmvCockpitHandlerArgs) {
         void loadTopMerchants(false);
       }
     },
-    onKpiDateChange: async () => {
-      const requestId = args.beginRequest();
-      const isCurrent = () => args.isRequestCurrent(requestId);
-      if (!isCurrent()) return;
-      await Promise.all([
-        loadGmvKpis(args.kpiDate.value, args.kpi, args.loadError, isCurrent),
-        loadGmvTrend(
-          args.trendGranularity.value,
-          args.kpiDate.value,
-          args.trend,
-          args.loadError,
-          isCurrent
-        ),
-        loadGmvHourly(args.kpiDate.value, args.hourly, args.loadError, isCurrent)
-      ]);
-      if (!isCurrent()) return;
-      // KPI 变了之后重算支付构成 / 漏斗 / 预警
-      await loadGmvCockpitExtras({
-        kpi: args.kpi,
-        extrasError: args.extrasError,
-        categories: args.categories,
-        channels: args.channels,
-        funnel: args.funnel,
-        activities: args.activities,
-        heatPoints: args.heatPoints,
-        heatCity: args.heatCity,
-        alerts: args.alerts,
-        isCurrent
-      });
-    },
+    onKpiDateChange: () => args.loadAll(),
     onBackfillCommand: (days: number) => {
       if (!args.isAlive()) return;
       // A long-running backfill invalidates older view loads, but keeps its
@@ -222,25 +189,17 @@ export function useGmvCockpitDerived(params: {
   trendMode: Ref<GmvTrendMode>;
   trendGranularity: Ref<GmvTrendGranularity>;
 }) {
-  const share = (part: 'gmvOnline' | 'gmvWallet') => {
-    const k = params.kpi.value;
-    if (!k || k.totalGmv === 0) return 0;
-    return (k[part] / k.totalGmv) * 100;
-  };
-
   return {
     backfillLabel: computed(() =>
       params.backfilling.value ? params.backfillStatusText.value || '抓取中...' : '历史回填'
     ),
     kpiDateLabel: computed(() =>
-      params.kpiDate.value === params.todayText ? '今日 GMV' : `${params.kpiDate.value} GMV`
+      params.kpiDate.value === params.todayText ? '今日净 GMV' : `${params.kpiDate.value} 净 GMV`
     ),
     hourlyDateLabel: computed(() =>
       params.kpiDate.value === params.todayText ? '今天' : params.kpiDate.value
     ),
-    totalGmvDisplay: computed(() => params.kpi.value?.totalGmv ?? 0),
-    barGmvOnline: computed(() => share('gmvOnline')),
-    barGmvWallet: computed(() => share('gmvWallet')),
+    totalGmvDisplay: computed(() => Number(readFen(params.kpi.value, 'totalGmv') ?? 0n) / 100),
     trendOption: computed(
       () =>
         buildGmvTrendOption(

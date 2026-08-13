@@ -1,8 +1,11 @@
 <template>
   <section class="page-stack task-center-page">
     <div class="page-header">
-      <h2>任务中心（{{ windowLabel }}）</h2>
-      <div class="header-actions">
+      <div class="task-heading">
+        <h2>任务中心</h2>
+        <p>创建时间范围：{{ windowLabel }}</p>
+      </div>
+      <div v-if="taskCapabilities.write" class="header-actions">
         <!-- Residual #212: batch create (POST /tasks/batch client existed unused). -->
         <AppleButton variant="secondary" @click="openBatchForm()">批量创建</AppleButton>
         <AppleButton variant="primary" @click="openForm()">
@@ -32,6 +35,9 @@
       v-loading="loading"
       :tasks="tasks"
       :pagination="pagination"
+      :allow-write="taskCapabilities.write"
+      :allow-manage="taskCapabilities.manage"
+      :allow-publish="taskCapabilities.publish"
       @view="handleView"
       @edit="handleEdit"
       @delete="handleDelete"
@@ -82,7 +88,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { Plus } from '@element-plus/icons-vue';
 import { useTaskCenter } from '../features/task-center/composables/useTaskCenter';
@@ -99,9 +105,15 @@ import TaskFailDialog from '../features/task-center/components/TaskFailDialog.vu
 import AppleButton from '../components/AppleButton.vue';
 import ErrorAlert from '../components/ErrorAlert.vue';
 import type { DistributionTask } from '@content/shared';
+import { useRoleStore } from '../stores/role';
+import { resolveTaskCommandCapabilities } from '../features/task-center/task-command-permissions';
 
 const route = useRoute();
 const router = useRouter();
+const roleStore = useRoleStore();
+const taskCapabilities = computed(() =>
+  resolveTaskCommandCapabilities(roleStore.effectiveRoles, roleStore.permissions)
+);
 
 const {
   loading,
@@ -219,8 +231,8 @@ onMounted(() => {
   const createFlag = String(route.query.create ?? '') === '1';
   const batchFlag = String(route.query.batch ?? '') === '1';
   if (!createFlag && !batchFlag) return;
-  if (batchFlag) openBatchForm();
-  else openForm();
+  if (batchFlag && taskCapabilities.value.write) openBatchForm();
+  else if (createFlag && taskCapabilities.value.write) openForm();
   const nextQuery = { ...route.query } as Record<string, string | string[] | undefined>;
   delete nextQuery.create;
   delete nextQuery.batch;

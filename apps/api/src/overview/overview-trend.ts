@@ -3,7 +3,8 @@ import {
   beijingDayRangeSqlite,
   SQL_GMV_OH,
   sqlBeijingDate,
-  sqlDatetimeExclusiveRange
+  sqlDatetimeExclusiveRange,
+  toFenBigInt
 } from '../common';
 import type { PrismaService } from '../prisma/prisma.service';
 import type { OverviewTrendPoint } from './overview.types';
@@ -17,7 +18,7 @@ export async function loadTrendRows(
   const { end: endExclusive } = beijingDayRangeSqlite(end);
   const salesRows = (await prisma.$queryRawUnsafe(
     `SELECT ${sqlBeijingDate('"paidTime"')} AS "date",
-            COALESCE(SUM(${SQL_GMV_OH}), 0) AS "gmv",
+            COALESCE(SUM(${SQL_GMV_OH}), 0) AS "gmvFen",
             COUNT(*) AS "paidOrderCount"
      FROM "OrderHeader"
      WHERE ${sqlDatetimeExclusiveRange('"paidTime"')}
@@ -25,7 +26,7 @@ export async function loadTrendRows(
      ORDER BY "date" ASC`,
     start,
     endExclusive
-  )) as Array<{ date: string; gmv: number; paidOrderCount: number }>;
+  )) as Array<{ date: string; gmvFen: bigint | number | null; paidOrderCount: number }>;
 
   const byDate = new Map(salesRows.map((r) => [r.date, r]));
   const days =
@@ -37,7 +38,7 @@ export async function loadTrendRows(
     const row = byDate.get(d);
     result.push({
       date: d,
-      gmv: Number(row?.gmv ?? 0),
+      gmvFen: toFenBigInt(row?.gmvFen ?? 0),
       paidOrderCount: Number(row?.paidOrderCount ?? 0)
     });
   }

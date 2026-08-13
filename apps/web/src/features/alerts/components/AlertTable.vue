@@ -10,6 +10,7 @@ export type AlertTableProps = {
   pagination:
     Omit<PaginationMeta, 'totalPages'> | { page: number; pageSize: number; total: number };
   resolving: boolean;
+  canResolve: boolean;
 };
 const props = defineProps<AlertTableProps>();
 defineEmits<{
@@ -33,6 +34,7 @@ const {
       :total="pagination.total"
       :page-count="alerts.length"
       :resolving="resolving"
+      :can-resolve="canResolve"
       :current-page-danger-count="currentPageDangerCount"
       :current-page-warning-count="currentPageWarningCount"
       :current-page-avg-score="currentPageAvgScore"
@@ -42,6 +44,7 @@ const {
     <AlertTableGrid
       :alerts="alerts"
       :alert-row-class-name="alertRowClassName"
+      :can-resolve="canResolve"
       @open-detail="$emit('open-detail', $event)"
       @resolve="$emit('resolve', $event)"
     />

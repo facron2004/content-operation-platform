@@ -3,25 +3,24 @@
     <header class="gmv-category-header">
       <h3>交易结构（按品类）</h3>
       <span class="gmv-category-meta">{{ rows.length }} 个品类</span>
-      <a class="gmv-category-more" href="javascript:void(0)">查看全部 ›</a>
     </header>
     <EmptyState
       v-if="rows.length === 0"
       title="暂无品类数据"
-      description="下拉刷新 JeeSite 订单或使用历史回填同步数据"
+      description="同步所选日订单或使用历史回填后自动生成"
     />
     <div v-else class="gmv-category-body">
       <div class="gmv-category-donut">
         <ChartPanel :option="donutOption" class="gmv-category-donut-panel" />
         <div class="gmv-category-center">
-          <span class="gmv-category-center-label">总GMV</span>
+          <span class="gmv-category-center-label">净 GMV</span>
           <strong class="gmv-category-center-value">¥ {{ totalText }}</strong>
         </div>
       </div>
       <ul class="gmv-category-legend">
         <li class="legend-head">
           <span>品类</span>
-          <span class="align-right">GMV（元）</span>
+          <span class="align-right">净 GMV（元）</span>
           <span class="align-right">占比</span>
         </li>
         <li v-for="row in rows" :key="row.name" class="gmv-category-legend-item">
@@ -65,23 +64,28 @@ const props = defineProps<{
 
 const totalText = computed(() => {
   const sum = props.rows.reduce((s, r) => s + Number(r.value || 0), 0);
-  return formatNumber(sum > 0 ? sum : props.total);
+  return formatNumber(props.rows.length > 0 ? sum : props.total);
 });
 
 const palette = ['#2e90fa', '#16b79e', '#9e77ed', '#f79009', '#6172f3', '#0ba5ec'];
 
 const donutOption = computed(() => {
-  const data = props.rows.map((row, idx) => ({
-    name: row.name,
-    value: Number(row.value.toFixed(2)),
-    itemStyle: { color: row.color || palette[idx % palette.length] }
-  }));
+  // ECharts pie geometry cannot represent negative values. Keep signed/zero
+  // categories in the exact legend and use only positive slices for geometry.
+  const data = props.rows
+    .filter((row) => row.value > 0)
+    .map((row, idx) => ({
+      name: row.name,
+      value: Number(row.value.toFixed(2)),
+      share: row.share,
+      itemStyle: { color: row.color || palette[idx % palette.length] }
+    }));
   if (data.length === 0) return {};
   return {
     tooltip: {
       trigger: 'item',
-      formatter: (p: { name: string; value: number; percent: number }) =>
-        `${p.name}<br/>GMV: ¥ ${formatNumber(p.value)}<br/>占比: ${p.percent.toFixed(1)}%`
+      formatter: (p: { name: string; value: number; data: { share: number } }) =>
+        `${p.name}<br/>净 GMV: ¥ ${formatNumber(p.value)}<br/>平台占比: ${formatPercentRaw(p.data.share * 100)}`
     },
     series: [
       {
@@ -128,16 +132,6 @@ const donutOption = computed(() => {
 .gmv-category-meta {
   color: #98a2b3;
   font-size: 12px;
-}
-
-.gmv-category-more {
-  color: #667085;
-  font-size: 12px;
-  text-decoration: none;
-  margin-left: auto;
-}
-.gmv-category-more:hover {
-  color: #2e90fa;
 }
 
 .gmv-category-body {

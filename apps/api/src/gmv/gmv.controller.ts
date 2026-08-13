@@ -51,11 +51,11 @@ export function gmvHourly(service: GmvService, q: GmvHourlyQueryDto, req: Reques
 }
 
 export function gmvDistribution(service: GmvService, q: GmvDistributionQueryDto, req: Request) {
-  return service.getDistribution(q.dim, q.limit, hasForceSignal(req, q));
+  return service.getDistribution(q.dim, q.limit, hasForceSignal(req, q), q.date);
 }
 
 export function gmvByMerchant(service: GmvService, q: GmvByMerchantQueryDto, req: Request) {
-  return service.getTopMerchants(q.sortBy, q.page, q.pageSize, hasForceSignal(req, q));
+  return service.getTopMerchants(q.sortBy, q.page, q.pageSize, hasForceSignal(req, q), q.date);
 }
 
 /** Max inclusive day span for interactive GMV refresh (prevents multi-year ETL storms). */

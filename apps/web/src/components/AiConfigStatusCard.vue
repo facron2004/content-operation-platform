@@ -17,7 +17,7 @@ defineEmits<{ refresh: [] }>();
       <template #icon>
         <el-icon><Refresh /></el-icon>
       </template>
-      刷新
+      重新读取状态
     </AppleButton>
   </div>
 </template>

@@ -1,4 +1,5 @@
 import client from '../http-client';
+import type { RetryableConfig } from '../http-client-utils';
 
 export type ProductInventoryStatus = 'all' | 'normal' | 'low' | 'out';
 
@@ -97,6 +98,28 @@ export async function getProductCenterProducts(params: {
       params,
       timeout: 30000
     })
+  ).data;
+}
+
+export interface SyncMerchantsResponse {
+  upserted: number;
+  packagesCount: number;
+  packagesPersisted: number;
+  skipped?: boolean;
+  note?: string;
+}
+
+/**
+ * 触发后端从 JeeSite 拉取最新套餐/商家数据并写入 ContentPackage。
+ * 仅 admin 可用；调用方应捕获 403/429 等错误并降级为本地刷新。
+ */
+export async function syncMerchantsFromJeeSite() {
+  return (
+    await client.post<SyncMerchantsResponse>(
+      '/content/sync-merchants',
+      {},
+      { timeout: 60000, __silentError__: true } as RetryableConfig
+    )
   ).data;
 }
 

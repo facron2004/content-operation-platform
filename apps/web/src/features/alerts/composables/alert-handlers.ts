@@ -84,6 +84,7 @@ export type AlertResolveArgs = {
   setActionError: (value: string | null) => void;
   load: (force?: boolean) => Promise<void>;
   isActive?: () => boolean;
+  canResolve: () => boolean;
 };
 
 function createAlertResolveHandlers(args: AlertResolveArgs) {
@@ -92,6 +93,7 @@ function createAlertResolveHandlers(args: AlertResolveArgs) {
     successText = '已标记处理，今日不会再进入待办'
   ) => {
     if (args.isActive && !args.isActive()) return;
+    if (!args.canResolve()) return;
     const requestId = args.resolveRequestId();
     await resolveAlertBatch({
       alertIds,

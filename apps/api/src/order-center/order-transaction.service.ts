@@ -499,7 +499,7 @@ export class OrderTransactionService {
   private async requireRefund(
     db: TransactionDb,
     refundId: string
-  ): Promise<Prisma.RefundRequestGetPayload<{}>> {
+  ): Promise<Prisma.RefundRequestGetPayload<Prisma.RefundRequestDefaultArgs>> {
     const refund = await db.refundRequest.findUnique({ where: { id: refundId } });
     if (!refund) throw new NotFoundException('退款申请不存在');
     return refund;

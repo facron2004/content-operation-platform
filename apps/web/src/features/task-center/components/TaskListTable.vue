@@ -165,13 +165,16 @@ import AppleButton from '../../../components/AppleButton.vue';
 import ErrorAlert from '../../../components/ErrorAlert.vue';
 import { useTaskIdClipboard } from '../composables/useTaskIdClipboard';
 
-withDefaults(
+const props = withDefaults(
   defineProps<{
     tasks: DistributionTask[];
     loading?: boolean;
     pagination: { current: number; pageSize: number; total: number };
+    allowWrite?: boolean;
+    allowManage?: boolean;
+    allowPublish?: boolean;
   }>(),
-  { loading: false }
+  { loading: false, allowWrite: false, allowManage: false, allowPublish: false }
 );
 
 const emit = defineEmits<{
@@ -270,35 +273,35 @@ function riskType(level: string): 'success' | 'warning' | 'danger' | 'info' {
 }
 
 function canSchedule(task: DistributionTask) {
-  return SCHEDULABLE.includes(task.status);
+  return props.allowManage && SCHEDULABLE.includes(task.status);
 }
 
 function canPublish(task: DistributionTask) {
-  return PUBLISHABLE.includes(task.status);
+  return props.allowPublish && PUBLISHABLE.includes(task.status);
 }
 
 function canComplete(task: DistributionTask) {
-  return COMPLETABLE.includes(task.status);
+  return props.allowManage && COMPLETABLE.includes(task.status);
 }
 
 function canFail(task: DistributionTask) {
-  return FAILABLE.includes(task.status);
+  return props.allowManage && FAILABLE.includes(task.status);
 }
 
 function canCancel(task: DistributionTask) {
-  return CANCELLABLE.includes(task.status);
+  return props.allowManage && CANCELLABLE.includes(task.status);
 }
 
 function canEdit(task: DistributionTask) {
-  return EDITABLE.includes(task.status);
+  return props.allowWrite && EDITABLE.includes(task.status);
 }
 
 function canReassign(task: DistributionTask) {
-  return REASSIGNABLE.includes(task.status);
+  return props.allowManage && REASSIGNABLE.includes(task.status);
 }
 
 function canDelete(task: DistributionTask) {
-  return DELETABLE.includes(task.status);
+  return props.allowWrite && DELETABLE.includes(task.status);
 }
 
 function shortId(id: string) {

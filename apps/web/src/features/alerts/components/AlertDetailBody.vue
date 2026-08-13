@@ -29,7 +29,7 @@
       <AppleButton variant="primary" @click="$emit('go-battle', alert.packageId)">
         生成作战卡
       </AppleButton>
-      <AppleButton variant="success" @click="$emit('resolve', alert.alertId)">
+      <AppleButton v-if="canResolve" variant="success" @click="$emit('resolve', alert.alertId)">
         标记已处理
       </AppleButton>
     </div>
@@ -39,7 +39,10 @@
 import type { OperationAlert } from '@content/shared';
 import AppleButton from '../../../components/AppleButton.vue';
 import { riskTagType, levelText } from '../../../utils/labels';
-defineProps<{ alert: (OperationAlert & { priorityScore?: number }) | null }>();
+defineProps<{
+  alert: (OperationAlert & { priorityScore?: number }) | null;
+  canResolve: boolean;
+}>();
 defineEmits<{
   close: [];
   'go-analysis': [packageId: string];

@@ -1,10 +1,10 @@
 <template>
   <section v-loading="loading" class="page-stack merchants-view">
-    <MerchantHero :loading="loading" @reload="reload">
-      <template #title>
-        {{ selectedMerchant ? selectedMerchant.merchantName : '商家清单' }}
-      </template>
-    </MerchantHero>
+    <div class="page-toolbar">
+      <AppleButton size="sm" variant="secondary" :loading="loading" @click="reload">
+        刷新
+      </AppleButton>
+    </div>
     <ErrorAlert :message="listError" />
     <ErrorAlert :message="detailError" />
     <div class="layout-grid">
@@ -51,9 +51,9 @@
 <script setup lang="ts">
 import ErrorAlert from '../components/ErrorAlert.vue';
 import { useMerchants } from '../features/merchants/composables/useMerchants';
-import MerchantHero from '../features/merchants/components/MerchantHero.vue';
 import MerchantListPanel from '../features/merchants/components/MerchantListPanel.vue';
 import MerchantDetailPanel from '../features/merchants/components/MerchantDetailPanel.vue';
+import AppleButton from '../components/AppleButton.vue';
 const {
   loading,
   detailLoading,
@@ -70,7 +70,6 @@ const {
   listTruncated,
   listLimit,
   selectedMerchantId,
-  selectedMerchant,
   profile,
   skuList,
   competitors,

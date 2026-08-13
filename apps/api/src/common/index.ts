@@ -9,8 +9,7 @@ export {
   netGmvParts,
   rateAgainstGmv,
   rateByCount,
-  toFenBigInt,
-  floorNonNegativeFen
+  toFenBigInt
 } from './gmv-math';
 export { hasForceSignal } from './force-signal';
 export { escapeLike, likeContains, sanitizeContainsSearch, jsonArrayIdLike } from './like-escape';

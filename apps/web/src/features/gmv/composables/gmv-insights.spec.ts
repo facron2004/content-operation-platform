@@ -22,7 +22,6 @@ const baseKpi: GmvKpi = {
   monthGmv: 30000,
   monthGmvOnline: 15000,
   monthGmvWallet: 9000,
-  platformCommission: 300,
   updatedAt: '2026-08-09T00:00:00.000Z',
   dataSource: 'DailyMetrics'
 };
@@ -48,7 +47,7 @@ describe('buildGmvInsights', () => {
     expect(insights.map((item) => item.key)).toEqual(['peak', 'verify', 'top-category', 'refund']);
     expect(insights[0]).toMatchObject({
       title: '09:00 成交高峰',
-      desc: '该时段GMV占比75.0%'
+      desc: '该时段净 GMV 占比 75.0%'
     });
     expect(insights[1]).toMatchObject({
       tone: 'orange',
@@ -57,7 +56,7 @@ describe('buildGmvInsights', () => {
     });
     expect(insights[2]).toMatchObject({
       title: '火锅表现亮眼',
-      desc: '火锅品类GMV占比60.0%'
+      desc: '火锅品类净 GMV 占比 60.0%'
     });
     expect(insights[3]).toMatchObject({
       title: '退款率偏高',
@@ -91,7 +90,7 @@ describe('buildGmvInsights', () => {
 
     expect(insights[0]).toMatchObject({
       title: '09:00 成交高峰',
-      desc: '该时段GMV占比75.0%'
+      desc: '该时段净 GMV 占比 75.0%'
     });
   });
 });

@@ -168,12 +168,13 @@ export class MerchantService {
 
   async listMerchants(
     q: MerchantsListQueryDto,
-    scope?: { merchantIds?: string[]; areaIds?: string[] }
+    scope?: { merchantIds?: string[]; areaIds?: string[] },
+    force = false
   ) {
     const today = beijingDateKey(new Date());
     const key = merchantListCacheKey({ query: q, scope, today });
     try {
-      const items = await this.listCache.getOrLoad<MerchantListItem[]>(key, false, () =>
+      const items = await this.listCache.getOrLoad<MerchantListItem[]>(key, force, () =>
         withHeavyAggregateGate(() =>
           computeMerchantsWithStale({ prisma: this.prisma, query: q, scope, today })
         )
@@ -187,10 +188,10 @@ export class MerchantService {
     }
   }
 
-  async getProfile(merchantId: string) {
+  async getProfile(merchantId: string, force = false) {
     const today = beijingDateKey(new Date());
     const key = merchantProfileCacheKey(merchantId, today);
-    return this.detailCache.getOrLoad(key, false, () =>
+    return this.detailCache.getOrLoad(key, force, () =>
       buildMerchantProfile(this.prisma, merchantId)
     );
   }
@@ -199,13 +200,13 @@ export class MerchantService {
     return loadMerchantTrendPayload(this.prisma, merchantId, query.days);
   }
 
-  async listSkus(merchantId: string, query: MerchantTrendQueryDto) {
+  async listSkus(merchantId: string, query: MerchantTrendQueryDto, force = false) {
     const today = beijingDateKey(new Date());
     // Residual #246: thread days into sales window + cache key (SPA day chips already send it).
     const days = query.days ?? 30;
     const key = merchantSkusCacheKey(merchantId, today, days);
     try {
-      return await this.detailCache.getOrLoad(key, false, () =>
+      return await this.detailCache.getOrLoad(key, force, () =>
         withHeavyAggregateGate(async () => {
           const items = mapMerchantSkuRows(
             await loadMerchantSkuRows(this.prisma, merchantId, days)

@@ -12,8 +12,31 @@ export interface MarketingTagView {
   description: string | null;
   status: string;
   memberCount: number;
+  ruleJson: unknown | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface TagRuleEvaluationView {
+  tag: MarketingTagView;
+  matchedCount: number;
+  addedCount: number;
+  removedCount: number;
+  evaluatedAt: string;
+}
+
+export interface TagRulePreviewMemberView {
+  memberId: string;
+  nickname: string | null;
+  phone: string | null;
+  level: string | null;
+  paidOrderCount: number;
+  paidGmvFen: string | null;
+}
+
+export interface TagRulePreviewView {
+  matchedCount: number;
+  sample: TagRulePreviewMemberView[];
 }
 
 export interface AudienceView {

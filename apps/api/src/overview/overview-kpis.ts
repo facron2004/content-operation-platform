@@ -14,6 +14,7 @@ export function buildOverviewKpiPayload(args: {
   todayGmvFen: bigint | null;
   todayOrderCount: number;
   staleSkuRows: { stale30SkuCount: number; distinctMerchants: number };
+  moneyUpdatedAt: string | null;
   moneyDataSource: OverviewKpiPayload['dataSource'];
 }): OverviewKpiPayload {
   const zeroSalesSkuCount = args.staleSkuRows.stale30SkuCount;
@@ -28,7 +29,7 @@ export function buildOverviewKpiPayload(args: {
     zeroSalesSkuRatio: zeroSalesRatio,
     todayGmvFen: args.todayGmvFen,
     todayOrderCount: args.todayOrderCount,
-    updatedAt: new Date().toISOString(),
+    updatedAt: args.moneyUpdatedAt,
     dataSource: args.moneyDataSource
   };
 }
@@ -51,9 +52,10 @@ export function loadOverviewKpis(
   cache: TtlCache,
   date?: string,
   /** When true, cold compute shares process-wide heavy aggregate pool. */
-  useHeavyGate = false
+  useHeavyGate = false,
+  force = false
 ) {
-  return cache.getOrLoad(`kpis:${date ?? 'today'}`, false, () => {
+  return cache.getOrLoad(`kpis:${date ?? 'today'}`, force, () => {
     const load = async () => {
       const today = date ?? beijingDateKey(new Date());
       const rules = DEFAULT_INVENTORY_RULES;
@@ -68,7 +70,10 @@ export function loadOverviewKpis(
           v: await prisma.contentPackage.count({ where: { stockLeft: { gt: 0 } } })
         }),
         async () => ({ kind: 'money', v: await resolveDayGmvMoney(prisma, today) }),
-        async () => ({ kind: 'stale', v: await aggregateStaleSkuStats(prisma, today, rules) })
+        async () => ({
+          kind: 'stale',
+          v: await aggregateStaleSkuStats(prisma, today, rules, force)
+        })
       ];
       const results = await mapPool(legs, DATA_ANALYSIS_OH_CONCURRENCY, (fn) => fn());
       const totalMerchants = results.find((r) => r.kind === 'merchants')!.v;
@@ -82,6 +87,7 @@ export function loadOverviewKpis(
         todayGmvFen: money.totalGmvFen,
         todayOrderCount: money.paidOrderCount,
         staleSkuRows,
+        moneyUpdatedAt: money.updatedAt,
         moneyDataSource: money.dataSource
       });
     };

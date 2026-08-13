@@ -21,12 +21,14 @@ describe('residual #287 overview top-offenders LIMIT honesty', () => {
 
   it('controller/service still return loadTopOffenders payload object', async () => {
     const service = await readFile(path.join(srcRoot, 'overview', 'overview.service.ts'), 'utf8');
-    expect(service).toMatch(/loadTopOffenders\(this\.prisma,\s*n\)/);
+    expect(service).toMatch(/loadTopOffenders\(this\.prisma,\s*n,\s*asOf\)/);
     const controller = await readFile(
       path.join(srcRoot, 'overview', 'overview.controller.ts'),
       'utf8'
     );
-    expect(controller).toMatch(/getTopOffenders\(query\.limit\)/);
+    expect(controller).toMatch(
+      /getTopOffenders\(\s*query\.limit,\s*hasForceSignal\(req,\s*query\),\s*query\.date\s*\)/
+    );
   });
 
   it('SPA OverviewTopOffendersResponse + table surface honesty', async () => {

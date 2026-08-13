@@ -9,8 +9,6 @@ import GmvCockpitChartCard from './GmvCockpitChartCard.vue';
 import GmvCategoryDonut from './GmvCategoryDonut.vue';
 import GmvChannelBars from './GmvChannelBars.vue';
 import GmvConversionFunnel from './GmvConversionFunnel.vue';
-import GmvActivityTable from './GmvActivityTable.vue';
-import GmvHeatmap from './GmvHeatmap.vue';
 import GmvAlertsList from './GmvAlertsList.vue';
 import type { GmvTrendGranularity, GmvTrendMode } from '../composables/gmv-chart-ui';
 import { GMV_DIST_OPTIONS } from './gmv-cockpit-charts-ui';
@@ -18,25 +16,22 @@ import { GMV_DIST_OPTIONS } from './gmv-cockpit-charts-ui';
 import type { GmvKpi, GmvHourlyPoint } from '../../../services/api/gmv.api';
 import type { GmvTopMerchant } from './gmv-cockpit-charts-ui';
 import type {
-  GmvActivityRow,
   GmvAlertItem,
   GmvCategoryRow,
   GmvChannelRow,
-  GmvFunnelStage,
-  GmvHeatPoint
+  GmvFunnelStage
 } from '../composables/gmv-cockpit-core';
 import { buildGmvInsights } from '../composables/gmv-insights';
 
 export type GmvCockpitBodyProps = {
   kpi: GmvKpi | null;
   totalGmvDisplay: number;
-  barGmvOnline: number;
-  barGmvWallet: number;
   trendOption: Record<string, unknown>;
   hourlyOption: Record<string, unknown>;
   distributionOption: Record<string, unknown>;
   topMerchants: GmvTopMerchant[];
   merchantPage: number;
+  merchantPageSize: number;
   merchantHasMore: boolean;
   // Residual #265: GMV_TOP_MERCHANTS_LIMIT honesty.
   merchantTruncated?: boolean;
@@ -49,9 +44,6 @@ export type GmvCockpitBodyProps = {
   categories: GmvCategoryRow[];
   channels: GmvChannelRow[];
   funnel: GmvFunnelStage[];
-  activities: GmvActivityRow[];
-  heatPoints: GmvHeatPoint[];
-  heatCity: string;
   alerts: GmvAlertItem[];
   hourly: GmvHourlyPoint[];
 };
@@ -89,19 +81,15 @@ const insightsData = computed(() =>
     <GmvCockpitCharts
       v-model:trend-granularity="trendGranularity"
       v-model:trend-mode="trendMode"
-      v-model:dist-dim="distDim"
       :trend-option="trendOption"
-      :hourly-option="hourlyOption"
-      :distribution-option="distributionOption"
-      :hourly-date-label="hourlyDateLabel"
       @trend-change="$emit('trend-change')"
-      @dist-change="$emit('dist-change')"
     />
 
     <GmvTopMerchantsTable
       v-model:merchant-sort="merchantSort"
       :top-merchants="topMerchants"
       :page="merchantPage"
+      :page-size="merchantPageSize"
       :has-more="merchantHasMore"
       :truncated="merchantTruncated"
       :limit="merchantLimit"
@@ -119,7 +107,7 @@ const insightsData = computed(() =>
     <GmvHourlyChartCard :option="hourlyOption" :date-label="hourlyDateLabel" />
 
     <GmvCockpitChartCard
-      title="区域/商圈分布（GMV）"
+      title="区域 / 类目净 GMV 分布"
       :option="distributionOption"
       :model-value="distDim"
       :options="GMV_DIST_OPTIONS"
@@ -147,36 +135,28 @@ const insightsData = computed(() =>
       <GmvConversionFunnel :stages="funnel" />
 
       <GmvAlertsList :alerts="alerts" />
-
-      <!-- Hidden / collapsed sections kept for data flow compatibility -->
-      <div style="display: none">
-        <GmvActivityTable :rows="activities" />
-        <GmvHeatmap :city="heatCity" :points="heatPoints" />
-      </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-.cockpit-grid {
-  display: none;
-}
-
 .cockpit-primary-row {
   display: grid;
-  grid-template-columns: minmax(0, 1.65fr) minmax(360px, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 1fr);
   gap: 12px;
   align-items: stretch;
   min-width: 0;
+  height: 340px;
 }
 
 .cockpit-primary-row > * {
   min-width: 0;
+  height: 100%;
 }
 
 .cockpit-secondary-grid {
   display: grid;
-  grid-template-columns: 1.2fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
   min-width: 0;
   max-width: 100%;
@@ -189,6 +169,12 @@ const insightsData = computed(() =>
   min-width: 0;
 }
 
+/* Unify the height of the first card in each column (交易品类 / 履约与退款). */
+.cockpit-secondary-grid :deep(.gmv-category-card),
+.cockpit-secondary-grid :deep(.gmv-funnel-card) {
+  min-height: 320px;
+}
+
 .cockpit-full-row-two {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -198,12 +184,6 @@ const insightsData = computed(() =>
 }
 
 /* Responsive breakpoints */
-@media (max-width: 1400px) {
-  .cockpit-primary-row {
-    grid-template-columns: minmax(0, 1.4fr) minmax(320px, 1fr);
-  }
-}
-
 @media (max-width: 1180px) {
   .cockpit-primary-row,
   .cockpit-secondary-grid,

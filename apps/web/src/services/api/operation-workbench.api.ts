@@ -48,7 +48,7 @@ export interface WorkbenchPendingItem {
 
 export interface OperationWorkbenchResponse {
   date: string;
-  updatedAt: string;
+  updatedAt: string | null;
   dataSources: string[];
   kpis: {
     gmv: OperationGmvKpi;

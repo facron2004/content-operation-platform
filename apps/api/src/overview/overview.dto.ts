@@ -1,11 +1,14 @@
 import { IsIn, IsInt, IsOptional, Max, Min } from 'class-validator';
 import { Type } from 'class-transformer';
-import { optionalDateKey } from '../content/dto-decorators';
+import { optionalDateKey, optionalString } from '../content/dto-decorators';
 
 /** OverviewView KPI; date defaults to Beijing business day (beijingDateKey). */
 export class OverviewKpiQueryDto {
   @optionalDateKey()
   date?: string;
+
+  @optionalString(5)
+  force?: boolean | string;
 }
 
 /** Overview trend; days=7 default, allowed 7/30. */
@@ -18,6 +21,9 @@ export class OverviewTrendQueryDto {
 
   @optionalDateKey()
   endDate?: string;
+
+  @optionalString(5)
+  force?: boolean | string;
 }
 
 export type OverviewDistributionDim = 'area' | 'category' | 'stale';
@@ -33,6 +39,12 @@ export class OverviewDistributionQueryDto {
   @Min(1)
   @Max(50)
   limit: number = 20;
+
+  @optionalDateKey()
+  date?: string;
+
+  @optionalString(5)
+  force?: boolean | string;
 }
 
 export class OverviewTopOffendersQueryDto {
@@ -42,4 +54,10 @@ export class OverviewTopOffendersQueryDto {
   @Min(1)
   @Max(50)
   limit: number = 10;
+
+  @optionalDateKey()
+  date?: string;
+
+  @optionalString(5)
+  force?: boolean | string;
 }

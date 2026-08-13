@@ -122,7 +122,7 @@ const route = useRoute();
 const router = useRouter();
 const iconMap = ICON_MAP;
 
-/** User-toggled open groups; auto-open active path groups. */
+/** Keep one working center open; navigation automatically follows the active path. */
 const openGroups = ref<Set<string>>(new Set(resolveOpenGroupKeys(route.path)));
 
 watch(
@@ -130,9 +130,7 @@ watch(
   (path) => {
     const auto = resolveOpenGroupKeys(path);
     if (!auto.length) return;
-    const next = new Set(openGroups.value);
-    for (const key of auto) next.add(key);
-    openGroups.value = next;
+    openGroups.value = new Set(auto);
   }
 );
 
@@ -145,7 +143,10 @@ function isGroupOpen(key: string) {
 }
 
 function isGroupActive(node: NavGroupNode) {
-  return node.children.some((c) => isActive(c.path));
+  return (
+    node.children.some((c) => isActive(c.path)) ||
+    (node.aliases?.some((alias) => isActive(alias)) ?? false)
+  );
 }
 
 function toggleGroup(node: NavGroupNode) {
@@ -160,7 +161,10 @@ function toggleGroup(node: NavGroupNode) {
   }
   const next = new Set(openGroups.value);
   if (next.has(node.key)) next.delete(node.key);
-  else next.add(node.key);
+  else {
+    next.clear();
+    next.add(node.key);
+  }
   openGroups.value = next;
 }
 

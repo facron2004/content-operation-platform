@@ -54,7 +54,8 @@ export class AlertService {
   async getOperationAlerts(
     query: AlertQuery,
     getRecommendations: GetRecommendationsFn,
-    scope: AlertScope = {}
+    scope: AlertScope = {},
+    force = false
   ) {
     const today = this.todayKey();
     const cacheKey = alertAggregateCacheKey(query, scope, today);
@@ -69,7 +70,7 @@ export class AlertService {
       sourceTruncated: boolean;
     };
     const [aggregate, resolvedMeta] = await Promise.all([
-      this.aggregateCache.getOrLoad<AlertAggregatePayload>(cacheKey, false, async () => {
+      this.aggregateCache.getOrLoad<AlertAggregatePayload>(cacheKey, force, async () => {
         const recommendations = await getRecommendations({
           role: query.role,
           status: 'selling',

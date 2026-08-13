@@ -10,9 +10,9 @@ import {
   IS_VERIFIED,
   PAID_WHERE,
   type PrismaLike,
-  REFUND_COMPONENTS_FEN,
+  REFUND_AMOUNT_FEN,
   n,
-  rate
+  rateByCount
 } from './data-analysis-query.shared';
 
 const BEIJING_HOUR = `CAST(strftime('%H', datetime(replace(replace("paidTime", 'T', ' '), 'Z', ''), '+8 hours')) AS INTEGER)`;
@@ -52,7 +52,7 @@ export async function queryDailyTrend(
      refundByDay AS (
        SELECT
          ${BEIJING_DATE} AS "date",
-         COALESCE(SUM(${REFUND_COMPONENTS_FEN()}) / 100.0, 0) AS "refundAmount"
+         COALESCE(SUM(${REFUND_AMOUNT_FEN()}) / 100.0, 0) AS "refundAmount"
        FROM "OrderHeader"
        WHERE ${PAID_WHERE} AND "refundAmountFen" > 0
        GROUP BY ${BEIJING_DATE}
@@ -182,7 +182,7 @@ export async function queryTimeSlots(
       orderCount,
       salesAmount,
       verifiedCount,
-      verifyRate: rate(verifiedCount, orderCount)
+      verifyRate: rateByCount(verifiedCount, orderCount)
     };
   });
 }

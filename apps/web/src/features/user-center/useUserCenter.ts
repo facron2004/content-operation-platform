@@ -30,6 +30,7 @@ export function useUserCenter() {
         : ''
   );
   const detail = ref<UserCenterMemberDetailResponse | null>(null);
+  const dataSources = ref<string[]>([]);
   const summary = ref<UserCenterListResponse['summary']>({
     totalMembers: 0,
     paidMembers: 0,
@@ -64,11 +65,12 @@ export function useUserCenter() {
       items.value = response.items;
       summary.value = response.summary;
       pagination.value = response.pagination;
+      dataSources.value = response.dataSources;
       const current = selectedMemberId.value;
       if (current) {
-        await loadDetail(current);
+        await loadDetail(current, response.items.find((item) => item.memberId === current)?.inviteCode);
       } else if (response.items[0]) {
-        await selectMember(response.items[0].memberId, false);
+        await selectMember(response.items[0].memberId, false, response.items[0].inviteCode);
       } else {
         selectedMemberId.value = '';
         detail.value = null;
@@ -82,12 +84,12 @@ export function useUserCenter() {
     }
   }
 
-  async function loadDetail(memberId: string) {
+  async function loadDetail(memberId: string, inviteCode?: string | null) {
     const requestId = ++detailRequestId;
     detailLoading.value = true;
     detailError.value = null;
     try {
-      const response = await getUserCenterMember(memberId);
+      const response = await getUserCenterMember(memberId, inviteCode);
       if (disposed || requestId !== detailRequestId) return;
       detail.value = response;
     } catch (cause) {
@@ -99,7 +101,7 @@ export function useUserCenter() {
     }
   }
 
-  async function selectMember(memberId: string, updateRoute = true) {
+  async function selectMember(memberId: string, updateRoute = true, inviteCode?: string | null) {
     if (disposed || !memberId) return;
     selectedMemberId.value = memberId;
     if (updateRoute) {
@@ -112,7 +114,7 @@ export function useUserCenter() {
         }
       });
     }
-    await loadDetail(memberId);
+    await loadDetail(memberId, inviteCode);
   }
 
   async function applyFilters() {
@@ -199,6 +201,7 @@ export function useUserCenter() {
     detail,
     summary,
     pagination,
+    dataSources: computed(() => dataSources.value),
     reload,
     applyFilters,
     setPage,

@@ -3,6 +3,7 @@ import { Controller, Get, Inject, Query, Req } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import type { Request } from 'express';
+import { hasForceSignal } from '../common';
 import { assertUnrestrictedAnalytics } from '../user-access/scope-guards';
 import { RequireLogin } from '../user-access/iam/route-auth.decorator';
 import { RequirePermissions } from '../user-access/iam/require-permissions.decorator';
@@ -33,7 +34,7 @@ export class OverviewController {
     @Req() req: Request
   ) {
     assertUnrestrictedAnalytics(req);
-    return this.overview.getKpis(query.date);
+    return this.overview.getKpis(query.date, hasForceSignal(req, query));
   }
 
   @Get('trend')
@@ -45,7 +46,7 @@ export class OverviewController {
     @Req() req: Request
   ) {
     assertUnrestrictedAnalytics(req);
-    return this.overview.getTrend(query.days, query.endDate);
+    return this.overview.getTrend(query.days, query.endDate, hasForceSignal(req, query));
   }
 
   @Get('distribution')
@@ -57,7 +58,12 @@ export class OverviewController {
     @Req() req: Request
   ) {
     assertUnrestrictedAnalytics(req);
-    return this.overview.getDistribution(query.dim, query.limit);
+    return this.overview.getDistribution(
+      query.dim,
+      query.limit,
+      hasForceSignal(req, query),
+      query.date
+    );
   }
 
   @Get('top-offenders')
@@ -69,6 +75,6 @@ export class OverviewController {
     @Req() req: Request
   ) {
     assertUnrestrictedAnalytics(req);
-    return this.overview.getTopOffenders(query.limit);
+    return this.overview.getTopOffenders(query.limit, hasForceSignal(req, query), query.date);
   }
 }

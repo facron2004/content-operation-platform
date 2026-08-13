@@ -18,7 +18,7 @@
       :hint="kpi ? `零动销 SKU ${formatCount(kpi.zeroSalesSkuCount)}` : undefined"
       @activate="$emit('go-zero-sales')"
     />
-    <MetricTile label="今日 GMV" :value="displayMoney(kpi, 'todayGmv')" info />
+    <MetricTile label="今日净 GMV" :value="displayMoney(kpi, 'todayGmv')" info />
     <MetricTile label="今日成单数" :value="kpi?.todayOrderCount ?? '-'" />
   </div>
 </template>

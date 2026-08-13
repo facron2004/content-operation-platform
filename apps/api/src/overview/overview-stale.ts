@@ -3,6 +3,7 @@ import { DEFAULT_INVENTORY_RULES } from '../domain/rules-defaults';
 import { beijingDateKey, shiftDateKey } from '@content/shared';
 import type { PrismaService } from '../prisma/prisma.service';
 import {
+  computePlatformStaleBucketStats,
   loadPlatformStaleBucketStats,
   stale30SkuCountFromBuckets
 } from '../common/stale-bucket-stats';
@@ -17,13 +18,16 @@ import type { OverviewTopOffender } from './overview.types';
 export async function aggregateStaleSkuStats(
   prisma: PrismaService,
   today: string,
-  rules: InventoryRuleConfig
+  rules: InventoryRuleConfig,
+  force = false
 ) {
   const threshold = shiftDateKey(today, -(rules.stale30Days - 1));
   // Sequential: histogram is process-TTL cached (often hit); merchant DISTINCT is
   // the cold full-catalog NOT EXISTS. Running both in parallel doubles SQLite
   // load on cold miss under the same heavy-gate holder.
-  const buckets = await loadPlatformStaleBucketStats(prisma, today, rules);
+  const buckets = force
+    ? await computePlatformStaleBucketStats(prisma, today, rules)
+    : await loadPlatformStaleBucketStats(prisma, today, rules);
   const merchantRow = (await prisma.$queryRawUnsafe(
     `SELECT COUNT(DISTINCT "merchantId") AS "distinctMerchants"
      FROM "ContentPackage"
@@ -32,9 +36,10 @@ export async function aggregateStaleSkuStats(
        AND NOT EXISTS (
          SELECT 1 FROM "PackageSalesDaily" s
          WHERE s."packageId" = "ContentPackage"."packageId"
-           AND s."salesQty" > 0 AND s."date" >= ?
+           AND s."salesQty" > 0 AND s."date" >= ? AND s."date" <= ?
        )`,
-    threshold
+    threshold,
+    today
   )) as Array<{ distinctMerchants: number }>;
   const [row] = merchantRow;
   return {
@@ -48,10 +53,14 @@ export async function aggregateStaleSkuStats(
  * Shared process TTL with movement-today (see loadPlatformStaleBucketStats).
  */
 export async function aggregateStaleBucketStats(
-  prisma: PrismaService
+  prisma: PrismaService,
+  date?: string,
+  force = false
 ): Promise<Record<string, number>> {
-  const today = beijingDateKey(new Date());
-  return loadPlatformStaleBucketStats(prisma, today);
+  const today = date ?? beijingDateKey(new Date());
+  return force
+    ? computePlatformStaleBucketStats(prisma, today)
+    : loadPlatformStaleBucketStats(prisma, today);
 }
 
 export type StaleMerchantOffenderRow = {
@@ -65,6 +74,7 @@ export type StaleMerchantOffenderRow = {
 export async function queryStaleMerchantOffenders(
   prisma: PrismaService,
   threshold: string,
+  asOfDate: string,
   limit: number
 ): Promise<StaleMerchantOffenderRow[]> {
   // Pre-aggregate totalSku once (merchant_total CTE) — previous correlated
@@ -90,12 +100,13 @@ export async function queryStaleMerchantOffenders(
        AND NOT EXISTS (
          SELECT 1 FROM "PackageSalesDaily" s
          WHERE s."packageId" = cp."packageId"
-           AND s."salesQty" > 0 AND s."date" >= ?
+           AND s."salesQty" > 0 AND s."date" >= ? AND s."date" <= ?
        )
      GROUP BY cp."merchantId", mt."totalSku"
      ORDER BY "stale30SkuCount" DESC
      LIMIT ?`,
     threshold,
+    asOfDate,
     limit
   )) as StaleMerchantOffenderRow[];
 }
@@ -114,13 +125,14 @@ export type OverviewTopOffendersPayload = {
 
 export async function loadTopOffenders(
   prisma: PrismaService,
-  limit: number
+  limit: number,
+  date?: string
 ): Promise<OverviewTopOffendersPayload> {
   const safeLimit = Math.max(1, Math.floor(limit) || 10);
-  const today = beijingDateKey(new Date());
+  const today = date ?? beijingDateKey(new Date());
   const threshold = shiftDateKey(today, -(DEFAULT_INVENTORY_RULES.stale30Days - 1));
   // Residual #287: LIMIT+1 probe — exact truncated without COUNT(*), head stays Top-N.
-  const rows = await queryStaleMerchantOffenders(prisma, threshold, safeLimit + 1);
+  const rows = await queryStaleMerchantOffenders(prisma, threshold, today, safeLimit + 1);
   const truncated = rows.length > safeLimit;
   const head = rows.slice(0, safeLimit);
   const items = head.map((r) => ({

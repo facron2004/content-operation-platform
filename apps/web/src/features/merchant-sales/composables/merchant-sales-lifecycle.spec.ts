@@ -202,6 +202,53 @@ describe('merchant sales request lifecycle', () => {
     expect(state.ranking.value.items[0]?.merchantName).toBe('retried');
   });
 
+  it('uses force only for an explicit reload, not cached paging reads', async () => {
+    scope = effectScope();
+    let state!: ReturnType<typeof createMerchantSalesState>;
+    let loaders!: ReturnType<typeof createMerchantSalesLoaders>;
+    scope.run(() => {
+      state = createMerchantSalesState();
+      state.windowSel.value = 'week';
+      loaders = createMerchantSalesLoaders(state);
+    });
+
+    await loaders.reload();
+    expect(mocks.getMerchantSalesSummary).toHaveBeenLastCalledWith({ window: 'week' });
+    expect(mocks.getMerchantSalesTrend).toHaveBeenLastCalledWith({ window: 'week' });
+    expect(mocks.getMerchantSalesRanking).toHaveBeenLastCalledWith({
+      window: 'week',
+      sortBy: 'gmvDesc',
+      page: 1,
+      pageSize: 20
+    });
+
+    await loaders.reload(true);
+    expect(mocks.getMerchantSalesSummary).toHaveBeenLastCalledWith({
+      window: 'week',
+      force: true
+    });
+    expect(mocks.getMerchantSalesTrend).toHaveBeenLastCalledWith({
+      window: 'week',
+      force: true
+    });
+    expect(mocks.getMerchantSalesRanking).toHaveBeenLastCalledWith({
+      window: 'week',
+      sortBy: 'gmvDesc',
+      page: 1,
+      pageSize: 20,
+      force: true
+    });
+
+    state.page.value = 2;
+    await loaders.loadRanking();
+    expect(mocks.getMerchantSalesRanking).toHaveBeenLastCalledWith({
+      window: 'week',
+      sortBy: 'gmvDesc',
+      page: 2,
+      pageSize: 20
+    });
+  });
+
   it('keeps summary and trend errors independent during a reload and clears both on retry', async () => {
     mocks.getMerchantSalesSummary
       .mockReset()

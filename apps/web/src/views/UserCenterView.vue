@@ -1,20 +1,10 @@
 <template>
   <section v-loading="loading" class="page-stack user-center-view">
-    <div class="user-center-hero panel">
-      <div>
-        <p class="eyebrow">V2.0.1 / USER OPERATIONS</p>
-        <h1>用户中心</h1>
-        <p class="hero-description">
-          统一查看客户档案、订单行为与积分流水，为用户分层、触达和复购运营提供数据底座。
-        </p>
-      </div>
-      <div class="user-center-hero__actions">
-        <span class="source-pill">{{ dataSources.join(' + ') || 'Member' }}</span>
-        <el-button :loading="loading" @click="reload">
-          <el-icon><Refresh /></el-icon>
-          刷新
-        </el-button>
-      </div>
+    <div class="page-toolbar">
+      <el-button :loading="loading" @click="reload">
+        <el-icon><Refresh /></el-icon>
+        刷新
+      </el-button>
     </div>
 
     <ErrorAlert :message="error" />
@@ -22,9 +12,9 @@
 
     <div class="user-center-metrics">
       <article class="user-center-metric">
-        <span>用户总数</span>
-        <strong>{{ formatCount(summary.totalMembers) }}</strong>
-        <small>当前客户档案</small>
+          <span>用户总数</span>
+          <strong>{{ formatCount(summary.totalMembers) }}</strong>
+          <small>{{ dataSources.includes('JeeSite Member') ? 'JeeSite 会员主档' : '当前客户档案' }}</small>
       </article>
       <article class="user-center-metric">
         <span>已支付用户</span>
@@ -57,7 +47,7 @@
           <el-input
             v-model="search"
             clearable
-            placeholder="搜索昵称、手机号或用户 ID"
+            placeholder="搜索昵称、手机号、邀请码或用户 ID"
             @keyup.enter="applyFilters"
           >
             <template #prefix>
@@ -88,6 +78,13 @@
               </div>
             </template>
           </el-table-column>
+          <el-table-column label="邀请码" min-width="126" prop="inviteCode">
+            <template #default="{ row }">{{ row.inviteCode || '—' }}</template>
+          </el-table-column>
+          <el-table-column label="上级邀请码" min-width="126" prop="parentInviteCode">
+            <template #default="{ row }">{{ row.parentInviteCode || '—' }}</template>
+          </el-table-column>
+          <el-table-column label="下级用户数" width="104" align="right" prop="downlineCount" />
           <el-table-column label="等级" width="94">
             <template #default="{ row }">
               <el-tag size="small" effect="plain">{{ row.level || '普通' }}</el-tag>
@@ -142,6 +139,21 @@
             <div>
               <span>钱包余额</span>
               <strong>{{ displayFen(selectedMember.walletBalanceFen) }}</strong>
+            </div>
+          </div>
+
+          <div class="user-detail-referral">
+            <div>
+              <span>邀请码</span>
+              <strong>{{ selectedMember.inviteCode || '—' }}</strong>
+            </div>
+            <div>
+              <span>上级邀请码</span>
+              <strong>{{ selectedMember.parentInviteCode || '—' }}</strong>
+            </div>
+            <div>
+              <span>直属下级</span>
+              <strong>{{ formatCount(selectedMember.downlineCount) }}</strong>
             </div>
           </div>
 
@@ -217,6 +229,7 @@ const {
   detail,
   summary,
   pagination,
+  dataSources,
   reload,
   applyFilters,
   setPage,
@@ -227,9 +240,8 @@ const {
   statusLabel
 } = useUserCenter();
 
-const dataSources = ['Member', 'OrderHeader'];
 const formatCount = (value: number) => value.toLocaleString('zh-CN');
-const selectTableMember = (row: UserCenterMemberItem) => selectMember(row.memberId);
+const selectTableMember = (row: UserCenterMemberItem) => selectMember(row.memberId, true, row.inviteCode);
 </script>
 
 <style src="../styles/views/user-center.css" scoped></style>

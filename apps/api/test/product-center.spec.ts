@@ -39,7 +39,7 @@ describe('product center', () => {
           ])
       }
     } as unknown as PrismaService;
-    const service = new ProductCenterService(prisma);
+    const service = new ProductCenterService(prisma, {} as never);
 
     const result = await service.listProducts({
       page: 1,

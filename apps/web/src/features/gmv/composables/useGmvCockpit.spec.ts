@@ -218,13 +218,14 @@ describe('GMV cockpit request lifecycle', () => {
 
     loadError.value = null;
     mocks.getGmvDistribution.mockRejectedValueOnce(new Error('distribution failed'));
-    await loadGmvDistribution('area', ref<GmvDistributionRow[]>([]), loadError);
+    await loadGmvDistribution('area', '2026-08-10', ref<GmvDistributionRow[]>([]), loadError);
     expect(loadError.value).toBe('加载分布失败');
 
     loadError.value = null;
     mocks.getGmvByMerchant.mockRejectedValueOnce({ code: 'ECONNABORTED' });
     await loadGmvTopMerchants({
       sort: 'gmvDesc',
+      date: '2026-08-10',
       page: 1,
       pageSize: 20,
       topMerchants: ref<GmvMerchantRow[]>([]),
@@ -291,8 +292,14 @@ describe('GMV cockpit request lifecycle', () => {
     await cockpit.reload();
 
     expect(mocks.getGmvToday).toHaveBeenCalledWith(cockpit.kpiDate.value, true);
-    expect(mocks.getGmvByMerchant).toHaveBeenCalledWith('gmvDesc', 1, 20, true);
-    expect(mocks.getGmvDistribution).toHaveBeenCalledWith('area', 10, true);
+    expect(mocks.getGmvByMerchant).toHaveBeenCalledWith(
+      'gmvDesc',
+      1,
+      20,
+      true,
+      cockpit.kpiDate.value
+    );
+    expect(mocks.getGmvDistribution).toHaveBeenCalledWith('area', 10, true, cockpit.kpiDate.value);
     expect(mocks.success).toHaveBeenCalledWith('已拉取 1 单 (1 页)');
     expect(cockpit.loading.value).toBe(false);
   });
@@ -312,7 +319,7 @@ describe('GMV cockpit request lifecycle', () => {
     await cockpit.reload();
 
     expect(mocks.warning).toHaveBeenCalledWith(
-      '刷新完成，但JeSite 拉单未完成，已使用本地数据重算，当前页面可能仍是旧数据'
+      '同步完成，但JeSite 拉单未完成，已使用本地数据重算，当前页面可能仍是旧数据'
     );
     expect(mocks.success).not.toHaveBeenCalled();
     expect(mocks.info).not.toHaveBeenCalled();

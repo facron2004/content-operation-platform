@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import ErrorAlert from '../components/ErrorAlert.vue';
-import AttributionHero from '../features/attribution/components/AttributionHero.vue';
+import AppleButton from '../components/AppleButton.vue';
 import AttributionTable from '../features/attribution/components/AttributionTable.vue';
 import AttributionBindDialog from '../features/attribution/components/AttributionBindDialog.vue';
 import { useAttributionPage } from '../features/attribution/composables/useAttributionPage';
@@ -11,8 +11,6 @@ const {
   loadError,
   actionError,
   orders,
-  dateFrom,
-  dateTo,
   pagination,
   canManage,
   bindDialogVisible,
@@ -31,16 +29,27 @@ const {
 
 <template>
   <section v-loading="loading" class="page-stack attribution-page">
-    <AttributionHero
-      :loading="loading"
-      :action-loading="actionLoading"
-      :can-manage="canManage"
-      :total="pagination.total"
-      :date-from="dateFrom"
-      :date-to="dateTo"
-      @reload="load"
-      @recompute="recompute"
-    />
+    <div class="page-toolbar">
+      <AppleButton
+        variant="secondary"
+        size="sm"
+        :loading="loading"
+        :disabled="actionLoading"
+        @click="load"
+      >
+        刷新列表
+      </AppleButton>
+      <AppleButton
+        v-if="canManage"
+        variant="primary"
+        size="sm"
+        :loading="actionLoading"
+        :disabled="loading"
+        @click="recompute"
+      >
+        重算归因
+      </AppleButton>
+    </div>
     <ErrorAlert :message="loadError" />
     <ErrorAlert :message="actionError" />
     <AttributionTable

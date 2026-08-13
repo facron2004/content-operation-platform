@@ -18,6 +18,7 @@
         :key="item.packageId"
         :item="item"
         :resolving="resolving"
+        :can-resolve="canResolve"
         @navigate="$emit('navigate', $event)"
         @create-task="$emit('create-task', $event)"
         @resolve-batch="(ids, msg) => $emit('resolve-batch', ids, msg)"
@@ -31,6 +32,7 @@ import FocusPackageCard from './FocusPackageCard.vue';
 defineProps<{
   topPackages: AlertPackageFocus[];
   resolving: boolean;
+  canResolve: boolean;
   focusPackageTruncated?: boolean;
   focusPackageLimit?: number;
   focusPackageMatched?: number;

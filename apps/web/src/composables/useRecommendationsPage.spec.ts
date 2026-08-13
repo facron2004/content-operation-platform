@@ -135,6 +135,43 @@ describe('useRecommendationsPage request lifecycle', () => {
     expect(page.loading.value).toBe(false);
   });
 
+  it('marks an explicit refresh so the API can bypass its server cache', async () => {
+    mocks.getRecommendations.mockResolvedValue(recommendationsFor('PKG-force'));
+    const page = useRecommendationsPage();
+    await vi.waitFor(() => expect(page.items.value[0]?.packageId).toBe('PKG-force'));
+
+    await page.load(true);
+
+    expect(mocks.clearPackageCache).toHaveBeenCalled();
+    expect(mocks.getRecommendations).toHaveBeenLastCalledWith(
+      expect.objectContaining({ force: true })
+    );
+  });
+
+  it('does not cache refreshed first-page rows under the page that was active before refresh', async () => {
+    mocks.getRecommendations.mockImplementation(async (params: { page?: number }) =>
+      recommendationsFor(`PKG-page-${params.page ?? 1}`)
+    );
+    const page = useRecommendationsPage();
+    await vi.waitFor(() => expect(page.items.value[0]?.packageId).toBe('PKG-page-1'));
+    page.pagination.page = 3;
+
+    await page.load(true);
+    expect(page.pagination.page).toBe(1);
+    expect(mocks.getRecommendations).toHaveBeenLastCalledWith(
+      expect.objectContaining({ page: 1, force: true })
+    );
+
+    const callCountAfterRefresh = mocks.getRecommendations.mock.calls.length;
+    page.pagination.page = 3;
+    await page.load();
+    expect(mocks.getRecommendations).toHaveBeenCalledTimes(callCountAfterRefresh + 1);
+    expect(mocks.getRecommendations).toHaveBeenLastCalledWith(
+      expect.objectContaining({ page: 3, force: undefined })
+    );
+    expect(page.items.value[0]?.packageId).toBe('PKG-page-3');
+  });
+
   it('keeps successful list metadata and preserves page actions through the facade', async () => {
     mocks.getRecommendations.mockResolvedValueOnce({
       packages: [

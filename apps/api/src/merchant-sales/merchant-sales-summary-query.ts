@@ -2,6 +2,7 @@
 import type { PrismaService } from '../prisma/prisma.service';
 import { SQL_GMV_SS } from '../common/gmv-math';
 import { beijingDayRangeSqlite, sqlDatetimeExclusiveRange } from '../common/sqlite-datetime';
+import { rateByCount } from '../common';
 import { whereArgsForWindow, whereClauseForWindow } from './merchant-sales-window';
 import type { MerchantSalesSummary, MerchantSalesWindow } from './merchant-sales.dto';
 
@@ -38,8 +39,6 @@ export function mapSummaryAggregate(
     refundCount = Number(r.refundCount),
     verifyCount = Number(r.verifyCount),
     paidOrderCount = Number(r.paidOrderCount);
-  // Unified 单数口径: 退款率 = 退款单数 / 支付单数, 核销率 = 核销单数 / 支付单数.
-  const safeRate = (numerator: number) => (paidOrderCount > 0 ? numerator / paidOrderCount : 0);
   return {
     window,
     date: start,
@@ -47,8 +46,8 @@ export function mapSummaryAggregate(
     totalGmv,
     totalRefund,
     totalVerify,
-    refundRate: safeRate(refundCount),
-    verifyRate: safeRate(verifyCount),
+    refundRate: rateByCount(refundCount, paidOrderCount),
+    verifyRate: rateByCount(verifyCount, paidOrderCount),
     paidOrderCount,
     merchantCount: Number(r.merchantCount),
     packageCount: Number(r.packageCount),

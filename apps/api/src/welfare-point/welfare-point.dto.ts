@@ -53,9 +53,4 @@ export class WelfarePointQueryDto {
   @IsOptional()
   @IsString()
   keyword?: string;
-
-  /** 强制绕过缓存重新拉取 JeeSite。 */
-  @IsOptional()
-  @Type(() => Boolean)
-  reload?: boolean;
 }

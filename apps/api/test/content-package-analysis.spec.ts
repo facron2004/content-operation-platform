@@ -3,9 +3,10 @@ import type { ContentPackage, RecommendPackageItem, SalesSnapshot } from '@conte
 import { buildPromotionScore } from '../src/domain/promotion-rules';
 import { buildPackageAnalysisResult } from '../src/content/content-package-analysis';
 import { buildPackageAnalysisResult as buildFromLegacyCore } from '../src/content/content-recommend-core';
+import { generateContentBattleCardFromAnalysis } from '../src/content/content-facade';
 
 describe('content package analysis projection', () => {
-  it('projects recommendation state and preserves the legacy core export', () => {
+  it('projects recommendation state and preserves the legacy core export', async () => {
     const pkg: ContentPackage = {
       packageId: 'PKG-ANALYSIS',
       packageName: '套餐分析',
@@ -114,5 +115,29 @@ describe('content package analysis projection', () => {
       { label: '核销', value: 6 },
       { label: '退款', value: 1 }
     ]);
+
+    let projected: RecommendPackageItem | undefined;
+    await generateContentBattleCardFromAnalysis(
+      async () => ({
+        ...result,
+        salesData: {
+          ...result.salesData,
+          exposureCount: 9,
+          paidOrderCount: 3,
+          verifyCount: 1,
+          refundCount: 1
+        }
+      }),
+      pkg.packageId,
+      (item) => {
+        projected = item;
+        return {} as never;
+      }
+    );
+    expect(projected).toMatchObject({
+      conversionRate: 0.3333,
+      verifyRate: 0.3333,
+      refundRate: 0.3333
+    });
   });
 });

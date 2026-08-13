@@ -7,11 +7,13 @@
       :backfilling="backfilling"
       :backfill-label="backfillLabel"
       :loading="loading"
+      :can-refresh="canRefresh"
       :disable-future-date="disableFutureDate"
       @update:kpi-date="kpiDate = $event"
       @date-change="onKpiDateChange"
       @backfill="onBackfillCommand"
       @backfill-date="onBackfillDate"
+      @load="loadAll"
       @reload="reload"
     />
     <ErrorAlert :message="loadError" />
@@ -23,13 +25,12 @@
       v-model:merchant-sort="merchantSort"
       :kpi="kpi"
       :total-gmv-display="totalGmvDisplay"
-      :bar-gmv-online="barGmvOnline"
-      :bar-gmv-wallet="barGmvWallet"
       :trend-option="trendOption"
       :hourly-option="hourlyOption"
       :distribution-option="distributionOption"
       :top-merchants="topMerchants"
       :merchant-page="merchantPage"
+      :merchant-page-size="merchantPageSize"
       :merchant-has-more="merchantHasMore"
       :merchant-truncated="merchantTruncated"
       :merchant-limit="merchantLimit"
@@ -40,9 +41,6 @@
       :categories="categories"
       :channels="channels"
       :funnel="funnel"
-      :activities="activities"
-      :heat-points="heatPoints"
-      :heat-city="heatCity"
       :alerts="alerts"
       :hourly="hourly"
       @trend-change="loadTrend"
@@ -55,10 +53,15 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue';
 import ErrorAlert from '../components/ErrorAlert.vue';
 import { useGmvCockpit } from '../features/gmv/composables/useGmvCockpit';
 import GmvCockpitHeader from '../features/gmv/components/GmvCockpitHeader.vue';
 import GmvCockpitBody from '../features/gmv/components/GmvCockpitBody.vue';
+import { useRoleStore } from '../stores/role';
+
+const roleStore = useRoleStore();
+const canRefresh = computed(() => roleStore.permissions.includes('analytics:refresh'));
 
 const {
   loading,
@@ -67,6 +70,7 @@ const {
   kpi,
   topMerchants,
   merchantPage,
+  merchantPageSize,
   merchantHasMore,
   merchantTruncated,
   merchantLimit,
@@ -84,8 +88,6 @@ const {
   backfillLabel,
   hourlyDateLabel,
   totalGmvDisplay,
-  barGmvOnline,
-  barGmvWallet,
   trendOption,
   hourlyOption,
   distributionOption,
@@ -98,13 +100,11 @@ const {
   onKpiDateChange,
   onBackfillCommand,
   onBackfillDate,
+  loadAll,
   reload,
   categories,
   channels,
   funnel,
-  activities,
-  heatPoints,
-  heatCity,
   alerts,
   hourly
 } = useGmvCockpit();

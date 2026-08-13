@@ -1,7 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { readFile } from 'fs/promises';
 import path from 'path';
 import { mapDistributionRows } from '../src/gmv/gmv-metrics';
+import { computeDistributionFromOrderHeader } from '../src/gmv/gmv-order-header-distribution';
+import type { PrismaService } from '../src/prisma/prisma.service';
 
 const srcRoot = path.join(__dirname, '..', 'src');
 const webRoot = path.join(__dirname, '..', '..', 'web', 'src');
@@ -34,6 +36,65 @@ describe('residual #289 GMV distribution LIMIT honesty', () => {
     expect(partial.items[0].share).toBeCloseTo(0.8);
     expect(partial.limit).toBe(1);
     expect(partial.matched).toBeGreaterThanOrEqual(2);
+  });
+
+  it('keeps a negative or zero LIMIT tail visible and exactly reconciled', () => {
+    const signed = mapDistributionRows(
+      [
+        { key: 'A', gmvFen: 120n, gmvOnlineFen: 120n, gmvWalletFen: 0n },
+        { key: 'B', gmvFen: -20n, gmvOnlineFen: -20n, gmvWalletFen: 0n }
+      ],
+      100n,
+      1
+    );
+
+    expect(signed.truncated).toBe(true);
+    expect(signed.items.map((row) => [row.key, row.totalGmvFen, row.share])).toEqual([
+      ['A', 120n, 1.2],
+      ['其他', -20n, -0.2]
+    ]);
+    expect(signed.items.reduce((sum, row) => sum + (row.totalGmvFen ?? 0n), 0n)).toBe(100n);
+    expect(signed.items.reduce((sum, row) => sum + row.share, 0)).toBeCloseTo(1);
+    expect(signed.items[1]).toMatchObject({ gmvOnlineFen: null, gmvWalletFen: null });
+
+    const zeroTail = mapDistributionRows(
+      [
+        { key: 'A', gmvFen: 100n },
+        { key: 'B', gmvFen: 0n }
+      ],
+      100n,
+      1
+    );
+    expect(zeroTail.truncated).toBe(true);
+    expect(zeroTail.items[1]).toMatchObject({ key: '其他', totalGmvFen: 0n });
+  });
+
+  it('uses a stable LIMIT+1 probe and does not erase a real zero-net day', async () => {
+    const query = vi
+      .fn()
+      .mockResolvedValueOnce([{ totalGmvFen: 0n }])
+      .mockResolvedValueOnce([
+        {
+          key: '美食',
+          gmvFen: 0n,
+          gmvOnlineFen: 6_000n,
+          gmvWalletFen: 0n,
+          gmvBonusFen: 0n,
+          refundFen: 6_000n
+        }
+      ]);
+
+    const result = await computeDistributionFromOrderHeader(
+      { $queryRawUnsafe: query } as unknown as PrismaService,
+      'category',
+      8,
+      '2025-03-10'
+    );
+
+    expect(query.mock.calls[1]?.at(-1)).toBe(9);
+    expect(String(query.mock.calls[1]?.[0])).toContain('ORDER BY "gmvFen" DESC, "key" ASC');
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]).toMatchObject({ key: '美食', totalGmvFen: 0n, share: 0 });
   });
 
   it('computeDistributionFromOrderHeader + resolve return payload type', async () => {

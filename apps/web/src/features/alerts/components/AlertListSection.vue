@@ -8,6 +8,7 @@ defineProps<{
   pagination:
     Omit<PaginationMeta, 'totalPages'> | { page: number; pageSize: number; total: number };
   resolving: boolean;
+  canResolve: boolean;
 }>();
 defineEmits<{
   'update:keyword': [value: string];
@@ -35,6 +36,7 @@ defineEmits<{
     :alerts="alerts"
     :pagination="pagination"
     :resolving="resolving"
+    :can-resolve="canResolve"
     @open-detail="$emit('open-detail', $event)"
     @resolve="$emit('resolve', $event)"
     @resolve-page="$emit('resolve-page')"

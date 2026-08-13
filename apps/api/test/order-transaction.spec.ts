@@ -67,9 +67,18 @@ function createService(overrides: Record<string, unknown> = {}) {
     $transaction: vi.fn(async (callback) => callback(tx)),
     ...overrides
   } as unknown as PrismaService;
-  const inventory = { restore: vi.fn() } as never;
-  const outbox = { publishEvent: vi.fn().mockResolvedValue('event-1') } as never;
-  return { service: new OrderTransactionService(tx as unknown as PrismaService, inventory, outbox), tx, inventory, outbox };
+  const inventory = { restore: vi.fn() };
+  const outbox = { publishEvent: vi.fn().mockResolvedValue('event-1') };
+  return {
+    service: new OrderTransactionService(
+      tx as unknown as PrismaService,
+      inventory as never,
+      outbox as never
+    ),
+    tx,
+    inventory,
+    outbox
+  };
 }
 
 describe('order transaction core', () => {
@@ -83,12 +92,18 @@ describe('order transaction core', () => {
       'idem-verify-1'
     );
 
-    expect(result.order).toMatchObject({ orderId: 'order-1', status: 'verified', verifyAmountFen: '10000' });
+    expect(result.order).toMatchObject({
+      orderId: 'order-1',
+      status: 'verified',
+      verifyAmountFen: '10000'
+    });
     expect(tx.verificationRecord.create).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ amountFen: 10000n }) })
     );
     expect(tx.orderHeader.update).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ status: 'verified', verifyAmountFen: 10000n }) })
+      expect.objectContaining({
+        data: expect.objectContaining({ status: 'verified', verifyAmountFen: 10000n })
+      })
     );
     expect(tx.orderStateHistory.create).toHaveBeenCalledOnce();
     expect(outbox.publishEvent).toHaveBeenCalledWith(
@@ -103,7 +118,9 @@ describe('order transaction core', () => {
   it('退款申请只进入退款中，不提前伪造已退款金额', async () => {
     const { service, tx } = createService({
       orderHeader: {
-        findUnique: vi.fn().mockResolvedValue(createOrder({ status: 'verified', verifyAmountFen: 10000n })),
+        findUnique: vi
+          .fn()
+          .mockResolvedValue(createOrder({ status: 'verified', verifyAmountFen: 10000n })),
         update: vi.fn().mockResolvedValue(undefined)
       }
     });
@@ -120,7 +137,9 @@ describe('order transaction core', () => {
       expect.objectContaining({ data: { status: 'refunding' } })
     );
     expect(tx.refundRequest.create).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ refundAmountFen: 10000n, status: 'requested' }) })
+      expect.objectContaining({
+        data: expect.objectContaining({ refundAmountFen: 10000n, status: 'requested' })
+      })
     );
   });
 
@@ -149,7 +168,9 @@ describe('order transaction core', () => {
       refundRequest: {
         findMany: vi.fn().mockResolvedValue([]),
         findUnique: vi.fn().mockResolvedValue(refund),
-        update: vi.fn().mockResolvedValue({ ...refund, status: 'completed', completedAt: new Date() }),
+        update: vi
+          .fn()
+          .mockResolvedValue({ ...refund, status: 'completed', completedAt: new Date() }),
         count: vi.fn().mockResolvedValue(0)
       }
     });
@@ -167,7 +188,9 @@ describe('order transaction core', () => {
       expect.objectContaining({ packageId: 'package-1', businessId: 'refund-1', quantity: 1 })
     );
     expect(tx.orderHeader.update).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ refundAmountFen: 10000n, status: 'refunded' }) })
+      expect.objectContaining({
+        data: expect.objectContaining({ refundAmountFen: 10000n, status: 'refunded' })
+      })
     );
   });
 });

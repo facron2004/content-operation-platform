@@ -1,18 +1,8 @@
 <template>
   <section v-loading="loading" class="page-stack merchant-applications-view">
-    <div class="merchant-applications-hero panel">
-      <div>
-        <p class="eyebrow">V2.0 / MERCHANT ONBOARDING</p>
-        <h1>商家入驻审核</h1>
-        <p class="hero-description">
-          按资质、合同和启用阶段推进商家入驻；联系人、证照和银行信息在列表中默认脱敏。
-        </p>
-      </div>
-      <div class="merchant-applications-hero__actions">
-        <span class="source-pill">MerchantApplication + ApprovalAction</span>
-        <el-button :loading="loading" @click="reload">刷新</el-button>
-        <el-button type="primary" @click="openCreate">新建入驻申请</el-button>
-      </div>
+    <div class="page-toolbar">
+      <el-button :loading="loading" @click="reload">刷新</el-button>
+      <el-button type="primary" @click="openCreate">新建入驻申请</el-button>
     </div>
 
     <ErrorAlert :message="error" />

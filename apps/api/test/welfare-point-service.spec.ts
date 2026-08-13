@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { WelfarePointService } from '../src/welfare-point/welfare-point.service';
 import type { WelfarePointRecord } from '../src/welfare-point/welfare-point.types';
 import type { WelfarePointQueryDto } from '../src/welfare-point/welfare-point.dto';
+import { WelfarePointController } from '../src/welfare-point/welfare-point.controller';
+import { PERMISSIONS_KEY } from '../src/user-access/iam/require-permissions.decorator';
 
 function fakeAutoLogin() {
   return { ensureValidCookie: vi.fn() } as never;
@@ -38,8 +40,9 @@ async function summarize(
 ) {
   const svc = new WelfarePointService(fakeAutoLogin());
   // Bypass JeeSite: feed a fake dataset straight into the aggregation path.
-  (svc as unknown as { getDataset: () => Promise<{ rows: WelfarePointRecord[]; cached: boolean }> }).getDataset =
-    async () => ({ rows, cached });
+  (
+    svc as unknown as { getDataset: () => Promise<{ rows: WelfarePointRecord[]; cached: boolean }> }
+  ).getDataset = async () => ({ rows, cached });
   return svc.summary(q as WelfarePointQueryDto);
 }
 
@@ -65,8 +68,16 @@ describe('WelfarePointService.aggregate', () => {
 
   it('derives dataRange from the same wall-clock buckets as dailyTrend', async () => {
     const rows = [
-      rec({ createDate: '2026-06-02 09:00:00', createDateTs: Date.parse('2026-06-02T09:00:00Z'), id: '1' }),
-      rec({ createDate: '2026-08-10 23:00:00', createDateTs: Date.parse('2026-08-10T23:00:00Z'), id: '2' })
+      rec({
+        createDate: '2026-06-02 09:00:00',
+        createDateTs: Date.parse('2026-06-02T09:00:00Z'),
+        id: '1'
+      }),
+      rec({
+        createDate: '2026-08-10 23:00:00',
+        createDateTs: Date.parse('2026-08-10T23:00:00Z'),
+        id: '2'
+      })
     ];
     const sum = await summarize(rows, false);
     expect(sum.dataRange.minDate).toBe('2026-06-02');
@@ -79,8 +90,22 @@ describe('WelfarePointService.aggregate', () => {
     // Two records in the same second: a recharge (later id) and an earlier consume.
     // The latest running balance must be the one from the strictly-later id.
     const rows = [
-      rec({ centerMemberId: 'm1', pointType: 2, pointAmount: 1.01, currentBalance: 8.99, createDateTs: Date.parse('2026-08-10T10:00:00Z'), id: '100' }),
-      rec({ centerMemberId: 'm1', pointType: 1, pointAmount: 10, currentBalance: 10, createDateTs: Date.parse('2026-08-10T10:00:00Z'), id: '101' })
+      rec({
+        centerMemberId: 'm1',
+        pointType: 2,
+        pointAmount: 1.01,
+        currentBalance: 8.99,
+        createDateTs: Date.parse('2026-08-10T10:00:00Z'),
+        id: '100'
+      }),
+      rec({
+        centerMemberId: 'm1',
+        pointType: 1,
+        pointAmount: 10,
+        currentBalance: 10,
+        createDateTs: Date.parse('2026-08-10T10:00:00Z'),
+        id: '101'
+      })
     ];
     const sum = await summarize(rows, false);
     // net = 10 - 1.01 = 8.99, and the latest snapshot (id 101) balance is 10.
@@ -98,29 +123,60 @@ describe('WelfarePointService.aggregate', () => {
       // Strictly increasing timestamps per member, and each row's currentBalance is
       // the running total at that exact moment — as JeeSite sends it. The latest
       // row's balance therefore equals that member's net change.
-      rows.push(rec({
-        centerMemberId: mid,
-        pointType: 1,
-        pointAmount: recharge,
-        currentBalance: recharge,
-        createDateTs: base + m * 3,
-        id: `${m}0`
-      }));
-      rows.push(rec({
-        centerMemberId: mid,
-        pointType: 2,
-        pointAmount: consume,
-        currentBalance: recharge - consume,
-        createDateTs: base + m * 3 + 1,
-        id: `${m}1`
-      }));
+      rows.push(
+        rec({
+          centerMemberId: mid,
+          pointType: 1,
+          pointAmount: recharge,
+          currentBalance: recharge,
+          createDateTs: base + m * 3,
+          id: `${m}0`
+        })
+      );
+      rows.push(
+        rec({
+          centerMemberId: mid,
+          pointType: 2,
+          pointAmount: consume,
+          currentBalance: recharge - consume,
+          createDateTs: base + m * 3 + 1,
+          id: `${m}1`
+        })
+      );
     }
     // Dedicated tie member: all three records share the SAME second. The latest
     // running balance is carried by the strictly-later snowflake id, and it equals
     // the member's net (5 - 4 = 1) so the dataset total stays consistent.
-    rows.push(rec({ centerMemberId: 'tie_a', pointType: 1, pointAmount: 5, currentBalance: 5, createDateTs: base, id: '1' }));
-    rows.push(rec({ centerMemberId: 'tie_a', pointType: 2, pointAmount: 4, currentBalance: 1, createDateTs: base, id: '2' }));
-    rows.push(rec({ centerMemberId: 'tie_a', pointType: 1, pointAmount: 0, currentBalance: 1, createDateTs: base, id: '3' }));
+    rows.push(
+      rec({
+        centerMemberId: 'tie_a',
+        pointType: 1,
+        pointAmount: 5,
+        currentBalance: 5,
+        createDateTs: base,
+        id: '1'
+      })
+    );
+    rows.push(
+      rec({
+        centerMemberId: 'tie_a',
+        pointType: 2,
+        pointAmount: 4,
+        currentBalance: 1,
+        createDateTs: base,
+        id: '2'
+      })
+    );
+    rows.push(
+      rec({
+        centerMemberId: 'tie_a',
+        pointType: 1,
+        pointAmount: 0,
+        currentBalance: 1,
+        createDateTs: base,
+        id: '3'
+      })
+    );
     const sum = await summarize(rows, false);
     const r2 = (n: number) => Math.round(n * 100) / 100;
     expect(r2(sum.kpis.currentBalanceSum - sum.kpis.netChange)).toBe(0);
@@ -130,10 +186,19 @@ describe('WelfarePointService.aggregate', () => {
     // applyFilters parses bounds via Date.parse; a NaN bound must not make every
     // row pass. We assert the filtered count equals the full set (no false filtering).
     const q = { dateFrom: '2026-08-01T00:00:00Z' } as unknown as WelfarePointQueryDto;
-    const rows = [rec({ createDate: '2026-08-10 13:35:08', createDateTs: Date.parse('2026-08-10T13:35:08Z'), id: '1' })];
+    const rows = [
+      rec({
+        createDate: '2026-08-10 13:35:08',
+        createDateTs: Date.parse('2026-08-10T13:35:08Z'),
+        id: '1'
+      })
+    ];
     const svc = new WelfarePointService(fakeAutoLogin());
-    (svc as unknown as { getDataset: () => Promise<{ rows: WelfarePointRecord[]; cached: boolean }> }).getDataset =
-      async () => ({ rows, cached: false });
+    (
+      svc as unknown as {
+        getDataset: () => Promise<{ rows: WelfarePointRecord[]; cached: boolean }>;
+      }
+    ).getDataset = async () => ({ rows, cached: false });
     // The DTO would reject this shape earlier, but the service must still be safe.
     const sum = await svc.summary(q);
     expect(sum.kpis.totalRecords).toBe(1);
@@ -147,8 +212,11 @@ describe('WelfarePointService.applyFilters', () => {
       rec({ centerMemberId: 'b', pointType: 2, sourceType: -2, id: '2' })
     ];
     const svc = new WelfarePointService(fakeAutoLogin());
-    (svc as unknown as { getDataset: () => Promise<{ rows: WelfarePointRecord[]; cached: boolean }> }).getDataset =
-      async () => ({ rows, cached: false });
+    (
+      svc as unknown as {
+        getDataset: () => Promise<{ rows: WelfarePointRecord[]; cached: boolean }>;
+      }
+    ).getDataset = async () => ({ rows, cached: false });
 
     const consume = await svc.query({ pointType: '2' } as WelfarePointQueryDto);
     expect(consume.list).toHaveLength(1);
@@ -156,5 +224,30 @@ describe('WelfarePointService.applyFilters', () => {
 
     const bySource = await svc.query({ sourceType: '-2' } as WelfarePointQueryDto);
     expect(bySource.list).toHaveLength(1);
+  });
+});
+
+describe('WelfarePointService.refresh', () => {
+  it('publishes one freshly fetched dataset for subsequent summary and list reads', async () => {
+    const svc = new WelfarePointService(fakeAutoLogin());
+    const fresh = [rec({ id: 'fresh', centerMemberId: 'fresh-member' })];
+    const fetchAll = vi
+      .spyOn(svc as unknown as { fetchAll: () => Promise<WelfarePointRecord[]> }, 'fetchAll')
+      .mockResolvedValue(fresh);
+
+    await svc.refresh();
+    const [summary, list] = await Promise.all([
+      svc.summary({} as WelfarePointQueryDto),
+      svc.query({} as WelfarePointQueryDto)
+    ]);
+
+    expect(fetchAll).toHaveBeenCalledTimes(1);
+    expect(summary.kpis.totalRecords).toBe(1);
+    expect(list.list[0]?.id).toBe('fresh');
+  });
+
+  it('requires analytics:refresh on the upstream refresh endpoint', () => {
+    const handler = WelfarePointController.prototype.refresh;
+    expect(Reflect.getMetadata(PERMISSIONS_KEY, handler)).toEqual(['analytics:refresh']);
   });
 });

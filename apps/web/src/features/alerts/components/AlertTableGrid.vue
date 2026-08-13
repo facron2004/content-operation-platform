@@ -7,6 +7,7 @@
     :row-class-name="alertRowClassName"
   >
     <AlertTableGridColumns
+      :can-resolve="canResolve"
       @open-detail="$emit('open-detail', $event)"
       @resolve="$emit('resolve', $event)"
     />
@@ -16,6 +17,10 @@
 import type { OperationAlert } from '@content/shared';
 import AlertTableGridColumns from './AlertTableGridColumns.vue';
 type AlertRow = OperationAlert & { priorityScore?: number };
-defineProps<{ alerts: AlertRow[]; alertRowClassName: (args: { row: AlertRow }) => string }>();
+defineProps<{
+  alerts: AlertRow[];
+  alertRowClassName: (args: { row: AlertRow }) => string;
+  canResolve: boolean;
+}>();
 defineEmits<{ 'open-detail': [alert: AlertRow]; resolve: [alertId: string] }>();
 </script>

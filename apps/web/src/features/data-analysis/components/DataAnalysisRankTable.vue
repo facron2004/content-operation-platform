@@ -25,7 +25,7 @@ defineProps<{
     <el-table :data="rows" size="small" empty-text="暂无数据" max-height="420">
       <el-table-column prop="rank" label="#" width="48" align="center" />
       <el-table-column prop="name" :label="nameLabel" min-width="140" show-overflow-tooltip />
-      <el-table-column label="订单数" min-width="80" align="right">
+      <el-table-column label="支付订单数" min-width="100" align="right">
         <template #default="{ row }">{{ formatNumber(row.orderCount, 0) }}</template>
       </el-table-column>
       <el-table-column label="销售额" min-width="110" align="right">
@@ -44,7 +44,7 @@ defineProps<{
           </span>
         </template>
       </el-table-column>
-      <el-table-column label="客单价" min-width="90" align="right">
+      <el-table-column label="净客单价" min-width="100" align="right">
         <template #default="{ row }">{{ displayMoney(row, 'avgOrderValue') }}</template>
       </el-table-column>
     </el-table>

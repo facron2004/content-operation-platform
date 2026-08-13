@@ -23,12 +23,12 @@ describe('residual #214 movement merchantId/category/areaId filters', () => {
     expect(src).toMatch(/category\?:/);
     expect(src).toMatch(/areaId\?:/);
     // Loader must forward all three — pin on call sites (not the import).
-    expect(src).toMatch(/getMovementStagnant\(\{[\s\S]{0,300}merchantId/);
-    expect(src).toMatch(/getMovementStagnant\(\{[\s\S]{0,300}category/);
-    expect(src).toMatch(/getMovementStagnant\(\{[\s\S]{0,300}areaId/);
-    expect(src).toMatch(/getMovementMoving\(\{[\s\S]{0,300}merchantId/);
-    expect(src).toMatch(/getMovementMoving\(\{[\s\S]{0,300}category/);
-    expect(src).toMatch(/getMovementMoving\(\{[\s\S]{0,300}areaId/);
+    expect(src).toMatch(/getMovementStagnant\(\s*\{[\s\S]{0,400}merchantId/);
+    expect(src).toMatch(/getMovementStagnant\(\s*\{[\s\S]{0,400}category/);
+    expect(src).toMatch(/getMovementStagnant\(\s*\{[\s\S]{0,400}areaId/);
+    expect(src).toMatch(/getMovementMoving\(\s*\{[\s\S]{0,400}merchantId/);
+    expect(src).toMatch(/getMovementMoving\(\s*\{[\s\S]{0,400}category/);
+    expect(src).toMatch(/getMovementMoving\(\s*\{[\s\S]{0,400}areaId/);
   });
 
   it('MovementFilterControls exposes merchantId/category/areaId inputs', async () => {

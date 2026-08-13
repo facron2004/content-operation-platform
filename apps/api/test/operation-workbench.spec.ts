@@ -76,6 +76,7 @@ describe('OperationWorkbenchService', () => {
     const result = await service.getWorkbench('2026-08-11');
 
     expect(result.date).toBe('2026-08-11');
+    expect(result.updatedAt).toBe('2026-08-11T00:00:00.000Z');
     expect(result.kpis.gmv).toBe(gmv);
     expect(result.kpis.catalog.zeroSalesSkuCount).toBe(4);
     expect(result.pending.total).toBe(11);

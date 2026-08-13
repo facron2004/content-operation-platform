@@ -1,6 +1,6 @@
 import client from '../http-client';
 import { downloadBlob } from '../http-client';
-import { cachedGet } from '../cache.service';
+import { cachedGet, clearCache } from '../cache.service';
 
 export type WelfarePointType = 1 | 2;
 
@@ -36,7 +36,6 @@ export type WelfarePointQuery = {
   dateFrom?: string;
   dateTo?: string;
   keyword?: string;
-  reload?: boolean;
 };
 
 export interface WelfarePointKpis {
@@ -92,31 +91,47 @@ export interface WelfarePointListResult {
   pageSize: number;
 }
 
+export interface WelfarePointRefreshResult {
+  total: number;
+  refreshedAt: string;
+}
+
 const SUMMARY_TTL = 120_000;
 const LIST_TTL = 60_000;
 
-const getSummary = (params: WelfarePointQuery) =>
-  cachedGet<WelfarePointSummary>(
-    () => client.get('/welfare-points/summary', { params }).then((r) => r.data),
-    '/welfare-points/summary',
-    params,
-    SUMMARY_TTL
-  );
+const get = <T>(
+  path: '/welfare-points' | '/welfare-points/summary',
+  params: WelfarePointQuery,
+  ttl: number,
+  bypassCache = false
+) => {
+  const fetcher = () => client.get(path, { params }).then((r) => r.data as T);
+  if (bypassCache) {
+    clearCache(path);
+    return fetcher();
+  }
+  return cachedGet<T>(fetcher, path, params, ttl);
+};
 
-const getList = (params: WelfarePointQuery) =>
-  cachedGet<WelfarePointListResult>(
-    () => client.get('/welfare-points', { params }).then((r) => r.data),
-    '/welfare-points',
-    params,
-    LIST_TTL
-  );
-
-export function getWelfarePointsSummary(params: WelfarePointQuery): Promise<WelfarePointSummary> {
-  return getSummary(params);
+export function getWelfarePointsSummary(
+  params: WelfarePointQuery,
+  bypassCache = false
+): Promise<WelfarePointSummary> {
+  return get<WelfarePointSummary>('/welfare-points/summary', params, SUMMARY_TTL, bypassCache);
 }
 
-export function getWelfarePointsList(params: WelfarePointQuery): Promise<WelfarePointListResult> {
-  return getList(params);
+export function getWelfarePointsList(
+  params: WelfarePointQuery,
+  bypassCache = false
+): Promise<WelfarePointListResult> {
+  return get<WelfarePointListResult>('/welfare-points', params, LIST_TTL, bypassCache);
+}
+
+export async function refreshWelfarePoints(): Promise<WelfarePointRefreshResult> {
+  const response = await client.post('/welfare-points/refresh');
+  // One pattern clears summary plus every cached list page/filter combination.
+  clearCache('/welfare-points');
+  return response.data as WelfarePointRefreshResult;
 }
 
 export function exportWelfarePointsCsv(params: WelfarePointQuery): Promise<void> {

@@ -12,7 +12,11 @@ const mocks = vi.hoisted(() => ({
   confirm: vi.fn(),
   messageWarning: vi.fn(),
   messageSuccess: vi.fn(),
-  messageError: vi.fn()
+  messageError: vi.fn(),
+  roleStore: {
+    effectiveRoles: ['admin'] as string[],
+    permissions: ['attribution:manage'] as string[]
+  }
 }));
 
 vi.mock('vue', async () => {
@@ -33,7 +37,7 @@ vi.mock('../../../services/http-client', () => ({
 }));
 
 vi.mock('../../../stores/role', () => ({
-  useRoleStore: () => ({ permissions: ['attribution:manage'] })
+  useRoleStore: () => mocks.roleStore
 }));
 
 vi.mock('element-plus', () => ({
@@ -87,6 +91,8 @@ function ordersResponse(orderId: string): UnmatchedOrdersResponse {
 }
 
 function resetMocks() {
+  mocks.roleStore.effectiveRoles = ['admin'];
+  mocks.roleStore.permissions = ['attribution:manage'];
   mocks.getUnmatchedOrders.mockReset().mockResolvedValue(ordersResponse('default'));
   mocks.manualBindAttribution.mockReset().mockResolvedValue({ success: true });
   mocks.recomputeAttribution.mockReset().mockResolvedValue({ success: true, processedTasks: 1 });
@@ -128,6 +134,26 @@ describe('attribution page request lifecycle', () => {
     expect(page.orders.value[0]?.orderId).toBe('new-order');
     expect(page.loadError.value).toBeNull();
     expect(page.loading.value).toBe(false);
+  });
+
+  it('requires both an operator role and attribution permission for write actions', async () => {
+    mocks.roleStore.effectiveRoles = ['auditor'];
+    mocks.roleStore.permissions = ['attribution:manage'];
+    scope = effectScope();
+    const page = scope.run(() => useAttributionPage())!;
+
+    expect(page.canManage.value).toBe(false);
+    page.openBind(order('order-1'));
+    page.setBindDialogVisible(true);
+    page.bindOrder.value = order('order-1');
+    page.setBindTaskId('task-1');
+    await page.manualBind();
+    await page.recompute();
+
+    expect(page.bindDialogVisible.value).toBe(false);
+    expect(mocks.manualBindAttribution).not.toHaveBeenCalled();
+    expect(mocks.recomputeAttribution).not.toHaveBeenCalled();
+    expect(mocks.confirm).not.toHaveBeenCalled();
   });
 
   it('ignores late list data and blocks new requests after scope disposal', async () => {

@@ -1,20 +1,10 @@
 <template>
   <section v-loading="loading" class="page-stack finance-center-view">
-    <div class="finance-center-hero panel">
-      <div>
-        <p class="eyebrow">V2.0.1 / FINANCE READ MODEL</p>
-        <h1>资金中心</h1>
-        <p class="hero-description">
-          统一支付、退款、核销与账户流水，并将商家结算、分账、对账的状态和幂等边界集中呈现。
-        </p>
-      </div>
-      <div class="finance-center-hero__actions">
-        <span class="source-pill">{{ dashboard.dataSources.join(' + ') || '兼容读链' }}</span>
-        <el-button :loading="loading" @click="reload">
-          <el-icon><Refresh /></el-icon>
-          刷新
-        </el-button>
-      </div>
+    <div class="page-toolbar">
+      <el-button :loading="loading" @click="reload">
+        <el-icon><Refresh /></el-icon>
+        刷新
+      </el-button>
     </div>
 
     <ErrorAlert :message="error" />

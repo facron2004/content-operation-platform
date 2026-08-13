@@ -1,13 +1,20 @@
 <template>
   <section v-loading="loading" class="page-stack movement">
-    <MovementHero
-      v-model:kpi-date="kpiDate"
-      :loading="loading"
-      :today-text="todayText"
-      :today="today"
-      @reload="reload"
-      @date-change="reload"
-    />
+    <div class="page-toolbar">
+      <span class="page-toolbar__label">业务日</span>
+      <el-date-picker
+        :model-value="kpiDate || undefined"
+        type="date"
+        value-format="YYYY-MM-DD"
+        placeholder="业务日(默认今天)"
+        clearable
+        style="width: 170px"
+        @update:model-value="onKpiDateChange"
+      />
+      <AppleButton variant="secondary" size="sm" :loading="loading" @click="reload(true)">
+        重新加载本地数据
+      </AppleButton>
+    </div>
     <ErrorAlert :message="loadError" />
     <MovementKpiRow :today="today" />
     <MovementBucketSection
@@ -52,8 +59,8 @@
 </template>
 <script setup lang="ts">
 import ErrorAlert from '../components/ErrorAlert.vue';
+import AppleButton from '../components/AppleButton.vue';
 import MovementBucketSection from '../features/movement/components/MovementBucketSection.vue';
-import MovementHero from '../features/movement/components/MovementHero.vue';
 import MovementKpiRow from '../features/movement/components/MovementKpiRow.vue';
 import MovementListBody from '../features/movement/components/MovementListBody.vue';
 import MovementTimelineDrawer from '../features/movement/components/MovementTimelineDrawer.vue';
@@ -73,7 +80,6 @@ const {
   // Residual #266: MOVEMENT_CACHE_CAP honesty.
   listTruncated,
   listLimit,
-  todayText,
   emptyText,
   reload,
   reloadList,
@@ -87,6 +93,13 @@ const {
   bucketLabel,
   bucketColor
 } = useMovementList();
+
+function onKpiDateChange(value: string | null) {
+  const next = value ?? '';
+  if (next === kpiDate.value) return;
+  kpiDate.value = next;
+  reload();
+}
 
 // Residual #210: per-SKU stock/sales timeline drawer.
 // Residual #234: setDays re-fetches with operator-selected window (7–90).

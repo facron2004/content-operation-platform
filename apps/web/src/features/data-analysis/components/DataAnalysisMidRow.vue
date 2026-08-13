@@ -27,14 +27,14 @@ const keyMetrics: Array<{
 }> = [
   {
     key: 'orderCount',
-    label: '订单数',
+    label: '支付订单数',
     value: (o) => formatNumber(o?.orderCount, 0),
     icon: 'orders',
     tone: 'blue'
   },
   {
     key: 'avgOrderValue',
-    label: '客单价',
+    label: '净客单价',
     value: (o) => displayMoney(o, 'avgOrderValue'),
     icon: 'aov',
     tone: 'indigo'

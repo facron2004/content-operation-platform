@@ -22,7 +22,7 @@ export interface WorkbenchPendingCounts {
 
 export interface OperationWorkbenchPayload {
   date: string;
-  updatedAt: string;
+  updatedAt: string | null;
   dataSources: string[];
   kpis: {
     gmv: GmvTodayPayload;

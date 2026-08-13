@@ -1,24 +1,13 @@
 <template>
   <section class="page-stack iam-page">
-    <header class="iam-hero">
-      <div>
-        <p class="iam-kicker">ACCESS / CONTROL PLANE</p>
-        <h2>权限中心</h2>
-        <p class="iam-subtitle">把角色、组织边界和用户授权放在同一个可追溯的控制面。</p>
-      </div>
-      <div class="iam-hero-meta">
-        <div>
-          <span>当前租户</span>
-          <strong>{{ tenantId }}</strong>
-        </div>
-        <AppleButton variant="tinted" size="sm" :loading="loading" @click="refreshAll">
-          <template #icon>
-            <el-icon><Refresh /></el-icon>
-          </template>
-          刷新
-        </AppleButton>
-      </div>
-    </header>
+    <div class="page-toolbar">
+      <AppleButton variant="tinted" size="sm" :loading="loading" @click="refreshAll">
+        <template #icon>
+          <el-icon><Refresh /></el-icon>
+        </template>
+        刷新
+      </AppleButton>
+    </div>
 
     <div class="iam-layout">
       <aside class="iam-rail">
@@ -83,5 +72,5 @@ import { usePermissionCenter } from '../features/permission-center/usePermission
 import '../styles/permission-center.css';
 
 const controller = usePermissionCenter();
-const { activeTab, tabs, tenantId, loading, errorMessage, writeError, refreshAll } = controller;
+const { activeTab, tabs, loading, errorMessage, writeError, refreshAll } = controller;
 </script>

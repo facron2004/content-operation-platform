@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { defineAsyncComponent } from 'vue';
 import ErrorAlert from '../components/ErrorAlert.vue';
+import AppleButton from '../components/AppleButton.vue';
 import RefundMerchantTable from '../features/refund/components/RefundMerchantTable.vue';
 import RefundVerifyKpiRow from '../features/refund/components/RefundVerifyKpiRow.vue';
-import RefundVerifyHero from '../features/refund/components/RefundVerifyHero.vue';
 import RefundVerifyTrend from '../features/refund/components/RefundVerifyTrend.vue';
 import { useRefundVerify } from '../features/refund/composables/useRefundVerify';
+import type { RefundWindow } from '../services/api/refund.api';
 const ChartPanel = defineAsyncComponent(() => import('../components/ChartPanel.vue')),
   {
     loading,
@@ -39,19 +40,51 @@ const ChartPanel = defineAsyncComponent(() => import('../components/ChartPanel.v
     formatNumber,
     formatPercent
   } = useRefundVerify();
+
+const WINDOWS: { label: string; value: RefundWindow }[] = [
+  { label: '今日', value: 'day' },
+  { label: '本周', value: 'week' },
+  { label: '本月', value: 'month' },
+  { label: '本年', value: 'year' }
+];
+
+function onKpiDateChange(value: string | null) {
+  const next = value ?? '';
+  if (next === kpiDate.value) return;
+  kpiDate.value = next;
+  reload();
+}
+
+function onWindowChange(value: string | number | boolean) {
+  kpiWindow.value = value as RefundWindow;
+  reload();
+}
 </script>
 <template>
   <section v-loading="loading" class="page-stack refund-view">
-    <RefundVerifyHero
-      v-model:kpi-date="kpiDate"
-      v-model:kpi-window="kpiWindow"
-      :loading="loading"
-      @reload="reload"
-      @date-change="reload"
-      @window-change="reload"
-    />
+    <div class="page-toolbar">
+      <span class="page-toolbar__label">业务日</span>
+      <el-date-picker
+        :model-value="kpiDate || undefined"
+        type="date"
+        value-format="YYYY-MM-DD"
+        placeholder="业务日(默认今天)"
+        clearable
+        style="width: 170px"
+        @update:model-value="onKpiDateChange"
+      />
+      <span class="page-toolbar__label">周期</span>
+      <el-radio-group :model-value="kpiWindow" size="small" @update:model-value="onWindowChange">
+        <el-radio-button v-for="w in WINDOWS" :key="w.value" :value="w.value">
+          {{ w.label }}
+        </el-radio-button>
+      </el-radio-group>
+      <AppleButton size="sm" variant="secondary" :loading="loading" @click="reload(true)">
+        重新加载本地数据
+      </AppleButton>
+    </div>
     <ErrorAlert :message="kpiError" />
-    <el-tabs v-model="activeTab" @tab-change="reload">
+    <el-tabs v-model="activeTab" @tab-change="reload()">
       <el-tab-pane label="退款分析" name="refund" />
       <el-tab-pane label="核销分析" name="verify" />
     </el-tabs>

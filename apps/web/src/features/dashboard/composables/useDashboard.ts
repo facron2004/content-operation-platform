@@ -33,7 +33,8 @@ export function useDashboard(role: Ref<string | undefined>) {
     try {
       if (force) clearDashboardCache();
       const response = (await api.getTodayOperationConsole({
-        role: role.value
+        role: role.value,
+        ...(force ? { force: true } : {})
       })) as ConsoleResponse;
       if (disposed || currentRequestId !== requestId.value) return;
       consoleData.value = mapConsoleResponse(response);
@@ -49,7 +50,7 @@ export function useDashboard(role: Ref<string | undefined>) {
     }
   };
   watch(role, () => {
-    void load(true);
+    void load();
   });
   return { loading, loadError, consoleData, activeFocus, summary, todayText, load };
 }

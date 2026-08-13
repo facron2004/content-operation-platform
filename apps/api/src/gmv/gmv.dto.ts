@@ -1,6 +1,15 @@
 /** Consolidated GMV module. */
 import { Type } from 'class-transformer';
-import { IsIn, IsInt, IsOptional, IsString, Matches, Max, Min } from 'class-validator';
+import {
+  IsDateString,
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsString,
+  Matches,
+  Max,
+  Min
+} from 'class-validator';
 import { optionalDateKey, optionalString } from '../content/dto-decorators';
 
 // --- dto/gmv-query.types.ts ---
@@ -19,11 +28,12 @@ export const GMV_DISTRIBUTION_DIMS: readonly GmvDistributionDim[] = [
   'channel'
 ] as const;
 
-export type GmvMerchantSort = 'gmvDesc' | 'refundDesc' | 'verifyDesc';
+export type GmvMerchantSort = 'gmvDesc' | 'refundDesc' | 'verifyDesc' | 'orderDesc';
 export const GMV_MERCHANT_SORTS: readonly GmvMerchantSort[] = [
   'gmvDesc',
   'refundDesc',
-  'verifyDesc'
+  'verifyDesc',
+  'orderDesc'
 ] as const;
 
 // --- dto/gmv-query-core.dto.ts ---
@@ -91,6 +101,9 @@ export class GmvHourlyQueryDto {
 export class GmvDistributionQueryDto {
   @IsOptional() @IsIn([...GMV_DISTRIBUTION_DIMS]) dim: GmvDistributionDim = 'area';
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(50) limit: number = 20;
+  @optionalDateKey()
+  @IsDateString({ strict: true }, { message: 'date 必须为有效的 YYYY-MM-DD 日期' })
+  date?: string;
   @optionalString(5) force?: boolean | string;
   @optionalString(40) _?: string;
   @optionalString(40) _t?: string;
@@ -99,6 +112,9 @@ export class GmvByMerchantQueryDto {
   @IsOptional() @IsIn([...GMV_MERCHANT_SORTS]) sortBy: GmvMerchantSort = 'gmvDesc';
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100) page: number = 1;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100) pageSize: number = 20;
+  @optionalDateKey()
+  @IsDateString({ strict: true }, { message: 'date 必须为有效的 YYYY-MM-DD 日期' })
+  date?: string;
   @optionalString(5) force?: boolean | string;
   @optionalString(40) _?: string;
   @optionalString(40) _t?: string;
@@ -156,11 +172,9 @@ export interface GmvTodayPayload {
   monthGmvOnlineFen: bigint | null;
   /** 本月累计 余额支付金额 */
   monthGmvWalletFen: bigint | null;
-  /** 平台佣金收入（暂无订单级佣金，固定 0 并披露） */
-  platformCommission: number;
   /** 相对前一日（或上月同期）的环比 */
   compare?: GmvCompareDelta;
-  updatedAt: string;
+  updatedAt: string | null;
   dataSource: 'DailyMetrics' | 'OrderHeader' | 'empty';
 }
 
@@ -208,7 +222,7 @@ export interface GmvDistributionPayload {
    * When truncated, this is at-least `limit + 1` (long-tail remainder exists).
    */
   matched: number;
-  /** true when head GMV < platform total (「其他」 long-tail present). */
+  /** true when LIMIT+1 proves a named long tail (including zero/negative net-GMV tails). */
   truncated: boolean;
 }
 
@@ -253,8 +267,7 @@ export const emptyTodayPayload = (
   monthGmvFen: 0n,
   monthGmvOnlineFen: 0n,
   monthGmvWalletFen: 0n,
-  platformCommission: 0,
-  updatedAt: new Date().toISOString(),
+  updatedAt: null,
   dataSource
 });
 

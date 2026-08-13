@@ -102,9 +102,15 @@ async function upsertMember(order: MappedOrderRecord) {
     totalGmv: order.paidAmount,
     totalOrders: 1
   } as const;
+  const inviteData = {
+    ...(order.inviteCode ? { inviteCode: order.inviteCode } : {}),
+    ...(order.parentInviteCode ? { parentInviteCode: order.parentInviteCode } : {})
+  };
   const existing = await prisma.member.findUnique({ where: { memberId: key } });
   if (!existing) {
-    await prisma.member.create({ data: { ...data, firstOrderAt: new Date(order.orderTime) } });
+    await prisma.member.create({
+      data: { ...data, ...inviteData, firstOrderAt: new Date(order.orderTime) }
+    });
   } else {
     await prisma.member.update({
       where: { memberId: key },
@@ -113,7 +119,8 @@ async function upsertMember(order: MappedOrderRecord) {
         phone: data.phone ?? existing.phone,
         totalGmv: existing.totalGmv + data.totalGmv,
         totalOrders: existing.totalOrders + 1,
-        lastOrderAt: new Date(order.orderTime)
+        lastOrderAt: new Date(order.orderTime),
+        ...inviteData
       }
     });
   }

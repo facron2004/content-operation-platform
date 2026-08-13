@@ -1,14 +1,20 @@
 <template>
   <section v-loading="loading" class="page-stack overview">
-    <OverviewHero
-      v-model:kpi-date="kpiDate"
-      :date-label="kpi?.date || kpiDate || todayText"
-      :data-source="kpi?.dataSource"
-      :updated-at-label="formatTime(kpi?.updatedAt)"
-      :loading="loading"
-      @reload="reload"
-      @date-change="reload"
-    />
+    <div class="page-toolbar">
+      <span class="page-toolbar__label">业务日</span>
+      <el-date-picker
+        :model-value="kpiDate || undefined"
+        type="date"
+        value-format="YYYY-MM-DD"
+        placeholder="业务日"
+        :clearable="false"
+        style="width: 150px"
+        @update:model-value="onKpiDateChange"
+      />
+      <AppleButton variant="secondary" size="sm" :loading="loading" @click="reload(true)">
+        重新加载本地数据
+      </AppleButton>
+    </div>
     <ErrorAlert :message="loadError" />
     <OverviewKpiRow :kpi="kpi" @go-zero-sales="goZeroSales()" />
     <OverviewChartsRow
@@ -36,12 +42,11 @@
 </template>
 <script setup lang="ts">
 import ErrorAlert from '../components/ErrorAlert.vue';
-import { formatTime } from '../utils/labels';
 import { useOverview } from '../features/overview/composables/useOverview';
 import OverviewOffendersTable from '../features/overview/components/OverviewOffendersTable.vue';
 import OverviewKpiRow from '../features/overview/components/OverviewKpiRow.vue';
-import OverviewHero from '../features/overview/components/OverviewHero.vue';
 import OverviewChartsRow from '../features/overview/components/OverviewChartsRow.vue';
+import AppleButton from '../components/AppleButton.vue';
 const {
   loading,
   loadError,
@@ -56,7 +61,6 @@ const {
   distributionTruncated,
   distributionLimit,
   distributionMatched,
-  todayText,
   kpiDate,
   trendDays,
   staleDim,
@@ -69,5 +73,12 @@ const {
   goZeroSales,
   offenderRowClass
 } = useOverview();
+
+function onKpiDateChange(value: string | null) {
+  const next = value ? String(value) : kpiDate.value;
+  if (next === kpiDate.value) return;
+  kpiDate.value = next;
+  reload();
+}
 </script>
 <style src="../styles/views/overview.css" scoped></style>

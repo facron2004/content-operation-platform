@@ -16,8 +16,8 @@ describe('residual #224 overview KPI as-of date', () => {
 
   it('overview-core forwards kpiDate into getOverviewKpis + trend endDate', async () => {
     const src = await readFile(path.join(__dirname, 'overview-core.ts'), 'utf8');
-    expect(src).toMatch(/getOverviewKpis\(date\s*\|\|\s*undefined\)/);
-    expect(src).toMatch(/getOverviewTrend\(days,\s*endDate\s*\|\|\s*undefined\)/);
+    expect(src).toMatch(/getOverviewKpis\(date\s*\|\|\s*undefined,\s*force\)/);
+    expect(src).toMatch(/getOverviewTrend\(days,\s*endDate\s*\|\|\s*undefined,\s*force\)/);
     expect(src).toMatch(/kpiDate:\s*Ref<string>/);
     expect(src).toMatch(/params\.kpiDate\.value/);
   });
@@ -28,14 +28,12 @@ describe('residual #224 overview KPI as-of date', () => {
     expect(src).toMatch(/kpiDate,/);
   });
 
-  it('OverviewHero + OverviewView wire date picker', async () => {
-    const hero = await readFile(path.join(__dirname, '../components/OverviewHero.vue'), 'utf8');
-    expect(hero).toMatch(/el-date-picker/);
-    expect(hero).toMatch(/update:kpiDate/);
-    expect(hero).toMatch(/date-change/);
-
+  it('OverviewView wires date picker + reload in toolbar', async () => {
     const view = await readFile(path.join(srcRoot, 'views/OverviewView.vue'), 'utf8');
-    expect(view).toMatch(/v-model:kpi-date="kpiDate"/);
-    expect(view).toMatch(/@date-change="reload"/);
+    expect(view).toMatch(/el-date-picker/);
+    expect(view).toMatch(/onKpiDateChange/);
+    expect(view).toMatch(/kpiDate\.value = next/);
+    expect(view).toMatch(/reload\(\)/);
+    expect(view).toMatch(/重新加载本地数据/);
   });
 });

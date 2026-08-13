@@ -43,6 +43,8 @@ export type OrderHeaderGmvRow = {
   orderCount: number;
   refundOrderCount: number;
   verifyCount: number;
+  /** Latest local ingestion/update time among orders in the queried paidTime window. */
+  sourceUpdatedAt?: string | Date | null;
 };
 
 export const EMPTY_ORDER_HEADER_GMV_ROW: OrderHeaderGmvRow = {
@@ -54,7 +56,8 @@ export const EMPTY_ORDER_HEADER_GMV_ROW: OrderHeaderGmvRow = {
   refundAmountFen: 0n,
   orderCount: 0,
   refundOrderCount: 0,
-  verifyCount: 0
+  verifyCount: 0,
+  sourceUpdatedAt: null
 };
 
 // Residual #121: removed dead toIsoText alias — writers use toSqliteDateTimeOrNull.

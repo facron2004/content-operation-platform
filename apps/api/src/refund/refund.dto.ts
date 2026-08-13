@@ -1,7 +1,7 @@
 /** Consolidated refund module. */
 import { Type } from 'class-transformer';
 import { IsIn, IsInt, IsOptional, Max, Min } from 'class-validator';
-import { optionalDateKey } from '../content/dto-decorators';
+import { optionalDateKey, optionalString } from '../content/dto-decorators';
 import type { RefundWindow } from './refund-top-merchants';
 
 export type TrendBucket = 'day' | 'week' | 'month' | 'year';
@@ -14,12 +14,14 @@ export class RefundTodayQueryDto {
   @optionalDateKey() date?: string;
   /** 口径周期: 日/周/月/年 — 默认 day(今日)。 */
   @IsOptional() @IsIn(['day', 'week', 'month', 'year']) window?: RefundWindow;
+  @optionalString(5) force?: boolean | string;
 }
 export class RefundTrendQueryDto {
   @IsOptional() @Type(() => Number) @IsInt() @IsIn([7, 30]) days: TrendWindow = 7;
   @optionalDateKey() endDate?: string;
   /** 趋势聚合粒度: 逐日/按周/按月/按年(默认 day)。 */
   @IsOptional() @IsIn(['day', 'week', 'month', 'year']) bucket?: TrendBucket;
+  @optionalString(5) force?: boolean | string;
 }
 export class RefundTopMerchantsQueryDto {
   @IsOptional() @IsIn(['refundDesc', 'verifyDesc']) sortBy: 'refundDesc' | 'verifyDesc' =
@@ -30,6 +32,7 @@ export class RefundTopMerchantsQueryDto {
   @IsOptional() @IsIn(['day', 'week', 'month', 'year']) window?: RefundWindow;
   /** 周期锚点日期(可选);不传则取今日。 */
   @optionalDateKey() date?: string;
+  @optionalString(5) force?: boolean | string;
 }
 
 // --- refund-today.types.ts ---
@@ -47,7 +50,7 @@ export interface RefundTodayPayload {
     refund: number;
     refundRate: number;
   }>;
-  updatedAt: string;
+  updatedAt: string | null;
 }
 export interface RefundTrendPoint {
   date: string;
@@ -72,7 +75,7 @@ export interface RefundVerifyTodayPayload {
     verify: number;
     verifyRate: number;
   }>;
-  updatedAt: string;
+  updatedAt: string | null;
 }
 export interface VerifyTrendPoint {
   date: string;

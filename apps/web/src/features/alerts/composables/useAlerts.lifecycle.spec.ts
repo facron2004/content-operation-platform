@@ -87,7 +87,7 @@ describe('useAlerts request lifecycle', () => {
     const scope = effectScope();
     let alerts!: ReturnType<typeof useAlerts>;
     scope.run(() => {
-      alerts = useAlerts(ref('operator'));
+      alerts = useAlerts(ref('operator'), ref(true));
     });
 
     const firstLoad = alerts.load();
@@ -108,7 +108,7 @@ describe('useAlerts request lifecycle', () => {
     const scope = effectScope();
     let alerts!: ReturnType<typeof useAlerts>;
     scope.run(() => {
-      alerts = useAlerts(ref('operator'));
+      alerts = useAlerts(ref('operator'), ref(true));
     });
 
     const firstResolve = alerts.resolve('alert-1');
@@ -134,7 +134,7 @@ describe('useAlerts request lifecycle', () => {
     const scope = effectScope();
     let alerts!: ReturnType<typeof useAlerts>;
     scope.run(() => {
-      alerts = useAlerts(ref('operator'));
+      alerts = useAlerts(ref('operator'), ref(true));
     });
 
     await alerts.resolve('alert-1');
@@ -146,6 +146,35 @@ describe('useAlerts request lifecycle', () => {
     expect(alerts.actionError.value).toBeNull();
     expect(mocks.success).toHaveBeenCalledWith('已标记处理，今日不会再进入待办');
 
+    scope.stop();
+  });
+
+  it('does not issue a resolve request when the session lacks write permission', async () => {
+    const scope = effectScope();
+    let alerts!: ReturnType<typeof useAlerts>;
+    scope.run(() => {
+      alerts = useAlerts(ref('auditor'), ref(false));
+    });
+
+    await alerts.resolve('PKG-1:high_refund');
+
+    expect(mocks.resolveAlerts).not.toHaveBeenCalled();
+    expect(alerts.resolving.value).toBe(false);
+    scope.stop();
+  });
+
+  it('marks an explicit refresh so the API can bypass its server caches', async () => {
+    mocks.getAlerts.mockResolvedValue(alertResponse());
+    const scope = effectScope();
+    let alerts!: ReturnType<typeof useAlerts>;
+    scope.run(() => {
+      alerts = useAlerts(ref('admin'), ref(true));
+    });
+
+    await alerts.load(true);
+
+    expect(mocks.clearAlertCache).toHaveBeenCalled();
+    expect(mocks.getAlerts).toHaveBeenCalledWith(expect.objectContaining({ force: true }));
     scope.stop();
   });
 });

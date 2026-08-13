@@ -1,7 +1,7 @@
 /** Detail-row query and presentation mapping for the data-analysis report. */
 import { maskPhone as maskPhonePii, sqlDatetimeExclusiveRange } from '../common';
 import { type DataAnalysisOrderDetailRow } from './data-analysis.dto';
-import { type PrismaLike, REFUND_COMPONENTS_FEN, fenToYuan, n } from './data-analysis-query.shared';
+import { type PrismaLike, REFUND_AMOUNT_FEN, fenToYuan, n } from './data-analysis-query.shared';
 import { paidTimeBounds } from './data-analysis-window';
 
 type DetailSqlRow = {
@@ -29,18 +29,26 @@ function maskMemberPhone(phone: string | null | undefined): string {
   return maskPhonePii(phone) ?? '';
 }
 
-function statusLabel(status: string | null | undefined, verifyTime: string | null): string {
-  if (status === 'refunded') return '已退款';
+function statusLabel(
+  status: string | null | undefined,
+  verifyTime: string | null,
+  refundAmountFen: bigint | null
+): string {
+  if (Number(refundAmountFen ?? 0) > 0 || status === 'refunded') return '已退款';
   if (status === 'verified' || verifyTime) return '待评价';
   if (status === 'paid') return '已发货';
   if (status === 'cancelled') return '已取消';
   return status || '';
 }
 
-function verifyLabel(status: string | null | undefined, verifyTime: string | null): string {
-  if (status === 'verified' || verifyTime) return '已核销';
+function verifyLabel(
+  status: string | null | undefined,
+  verifyTime: string | null,
+  refundAmountFen: bigint | null
+): string {
+  if (verifyTime) return '已核销';
+  if (Number(refundAmountFen ?? 0) > 0 || status === 'refunded') return '已退款';
   if (status === 'cancelled') return '已过期';
-  if (status === 'refunded') return '已退款';
   return '待核销';
 }
 
@@ -73,8 +81,7 @@ export async function queryOrderDetails(
        oh."orderAmountFen" AS "orderAmountFen",
        oh."paidAmountWalletFen" AS "walletAmountFen",
        oh."pointUsed" AS "pointUsed",
-       CASE WHEN COALESCE(oh."refundAmountFen", 0) > 0
-         THEN ${REFUND_COMPONENTS_FEN('oh.')} ELSE 0 END AS "refundAmountFen",
+       ${REFUND_AMOUNT_FEN('oh.')} AS "refundAmountFen",
        oh."coupon" AS "coupon",
        oh."salesman" AS "salesman",
        oh."parentSalesman" AS "parentSalesman",
@@ -113,9 +120,9 @@ export async function queryOrderDetails(
       coupon: r.coupon?.trim() || '',
       salesman: r.salesman?.trim() || '',
       parentSalesman: r.parentSalesman?.trim() || '',
-      statusLabel: statusLabel(r.status, r.verifyTime),
+      statusLabel: statusLabel(r.status, r.verifyTime, r.refundAmountFen),
       orderType: '虚拟卡券',
-      verifyLabel: verifyLabel(r.status, r.verifyTime),
+      verifyLabel: verifyLabel(r.status, r.verifyTime, r.refundAmountFen),
       paidTime: fmtTime(r.paidTime),
       verifyTime: fmtTime(r.verifyTime)
     }))

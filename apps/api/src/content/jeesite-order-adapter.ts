@@ -8,6 +8,8 @@ export interface MappedOrderRecord {
   memberId: string;
   memberName: string;
   memberPhone: string;
+  inviteCode?: string;
+  parentInviteCode?: string;
   packageId: string;
   merchantId: string;
   merchantName: string;
@@ -31,6 +33,31 @@ export interface MappedOrderRecord {
   pointUsed: number;
   status: 'paid' | 'verified' | 'cancelled' | 'refunded';
 }
+
+const INVITE_CODE_KEYS = [
+  'centerMemberInviteCode',
+  'centerMember.code',
+  'centerMember.memberCode',
+  'centerMember.inviteCode',
+  'centerMember.invitationCode',
+  'memberCode',
+  'memberInviteCode',
+  'memberInvitationCode',
+  'inviteCode',
+  'invitationCode',
+  '邀请码'
+] as const;
+
+const PARENT_INVITE_CODE_KEYS = [
+  'centerMemberParentInviteCode',
+  'centerMember.parentCode',
+  'centerMember.parentInviteCode',
+  'centerMember.parentInvitationCode',
+  'parentInviteCode',
+  'parentInvitationCode',
+  'superiorInviteCode',
+  '上级邀请码'
+] as const;
 
 /**
  * JeSite bargainOrder/listData → 业务员/上级业务员/优惠券 候选键。
@@ -174,6 +201,8 @@ export function mapJeesiteOrderListToDataset(payload: unknown): {
       memberId: rowText(row, ['centerMemberId', 'centerMember.id']),
       memberName: rowText(row, ['memberName']),
       memberPhone: rowText(row, ['memberPhone']),
+      inviteCode: rowText(row, INVITE_CODE_KEYS) || undefined,
+      parentInviteCode: rowText(row, PARENT_INVITE_CODE_KEYS) || undefined,
       packageId: rowText(row, ['bargainCommodityId', 'bargainCommodity.id']),
       merchantId: rowText(row, ['corePartnerId', 'corePartner.id']),
       merchantName,

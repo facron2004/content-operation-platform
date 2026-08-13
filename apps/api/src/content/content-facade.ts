@@ -1,15 +1,17 @@
 import { NotFoundException } from '@nestjs/common';
-import type {
-  BattleCard,
-  CommunityGroup,
-  ContentPackage,
-  OperationTag,
-  PackageScoreBreakdown,
-  RecommendPackageItem,
-  RecommendQuery,
-  RecommendationResult,
-  UserRole
+import {
+  safeRatio,
+  type BattleCard,
+  type CommunityGroup,
+  type ContentPackage,
+  type OperationTag,
+  type PackageScoreBreakdown,
+  type RecommendPackageItem,
+  type RecommendQuery,
+  type RecommendationResult,
+  type UserRole
 } from '@content/shared';
+import { rateByCount } from '../common';
 import { RECOMMEND_CACHE_CAP } from '../common/sql-chunk';
 import { buildBattleCard, buildDerivedCommunities } from '../domain/operation-rules';
 import type { DataSourceService } from './data-source.service';
@@ -28,12 +30,12 @@ export type ContentScopeFilter = {
 };
 
 export function createContentCommunityDelegates(params: {
-  getRecommendations: (query: RecommendQuery) => Promise<RecommendationResult>;
+  getRecommendations: (query: RecommendQuery, force?: boolean) => Promise<RecommendationResult>;
   getPackageAnalysis: (packageId: string) => Promise<PackageAnalysisResult | null>;
 }) {
   return {
-    getCommunities: (role?: UserRole, scope?: ContentScopeFilter) =>
-      getContentCommunities(params.getRecommendations, role, scope),
+    getCommunities: (role?: UserRole, scope?: ContentScopeFilter, force = false) =>
+      getContentCommunities(params.getRecommendations, role, scope, force),
     getCommunityRecommendations: (groupId: string, role?: UserRole, scope?: ContentScopeFilter) =>
       getContentCommunityRecommendations(
         (r) => getContentCommunities(params.getRecommendations, r, scope),
@@ -46,7 +48,7 @@ export function createContentCommunityDelegates(params: {
 }
 
 export function createContentDelegates(params: {
-  getRecommendations: (query: RecommendQuery) => Promise<RecommendationResult>;
+  getRecommendations: (query: RecommendQuery, force?: boolean) => Promise<RecommendationResult>;
   dataSource: DataSourceService;
   dailyInventoryCrawler: DailyInventoryCrawlerService;
   warn: (msg: string) => void;
@@ -162,18 +164,9 @@ export async function generateContentBattleCardFromAnalysis(
     reason: analysis.recommendation.reason,
     riskTips: analysis.recommendation.riskTips,
     recommendedChannels: analysis.recommendation.suggestedChannels,
-    conversionRate:
-      analysis.salesData.exposureCount > 0
-        ? analysis.salesData.paidOrderCount / analysis.salesData.exposureCount
-        : 0,
-    verifyRate:
-      analysis.salesData.paidOrderCount > 0
-        ? analysis.salesData.verifyCount / analysis.salesData.paidOrderCount
-        : 0,
-    refundRate:
-      analysis.salesData.paidOrderCount > 0
-        ? analysis.salesData.refundCount / analysis.salesData.paidOrderCount
-        : 0,
+    conversionRate: safeRatio(analysis.salesData.paidOrderCount, analysis.salesData.exposureCount),
+    verifyRate: rateByCount(analysis.salesData.verifyCount, analysis.salesData.paidOrderCount),
+    refundRate: rateByCount(analysis.salesData.refundCount, analysis.salesData.paidOrderCount),
     operationTags: analysis.operationTags,
     scoreBreakdown: analysis.scoreBreakdown,
     operationAlerts: analysis.operationAlerts
@@ -183,10 +176,12 @@ export async function generateContentBattleCardFromAnalysis(
 
 export async function getContentCommunities(
   getRecommendations: (
-    query: RecommendQuery
+    query: RecommendQuery,
+    force?: boolean
   ) => Promise<{ packages: RecommendPackageItem[]; matchedCount?: number }>,
   role?: UserRole,
-  scope?: ContentScopeFilter
+  scope?: ContentScopeFilter,
+  force = false
 ): Promise<{
   items: CommunityGroup[];
   // Residual #278: dual-cap honesty for derived communities.
@@ -201,14 +196,17 @@ export async function getContentCommunities(
   groupLimit: number;
   groupTruncated: boolean;
 }> {
-  const recommendations = await getRecommendations({
-    role,
-    status: 'selling',
-    areaId: scope?.areaId,
-    merchantId: scope?.merchantId,
-    areaIds: scope?.areaIds,
-    merchantIds: scope?.merchantIds
-  });
+  const recommendations = await getRecommendations(
+    {
+      role,
+      status: 'selling',
+      areaId: scope?.areaId,
+      merchantId: scope?.merchantId,
+      areaIds: scope?.areaIds,
+      merchantIds: scope?.merchantIds
+    },
+    force
+  );
   const recommendPackages = recommendations.packages ?? [];
   // Residual #278: RECOMMEND_CACHE_CAP source honesty (parity #275/#277).
   const sourceLimit = RECOMMEND_CACHE_CAP;

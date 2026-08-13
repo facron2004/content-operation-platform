@@ -1,4 +1,5 @@
 import { Injectable, Inject } from '@nestjs/common';
+import { sqlDatetime } from '../common';
 import { PrismaService } from '../prisma/prisma.service';
 
 export interface FreshnessMetric {
@@ -19,13 +20,13 @@ export class DataFreshnessService {
     const now = new Date();
 
     const tpdRows = await this.prisma.$queryRawUnsafe<[{ maxTime: string | null }]>(
-      `SELECT MAX("computedAt") as maxTime FROM "TaskPerformanceDaily"`
+      `SELECT MAX(${sqlDatetime('"computedAt"')}) as maxTime FROM "TaskPerformanceDaily"`
     );
     const attrRows = await this.prisma.$queryRawUnsafe<[{ maxTime: string | null }]>(
-      `SELECT MAX("attributedAt") as maxTime FROM "OrderAttribution"`
+      `SELECT MAX(${sqlDatetime('"attributedAt"')}) as maxTime FROM "OrderAttribution"`
     );
     const mdmRows = await this.prisma.$queryRawUnsafe<[{ maxTime: string | null }]>(
-      `SELECT MAX("updatedAt") as maxTime FROM "MerchantDailyMetrics"`
+      `SELECT MAX(${sqlDatetime('"updatedAt"')}) as maxTime FROM "MerchantDailyMetrics"`
     );
 
     const metrics: FreshnessMetric[] = [
@@ -49,7 +50,16 @@ export class DataFreshnessService {
     if (!lastTimeStr) {
       return { entity, lastUpdatedAt: null, lagSeconds: null, status: 'unknown' };
     }
-    const lastDate = new Date(lastTimeStr);
+    // SQLite datetime() emits a UTC space-form value without a zone suffix.
+    // `new Date('YYYY-MM-DD HH:mm:ss')` is interpreted in the process timezone
+    // (Asia/Shanghai in production), which used to make every lag eight hours
+    // too large and could report healthy data as lagging.
+    const normalized = lastTimeStr.trim().replace(' ', 'T');
+    const hasZone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(normalized);
+    const lastDate = new Date(hasZone ? normalized : `${normalized}Z`);
+    if (Number.isNaN(lastDate.getTime())) {
+      return { entity, lastUpdatedAt: null, lagSeconds: null, status: 'unknown' };
+    }
     const lagSeconds = Math.max(0, Math.floor((now.getTime() - lastDate.getTime()) / 1000));
     const status = lagSeconds > maxLagAllowed ? 'lagging' : 'healthy';
 

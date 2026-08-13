@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import {
   loadMerchantSalesExportRows,
   queryExportCsv,
+  mapRankingRow,
+  mapSummaryAggregate,
   querySummary,
   queryTrendRows
 } from '../src/merchant-sales/merchant-sales-query';
@@ -10,6 +12,37 @@ import { sortColumn } from '../src/merchant-sales/merchant-sales-window';
 import type { PrismaService } from '../src/prisma/prisma.service';
 
 describe('merchant-sales net GMV reads', () => {
+  it('rounds count-based rates to the shared four-decimal contract', () => {
+    const aggregate = {
+      totalGmv: 0,
+      totalRefund: 0,
+      totalVerify: 0,
+      refundCount: 4,
+      verifyCount: 166,
+      paidOrderCount: 329,
+      merchantCount: 1,
+      packageCount: 1
+    };
+    expect(mapSummaryAggregate(aggregate, 'day', '2026-08-12', '2026-08-12')).toMatchObject({
+      refundRate: 0.0122,
+      verifyRate: 0.5046
+    });
+    expect(
+      mapRankingRow({
+        merchantName: 'merchant-a',
+        areaName: 'area-a',
+        gmv: 0,
+        gmvRefund: 0,
+        gmvVerify: 0,
+        refundCount: 4,
+        verifyCount: 166,
+        paidOrderCount: 329,
+        orderCount: 329,
+        packageCount: 1
+      })
+    ).toMatchObject({ refundRate: 0.0122, verifyRate: 0.5046 });
+  });
+
   it('uses net GMV consistently in summary, trend, and export', async () => {
     const client = createClient({ url: 'file::memory:' });
     try {

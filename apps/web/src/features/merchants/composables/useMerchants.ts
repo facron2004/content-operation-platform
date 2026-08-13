@@ -54,7 +54,7 @@ export function useMerchants() {
     competitorsMatched
   } = state;
 
-  async function reloadList() {
+  async function reloadList(force = false) {
     if (disposed) return;
     const requestId = ++listRequestId;
     await loadMerchantList({
@@ -68,10 +68,11 @@ export function useMerchants() {
       listError,
       listTruncated,
       listLimit,
+      force,
       isCurrent: () => !disposed && requestId === listRequestId
     });
   }
-  async function reloadDetail() {
+  async function reloadDetail(force = false) {
     if (disposed) return;
     const requestId = ++detailRequestId;
     await loadMerchantDetail({
@@ -91,6 +92,7 @@ export function useMerchants() {
       competitorsTruncated,
       competitorsLimit,
       competitorsMatched,
+      force,
       isCurrent: () => !disposed && requestId === detailRequestId
     });
   }

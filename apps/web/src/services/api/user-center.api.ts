@@ -2,6 +2,9 @@ import client from '../http-client';
 
 export interface UserCenterMemberItem {
   memberId: string;
+  inviteCode: string | null;
+  parentInviteCode: string | null;
+  downlineCount: number;
   nickname: string | null;
   phone: string | null;
   level: string | null;
@@ -74,9 +77,10 @@ export async function getUserCenterMembers(params: {
   ).data;
 }
 
-export async function getUserCenterMember(memberId: string) {
+export async function getUserCenterMember(memberId: string, inviteCode?: string | null) {
   return (
     await client.get<UserCenterMemberDetailResponse>(`/user-center/members/${memberId}`, {
+      params: inviteCode ? { inviteCode } : undefined,
       timeout: 30000
     })
   ).data;

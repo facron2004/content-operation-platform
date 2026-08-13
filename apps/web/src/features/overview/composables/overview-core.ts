@@ -19,10 +19,11 @@ async function loadOverviewKpis(
   loadError: Ref<string | null>,
   // Residual #224: as-of business day (OverviewKpiQueryDto.date).
   date: string | undefined,
+  force: boolean,
   isCurrent: IsCurrent
 ) {
   try {
-    const nextKpi = await getOverviewKpis(date || undefined);
+    const nextKpi = await getOverviewKpis(date || undefined, force);
     if (isCurrent()) kpi.value = nextKpi;
   } catch (err) {
     if (isCurrent()) loadError.value = extractErrorMessage(err, '加载 KPI 失败');
@@ -35,10 +36,11 @@ async function loadOverviewTrend(
   loadError: Ref<string | null>,
   // Residual #224: endDate aligns trend window with KPI as-of day.
   endDate: string | undefined,
+  force: boolean,
   isCurrent: IsCurrent
 ) {
   try {
-    const nextTrend = await getOverviewTrend(days, endDate || undefined);
+    const nextTrend = await getOverviewTrend(days, endDate || undefined, force);
     if (isCurrent()) trend.value = nextTrend;
   } catch (err) {
     if (isCurrent()) loadError.value = extractErrorMessage(err, '加载趋势失败');
@@ -49,6 +51,8 @@ async function loadOverviewDistribution(
   dim: 'stale' | 'area' | 'category',
   distribution: Ref<Dist>,
   loadError: Ref<string | null>,
+  date: string | undefined,
+  force: boolean,
   isCurrent: IsCurrent,
   // Residual #288: optional honesty sinks for Top-N distribution head.
   distributionTruncated?: Ref<boolean>,
@@ -56,7 +60,7 @@ async function loadOverviewDistribution(
   distributionMatched?: Ref<number | null>
 ) {
   try {
-    const payload = await getOverviewDistribution(dim, 20);
+    const payload = await getOverviewDistribution(dim, 20, date || undefined, force);
     if (!isCurrent()) return;
     distribution.value = payload.items ?? [];
     if (distributionTruncated) distributionTruncated.value = Boolean(payload.truncated);
@@ -79,6 +83,8 @@ async function loadOverviewTopOffenders(
   topOffenders: Ref<OverviewTopOffender[]>,
   offendersLoading: Ref<boolean>,
   loadError: Ref<string | null>,
+  date: string | undefined,
+  force: boolean,
   isCurrent: IsCurrent,
   // Residual #287: optional honesty sinks for Top-N head.
   offendersTruncated?: Ref<boolean>,
@@ -88,7 +94,7 @@ async function loadOverviewTopOffenders(
   if (!isCurrent()) return;
   offendersLoading.value = true;
   try {
-    const payload = await getOverviewTopOffenders(10);
+    const payload = await getOverviewTopOffenders(10, date || undefined, force);
     if (!isCurrent()) return;
     topOffenders.value = payload.items ?? [];
     if (offendersTruncated) offendersTruncated.value = Boolean(payload.truncated);
@@ -163,6 +169,7 @@ export function createOverviewActions(params: {
       params.trend,
       params.loadError,
       params.kpiDate.value || undefined,
+      false,
       () => !disposed && requestId === trendRequestId
     );
   }
@@ -174,6 +181,8 @@ export function createOverviewActions(params: {
       params.staleDim.value,
       params.distribution,
       params.loadError,
+      params.kpiDate.value || undefined,
+      false,
       () => !disposed && requestId === distributionRequestId,
       params.distributionTruncated,
       params.distributionLimit,
@@ -181,7 +190,7 @@ export function createOverviewActions(params: {
     );
   }
 
-  async function reload() {
+  async function reload(force = false) {
     if (disposed) return;
     const currentReloadId = ++reloadRequestId;
     const currentKpiRequestId = ++kpiRequestId;
@@ -196,6 +205,7 @@ export function createOverviewActions(params: {
         params.kpi,
         params.loadError,
         asOf,
+        force,
         () => !disposed && currentKpiRequestId === kpiRequestId
       ),
       loadOverviewTrend(
@@ -203,12 +213,15 @@ export function createOverviewActions(params: {
         params.trend,
         params.loadError,
         asOf,
+        force,
         () => !disposed && currentTrendRequestId === trendRequestId
       ),
       loadOverviewDistribution(
         params.staleDim.value,
         params.distribution,
         params.loadError,
+        asOf,
+        force,
         () => !disposed && currentDistributionRequestId === distributionRequestId,
         params.distributionTruncated,
         params.distributionLimit,
@@ -218,6 +231,8 @@ export function createOverviewActions(params: {
         params.topOffenders,
         params.offendersLoading,
         params.loadError,
+        asOf,
+        force,
         () => !disposed && currentOffendersRequestId === offendersRequestId,
         params.offendersTruncated,
         params.offendersLimit,

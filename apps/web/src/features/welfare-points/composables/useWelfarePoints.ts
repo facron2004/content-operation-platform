@@ -3,6 +3,7 @@ import {
   exportWelfarePointsCsv,
   getWelfarePointsList,
   getWelfarePointsSummary,
+  refreshWelfarePoints,
   type WelfarePointQuery,
   type WelfarePointRecord,
   type WelfarePointSummary
@@ -38,10 +39,11 @@ export function useWelfarePoints() {
   const total = ref(0);
   const loading = ref(false);
   const listLoading = ref(false);
+  const syncing = ref(false);
   const loadError = ref('');
   const cached = ref(false);
 
-  function buildParams(force = false): WelfarePointQuery {
+  function buildParams(): WelfarePointQuery {
     const p: WelfarePointQuery = {
       page: page.value,
       pageSize: pageSize.value,
@@ -50,17 +52,16 @@ export function useWelfarePoints() {
       sourceType: sourceType.value || undefined,
       dateFrom: dateFrom.value || undefined,
       dateTo: dateTo.value || undefined,
-      keyword: keyword.value || undefined,
-      reload: force || undefined
+      keyword: keyword.value || undefined
     };
     return p;
   }
 
-  async function loadSummary(force = false) {
+  async function loadSummary(bypassCache = false) {
     loading.value = true;
     loadError.value = '';
     try {
-      const data = await getWelfarePointsSummary(buildParams(force));
+      const data = await getWelfarePointsSummary(buildParams(), bypassCache);
       summary.value = data;
       cached.value = data.cached;
     } catch (e) {
@@ -70,10 +71,10 @@ export function useWelfarePoints() {
     }
   }
 
-  async function loadList() {
+  async function loadList(bypassCache = false) {
     listLoading.value = true;
     try {
-      const data = await getWelfarePointsList(buildParams());
+      const data = await getWelfarePointsList(buildParams(), bypassCache);
       list.value = data.list;
       total.value = data.total;
     } catch (e) {
@@ -83,8 +84,24 @@ export function useWelfarePoints() {
     }
   }
 
-  async function reload(force = false) {
-    await Promise.all([loadSummary(force), loadList()]);
+  async function reload(syncUpstream = false) {
+    if (!syncUpstream) {
+      await Promise.all([loadSummary(), loadList()]);
+      return;
+    }
+
+    syncing.value = true;
+    loadError.value = '';
+    try {
+      await refreshWelfarePoints();
+      // The sync endpoint finishes first and invalidates all cached pages. Both
+      // reads then bypass the Web cache and observe the same fresh API snapshot.
+      await Promise.all([loadSummary(true), loadList(true)]);
+    } catch (e) {
+      loadError.value = extractErrorMessage(e, '福利金数据同步失败');
+    } finally {
+      syncing.value = false;
+    }
   }
 
   function applyFilters() {
@@ -113,9 +130,15 @@ export function useWelfarePoints() {
   }
 
   // chart options
-  const trendOption = computed(() => (summary.value ? buildTrendOption(summary.value.dailyTrend) : {}));
-  const typeOption = computed(() => (summary.value ? buildTypeDonutOption(summary.value.byType) : {}));
-  const sourceOption = computed(() => (summary.value ? buildSourceBarOption(summary.value.bySource) : {}));
+  const trendOption = computed(() =>
+    summary.value ? buildTrendOption(summary.value.dailyTrend) : {}
+  );
+  const typeOption = computed(() =>
+    summary.value ? buildTypeDonutOption(summary.value.byType) : {}
+  );
+  const sourceOption = computed(() =>
+    summary.value ? buildSourceBarOption(summary.value.bySource) : {}
+  );
   const topMembersOption = computed(() =>
     summary.value ? buildTopMembersOption(summary.value.topMembers) : {}
   );
@@ -139,6 +162,7 @@ export function useWelfarePoints() {
     list,
     loading,
     listLoading,
+    syncing,
     loadError,
     cached,
     // actions

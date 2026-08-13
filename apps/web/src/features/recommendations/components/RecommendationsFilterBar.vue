@@ -62,7 +62,7 @@
       @update:model-value="$emit('update:date', $event ? String($event) : '')"
     />
     <AppleButton variant="primary" :loading="loading" @click="$emit('refresh')">
-      {{ loading ? '加载中' : '刷新套餐' }}
+      {{ loading ? '加载中' : '重新加载套餐' }}
     </AppleButton>
   </div>
 </template>

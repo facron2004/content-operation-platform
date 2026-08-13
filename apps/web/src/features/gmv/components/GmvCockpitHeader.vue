@@ -7,11 +7,13 @@
     :backfilling="backfilling"
     :backfill-label="backfillLabel"
     :loading="loading"
+    :can-refresh="canRefresh"
     :disable-future-date="disableFutureDate"
     @update:kpi-date="$emit('update:kpiDate', $event)"
     @date-change="$emit('date-change')"
     @backfill="$emit('backfill', $event)"
     @backfill-date="$emit('backfill-date', $event)"
+    @load="$emit('load')"
     @reload="$emit('reload')"
   />
 </template>
@@ -28,6 +30,7 @@ defineProps<{
   backfilling: boolean;
   backfillLabel: string;
   loading: boolean;
+  canRefresh: boolean;
   disableFutureDate: (date: Date) => boolean;
 }>();
 
@@ -36,6 +39,7 @@ defineEmits<{
   'date-change': [];
   backfill: [days: number];
   'backfill-date': [range: GmvBackfillRange];
+  load: [];
   reload: [];
 }>();
 </script>

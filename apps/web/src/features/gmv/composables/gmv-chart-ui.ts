@@ -5,7 +5,7 @@ import type {
 } from '../../../services/api/gmv.api';
 import { buildCategoryBar, buildDualAxisLine, buildMultiLine } from '../../../utils/chart-options';
 import { CHART_COLORS, CHART_GRID, CHART_TOOLTIP } from '../../../utils/chart-theme';
-import { formatNumber, formatPercentRaw, readFen } from '../../../utils/format';
+import { displayMoney, formatPercentRaw, readFen } from '../../../utils/format';
 
 export function buildGmvDistributionOption(distribution: GmvDistributionRow[]) {
   if (distribution.length === 0) return {};
@@ -17,11 +17,11 @@ export function buildGmvDistributionOption(distribution: GmvDistributionRow[]) {
       key: r.key,
       extra: {
         占比: formatPercentRaw(r.share * 100),
-        在线: `¥ ${formatNumber(r.gmvOnline)}`,
-        余额: `¥ ${formatNumber(r.gmvWallet)}`
+        在线: displayMoney(r, 'gmvOnline'),
+        余额: displayMoney(r, 'gmvWallet')
       }
     })),
-    yName: 'GMV',
+    yName: '净 GMV',
     showShare: true,
     rotate: 30,
     barMaxWidth: 32
@@ -62,7 +62,7 @@ export function buildGmvTrendOption(
   if (mode === 'mix') {
     return buildMultiLine({
       categories,
-      yName: 'GMV',
+      yName: '净 GMV',
       series: [
         {
           name: '在线现金',
@@ -79,7 +79,7 @@ export function buildGmvTrendOption(
     });
   }
 
-  // prototype default: clean single GMV area line
+  // Default: clean single net-GMV area line.
   return {
     color: [CHART_COLORS.primary],
     tooltip: {
@@ -108,7 +108,7 @@ export function buildGmvTrendOption(
     },
     series: [
       {
-        name: 'GMV（元）',
+        name: '净 GMV（元）',
         type: 'line',
         smooth: true,
         symbol: 'circle',
@@ -164,7 +164,7 @@ export function buildGmvHourlyOption(hourly: GmvHourlyPoint[]) {
     },
     series: [
       {
-        name: 'GMV（元）',
+        name: '净 GMV（元）',
         type: 'bar',
         data: hourly.map((p) => Number(readFen(p, 'totalGmv') ?? 0) / 100),
         itemStyle: {

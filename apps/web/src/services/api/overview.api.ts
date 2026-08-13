@@ -1,5 +1,6 @@
 import client from '../http-client';
-import { cachedGet } from '../cache.service';
+import { cachedGet, clearCache } from '../cache.service';
+import { withForce } from './with-force';
 
 export interface OverviewKpi {
   date: string;
@@ -8,14 +9,15 @@ export interface OverviewKpi {
   zeroSalesMerchants: number;
   zeroSalesSkuCount: number;
   zeroSalesSkuRatio: number;
-  todayGmv: number;
+  todayGmv?: number;
+  todayGmvFen?: string | number | null;
   todayOrderCount: number;
-  updatedAt: string;
+  updatedAt: string | null;
   dataSource: string;
 }
 export interface OverviewTrendPoint {
   date: string;
-  gmv: number;
+  gmvFen: string | number | null;
   paidOrderCount: number;
 }
 export interface OverviewDistributionRow {
@@ -49,12 +51,24 @@ export interface OverviewTopOffendersResponse {
 }
 
 const TTL = 60_000;
-const get = <T>(path: string, params: Record<string, unknown>) =>
-  cachedGet<T>(() => client.get(path, { params }).then((res) => res.data), path, params, TTL);
-export const getOverviewKpis = (date?: string) => get<OverviewKpi>('/overview/kpis', { date });
-export const getOverviewTrend = (days: 7 | 30, endDate?: string) =>
-  get<OverviewTrendPoint[]>('/overview/trend', { days, endDate });
-export const getOverviewDistribution = (dim: 'area' | 'category' | 'stale', limit: number) =>
-  get<OverviewDistributionResponse>('/overview/distribution', { dim, limit });
-export const getOverviewTopOffenders = (limit = 10) =>
-  get<OverviewTopOffendersResponse>('/overview/top-offenders', { limit });
+const get = <T>(path: string, params: Record<string, unknown>, force = false) => {
+  const fetcher = () =>
+    client.get(withForce(path, force), { params }).then((response) => response.data as T);
+  if (force) {
+    clearCache(path);
+    return fetcher();
+  }
+  return cachedGet<T>(fetcher, path, params, TTL);
+};
+export const getOverviewKpis = (date?: string, force = false) =>
+  get<OverviewKpi>('/overview/kpis', { date }, force);
+export const getOverviewTrend = (days: 7 | 30, endDate?: string, force = false) =>
+  get<OverviewTrendPoint[]>('/overview/trend', { days, endDate }, force);
+export const getOverviewDistribution = (
+  dim: 'area' | 'category' | 'stale',
+  limit: number,
+  date?: string,
+  force = false
+) => get<OverviewDistributionResponse>('/overview/distribution', { dim, limit, date }, force);
+export const getOverviewTopOffenders = (limit = 10, date?: string, force = false) =>
+  get<OverviewTopOffendersResponse>('/overview/top-offenders', { limit, date }, force);

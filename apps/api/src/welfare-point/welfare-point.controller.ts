@@ -1,6 +1,6 @@
 /** HTTP surface for 用户福利金 (welfare point) usage dashboard.
  *  Proxies JeeSite center/memberWelfarePointRecord with in-memory aggregation. */
-import { Controller, Get, Inject, Query, Res } from '@nestjs/common';
+import { Controller, Get, Inject, Post, Query, Res } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import type { Response } from 'express';
@@ -34,6 +34,14 @@ export class WelfarePointController {
   })
   summary(@Query(createDtoPipe(WelfarePointQueryDto)) q: WelfarePointQueryDto) {
     return this.service.summary(q);
+  }
+
+  @Post('refresh')
+  @RequirePermissions('analytics:refresh')
+  @Throttle({ long: { limit: 3, ttl: 60000 } })
+  @ApiOperation({ summary: '从 JeeSite 同步福利金数据并更新统一数据集' })
+  refresh() {
+    return this.service.refresh();
   }
 
   @Get('export')

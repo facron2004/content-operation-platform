@@ -72,16 +72,22 @@ export function createGmvCacheMethods(cache: TtlCache, prisma: PrismaService) {
         gmvHeavyLoad(() => resolveGmvHourly(prisma, date))
       );
     },
-    getDistribution(dim: GmvDistributionDim, limit: number, force = false) {
-      return cache.getOrLoad(`gmvDist:${dim}:${limit}`, force, () =>
-        gmvHeavyLoad(() => resolveGmvDistribution(prisma, dim, limit))
+    getDistribution(dim: GmvDistributionDim, limit: number, force = false, date?: string) {
+      return cache.getOrLoad(`gmvDist:${dim}:${limit}:${date ?? 'recent7'}`, force, () =>
+        gmvHeavyLoad(() => resolveGmvDistribution(prisma, dim, limit, date))
       ) as Promise<GmvDistributionPayload>;
     },
-    getTopMerchants(sortBy: GmvMerchantSort, page: number, pageSize: number, force = false) {
+    getTopMerchants(
+      sortBy: GmvMerchantSort,
+      page: number,
+      pageSize: number,
+      force = false,
+      date?: string
+    ) {
       // Aggregate cache key excludes page so flips share one sorted merchant list.
       return cache
-        .getOrLoad(`gmvMerchants:${sortBy}`, force, () =>
-          gmvHeavyLoad(() => computeGmvTopMerchants(prisma, sortBy))
+        .getOrLoad(`gmvMerchants:${sortBy}:${date ?? 'recent7'}`, force, () =>
+          gmvHeavyLoad(() => computeGmvTopMerchants(prisma, sortBy, date))
         )
         .then((rows) => pageMerchants(rows, page, pageSize)) as Promise<{
         items: GmvMerchantRow[];
@@ -211,12 +217,18 @@ export class GmvService {
     return this.ops.getHourly(date, force);
   }
 
-  getDistribution(dim: GmvDistributionDim, limit: number, force = false) {
-    return this.ops.getDistribution(dim, limit, force);
+  getDistribution(dim: GmvDistributionDim, limit: number, force = false, date?: string) {
+    return this.ops.getDistribution(dim, limit, force, date);
   }
 
-  getTopMerchants(sortBy: GmvMerchantSort, page: number, pageSize: number, force = false) {
-    return this.ops.getTopMerchants(sortBy, page, pageSize, force);
+  getTopMerchants(
+    sortBy: GmvMerchantSort,
+    page: number,
+    pageSize: number,
+    force = false,
+    date?: string
+  ) {
+    return this.ops.getTopMerchants(sortBy, page, pageSize, force, date);
   }
 
   invalidateCache(prefix?: string) {

@@ -2,6 +2,7 @@
 import type { PrismaService } from '../prisma/prisma.service';
 import { CSV_EXPORT_MAX_ROWS } from '../common/sql-chunk';
 import { SQL_GMV_SS } from '../common/gmv-math';
+import { rateByCount } from '../common';
 import {
   csvCell,
   sortColumn,
@@ -45,8 +46,8 @@ export function buildMerchantSalesCsv(
       verify = Number(r.gmvVerify),
       paidOrderCount = Number(r.paidOrderCount ?? 0),
       // Keep CSV aligned with summary/ranking: rate is orders, not money.
-      refundRate = paidOrderCount > 0 ? Number(r.refundCount ?? 0) / paidOrderCount : 0,
-      verifyRate = paidOrderCount > 0 ? Number(r.verifyCount ?? 0) / paidOrderCount : 0;
+      refundRate = rateByCount(Number(r.refundCount ?? 0), paidOrderCount),
+      verifyRate = rateByCount(Number(r.verifyCount ?? 0), paidOrderCount);
     lines.push(
       [
         csvCell(r.merchantName),

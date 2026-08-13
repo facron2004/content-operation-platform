@@ -188,7 +188,7 @@
           <div class="backfill-status__body">
             <div class="backfill-status__title">提示</div>
             <div class="backfill-status__desc">
-              抓取范围包含 {{ todayText }} 当天；切忌同时点"刷新"避免重复抓取
+              抓取范围包含 {{ todayText }} 当天；请勿同时点“同步所选日订单”，避免重复抓取
             </div>
           </div>
         </section>

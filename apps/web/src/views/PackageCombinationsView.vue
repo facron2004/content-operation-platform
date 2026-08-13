@@ -11,7 +11,13 @@ import {
   type PackageOption
 } from '../services/api/gap-center.api';
 import { buildBusinessIntentKey } from '../services/idempotency-key';
+import { canWritePackages as resolveCanWritePackages } from '../features/write-action-permissions';
+import { useRoleStore } from '../stores/role';
 
+const roleStore = useRoleStore();
+const canWritePackages = computed(() =>
+  resolveCanWritePackages(roleStore.effectiveRoles, roleStore.permissions)
+);
 const loading = ref(false);
 const saving = ref(false);
 const error = ref<string | null>(null);
@@ -70,11 +76,13 @@ async function reload() {
 }
 
 function openCreate() {
+  if (!canWritePackages.value) return;
   resetForm();
   createVisible.value = true;
 }
 
 async function submitCreate() {
+  if (!canWritePackages.value) return;
   if (!form.combinationName.trim() || !form.priceYuan || form.packageIds.length < 2) {
     ElMessage.warning('请填写名称、价格并至少选择两个子套餐');
     return;
@@ -104,6 +112,7 @@ async function submitCreate() {
 }
 
 async function toggle(row: PackageCombination) {
+  if (!canWritePackages.value) return;
   try {
     await updatePackageCombinationStatus(
       row.combinationId,
@@ -122,16 +131,9 @@ onMounted(() => void reload());
 
 <template>
   <section v-loading="loading" class="page-stack gap-page">
-    <div class="panel gap-hero">
-      <div>
-        <p class="eyebrow">V2.0 / PACKAGE COMBINATION</p>
-        <h1>组合套餐</h1>
-        <p class="hero-description">以真实子套餐组成可售组合，明确价格、共享库存规则和有效期。</p>
-      </div>
-      <div class="gap-actions">
-        <el-button :loading="loading" @click="reload">刷新</el-button>
-        <el-button type="primary" @click="openCreate">新建组合</el-button>
-      </div>
+    <div class="page-toolbar">
+      <el-button :loading="loading" @click="reload">刷新</el-button>
+      <el-button v-if="canWritePackages" type="primary" @click="openCreate">新建组合</el-button>
     </div>
     <ErrorAlert :message="error" />
     <section class="panel">
@@ -154,12 +156,12 @@ onMounted(() => void reload());
         <el-table-column label="库存规则" width="120"><template #default="{ row }">{{ row.inventoryRule === 'shared' ? '共享库存' : '独立库存' }}</template></el-table-column>
         <el-table-column label="有效期" width="170"><template #default="{ row }">{{ date(row.validStartAt) }} - {{ date(row.validEndAt) }}</template></el-table-column>
         <el-table-column label="状态" width="90"><template #default="{ row }"><el-tag size="small" effect="plain" :type="row.status === 'active' ? 'success' : 'info'">{{ row.status === 'active' ? '启用' : '停用' }}</el-tag></template></el-table-column>
-        <el-table-column label="操作" width="100"><template #default="{ row }"><el-button text size="small" @click="toggle(row)">{{ row.status === 'active' ? '停用' : '启用' }}</el-button></template></el-table-column>
+        <el-table-column v-if="canWritePackages" label="操作" width="100"><template #default="{ row }"><el-button text size="small" @click="toggle(row)">{{ row.status === 'active' ? '停用' : '启用' }}</el-button></template></el-table-column>
       </el-table>
       <el-empty v-if="!loading && !items.length" description="暂无组合套餐" />
     </section>
 
-    <el-dialog v-model="createVisible" title="新建组合套餐" width="560px" :close-on-click-modal="false">
+    <el-dialog v-if="canWritePackages" v-model="createVisible" title="新建组合套餐" width="560px" :close-on-click-modal="false">
       <el-form label-position="top">
         <el-form-item label="组合名称" required><el-input v-model="form.combinationName" maxlength="160" /></el-form-item>
         <el-form-item label="售价（元）" required><el-input v-model="form.priceYuan" inputmode="decimal" /></el-form-item>
@@ -176,9 +178,7 @@ onMounted(() => void reload());
 
 <style scoped>
 .gap-page { min-width: 0; }
-.gap-hero { display: flex; justify-content: space-between; gap: 20px; align-items: flex-start; }
-.gap-hero h1 { margin: 8px 0; }
-.gap-actions, .gap-toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.gap-toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .gap-toolbar { margin: 16px 0; }
 .gap-toolbar .el-input { width: 280px; max-width: 100%; }
 .section-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
@@ -188,5 +188,5 @@ onMounted(() => void reload());
 .tag-list { display: flex; flex-wrap: wrap; gap: 5px; }
 .selected-package-note { margin: -8px 0 14px; color: var(--muted); font-size: 12px; }
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-@media (max-width: 760px) { .gap-hero { flex-direction: column; } .form-grid { grid-template-columns: 1fr; } }
+@media (max-width: 760px) { .form-grid { grid-template-columns: 1fr; } }
 </style>

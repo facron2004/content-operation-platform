@@ -1,5 +1,11 @@
 /** GMV OrderHeader raw SQL queries (aggregates / hourly / distribution loaders). */
-import { SQL_GMV_OH, sqlBeijingDate, sqlDatetimeExclusiveRange, toFenBigInt } from '../common';
+import {
+  SQL_GMV_OH,
+  sqlBeijingDate,
+  sqlDatetime,
+  sqlDatetimeExclusiveRange,
+  toFenBigInt
+} from '../common';
 import { PrismaService } from '../prisma/prisma.service';
 import { emptyHourlyPoints, type GmvHourlyPoint } from './gmv.dto';
 import { type OrderHeaderGmvRow } from './gmv-order-header.types';
@@ -20,7 +26,8 @@ export async function queryOrderHeaderGmv(
             COALESCE(SUM("refundAmountFen"), 0) AS "refundAmountFen",
             COUNT(*) AS "orderCount",
             COUNT(CASE WHEN "refundAmountFen" > 0 THEN 1 END) AS "refundOrderCount",
-            COUNT(CASE WHEN "verifyTime" IS NOT NULL THEN 1 END) AS "verifyCount"
+            COUNT(CASE WHEN "verifyTime" IS NOT NULL THEN 1 END) AS "verifyCount",
+            MAX(${sqlDatetime('"updatedAt"')}) AS "sourceUpdatedAt"
      FROM "OrderHeader"
      WHERE ${sqlDatetimeExclusiveRange('"paidTime"')}`,
     startBound,
@@ -115,7 +122,7 @@ export async function loadOrderHeaderAreaDistribution(
      LEFT JOIN "ContentPackage" cp ON cp."packageId" = oh."packageId"
      WHERE ${sqlDatetimeExclusiveRange('oh."paidTime"')}
      GROUP BY COALESCE(NULLIF(oh."areaName", ''), NULLIF(cp."areaName", ''), '未分区')
-     ORDER BY "gmvFen" DESC
+     ORDER BY "gmvFen" DESC, "key" ASC
      LIMIT ?`,
     startBound,
     endBound,
@@ -134,7 +141,7 @@ export async function loadOrderHeaderAreaDistribution(
        FROM "OrderHeader" oh
        WHERE ${sqlDatetimeExclusiveRange('oh."paidTime"')}
        GROUP BY COALESCE(NULLIF(oh."merchantName", ''), '未知商家')
-       ORDER BY "gmvFen" DESC
+       ORDER BY "gmvFen" DESC, "key" ASC
        LIMIT ?`,
       startBound,
       endBound,
@@ -172,7 +179,7 @@ export async function loadOrderHeaderCategoryDistribution(
      LEFT JOIN "ContentPackage" cp ON cp."packageId" = oh."packageId"
      WHERE ${sqlDatetimeExclusiveRange('oh."paidTime"')}
      GROUP BY COALESCE(NULLIF(cp."category", ''), '未分类')
-     ORDER BY "gmvFen" DESC
+     ORDER BY "gmvFen" DESC, "key" ASC
      LIMIT ?`,
     startBound,
     endBound,

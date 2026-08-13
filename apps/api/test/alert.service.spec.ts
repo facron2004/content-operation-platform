@@ -396,6 +396,20 @@ describe('AlertService', () => {
       expect(page1.pagination.total).toBe(3);
       expect(page2.pagination.total).toBe(3);
     });
+
+    it('bypasses the ranked aggregate cache only for an explicit manual refresh', async () => {
+      const mockGetRecommendations = vi.fn().mockResolvedValue({
+        date: '2026-06-10',
+        packages: [{ operationAlerts: [makeAlert()] }]
+      });
+      const scope = { areaIds: ['force-refresh-area'] };
+
+      await service.getOperationAlerts({}, mockGetRecommendations, scope);
+      await service.getOperationAlerts({}, mockGetRecommendations, scope);
+      await service.getOperationAlerts({}, mockGetRecommendations, scope, true);
+
+      expect(mockGetRecommendations).toHaveBeenCalledTimes(2);
+    });
   });
 
   // ---- loadResolvedAlertIds ----

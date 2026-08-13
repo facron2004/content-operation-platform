@@ -36,8 +36,10 @@ describe('residual #70 dashboard ops heavy gate', () => {
     ]);
     const src = `${opsSrc}\n${summarySrc}`;
     expect(src).toContain('withHeavyAggregateGate');
+    // Explicit reloads may bypass the TTL cache, but both normal and force
+    // cold loads must still enter the shared heavy-aggregate gate.
     expect(src).toMatch(
-      /getOrLoad\(cacheKey, false, \(\) =>\s*withHeavyAggregateGate\(\(\) =>\s*this\.computeTodayOperationConsole/
+      /getOrLoad\(cacheKey, force, \(\) =>\s*withHeavyAggregateGate\(\(\) =>\s*this\.computeTodayOperationConsole/
     );
     expect(src).toMatch(
       /getOrLoad\(cacheKey, false, \(\) =>\s*withHeavyAggregateGate\(\(\) => this\.computePerformance/

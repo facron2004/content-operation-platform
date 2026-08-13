@@ -9,7 +9,7 @@ export function formatMoney(value?: number, decimals = 0): string {
   return `${value.toLocaleString('zh-CN', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}`;
 }
 export const percent = formatRatePercent;
-export function formatTime(value?: string): string {
+export function formatTime(value?: string | null): string {
   if (!value) return '-';
   const date = new Date(value);
   return Number.isNaN(date.getTime())

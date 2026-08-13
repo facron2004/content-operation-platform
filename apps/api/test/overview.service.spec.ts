@@ -13,6 +13,7 @@ const buildPrisma = (
     skuCount: number;
     todayGmv: number;
     todayOrderCount: number;
+    sourceUpdatedAt: string | null;
     stale30SkuCount: number;
     distinctMerchants: number;
   }> = {}
@@ -22,6 +23,7 @@ const buildPrisma = (
     skuCount: 500,
     todayGmv: 12345.67,
     todayOrderCount: 78,
+    sourceUpdatedAt: '2026-07-13 07:30:00',
     stale30SkuCount: 42,
     distinctMerchants: 12
   };
@@ -39,7 +41,8 @@ const buildPrisma = (
           {
             totalGmv: Math.round(v.todayGmv * 100),
             totalGmvFen: Math.round(v.todayGmv * 100),
-            paidOrderCount: v.todayOrderCount
+            paidOrderCount: v.todayOrderCount,
+            sourceUpdatedAt: v.sourceUpdatedAt
           }
         ];
       }
@@ -91,6 +94,7 @@ describe('OverviewService.getKpis', () => {
       zeroSalesMerchants: 12,
       todayGmvFen: 1234567n,
       todayOrderCount: 78,
+      updatedAt: '2026-07-13T07:30:00.000Z',
       dataSource: 'OrderHeader'
     });
     // 42/500 = 0.084
@@ -119,5 +123,34 @@ describe('OverviewService.getKpis', () => {
     svc.invalidateCache();
     await svc.getKpis();
     expect((prisma.contentPackage.count as ReturnType<typeof vi.fn>).mock.calls.length).toBe(2);
+  });
+
+  it('force 绕过 service TTL 并重新读取本地数据库', async () => {
+    const prisma = buildPrisma();
+    const svc = new OverviewService(prisma);
+    await svc.getKpis('2026-08-05');
+    await svc.getKpis('2026-08-05');
+    expect(prisma.contentPackage.count as ReturnType<typeof vi.fn>).toHaveBeenCalledTimes(1);
+
+    await svc.getKpis('2026-08-05', true);
+
+    expect(prisma.contentPackage.count as ReturnType<typeof vi.fn>).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps updatedAt tied to the source when the GET clock changes and leaves empty days null', async () => {
+    const sourceUpdatedAt = '2026-06-01 03:04:05';
+    const svc = new OverviewService(buildPrisma({ sourceUpdatedAt }));
+
+    const first = await svc.getKpis('2026-06-01', true);
+    vi.setSystemTime(new Date('2026-07-14T08:00:00Z'));
+    const second = await svc.getKpis('2026-06-01', true);
+
+    expect(first.updatedAt).toBe('2026-06-01T03:04:05.000Z');
+    expect(second.updatedAt).toBe(first.updatedAt);
+
+    const empty = await new OverviewService(
+      buildPrisma({ todayGmv: 0, todayOrderCount: 0, sourceUpdatedAt: null })
+    ).getKpis('2026-06-02', true);
+    expect(empty.updatedAt).toBeNull();
   });
 });

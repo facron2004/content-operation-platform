@@ -12,7 +12,7 @@ import { EMPTY_ALERT_SUMMARY } from './alert-types';
 export type { AlertSummary, AlertPackageFocus, AlertItem, AlertResponse } from './alert-types';
 export { useAlertTableSummary } from './alert-summary';
 
-export function useAlerts(role: Ref<string | undefined>) {
+export function useAlerts(role: Ref<string | undefined>, canResolve: Ref<boolean>) {
   const state = createAlertState();
   let disposed = false;
   const { recordSuccess, recordError } = useOperationHistory();
@@ -47,6 +47,7 @@ export function useAlerts(role: Ref<string | undefined>) {
     resolveRequestId: () => ++state.resolveRequestId.value,
     currentResolveRequestId: () => state.resolveRequestId.value,
     isActive: () => !disposed,
+    canResolve: () => canResolve.value,
     setResolving: (v) => {
       state.resolving.value = v;
     },

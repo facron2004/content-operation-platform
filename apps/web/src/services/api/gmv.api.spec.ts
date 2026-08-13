@@ -8,7 +8,7 @@ vi.mock('../http-client', () => ({
   default: { get: mocks.get }
 }));
 
-import { getGmvDistribution } from './gmv.api';
+import { getGmvByMerchant, getGmvDistribution } from './gmv.api';
 
 describe('GMV distribution request identity', () => {
   beforeEach(() => {
@@ -34,5 +34,21 @@ describe('GMV distribution request identity', () => {
     expect(categoryUrl).toContain('dim=category');
     expect(areaUrl).toContain('dim=area');
     expect(categoryUrl).not.toBe(areaUrl);
+  });
+
+  it('keeps selected business dates in distribution and merchant request identity', async () => {
+    await Promise.all([
+      getGmvDistribution('area', 20, true, '2026-08-09'),
+      getGmvDistribution('area', 20, true, '2026-08-10'),
+      getGmvByMerchant('gmvDesc', 1, 20, true, '2026-08-09'),
+      getGmvByMerchant('gmvDesc', 1, 20, true, '2026-08-10')
+    ]);
+
+    const urls = mocks.get.mock.calls.map((call) => String(call[0]));
+    expect(urls[0]).toContain('date=2026-08-09');
+    expect(urls[1]).toContain('date=2026-08-10');
+    expect(urls[2]).toContain('date=2026-08-09');
+    expect(urls[3]).toContain('date=2026-08-10');
+    expect(new Set(urls).size).toBe(4);
   });
 });

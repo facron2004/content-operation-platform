@@ -21,6 +21,7 @@
         创建任务
       </AppleButton>
       <AppleButton
+        v-if="canResolve"
         size="sm"
         variant="success"
         :disabled="!item.alertIds?.length"
@@ -35,7 +36,7 @@
 <script setup lang="ts">
 import AppleButton from '../../../components/AppleButton.vue';
 import type { AlertPackageFocus } from '../composables/useAlerts';
-defineProps<{ item: AlertPackageFocus; resolving: boolean }>();
+defineProps<{ item: AlertPackageFocus; resolving: boolean; canResolve: boolean }>();
 defineEmits<{
   navigate: [packageId: string];
   'create-task': [packageId: string];

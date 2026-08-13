@@ -24,10 +24,10 @@ describe('residual #176 publish/fail gates match API transitions', () => {
   it('TaskDetailView canPublish/canFail are scheduled-only', async () => {
     const src = await readFile(path.join(webSrc, 'views', 'TaskDetailView.vue'), 'utf8');
     expect(src).toMatch(
-      /const canPublish = computed\(\(\)\s*=>\s*task\.value\?\.status === ['"]scheduled['"]\)/
+      /const canPublish = computed\([\s\S]{0,160}taskCapabilities\.value\.publish[\s\S]{0,80}task\.value\?\.status === ['"]scheduled['"]/
     );
     expect(src).toMatch(
-      /const canFail = computed\(\(\)\s*=>\s*task\.value\?\.status === ['"]scheduled['"]\)/
+      /const canFail = computed\([\s\S]{0,160}taskCapabilities\.value\.manage[\s\S]{0,80}task\.value\?\.status === ['"]scheduled['"]/
     );
     // No draft/waiting_audit affordance for publish.
     expect(src).not.toMatch(/canPublish[\s\S]{0,200}['"]draft['"]/);

@@ -1,7 +1,13 @@
 import { IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min, MinLength } from 'class-validator';
 import { Type } from 'class-transformer';
+import { optionalString } from '../content/dto-decorators';
 
-export class MerchantsListQueryDto {
+export class MerchantForceQueryDto {
+  @optionalString(5)
+  force?: boolean | string;
+}
+
+export class MerchantsListQueryDto extends MerchantForceQueryDto {
   @IsOptional()
   @IsString()
   @MaxLength(100)
@@ -35,7 +41,7 @@ export class MerchantsListQueryDto {
 /** Interactive merchant trend window — align with merchant-sales/data-analysis 90d read cap. */
 export const MERCHANT_TREND_MAX_DAYS = 90;
 
-export class MerchantTrendQueryDto {
+export class MerchantTrendQueryDto extends MerchantForceQueryDto {
   @IsOptional()
   @Type(() => Number)
   @IsInt()

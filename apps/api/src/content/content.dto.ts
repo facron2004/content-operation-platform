@@ -186,6 +186,9 @@ export class AlertQueryDto {
   @Max(200)
   @Type(() => Number)
   pageSize?: number;
+
+  @optionalString(5)
+  force?: boolean | string;
 }
 
 // --- Ops today query ---
@@ -194,6 +197,19 @@ export class OpsTodayQueryDto {
   @IsString()
   @IsIn([...USER_ROLES])
   role?: UserRole;
+
+  @optionalString(5)
+  force?: boolean | string;
+}
+
+export class CommunitiesQueryDto {
+  @IsOptional()
+  @IsString()
+  @IsIn([...USER_ROLES])
+  role?: UserRole;
+
+  @optionalString(5)
+  force?: boolean | string;
 }
 
 // --- Copy list query ---
@@ -281,4 +297,7 @@ export class RecommendationsQueryDto {
   @Min(1)
   @Max(200)
   pageSize?: number;
+
+  @optionalString(5)
+  force?: boolean | string;
 }

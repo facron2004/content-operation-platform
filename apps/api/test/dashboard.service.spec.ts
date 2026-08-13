@@ -297,6 +297,21 @@ describe('DashboardService', () => {
       expect(result.hotOpportunities).toEqual([]);
       expect(result.slowMovingPackages).toEqual([]);
     });
+
+    it('reuses the local payload by default and bypasses it when force is authorized', async () => {
+      const mockGetRecommendations = vi.fn().mockResolvedValue({
+        date: '2026-06-10',
+        packages: [],
+        matchedCount: 0
+      });
+
+      await service.getTodayOperationConsole(undefined, mockGetRecommendations);
+      await service.getTodayOperationConsole(undefined, mockGetRecommendations);
+      expect(mockGetRecommendations).toHaveBeenCalledTimes(1);
+
+      await service.getTodayOperationConsole(undefined, mockGetRecommendations, {}, true);
+      expect(mockGetRecommendations).toHaveBeenCalledTimes(2);
+    });
   });
 
   // ---- getDashboardSummary ----

@@ -64,6 +64,200 @@ describe('marketing and private domain center', () => {
     );
   });
 
+  it('evaluates a rule tag and writes matched member relations', async () => {
+    const tag = {
+      ...tagRow(),
+      tagId: 'tag-rule-1',
+      name: '已付费用户',
+      code: 'paid_users',
+      tagType: 'rule'
+    };
+    const updatedTag = { ...tag, memberCount: 1 };
+    const tx = {
+      userTagRelation: {
+        findMany: vi.fn().mockResolvedValue([]),
+        createMany: vi.fn().mockResolvedValue({ count: 1 }),
+        deleteMany: vi.fn()
+      },
+      userTag: {
+        update: vi.fn().mockResolvedValue(updatedTag)
+      }
+    };
+    const prisma = {
+      userTag: {
+        create: vi.fn().mockResolvedValue(tag),
+        findUniqueOrThrow: vi.fn().mockResolvedValue(updatedTag)
+      },
+      ruleConfig: {
+        create: vi.fn().mockResolvedValue({})
+      },
+      member: {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            memberId: 'member-1',
+            nickname: '张三',
+            phone: '13800000000',
+            level: 'gold',
+            pointsBalance: 100,
+            totalOrders: 1,
+            totalGmvFen: 1000n
+          }
+        ])
+      },
+      $queryRawUnsafe: vi.fn().mockResolvedValue([
+        {
+          memberId: 'member-1',
+          totalOrders: 1,
+          paidOrderCount: 1,
+          paidGmvFen: 1000n,
+          firstPaidAt: '2026-08-01 00:00:00',
+          lastPaidAt: '2026-08-10 00:00:00'
+        }
+      ]),
+      $transaction: vi.fn(async (callback: (db: unknown) => Promise<unknown>) => callback(tx))
+    } as unknown as PrismaService;
+    const service = new MarketingPrivateService(prisma, {} as FinanceAssetService);
+
+    const result = await service.createTag({
+      name: tag.name,
+      code: tag.code,
+      category: tag.category,
+      tagType: 'rule',
+      ruleJson: JSON.stringify({
+        logic: 'and',
+        conditions: [{ field: 'paidOrderCount', operator: 'gte', value: 1 }]
+      })
+    });
+
+    expect(result).toMatchObject({ tagId: tag.tagId, tagType: 'rule', memberCount: 1 });
+    expect(prisma.ruleConfig.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ type: 'user-tag' }) })
+    );
+    expect(tx.userTagRelation.createMany).toHaveBeenCalledWith({
+      data: [expect.objectContaining({ tagId: tag.tagId, memberId: 'member-1', source: 'rule' })]
+    });
+    expect(tx.userTag.update).toHaveBeenCalledWith({
+      where: { tagId: tag.tagId },
+      data: { memberCount: 1 }
+    });
+  });
+
+  it('recalculates a dynamic audience from tag relations and synchronizes memberships', async () => {
+    const existing = {
+      audienceId: 'audience-1',
+      audienceNo: 'AUD-1',
+      name: '沉睡会员',
+      description: null,
+      audienceType: 'DYNAMIC',
+      ruleJson: JSON.stringify({ tags: ['sleep'], logic: 'and' }),
+      estimatedCount: 99,
+      snapshotCount: 0,
+      status: 'disabled',
+      createdBy: 'admin-1',
+      createdAt: new Date('2026-08-11T00:00:00.000Z'),
+      updatedAt: new Date('2026-08-11T00:00:00.000Z')
+    };
+    const updated = {
+      ...existing,
+      estimatedCount: 2,
+      updatedAt: new Date('2026-08-12T00:00:00.000Z')
+    };
+    const tx = {
+      audienceMember: {
+        findMany: vi.fn().mockResolvedValue([
+          { memberId: 'member-2', exitedAt: null },
+          { memberId: 'member-3', exitedAt: null }
+        ]),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+        createMany: vi.fn().mockResolvedValue({ count: 1 })
+      },
+      audience: { update: vi.fn().mockResolvedValue(updated) }
+    };
+    const prisma = {
+      audience: { findUnique: vi.fn().mockResolvedValue(existing) },
+      userTag: {
+        findMany: vi.fn().mockResolvedValue([{ tagId: 'tag-sleep', code: 'sleep' }])
+      },
+      userTagRelation: {
+        findMany: vi.fn().mockResolvedValue([
+          { tagId: 'tag-sleep', memberId: 'member-1' },
+          { tagId: 'tag-sleep', memberId: 'member-2' }
+        ])
+      },
+      $transaction: vi.fn(async (callback: (db: unknown) => Promise<unknown>) => callback(tx))
+    } as unknown as PrismaService;
+    const service = new MarketingPrivateService(prisma, {} as FinanceAssetService);
+
+    const result = await service.recalculateAudience('audience-1');
+
+    expect(result).toMatchObject({ estimatedCount: 2, snapshotCount: 0, status: 'disabled' });
+    expect(tx.audienceMember.updateMany).toHaveBeenCalledWith({
+      where: { audienceId: 'audience-1', memberId: { in: ['member-3'] } },
+      data: { exitedAt: expect.any(Date) }
+    });
+    expect(tx.audienceMember.createMany).toHaveBeenCalledWith({
+      data: [expect.objectContaining({ memberId: 'member-1', source: 'dynamic' })]
+    });
+    expect(tx.audience.update).toHaveBeenCalledWith({
+      where: { audienceId: 'audience-1' },
+      data: { estimatedCount: 2, snapshotCount: 0 }
+    });
+  });
+
+  it('creates a snapshot audience with rule-derived counts instead of a submitted estimate', async () => {
+    const now = new Date('2026-08-12T00:00:00.000Z');
+    const tx = {
+      audience: {
+        create: vi
+          .fn()
+          .mockImplementation(({ data }) =>
+            Promise.resolve({ ...data, status: 'active', createdAt: now, updatedAt: now })
+          )
+      },
+      audienceMember: { createMany: vi.fn().mockResolvedValue({ count: 1 }) }
+    };
+    const prisma = {
+      userTag: {
+        findMany: vi.fn().mockResolvedValue([{ tagId: 'tag-vip', code: 'vip' }])
+      },
+      userTagRelation: {
+        findMany: vi.fn().mockResolvedValue([{ tagId: 'tag-vip', memberId: 'member-1' }])
+      },
+      $transaction: vi.fn(async (callback: (db: unknown) => Promise<unknown>) => callback(tx))
+    } as unknown as PrismaService;
+    const service = new MarketingPrivateService(prisma, {} as FinanceAssetService);
+
+    const result = await service.createAudience(
+      {
+        name: 'VIP 快照',
+        audienceType: 'SNAPSHOT',
+        ruleJson: JSON.stringify({ tags: ['vip'], logic: 'or' })
+      },
+      { userId: 'admin-1' }
+    );
+
+    expect(result).toMatchObject({ estimatedCount: 1, snapshotCount: 1, status: 'active' });
+    expect(tx.audienceMember.createMany).toHaveBeenCalledWith({
+      data: [expect.objectContaining({ memberId: 'member-1', source: 'snapshot' })]
+    });
+  });
+
+  it('rejects unsupported audience rule fields instead of reporting a fake recalculation', async () => {
+    const prisma = {
+      audience: {
+        findUnique: vi.fn().mockResolvedValue({
+          audienceId: 'audience-1',
+          ruleJson: JSON.stringify({ tags: [], age: 20 })
+        })
+      }
+    } as unknown as PrismaService;
+    const service = new MarketingPrivateService(prisma, {} as FinanceAssetService);
+
+    await expect(service.recalculateAudience('audience-1')).rejects.toThrow(
+      '人群规则暂不支持字段：age'
+    );
+  });
+
   it('writes benefit grants through the shared append-only asset ledger', async () => {
     const tx = {
       member: { findUnique: vi.fn().mockResolvedValue(null) },

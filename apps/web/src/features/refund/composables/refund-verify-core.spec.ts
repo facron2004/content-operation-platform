@@ -157,8 +157,34 @@ describe('refund verify request lifecycle', () => {
     expect(state.refundToday.value?.date).toBe('new');
     expect(state.loadError.value).toBeNull();
     expect(state.loading.value).toBe(false);
-    expect(mocks.getRefundToday).toHaveBeenNthCalledWith(1, '2026-08-05', 'day');
-    expect(mocks.getRefundToday).toHaveBeenNthCalledWith(2, '2026-08-05', 'day');
+    expect(mocks.getRefundToday).toHaveBeenNthCalledWith(1, '2026-08-05', 'day', false);
+    expect(mocks.getRefundToday).toHaveBeenNthCalledWith(2, '2026-08-05', 'day', false);
+  });
+
+  it('uses force only for an explicit manual full reload', async () => {
+    const state = createRefundVerifyState();
+    state.kpiDate.value = '2026-08-05';
+    scope = effectScope();
+    const loaders = scope.run(() => bindRefundVerifyLoaders(state))!;
+
+    await loaders.reload();
+    expect(mocks.getRefundToday).toHaveBeenLastCalledWith('2026-08-05', 'day', false);
+    expect(mocks.getRefundTrend).toHaveBeenLastCalledWith(7, '2026-08-05', 'day', false);
+    expect(mocks.getRefundTopMerchants).toHaveBeenLastCalledWith(
+      expect.objectContaining({ date: '2026-08-05', window: 'day' }),
+      false
+    );
+
+    await loaders.reload(true);
+    expect(mocks.getRefundToday).toHaveBeenLastCalledWith('2026-08-05', 'day', true);
+    expect(mocks.getRefundTrend).toHaveBeenLastCalledWith(7, '2026-08-05', 'day', true);
+    expect(mocks.getRefundTopMerchants).toHaveBeenLastCalledWith(
+      expect.objectContaining({ date: '2026-08-05', window: 'day' }),
+      true
+    );
+
+    await loaders.loadTrend();
+    expect(mocks.getRefundTrend).toHaveBeenLastCalledWith(7, '2026-08-05', 'day', false);
   });
 
   it('does not let a stale trend error replace the latest trend', async () => {
@@ -183,8 +209,8 @@ describe('refund verify request lifecycle', () => {
 
     expect(state.trend.value[0]?.date).toBe('new');
     expect(state.loadError.value).toBeNull();
-    expect(mocks.getRefundTrend).toHaveBeenNthCalledWith(1, 30, '2026-08-05', 'day');
-    expect(mocks.getRefundTrend).toHaveBeenNthCalledWith(2, 30, '2026-08-05', 'day');
+    expect(mocks.getRefundTrend).toHaveBeenNthCalledWith(1, 30, '2026-08-05', 'day', false);
+    expect(mocks.getRefundTrend).toHaveBeenNthCalledWith(2, 30, '2026-08-05', 'day', false);
   });
 
   it('keeps the latest merchant page loading state while an earlier response resolves', async () => {

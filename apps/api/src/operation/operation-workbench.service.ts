@@ -31,7 +31,7 @@ export class OperationWorkbenchService {
 
     return {
       date: gmv.date,
-      updatedAt: new Date().toISOString(),
+      updatedAt: gmv.updatedAt,
       dataSources: [...new Set([gmv.dataSource, catalog.dataSource])],
       kpis: {
         gmv,

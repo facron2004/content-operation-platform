@@ -88,6 +88,10 @@
     {
       "name": "0022_v2_gap_center_entities",
       "sha256": "17f00e1eed36614bf990f89d5907b2ecf298fef324797a2b400c17f265b4ce69"
+    },
+    {
+      "name": "0023_member_invitation_hierarchy",
+      "sha256": "033b7d3ed97cb4c4611a008ac523b323fc617f1e82d07ba18d40e1700a8d3149"
     }
   ],
   "sourceEquivalences": [

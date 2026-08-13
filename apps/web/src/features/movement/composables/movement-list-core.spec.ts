@@ -161,6 +161,24 @@ describe('movement list request lifecycle', () => {
     expect(state.loading.value).toBe(false);
   });
 
+  it('only forwards force to both reads for an explicit manual reload', async () => {
+    mocks.getMovementToday.mockReset().mockResolvedValue(todayFor('2026-08-05'));
+    mocks.getMovementStagnant.mockReset().mockResolvedValue(listFor('package-a'));
+    mocks.getMovementMoving.mockReset();
+    scope = effectScope();
+    const state = createMovementListState();
+    state.kpiDate.value = '2026-08-05';
+    const loaders = scope.run(() => bindMovementListLoaders(state))!;
+
+    await loaders.reload();
+    await loaders.reload(true);
+
+    expect(mocks.getMovementToday).toHaveBeenNthCalledWith(1, '2026-08-05', false);
+    expect(mocks.getMovementToday).toHaveBeenNthCalledWith(2, '2026-08-05', true);
+    expect(mocks.getMovementStagnant.mock.calls[0]?.[1]).toBe(false);
+    expect(mocks.getMovementStagnant.mock.calls[1]?.[1]).toBe(true);
+  });
+
   it('ignores late list data and blocks new requests after scope disposal', async () => {
     const pending = createDeferred<MovementListResponse>();
     mocks.getMovementStagnant.mockReset().mockReturnValue(pending.promise);

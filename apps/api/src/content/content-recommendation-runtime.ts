@@ -138,7 +138,15 @@ export function createRecommendationRuntime(
       cache.clear();
       inFlight.clear();
     },
-    getRecommendations: (query: RecommendQuery) =>
-      getOrComputeRecommendations({ query, cache, inFlight, ttlMs, maxSize, compute })
+    getRecommendations: (query: RecommendQuery, force = false) => {
+      if (force) {
+        const key = recommendationCacheKey(query);
+        cache.delete(key);
+        // Detach only this query's old flight. Its completion guard prevents it
+        // from replacing the deliberately refreshed result.
+        inFlight.delete(key);
+      }
+      return getOrComputeRecommendations({ query, cache, inFlight, ttlMs, maxSize, compute });
+    }
   };
 }

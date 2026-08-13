@@ -2,18 +2,6 @@
   gap: var(--page-gap);
 }
 
-.user-center-hero {
-  display: flex;
-  align-items: stretch;
-  justify-content: space-between;
-  gap: 18px;
-  padding: 16px 18px;
-  background:
-    radial-gradient(circle at 92% 0%, rgba(var(--accent-rgb), 0.12), transparent 34%),
-    linear-gradient(180deg, var(--panel) 0%, var(--soft) 100%);
-}
-
-.user-center-hero h1,
 .section-heading h2,
 .user-detail-header h2 {
   margin: 4px 0 0;
@@ -22,26 +10,6 @@
   letter-spacing: -0.02em;
 }
 
-.user-center-hero h1 {
-  font-size: 24px;
-}
-
-.hero-description {
-  max-width: 62ch;
-  margin: 8px 0 0;
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.5;
-}
-
-.user-center-hero__actions {
-  display: flex;
-  align-items: flex-end;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.source-pill,
 .section-meta {
   display: inline-flex;
   align-items: center;
@@ -222,6 +190,36 @@
   white-space: nowrap;
 }
 
+.user-detail-referral {
+  display: grid;
+  gap: 8px;
+  padding-bottom: 12px;
+}
+
+.user-detail-referral div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--soft);
+}
+
+.user-detail-referral span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.user-detail-referral strong {
+  overflow: hidden;
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .user-tags {
   display: flex;
   gap: 6px;
@@ -303,10 +301,6 @@
 }
 
 @media (max-width: 760px) {
-  .user-center-hero {
-    flex-direction: column;
-  }
-
   .user-center-metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }

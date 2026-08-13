@@ -2,7 +2,7 @@
   <div class="chart-row chart-row-main">
     <section class="panel chart-card chart-card-wide proto-chart-card">
       <header class="proto-chart-header">
-        <h3>GMV趋势</h3>
+        <h3>净 GMV 趋势</h3>
         <div class="chart-controls">
           <el-radio-group
             :model-value="trendGranularity"
@@ -31,10 +31,10 @@
       </header>
       <div class="proto-chart-legend">
         <span class="legend-dot legend-gmv" />
-        GMV（元）
+        净 GMV（元）
         <span v-if="latestPoint" class="legend-latest">
           {{ latestDate }} ·
-          <strong>GMV ¥{{ formatNumber(latestPoint) }}</strong>
+          <strong>净 GMV ¥{{ formatNumber(latestPoint) }}</strong>
         </span>
       </div>
       <ChartPanel :option="trendOption" class="proto-chart-panel" />
@@ -57,9 +57,7 @@ const props = defineProps<GmvChartProps>();
 const emit = defineEmits<{
   'update:trendGranularity': [value: 'day' | 'week' | 'month'];
   'update:trendMode': [value: 'volume' | 'rates' | 'mix'];
-  'update:distDim': [value: 'area' | 'category'];
   trendChange: [];
-  distChange: [];
 }>();
 
 const { onGranularityChange, onModeChange } = createGmvChartsHandlers(emit);
@@ -176,9 +174,9 @@ const latestDate = computed(() => {
   min-height: 0;
 }
 
-.proto-chart-panel :deep(.chart-shell) {
+.proto-chart-card .proto-chart-panel :deep(.chart-shell) {
   flex: 1;
-  min-height: 220px;
+  min-height: 168px;
   height: 100%;
 }
 
@@ -186,6 +184,7 @@ const latestDate = computed(() => {
   display: grid;
   grid-template-columns: 1fr;
   gap: 20px;
+  align-items: stretch;
   height: 100%;
 }
 

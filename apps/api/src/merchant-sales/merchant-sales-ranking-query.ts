@@ -2,6 +2,7 @@
 import type { PrismaService } from '../prisma/prisma.service';
 import { GMV_TOP_MERCHANTS_LIMIT } from '../common/sql-chunk';
 import { SQL_GMV_SS } from '../common/gmv-math';
+import { rateByCount } from '../common';
 import { whereArgsForWindow, whereClauseForWindow, sortColumn } from './merchant-sales-window';
 import { queryMerchantDistinctPackageCounts } from './merchant-sales-summary-query';
 import type {
@@ -37,8 +38,8 @@ export function mapRankingRow(r: RankingSqlRow): MerchantSalesRankingRow {
     gmvRefund: refund,
     gmvVerify: verify,
     // Unified 单数口径: 退款率 = 退款单数 / 支付单数, 核销率 = 核销单数 / 支付单数.
-    refundRate: paidOrderCount > 0 ? refundCount / paidOrderCount : 0,
-    verifyRate: paidOrderCount > 0 ? verifyCount / paidOrderCount : 0,
+    refundRate: rateByCount(refundCount, paidOrderCount),
+    verifyRate: rateByCount(verifyCount, paidOrderCount),
     paidOrderCount,
     orderCount: Number(r.orderCount),
     packageCount: Number(r.packageCount)

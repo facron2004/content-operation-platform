@@ -37,7 +37,7 @@ test('repository migration policy pins every canonical migration source', () => 
 
   assert.deepEqual(result.errors, []);
   assert.equal(result.policy?.schemaVersion, 1);
-  assert.equal(result.policy?.canonicalMigrations.length, 21);
+  assert.equal(result.policy?.canonicalMigrations.length, 23);
   assert.deepEqual(
     result.policy?.sourceEquivalences.map((item) => item.migrationName),
     ['0004_drop_legacy_float_columns']

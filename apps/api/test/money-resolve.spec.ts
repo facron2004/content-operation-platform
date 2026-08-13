@@ -20,7 +20,9 @@ describe('money-resolve policy', () => {
 
   it('today always uses OrderHeader even when zeros', async () => {
     const prisma = {
-      $queryRawUnsafe: vi.fn().mockResolvedValue([{ totalGmvFen: 0n, paidOrderCount: 0 }]),
+      $queryRawUnsafe: vi
+        .fn()
+        .mockResolvedValue([{ totalGmvFen: 0n, paidOrderCount: 0, sourceUpdatedAt: null }]),
       dailyMetrics: {
         findUnique: vi.fn().mockResolvedValue({ totalGmvFen: 99_900n, paidOrderCount: 9 })
       }
@@ -31,6 +33,7 @@ describe('money-resolve policy', () => {
       date: '2026-07-13',
       totalGmvFen: 0n,
       paidOrderCount: 0,
+      updatedAt: null,
       dataSource: 'OrderHeader'
     });
     expect(prisma.dailyMetrics.findUnique).not.toHaveBeenCalled();
@@ -44,7 +47,8 @@ describe('money-resolve policy', () => {
           date: '2026-07-01',
           totalGmvFen: 500_000n,
           totalRefundFen: 20_000n,
-          paidOrderCount: 40
+          paidOrderCount: 40,
+          updatedAt: new Date('2026-07-02T03:04:05.000Z')
         })
       }
     } as unknown as MoneyPrisma;
@@ -52,12 +56,28 @@ describe('money-resolve policy', () => {
     const result = await resolveDayGmvMoney(prisma, '2026-07-01');
     expect(result.dataSource).toBe('DailyMetrics');
     expect(result.totalGmvFen).toBe(480_000n);
+    expect(result.updatedAt).toBe('2026-07-02T03:04:05.000Z');
     expect(prisma.$queryRawUnsafe).not.toHaveBeenCalled();
+    expect(prisma.dailyMetrics.findUnique).toHaveBeenCalledWith({
+      where: { date: '2026-07-01' },
+      select: {
+        totalGmvFen: true,
+        totalRefundFen: true,
+        paidOrderCount: true,
+        updatedAt: true
+      }
+    });
   });
 
   it('history falls back to OrderHeader when DailyMetrics missing', async () => {
     const prisma = {
-      $queryRawUnsafe: vi.fn().mockResolvedValue([{ totalGmvFen: 32_100n, paidOrderCount: 7 }]),
+      $queryRawUnsafe: vi.fn().mockResolvedValue([
+        {
+          totalGmvFen: 32_100n,
+          paidOrderCount: 7,
+          sourceUpdatedAt: '2026-06-15 09:08:07'
+        }
+      ]),
       dailyMetrics: { findUnique: vi.fn().mockResolvedValue(null) }
     } as unknown as MoneyPrisma;
 
@@ -66,6 +86,7 @@ describe('money-resolve policy', () => {
       date: '2026-06-15',
       totalGmvFen: 32_100n,
       paidOrderCount: 7,
+      updatedAt: '2026-06-15T09:08:07.000Z',
       dataSource: 'OrderHeader'
     });
   });

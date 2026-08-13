@@ -17,19 +17,30 @@ describe('GMV OrderHeader 核销额口径', () => {
           "paidAmountCardFen" INTEGER,
           "verifyAmountFen" INTEGER,
           "refundAmountFen" INTEGER,
-          "verifyTime" TEXT
+          "verifyTime" TEXT,
+          "updatedAt" TEXT
         )
       `);
       const insert = (args: InValue[]) =>
         client.execute({
           sql: `INSERT INTO "OrderHeader" (
             "paidTime", "paidAmountFen", "paidAmountWalletFen", "paidAmountBonusFen",
-            "paidAmountCardFen", "verifyAmountFen", "refundAmountFen", "verifyTime"
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            "paidAmountCardFen", "verifyAmountFen", "refundAmountFen", "verifyTime", "updatedAt"
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           args
         });
-      await insert(['2026-07-03 01:00:00', 10000, 0, 0, 0, 5000, 0, '2026-07-03 02:00:00']);
-      await insert(['2026-07-03 03:00:00', 5000, 0, 0, 0, 999, 0, null]);
+      await insert([
+        '2026-07-03 01:00:00',
+        10000,
+        0,
+        0,
+        0,
+        5000,
+        0,
+        '2026-07-03 02:00:00',
+        '2026-07-03 08:00:00'
+      ]);
+      await insert(['2026-07-03 03:00:00', 5000, 0, 0, 0, 999, 0, null, '2026-07-03 09:00:00']);
 
       const prisma = {
         $queryRawUnsafe: async <T = unknown>(sql: string, ...args: InValue[]) =>
@@ -41,6 +52,7 @@ describe('GMV OrderHeader 核销额口径', () => {
       expect(Number(aggregate?.verifyAmountFen)).toBe(5000);
       expect(Number(aggregate?.verifyCount)).toBe(1);
       expect(Number(aggregate?.orderCount)).toBe(2);
+      expect(aggregate?.sourceUpdatedAt).toBe('2026-07-03 09:00:00');
 
       const [trend] = await queryOrderHeaderTrendAgg(prisma, start, end);
       expect(trend?.date).toBe('2026-07-03');

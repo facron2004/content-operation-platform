@@ -128,6 +128,18 @@ describe('AI copy config request lifecycle', () => {
     expect(config.configForm.model).toBe('latest-model');
   });
 
+  it('uses cached status for normal loads and bypasses it for the manual refresh', async () => {
+    mocks.getAICopyStatus.mockResolvedValue(statusFor('model'));
+    scope = effectScope();
+    const config = scope.run(() => useAICopyConfig())!;
+
+    await config.loadAICopyStatus();
+    await config.loadAICopyStatus(true);
+
+    expect(mocks.getAICopyStatus).toHaveBeenNthCalledWith(1, false);
+    expect(mocks.getAICopyStatus).toHaveBeenNthCalledWith(2, true);
+  });
+
   it('exposes a save failure and clears it after a successful retry', async () => {
     mocks.updateAICopyConfig
       .mockRejectedValueOnce(new Error('save unavailable'))

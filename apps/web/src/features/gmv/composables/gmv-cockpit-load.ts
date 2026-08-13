@@ -13,12 +13,10 @@ import {
   loadGmvKpis,
   loadGmvTopMerchants,
   loadGmvTrend,
-  type GmvActivityRow,
   type GmvAlertItem,
   type GmvCategoryRow,
   type GmvChannelRow,
   type GmvFunnelStage,
-  type GmvHeatPoint,
   type GmvRequestGuard
 } from './gmv-cockpit-core';
 import { loadGmvCockpitExtras } from './gmv-cockpit-extras';
@@ -33,7 +31,7 @@ export function createGmvCockpitLoadAll(state: {
   hourly: Ref<GmvHourlyPoint[]>;
   distDim: Ref<'area' | 'category'>;
   distribution: Ref<GmvDistributionRow[]>;
-  merchantSort: Ref<'gmvDesc' | 'refundDesc' | 'verifyDesc'>;
+  merchantSort: Ref<'gmvDesc' | 'refundDesc' | 'verifyDesc' | 'orderDesc'>;
   merchantPage: Ref<number>;
   merchantPageSize: Ref<number>;
   merchantHasMore: Ref<boolean>;
@@ -48,9 +46,6 @@ export function createGmvCockpitLoadAll(state: {
   categories: Ref<GmvCategoryRow[]>;
   channels: Ref<GmvChannelRow[]>;
   funnel: Ref<GmvFunnelStage[]>;
-  activities: Ref<GmvActivityRow[]>;
-  heatPoints: Ref<GmvHeatPoint[]>;
-  heatCity: Ref<string>;
   alerts: Ref<GmvAlertItem[]>;
 }) {
   return async function loadAll(isCurrent: GmvRequestGuard = () => true) {
@@ -69,6 +64,7 @@ export function createGmvCockpitLoadAll(state: {
       loadGmvHourly(state.kpiDate.value, state.hourly, state.loadError, isCurrent),
       loadGmvDistribution(
         state.distDim.value,
+        state.kpiDate.value,
         state.distribution,
         state.loadError,
         state.distributionTruncated,
@@ -78,6 +74,7 @@ export function createGmvCockpitLoadAll(state: {
       ),
       loadGmvTopMerchants({
         sort: state.merchantSort.value,
+        date: state.kpiDate.value,
         page: state.merchantPage.value,
         pageSize: state.merchantPageSize.value,
         topMerchants: state.topMerchants,
@@ -90,14 +87,12 @@ export function createGmvCockpitLoadAll(state: {
     ]);
     if (!isCurrent()) return;
     await loadGmvCockpitExtras({
+      date: state.kpiDate.value,
       kpi: state.kpi,
       extrasError: state.extrasError,
       categories: state.categories,
       channels: state.channels,
       funnel: state.funnel,
-      activities: state.activities,
-      heatPoints: state.heatPoints,
-      heatCity: state.heatCity,
       alerts: state.alerts,
       isCurrent
     });

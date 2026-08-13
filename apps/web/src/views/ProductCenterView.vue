@@ -1,20 +1,10 @@
 <template>
   <section v-loading="loading" class="page-stack product-center-view">
-    <div class="product-center-hero panel">
-      <div>
-        <p class="eyebrow">V2.0.1 / PRODUCT & INVENTORY</p>
-        <h1>{{ pageMeta.title }}</h1>
-        <p class="hero-description">
-          {{ pageMeta.description }}
-        </p>
-      </div>
-      <div class="product-center-hero__actions">
-        <span class="source-pill">{{ pageMeta.source }}</span>
-        <el-button :loading="loading" @click="reload">
-          <el-icon><Refresh /></el-icon>
-          刷新
-        </el-button>
-      </div>
+    <div class="product-center-topbar">
+      <el-button :loading="loading || syncing" @click="syncAndReload">
+        <el-icon><Refresh /></el-icon>
+        {{ roleStore.isAdmin ? '同步并刷新' : '刷新' }}
+      </el-button>
     </div>
 
     <ErrorAlert :message="error" />
@@ -135,8 +125,15 @@
               <el-tag effect="plain" :type="inventoryType(selectedProduct.inventoryStatus)">
                 {{ inventoryLabel(selectedProduct.inventoryStatus) }}
               </el-tag>
-              <el-button size="small" @click="openEditDialog">编辑申请</el-button>
-              <el-button size="small" type="primary" @click="openInventoryDialog">
+              <el-button v-if="canWritePackages" size="small" @click="openEditDialog">
+                编辑申请
+              </el-button>
+              <el-button
+                v-if="canWritePackages"
+                size="small"
+                type="primary"
+                @click="openInventoryDialog"
+              >
                 调整库存
               </el-button>
             </div>
@@ -201,7 +198,7 @@
                   <el-tag size="small" effect="plain" :type="changeType(change.status)">
                     {{ changeLabel(change.status) }}
                   </el-tag>
-                  <template v-if="change.status === 'requested'">
+                  <template v-if="canWritePackages && change.status === 'requested'">
                     <el-button
                       size="small"
                       text
@@ -285,7 +282,12 @@
       </aside>
     </div>
 
-    <el-dialog v-model="editDialogOpen" title="提交商品编辑申请" width="520px">
+    <el-dialog
+      v-if="canWritePackages"
+      v-model="editDialogOpen"
+      title="提交商品编辑申请"
+      width="520px"
+    >
       <el-form label-width="92px" @submit.prevent="submitEdit">
         <el-form-item label="商品名称">
           <el-input v-model="editForm.packageName" />
@@ -312,7 +314,7 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="inventoryDialogOpen" title="调整库存" width="440px">
+    <el-dialog v-if="canWritePackages" v-model="inventoryDialogOpen" title="调整库存" width="440px">
       <el-form label-width="92px">
         <el-form-item label="调整数量" required>
           <el-input-number v-model="inventoryForm.delta" :min="-100000" :max="100000" />
@@ -339,6 +341,8 @@ import { Refresh } from '@element-plus/icons-vue';
 import { useRoute } from 'vue-router';
 import ErrorAlert from '../components/ErrorAlert.vue';
 import { useProductCenter } from '../features/product-center/useProductCenter';
+import { canWritePackages as resolveCanWritePackages } from '../features/write-action-permissions';
+import { useRoleStore } from '../stores/role';
 import {
   adjustProductInventory,
   approveProductEdit,
@@ -354,6 +358,7 @@ const {
   inventoryStatus,
   loading,
   detailLoading,
+  syncing,
   error,
   detailError,
   items,
@@ -363,6 +368,7 @@ const {
   summary,
   pagination,
   reload,
+  syncAndReload,
   applyFilters,
   setPage,
   selectProduct,
@@ -374,31 +380,26 @@ const {
 } = useProductCenter();
 
 const route = useRoute();
+const roleStore = useRoleStore();
+const canWritePackages = computed(() =>
+  resolveCanWritePackages(roleStore.effectiveRoles, roleStore.permissions)
+);
 const pageMeta = computed(() => {
   if (route.path.startsWith('/packages')) {
     return {
-      title: '套餐管理',
-      description: '基于 ContentPackage 查看套餐档案、可售状态与库存，不把组合套餐关系误当作普通套餐。',
       itemLabel: '套餐',
-      tableTitle: '套餐库存清单',
-      source: 'ContentPackage + SalesSnapshot'
+      tableTitle: '套餐库存清单'
     };
   }
   if (route.path.startsWith('/inventory')) {
     return {
-      title: '库存中心',
-      description: '按库存状态查看 ContentPackage 的可用量、库存快照与调整流水。',
       itemLabel: '库存 SKU',
-      tableTitle: '库存清单',
-      source: 'ContentPackage + InventoryOperation + SalesSnapshot'
+      tableTitle: '库存清单'
     };
   }
   return {
-    title: '商品列表',
-    description: '统一查看商品档案、库存状态和库存快照，优先识别售罄与低库存商品。',
     itemLabel: '商品 SKU',
-    tableTitle: '商品库存清单',
-    source: 'ContentPackage + SalesSnapshot'
+    tableTitle: '商品库存清单'
   };
 });
 
@@ -419,7 +420,7 @@ const editForm = reactive({
 const inventoryForm = reactive({ delta: 1, reason: '' });
 
 function openEditDialog() {
-  if (!selectedProduct.value) return;
+  if (!canWritePackages.value || !selectedProduct.value) return;
   editForm.packageName = selectedProduct.value.packageName;
   editForm.category = selectedProduct.value.category;
   editForm.salePriceFen = selectedProduct.value.salePriceFen ?? '';
@@ -430,12 +431,14 @@ function openEditDialog() {
 }
 
 function openInventoryDialog() {
+  if (!canWritePackages.value) return;
   inventoryForm.delta = 1;
   inventoryForm.reason = '';
   inventoryDialogOpen.value = true;
 }
 
 async function submitEdit() {
+  if (!canWritePackages.value) return;
   if (!selectedPackageId.value || !editForm.reason.trim()) {
     ElMessage.warning('请填写商品编辑原因');
     return;
@@ -465,6 +468,7 @@ async function submitEdit() {
 }
 
 async function submitInventory() {
+  if (!canWritePackages.value) return;
   if (!selectedPackageId.value || !inventoryForm.delta || !inventoryForm.reason.trim()) {
     ElMessage.warning('请填写非零库存调整数量和原因');
     return;
@@ -487,10 +491,12 @@ async function submitInventory() {
 }
 
 async function approveChange(requestId: string) {
+  if (!canWritePackages.value) return;
   try {
     await ElMessageBox.confirm('通过后会把申请字段落到商品档案，是否继续？', '审核商品编辑', {
       type: 'warning'
     });
+    if (!canWritePackages.value) return;
     actionLoading.value = true;
     await approveProductEdit(
       requestId,
@@ -509,11 +515,13 @@ async function approveChange(requestId: string) {
 }
 
 async function rejectChange(requestId: string) {
+  if (!canWritePackages.value) return;
   try {
     const result = await ElMessageBox.prompt('请输入驳回原因', '驳回商品编辑', {
       inputValidator: (value) => (value?.trim() ? true : '驳回原因不能为空'),
       inputErrorMessage: '驳回原因不能为空'
     });
+    if (!canWritePackages.value) return;
     actionLoading.value = true;
     await rejectProductEdit(
       requestId,

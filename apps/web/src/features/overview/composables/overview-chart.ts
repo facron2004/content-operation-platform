@@ -32,11 +32,11 @@ export function buildOverviewTrendOption(trend: OverviewTrendPoint[]) {
   if (trend.length === 0) return {};
   return buildDualAxisLine({
     categories: trend.map((p) => p.date.slice(5)),
-    leftName: 'GMV',
+    leftName: '净 GMV',
     rightName: '成单数',
     series: [
       {
-        name: 'GMV',
+        name: '净 GMV',
         data: trend.map((p) => Number(readFen(p, 'gmv') ?? 0) / 100),
         yAxisIndex: 0,
         color: CHART_COLORS.primary,

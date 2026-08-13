@@ -32,16 +32,6 @@ export const netGmvParts = (
 export const rateAgainstGmv = (amount: number, gmv: number): number => safeRatio(amount, gmv);
 
 /**
- * Net GMV (gross − refund) must never be negative in a KPI: a period or merchant
- * cannot "un-earn" more than it actually sold. Floor at 0 so the GMV card stays
- * sane when refunds exceed recognized GMV — e.g. orders paid fully by
- * coupon/bonus carry paidAmountFen=0 yet still get refunded, or refunds land on a
- * low-sales day. The separate refund / refundRate fields still expose the full
- * refund magnitude, so nothing is hidden, only the KPI floor is applied.
- */
-export const floorNonNegativeFen = (fen: bigint): bigint => (fen < 0n ? 0n : fen);
-
-/**
  * Canonical 单数口径 for 退款率/核销率 across the whole app:
  *   refundRate  = refundCount  / paidOrderCount
  *   verifyRate  = verifyCount  / paidOrderCount

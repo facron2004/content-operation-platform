@@ -241,6 +241,37 @@ describe('merchant page request lifecycle', () => {
     expect(page.profile.value?.merchantId).toBe('merchant-retried');
   });
 
+  it('forces only the manual reload through list, profile, and SKU cache boundaries', async () => {
+    scope = effectScope();
+    const page = scope.run(() => useMerchants())!;
+
+    mocks.mounted?.();
+    await vi.waitFor(() => expect(mocks.listMerchants).toHaveBeenCalled());
+    expect(mocks.listMerchants.mock.calls.at(-1)?.[0]).not.toHaveProperty('force');
+    page.search.value = 'merchant';
+    await page.onFilterChange();
+    expect(mocks.listMerchants.mock.calls.at(-1)?.[0]).not.toHaveProperty('force');
+    page.hasMore.value = true;
+    const callsBeforePaging = mocks.listMerchants.mock.calls.length;
+    page.nextPage();
+    await vi.waitFor(() =>
+      expect(mocks.listMerchants).toHaveBeenCalledTimes(callsBeforePaging + 1)
+    );
+    expect(mocks.listMerchants.mock.calls.at(-1)?.[0]).not.toHaveProperty('force');
+
+    page.selectedMerchantId.value = 'merchant';
+    await page.setDetailDays(60);
+    expect(mocks.getMerchantProfile).toHaveBeenLastCalledWith('merchant', false);
+    expect(mocks.getMerchantSkus).toHaveBeenLastCalledWith('merchant', 60, false);
+
+    await page.reload();
+    expect(mocks.listMerchants.mock.calls.at(-1)?.[0]).toEqual(
+      expect.objectContaining({ force: true })
+    );
+    expect(mocks.getMerchantProfile).toHaveBeenLastCalledWith('merchant', true);
+    expect(mocks.getMerchantSkus).toHaveBeenLastCalledWith('merchant', 60, true);
+  });
+
   it('ignores late list data and blocks new requests after scope disposal', async () => {
     const pending = createDeferred<MerchantListResponse>();
     mocks.listMerchants.mockReset().mockReturnValue(pending.promise);

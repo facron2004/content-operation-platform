@@ -19,7 +19,7 @@ describe('residual #230 GMV top-merchants pagination', () => {
     const src = await readFile(path.join(__dirname, 'gmv-cockpit-core.ts'), 'utf8');
     expect(src).toMatch(/merchantPage:\s*ref\(1\)/);
     expect(src).toMatch(/merchantHasMore:\s*ref\(false\)/);
-    expect(src).toMatch(/getGmvByMerchant\(params\.sort,\s*params\.page,\s*params\.pageSize/);
+    expect(src).toMatch(/getGmvByMerchant\(\s*params\.sort,\s*params\.page,\s*params\.pageSize/);
     expect(src).toMatch(/params\.hasMore\.value\s*=\s*!!result\.hasMore/);
     // Must not hard-code page 1 only path as the sole call.
     expect(src).not.toMatch(/getGmvByMerchant\([^,]+,\s*1,\s*20/);

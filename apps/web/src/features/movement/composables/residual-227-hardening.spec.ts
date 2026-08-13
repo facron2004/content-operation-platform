@@ -17,20 +17,15 @@ describe('residual #227 movement today as-of date', () => {
     const src = await readFile(path.join(__dirname, 'movement-list-core.ts'), 'utf8');
     expect(src).toMatch(/kpiDate:\s*Ref<string>/);
     expect(src).toMatch(/kpiDate:\s*ref\(''\)/);
-    expect(src).toMatch(/getMovementToday\(params\.date\s*\|\|\s*undefined\)/);
+    expect(src).toMatch(/getMovementToday\(params\.date\s*\|\|\s*undefined,\s*params\.force\)/);
     expect(src).toMatch(/date:\s*state\.kpiDate\.value/);
   });
 
-  it('MovementHero exposes date picker', async () => {
-    const src = await readFile(path.join(__dirname, '../components/MovementHero.vue'), 'utf8');
-    expect(src).toMatch(/el-date-picker/);
-    expect(src).toMatch(/update:kpiDate/);
-    expect(src).toMatch(/date-change/);
-  });
-
-  it('MovementListView wires kpiDate v-model + date-change reload', async () => {
+  it('MovementListView exposes date picker + reload in toolbar', async () => {
     const src = await readFile(path.join(srcRoot, 'views/MovementListView.vue'), 'utf8');
-    expect(src).toMatch(/v-model:kpi-date="kpiDate"/);
-    expect(src).toMatch(/@date-change="reload"/);
+    expect(src).toMatch(/el-date-picker/);
+    expect(src).toMatch(/onKpiDateChange/);
+    expect(src).toMatch(/kpiDate\.value = next/);
+    expect(src).toMatch(/reload\(\)/);
   });
 });

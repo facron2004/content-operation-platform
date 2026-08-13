@@ -2,41 +2,6 @@
   gap: 12px;
 }
 
-/* ---- hero ---- */
-.da-hero {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 4px 2px 0;
-  background: transparent;
-  border: none;
-  box-shadow: none;
-}
-
-.da-hero h2 {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 800;
-  letter-spacing: -0.01em;
-  color: var(--ink);
-}
-
-.hero-description {
-  max-width: 68ch;
-  margin: 4px 0 0;
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.45;
-}
-
-.hero-meta {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-}
-
 /* ---- apple pills / empty states (replace el-tag / el-empty) ---- */
 .da-pill {
   display: inline-flex;
@@ -677,9 +642,6 @@
   }
   .da-key-list {
     grid-template-columns: 1fr;
-  }
-  .da-hero {
-    flex-direction: column;
   }
   .da-range-picker {
     width: 100%;

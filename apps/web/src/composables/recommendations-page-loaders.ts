@@ -82,6 +82,11 @@ export async function loadRecommendationsPage(o: {
   const invMin = o.filters.inventoryMin.trim();
   const invMax = o.filters.inventoryMax.trim();
   const asOfDate = o.filters.date.trim();
+  if (o.force) {
+    clearPackageCache();
+    o.pagination.page = 1;
+    o.pageCache?.clear();
+  }
   const cacheKey = [
     o.pagination.page,
     o.pagination.pageSize,
@@ -116,11 +121,6 @@ export async function loadRecommendationsPage(o: {
   o.loading.value = true;
   o.loadError.value = null;
   try {
-    if (o.force) {
-      clearPackageCache();
-      o.pagination.page = 1;
-      o.pageCache?.clear();
-    }
     const inventoryMinNum =
       invMin !== '' && Number.isFinite(Number(invMin)) ? Number(invMin) : undefined;
     const inventoryMaxNum =
@@ -139,7 +139,8 @@ export async function loadRecommendationsPage(o: {
       // Residual #225: as-of business day.
       date: asOfDate || undefined,
       page: o.pagination.page,
-      pageSize: o.pagination.pageSize
+      pageSize: o.pagination.pageSize,
+      force: o.force || undefined
     });
     if (o.isDisposed?.() || o.requestId !== o.currentRequestId()) return;
     o.items.value = data.packages;

@@ -1,21 +1,11 @@
 <template>
-  <section v-loading="loading" class="page-stack welfare-points">
-    <header class="wp-hero">
-      <div>
-        <h2 class="wp-title">用户福利金看板</h2>
-        <p class="wp-sub">
-          数据来源：JeeSite 福利分记录表
-          <template v-if="summary?.dataRange.minDate">
-            （{{ summary.dataRange.minDate }} ~ {{ summary.dataRange.maxDate }}）
-          </template>
-          <span v-if="cached" class="wp-cached">缓存快照</span>
-        </p>
-      </div>
-      <div class="wp-actions">
-        <el-button :loading="loading" @click="reload(true)">刷新</el-button>
-        <el-button type="primary" @click="exportCsv">导出 CSV</el-button>
-      </div>
-    </header>
+  <section v-loading="loading || syncing" class="page-stack welfare-points">
+    <div class="page-toolbar">
+      <el-button v-if="canRefresh" :loading="syncing" @click="reload(true)">
+        同步福利金数据
+      </el-button>
+      <el-button v-if="canExport" type="primary" @click="exportCsv">导出 CSV</el-button>
+    </div>
 
     <ErrorAlert :message="loadError" />
 
@@ -48,7 +38,12 @@
         value-format="YYYY-MM-DD"
         style="width: 240px"
       />
-      <el-input v-model="keyword" placeholder="关键词(描述/订单号)" clearable style="width: 200px" />
+      <el-input
+        v-model="keyword"
+        placeholder="关键词(描述/订单号)"
+        clearable
+        style="width: 200px"
+      />
       <el-button type="primary" @click="applyFilters">查询</el-button>
       <el-button @click="resetFilters">重置</el-button>
     </div>
@@ -76,7 +71,12 @@
     <!-- Table -->
     <div class="panel wp-table">
       <h3 class="wp-chart-title">福利金记录</h3>
-      <el-table v-loading="listLoading" :data="list" size="small" :empty-text="loadError || '暂无数据'">
+      <el-table
+        v-loading="listLoading"
+        :data="list"
+        size="small"
+        :empty-text="loadError || '暂无数据'"
+      >
         <el-table-column prop="createDate" label="创建时间" width="150" />
         <el-table-column label="会员" min-width="180">
           <template #default="{ row }">
@@ -96,7 +96,9 @@
         <el-table-column prop="sourceTypeLabel" label="来源" width="110" />
         <el-table-column label="变动金额" width="110" align="right">
           <template #default="{ row }">
-            <span :class="row.pointType === 1 ? 'amt-in' : 'amt-out'">{{ fmtYuan(row.pointAmount) }}</span>
+            <span :class="row.pointType === 1 ? 'amt-in' : 'amt-out'">
+              {{ fmtYuan(row.pointAmount) }}
+            </span>
           </template>
         </el-table-column>
         <el-table-column label="当前余额" width="110" align="right">
@@ -124,6 +126,7 @@ import ErrorAlert from '../components/ErrorAlert.vue';
 import MetricTile from '../components/MetricTile.vue';
 import ChartPanel from '../components/ChartPanel.vue';
 import { useWelfarePoints } from '../features/welfare-points/composables/useWelfarePoints';
+import { useRoleStore } from '../stores/role';
 
 const sourceOptions = [
   { value: '1', label: '订单收益' },
@@ -154,8 +157,8 @@ const {
   list,
   loading,
   listLoading,
+  syncing,
   loadError,
-  cached,
   applyFilters,
   resetFilters,
   reload,
@@ -166,6 +169,9 @@ const {
   topMembersOption
 } = useWelfarePoints();
 
+const roleStore = useRoleStore();
+const canRefresh = computed(() => roleStore.permissions.includes('analytics:refresh'));
+const canExport = computed(() => roleStore.permissions.includes('analytics:export'));
 const netNegative = computed(() => (summary.value?.kpis.netChange ?? 0) < 0);
 </script>
 

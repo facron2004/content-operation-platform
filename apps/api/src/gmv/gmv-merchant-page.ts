@@ -20,6 +20,11 @@ export function sortMerchants(
           Number(a.gmvVerifyFen ?? (a as any).gmvVerify ?? 0) ||
         a.merchantName.localeCompare(b.merchantName)
       );
+    if (sortBy === 'orderDesc')
+      return (
+        Number(b.paidOrderCount ?? 0) - Number(a.paidOrderCount ?? 0) ||
+        a.merchantName.localeCompare(b.merchantName)
+      );
     // The fen path is already net GMV from SQL_GMV_SS; only the legacy float
     // fallback still carries gross GMV and needs the refund subtraction.
     const aGmv =

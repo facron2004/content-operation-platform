@@ -4,7 +4,13 @@ import { SQL_GMV_OH, beijingDayRangeSqlite, sqlDatetimeExclusiveRange } from '..
 
 describe('money-day OrderHeader aggregate', () => {
   it('uses SQL_GMV_OH (online + wallet) and format-agnostic Beijing day bounds', async () => {
-    const queryRawUnsafe = vi.fn().mockResolvedValue([{ totalGmvFen: 10050n, paidOrderCount: 3 }]);
+    const queryRawUnsafe = vi.fn().mockResolvedValue([
+      {
+        totalGmvFen: 10050n,
+        paidOrderCount: 3,
+        sourceUpdatedAt: '2026-07-10 05:06:07'
+      }
+    ]);
     const result = await loadDayGmvFromOrderHeader(
       { $queryRawUnsafe: queryRawUnsafe },
       '2026-07-10'
@@ -14,12 +20,14 @@ describe('money-day OrderHeader aggregate', () => {
       date: '2026-07-10',
       totalGmvFen: 10050n,
       paidOrderCount: 3,
+      updatedAt: '2026-07-10T05:06:07.000Z',
       dataSource: 'OrderHeader'
     });
 
     const [sql, startBound, endBound] = queryRawUnsafe.mock.calls[0];
     expect(String(sql)).toContain(SQL_GMV_OH);
     expect(String(sql)).toContain('OrderHeader');
+    expect(String(sql)).toContain('MAX(datetime(replace(replace("updatedAt"');
     expect(String(sql)).toContain(sqlDatetimeExclusiveRange('"paidTime"'));
     // Beijing 2026-07-10 00:00+08 = 2026-07-09 16:00:00 UTC (space form)
     const expected = beijingDayRangeSqlite('2026-07-10');
@@ -27,5 +35,19 @@ describe('money-day OrderHeader aggregate', () => {
     expect(endBound).toBe(expected.end);
     expect(startBound).toBe('2026-07-09 16:00:00');
     expect(endBound).toBe('2026-07-10 16:00:00');
+    expect(queryRawUnsafe).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns null source freshness for an empty paidTime day', async () => {
+    const queryRawUnsafe = vi
+      .fn()
+      .mockResolvedValue([{ totalGmvFen: 0n, paidOrderCount: 0, sourceUpdatedAt: null }]);
+
+    const result = await loadDayGmvFromOrderHeader(
+      { $queryRawUnsafe: queryRawUnsafe },
+      '2026-07-11'
+    );
+
+    expect(result.updatedAt).toBeNull();
   });
 });

@@ -50,7 +50,9 @@ describe('residual #71 refund cold heavy gate', () => {
     expect(src).toContain('withHeavyAggregateGate');
     expect(src).toMatch(/HeavyAggregateQueueFullError/);
     expect(src).toMatch(/退款核销计算繁忙/);
-    expect(src).toMatch(/getOrLoad\(o\.cacheKey, false, \(\) =>\s*withHeavyAggregateGate\(/);
+    expect(src).toMatch(
+      /getOrLoad\(o\.cacheKey, o\.force \?\? false, \(\) =>\s*withHeavyAggregateGate\(/
+    );
   });
 });
 

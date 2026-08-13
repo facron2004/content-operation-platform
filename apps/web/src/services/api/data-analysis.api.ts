@@ -1,4 +1,5 @@
 import client from '../http-client';
+import { withForce } from './with-force';
 
 export type DataAnalysisWindow = 'day' | 'week' | 'month' | 'year';
 
@@ -14,6 +15,7 @@ export interface DataAnalysisOverview {
   verifyAmount: number;
   verifyRate: number;
   refundRate: number;
+  refundCount: number;
   settlementRate: number;
   avgOrderValue: number;
   targetRatio: number;
@@ -166,11 +168,12 @@ export interface GetDataAnalysisSummaryParams {
   endDate?: string;
   detailLimit?: number;
   rankingLimit?: number;
+  force?: boolean;
 }
 
 export async function getDataAnalysisSummary(params: GetDataAnalysisSummaryParams) {
   return (
-    await client.get<DataAnalysisSummary>('/data-analysis/summary', {
+    await client.get<DataAnalysisSummary>(withForce('/data-analysis/summary', params.force), {
       params: {
         window: params.window,
         ...(params.date ? { date: params.date } : {}),

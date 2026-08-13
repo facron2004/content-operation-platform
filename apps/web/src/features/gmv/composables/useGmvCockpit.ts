@@ -58,7 +58,7 @@ export function useGmvCockpit() {
   }
 
   onScopeDispose(dispose);
-  // 页面加载/缓存切回只加载本地数据（快、不限流）；拉 JeeSite 由用户点击「刷新」或「历史回填」触发
+  // 页面加载/缓存切回只加载本地数据；拉 JeeSite 由有权限用户点击「同步」或「历史回填」触发。
   onMounted(() => void loadAll());
   onActivated(() => void loadAll());
 
@@ -73,6 +73,7 @@ export function useGmvCockpit() {
       isRequestCurrent,
       isAlive
     }),
+    loadAll,
     reload
   };
 }
@@ -86,12 +87,10 @@ export {
 } from '../../../utils/format';
 
 export type {
-  GmvActivityRow,
   GmvAlertItem,
   GmvCategoryRow,
   GmvChannelRow,
-  GmvFunnelStage,
-  GmvHeatPoint
+  GmvFunnelStage
 } from './gmv-cockpit-core';
 
 export type { GmvTrendGranularity, GmvTrendMode } from './gmv-chart-ui';

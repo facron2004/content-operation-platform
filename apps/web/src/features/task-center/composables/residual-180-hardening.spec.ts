@@ -61,7 +61,7 @@ describe('residual #180 schedule/complete SPA affordances', () => {
     const src = await readFile(path.join(srcRoot, 'views/TaskDetailView.vue'), 'utf8');
     expect(src).toMatch(/const canSchedule = computed/);
     expect(src).toMatch(
-      /const canComplete = computed\(\(\)\s*=>\s*task\.value\?\.status === ['"]published['"]\)/
+      /const canComplete = computed\([\s\S]{0,160}taskCapabilities\.value\.manage[\s\S]{0,80}task\.value\?\.status === ['"]published['"]/
     );
     expect(src).toMatch(/handleScheduleClick/);
     expect(src).toMatch(/handleCompleteClick/);
@@ -69,7 +69,7 @@ describe('residual #180 schedule/complete SPA affordances', () => {
     expect(src).toMatch(/await complete\(/);
     // Publish/fail remain scheduled-only.
     expect(src).toMatch(
-      /const canPublish = computed\(\(\)\s*=>\s*task\.value\?\.status === ['"]scheduled['"]\)/
+      /const canPublish = computed\([\s\S]{0,160}taskCapabilities\.value\.publish[\s\S]{0,80}task\.value\?\.status === ['"]scheduled['"]/
     );
   });
 

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { effectScope, nextTick, ref, type EffectScope } from 'vue';
 
 const mocks = vi.hoisted(() => ({
@@ -40,6 +40,11 @@ function consoleFor(date: string) {
 
 describe('useDashboard request lifecycle', () => {
   let scope: EffectScope | undefined;
+
+  beforeEach(() => {
+    mocks.getTodayOperationConsole.mockReset();
+    mocks.clearDashboardCache.mockReset();
+  });
 
   afterEach(() => {
     scope?.stop();
@@ -110,5 +115,26 @@ describe('useDashboard request lifecycle', () => {
     expect(dashboard.consoleData.value.date).toBe('');
     expect(dashboard.loading.value).toBe(false);
     expect(mocks.getTodayOperationConsole).toHaveBeenCalledTimes(1);
+  });
+
+  it('bypasses caches only for an explicit local reload', async () => {
+    mocks.getTodayOperationConsole.mockResolvedValue(consoleFor('loaded'));
+    const role = ref('platform_operator');
+    scope = effectScope();
+    const dashboard = scope.run(() => useDashboard(role))!;
+
+    await dashboard.load(true);
+
+    expect(mocks.clearDashboardCache).toHaveBeenCalledTimes(1);
+    expect(mocks.getTodayOperationConsole).toHaveBeenLastCalledWith({
+      role: 'platform_operator',
+      force: true
+    });
+
+    role.value = 'area_operator';
+    await nextTick();
+
+    expect(mocks.clearDashboardCache).toHaveBeenCalledTimes(1);
+    expect(mocks.getTodayOperationConsole).toHaveBeenLastCalledWith({ role: 'area_operator' });
   });
 });

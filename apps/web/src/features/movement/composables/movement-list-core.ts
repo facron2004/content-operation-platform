@@ -76,9 +76,10 @@ async function loadMovementToday(params: {
   isCurrent: () => boolean;
   // Residual #227: as-of business day.
   date?: string;
+  force?: boolean;
 }): Promise<void> {
   try {
-    const result = await getMovementToday(params.date || undefined);
+    const result = await getMovementToday(params.date || undefined, params.force);
     if (!params.isCurrent()) return;
     params.today.value = result;
   } catch (err) {
@@ -99,6 +100,7 @@ async function loadMovementList(params: {
   // Residual #266: optional honesty sinks for MOVEMENT_CACHE_CAP.
   listTruncated?: Ref<boolean>;
   listLimit?: Ref<number | null>;
+  force?: boolean;
 }): Promise<void> {
   params.listLoading.value = true;
   try {
@@ -106,25 +108,31 @@ async function loadMovementList(params: {
     // Residual #214: pass merchantId/category/areaId (API+client existed; SPA unwired).
     const result =
       params.activeTab.value === 'stagnant'
-        ? await getMovementStagnant({
-            bucket: f.bucket,
-            search: f.search,
-            sort: f.sort,
-            merchantId: f.merchantId || undefined,
-            category: f.category || undefined,
-            areaId: f.areaId || undefined,
-            page: params.page.value,
-            pageSize: PAGE_SIZE
-          })
-        : await getMovementMoving({
-            days: f.days,
-            search: f.search,
-            merchantId: f.merchantId || undefined,
-            category: f.category || undefined,
-            areaId: f.areaId || undefined,
-            page: params.page.value,
-            pageSize: PAGE_SIZE
-          });
+        ? await getMovementStagnant(
+            {
+              bucket: f.bucket,
+              search: f.search,
+              sort: f.sort,
+              merchantId: f.merchantId || undefined,
+              category: f.category || undefined,
+              areaId: f.areaId || undefined,
+              page: params.page.value,
+              pageSize: PAGE_SIZE
+            },
+            params.force
+          )
+        : await getMovementMoving(
+            {
+              days: f.days,
+              search: f.search,
+              merchantId: f.merchantId || undefined,
+              category: f.category || undefined,
+              areaId: f.areaId || undefined,
+              page: params.page.value,
+              pageSize: PAGE_SIZE
+            },
+            params.force
+          );
     if (!params.isCurrent()) return;
     params.rows.value = result.items;
     params.hasMore.value = result.pagination.hasMore;
@@ -177,7 +185,7 @@ export function bindMovementListLoaders(state: MovementListState) {
   let todayRequestId = 0;
   let reloadRequestId = 0;
 
-  const loadList = (): Promise<void> => {
+  const loadList = (force = false): Promise<void> => {
     if (disposed) return Promise.resolve();
     const currentRequestId = ++listRequestId;
     return loadMovementList({
@@ -190,11 +198,12 @@ export function bindMovementListLoaders(state: MovementListState) {
       loadError: state.loadError,
       isCurrent: () => !disposed && currentRequestId === listRequestId,
       listTruncated: state.listTruncated,
-      listLimit: state.listLimit
+      listLimit: state.listLimit,
+      force
     });
   };
 
-  async function reload() {
+  async function reload(force = false) {
     if (disposed) return;
     const currentReloadId = ++reloadRequestId;
     const currentTodayRequestId = ++todayRequestId;
@@ -205,9 +214,10 @@ export function bindMovementListLoaders(state: MovementListState) {
         today: state.today,
         loadError: state.loadError,
         isCurrent: () => !disposed && currentTodayRequestId === todayRequestId,
-        date: state.kpiDate.value || undefined
+        date: state.kpiDate.value || undefined,
+        force
       }),
-      loadList()
+      loadList(force)
     ]);
     if (!disposed && currentReloadId === reloadRequestId) state.loading.value = false;
   }
@@ -221,7 +231,7 @@ export function bindMovementListLoaders(state: MovementListState) {
     state.listLoading.value = false;
   });
 
-  onMounted(reload);
+  onMounted(() => void reload());
   return {
     loadList,
     reload,

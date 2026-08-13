@@ -20,6 +20,7 @@ export type RecommendationsParams = {
   date?: string;
   page?: number;
   pageSize?: number;
+  force?: boolean;
 };
 
 const get = <T>(url: string, params?: Record<string, unknown>, ttl = 60000) =>

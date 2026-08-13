@@ -71,8 +71,8 @@ export function bindMerchantRoute(params: {
   selectedMerchantId: Ref<string | undefined>;
   selectedMerchant: Ref<{ merchantId: string } | null>;
   merchants: Ref<Array<{ merchantId: string }>>;
-  reloadList: () => Promise<void>;
-  reloadDetail: () => Promise<void>;
+  reloadList: (force?: boolean) => Promise<void>;
+  reloadDetail: (force?: boolean) => Promise<void>;
   isCurrent?: () => boolean;
 }) {
   const isCurrent = params.isCurrent ?? (() => true);
@@ -106,8 +106,8 @@ export function bindMerchantRoute(params: {
 export function buildMerchantActions(options: {
   router: Router;
   state: MerchantState;
-  reloadList: () => Promise<void>;
-  reloadDetail: () => Promise<void>;
+  reloadList: (force?: boolean) => Promise<void>;
+  reloadDetail: (force?: boolean) => Promise<void>;
   selectMerchant: (id: string) => void;
 }) {
   const { page, hasMore, selectedMerchantId, trend } = options.state;
@@ -115,7 +115,7 @@ export function buildMerchantActions(options: {
     listHeight: 'calc(100vh - 260px)',
     trendSummary: computed(() => buildMerchantTrendSummary(trend.value)),
     trendOption: computed(() => buildMerchantTrendOption(trend.value)),
-    reload: async () => Promise.all([options.reloadList(), options.reloadDetail()]),
+    reload: async () => Promise.all([options.reloadList(true), options.reloadDetail(true)]),
     reloadList: options.reloadList,
     selectMerchant: options.selectMerchant,
     prevPage: () => {

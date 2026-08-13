@@ -5,6 +5,7 @@ import {
   refundTodayFromDailyMetrics,
   verifyTodayFromDailyMetrics
 } from '../src/refund/refund-daily-metrics';
+import { computeRefundFromOrderHeader } from '../src/refund/refund-order-header';
 import type { PrismaService } from '../src/prisma/prisma.service';
 
 describe('DailyMetrics net GMV read projections', () => {
@@ -69,7 +70,7 @@ describe('DailyMetrics net GMV read projections', () => {
     expect(verify).toMatchObject({ totalGmv: 80, verifyRate: 0.5 });
   });
 
-  it('floors net GMV at 0 when refunds exceed recognized GMV (no negative GMV)', async () => {
+  it('keeps negative net GMV consistent between DailyMetrics and OrderHeader', async () => {
     const prisma = {
       dailyMetrics: {
         findUnique: vi.fn().mockResolvedValue({
@@ -90,8 +91,20 @@ describe('DailyMetrics net GMV read projections', () => {
 
     const refund = await refundTodayFromDailyMetrics(prisma, '2026-07-31');
     const verify = await verifyTodayFromDailyMetrics(prisma, '2026-07-31');
+    const orderHeaderPrisma = {
+      $queryRawUnsafe: vi
+        .fn()
+        .mockResolvedValueOnce([{ totalGmvFen: -2000n, paidOrderCount: 1 }])
+        .mockResolvedValueOnce([{ totalRefundFen: 3000n, refundCount: 1 }])
+    } as unknown as PrismaService;
+    const orderHeader = await computeRefundFromOrderHeader(
+      orderHeaderPrisma,
+      { start: '2026-07-31', end: '2026-07-31' },
+      async () => []
+    );
 
-    expect(refund).toMatchObject({ totalGmv: 0 });
-    expect(verify).toMatchObject({ totalGmv: 0 });
+    expect(refund).toMatchObject({ totalGmv: -20 });
+    expect(verify).toMatchObject({ totalGmv: -20 });
+    expect(orderHeader.totalGmv).toBe(refund?.totalGmv);
   });
 });

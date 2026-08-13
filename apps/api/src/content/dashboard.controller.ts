@@ -12,6 +12,7 @@ import { resolveScopedQuery } from '../user-access/data-scope';
 import { assertUnrestrictedAnalytics } from '../user-access/scope-guards';
 import { RequireLogin } from '../user-access/iam/route-auth.decorator';
 import { RequirePermissions } from '../user-access/iam/require-permissions.decorator';
+import { hasForceSignal } from '../common';
 
 type AuthUser = {
   userId: string;
@@ -148,7 +149,8 @@ export class DashboardController {
     return this.dashboardService.getTodayOperationConsole(
       validRole,
       scopedRecommend(this.contentService, req),
-      opsScopeFromReq(req)
+      opsScopeFromReq(req),
+      hasForceSignal(req, query)
     );
   }
 

@@ -1,4 +1,5 @@
 import client from '../http-client';
+import { withForce } from './with-force';
 
 export type StaleBucket = 'normal' | 'stale_7d' | 'stale_15d' | 'stale_30d' | 'stale_60d';
 
@@ -33,7 +34,7 @@ export interface MovementTodayPayload {
   stagnantSkus: number;
   movingRate: number;
   bucketDistribution: Array<{ bucket: StaleBucket; totalSku: number }>;
-  updatedAt: string;
+  updatedAt: string | null;
 }
 
 export interface MovementSkuRow {
@@ -67,8 +68,12 @@ export type MovementTimelineResponse = {
   timeline: Array<{ date: string; stockLeft: number; salesQty: number; deltaSource: string }>;
 };
 
-export async function getMovementToday(date?: string) {
-  return (await client.get<MovementTodayPayload>('/movement/today', { params: { date } })).data;
+export async function getMovementToday(date?: string, force = false) {
+  return (
+    await client.get<MovementTodayPayload>(withForce('/movement/today', force), {
+      params: { date }
+    })
+  ).data;
 }
 
 export async function getMovementTimeline(packageId: string, days = 30) {
@@ -79,29 +84,39 @@ export async function getMovementTimeline(packageId: string, days = 30) {
   ).data;
 }
 
-export async function getMovementStagnant(params: {
-  bucket?: StaleBucket;
-  merchantId?: string;
-  category?: string;
-  areaId?: string;
-  search?: string;
-  sort?: 'lastSalesDateAsc' | 'staleDesc' | 'gmvDesc';
-  page?: number;
-  pageSize?: number;
-}) {
-  return (await client.get<MovementListResponse>('/movement/skus/stagnant', { params })).data;
+export async function getMovementStagnant(
+  params: {
+    bucket?: StaleBucket;
+    merchantId?: string;
+    category?: string;
+    areaId?: string;
+    search?: string;
+    sort?: 'lastSalesDateAsc' | 'staleDesc' | 'gmvDesc';
+    page?: number;
+    pageSize?: number;
+  },
+  force = false
+) {
+  return (
+    await client.get<MovementListResponse>(withForce('/movement/skus/stagnant', force), { params })
+  ).data;
 }
 
-export async function getMovementMoving(params: {
-  days?: 1 | 7 | 30;
-  merchantId?: string;
-  category?: string;
-  areaId?: string;
-  search?: string;
-  page?: number;
-  pageSize?: number;
-}) {
-  return (await client.get<MovementListResponse>('/movement/skus/moving', { params })).data;
+export async function getMovementMoving(
+  params: {
+    days?: 1 | 7 | 30;
+    merchantId?: string;
+    category?: string;
+    areaId?: string;
+    search?: string;
+    page?: number;
+    pageSize?: number;
+  },
+  force = false
+) {
+  return (
+    await client.get<MovementListResponse>(withForce('/movement/skus/moving', force), { params })
+  ).data;
 }
 
 /** Relative path for axios client (baseURL already includes /api). */

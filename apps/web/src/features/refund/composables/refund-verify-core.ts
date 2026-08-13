@@ -40,7 +40,7 @@ export type RefundTodayPayload = {
   refundCount: number;
   paidOrderCount: number;
   topRefundMerchants: TopMerchantRow[];
-  updatedAt: string;
+  updatedAt: string | null;
 };
 
 export type VerifyTodayPayload = {
@@ -51,7 +51,7 @@ export type VerifyTodayPayload = {
   verifyCount: number;
   paidOrderCount: number;
   topVerifyMerchants: TopMerchantRow[];
-  updatedAt: string;
+  updatedAt: string | null;
 };
 
 export function createRefundVerifyState() {
@@ -120,17 +120,18 @@ async function loadRefundOrVerifyToday(
   // Residual #226: as-of business day.
   date?: string,
   // 周期口径: 影响 KPI 与商家榜的 今日/本周/本月/本年 窗口.
-  window?: RefundWindow
+  window?: RefundWindow,
+  force = false
 ) {
   if (isCurrent()) kpiError.value = null;
   try {
     const asOf = date || undefined;
     if (activeTab === 'refund') {
-      const result = await getRefundToday(asOf, window);
+      const result = await getRefundToday(asOf, window, force);
       if (!isCurrent()) return;
       refundToday.value = result;
     } else {
-      const result = await getVerifyToday(asOf, window);
+      const result = await getVerifyToday(asOf, window, force);
       if (!isCurrent()) return;
       verifyToday.value = result;
     }
@@ -149,15 +150,16 @@ async function loadRefundOrVerifyTrend(
   // Residual #226: endDate aligns trend window with KPI as-of day.
   endDate?: string,
   // 趋势聚合粒度: 按日/周/月/年.
-  bucket?: TrendBucket
+  bucket?: TrendBucket,
+  force = false
 ) {
   if (isCurrent()) trendError.value = null;
   try {
     const asOf = endDate || undefined;
     const rows =
       activeTab === 'refund'
-        ? mapRefundTrend(await getRefundTrend(trendDays, asOf, bucket))
-        : mapVerifyTrend(await getVerifyTrend(trendDays, asOf, bucket));
+        ? mapRefundTrend(await getRefundTrend(trendDays, asOf, bucket, force))
+        : mapVerifyTrend(await getVerifyTrend(trendDays, asOf, bucket, force));
     if (!isCurrent()) return;
     trend.value = rows;
   } catch (err) {
@@ -182,19 +184,23 @@ async function loadRefundTopMerchants(params: {
   window?: RefundWindow;
   /** 周期锚点日期(可选). */
   date?: string;
+  force?: boolean;
 }) {
   if (!params.isCurrent()) return;
   params.merchantError.value = null;
   params.listLoading.value = true;
   try {
     // Residual #229: honor page/pageSize + hasMore from API.
-    const result = await getRefundTopMerchants({
-      sortBy: params.sortBy,
-      page: params.page,
-      pageSize: params.pageSize,
-      window: params.window,
-      date: params.date
-    });
+    const result = await getRefundTopMerchants(
+      {
+        sortBy: params.sortBy,
+        page: params.page,
+        pageSize: params.pageSize,
+        window: params.window,
+        date: params.date
+      },
+      params.force ?? false
+    );
     if (!params.isCurrent()) return;
     params.topMerchants.value = result.items;
     params.hasMore.value = !!result.hasMore;
@@ -239,7 +245,7 @@ export function bindRefundVerifyLoaders(state: RefundVerifyBindState) {
   let trendRequestId = 0;
   let merchantRequestId = 0;
 
-  async function reload() {
+  async function reload(force = false) {
     if (disposed) return;
     const currentReloadRequestId = ++reloadRequestId;
     const currentTodayRequestId = ++todayRequestId;
@@ -265,7 +271,8 @@ export function bindRefundVerifyLoaders(state: RefundVerifyBindState) {
         state.kpiError,
         () => !disposed && currentTodayRequestId === todayRequestId,
         asOf,
-        kpiWindow
+        kpiWindow,
+        force
       ),
       loadRefundOrVerifyTrend(
         activeTab,
@@ -274,7 +281,8 @@ export function bindRefundVerifyLoaders(state: RefundVerifyBindState) {
         state.trendError,
         () => !disposed && currentTrendRequestId === trendRequestId,
         asOf,
-        state.trendBucket.value
+        state.trendBucket.value,
+        force
       ),
       loadRefundTopMerchants({
         sortBy,
@@ -288,7 +296,8 @@ export function bindRefundVerifyLoaders(state: RefundVerifyBindState) {
         merchantError: state.merchantError,
         isCurrent: () => !disposed && currentMerchantRequestId === merchantRequestId,
         window: kpiWindow,
-        date: asOf
+        date: asOf,
+        force
       })
     ]);
     if (!disposed && currentReloadRequestId === reloadRequestId) state.loading.value = false;
@@ -309,7 +318,8 @@ export function bindRefundVerifyLoaders(state: RefundVerifyBindState) {
       merchantError: state.merchantError,
       isCurrent: () => !disposed && currentMerchantRequestId === merchantRequestId,
       window: state.kpiWindow.value,
-      date: state.kpiDate.value || undefined
+      date: state.kpiDate.value || undefined,
+      force: false
     });
   }
 
@@ -323,7 +333,8 @@ export function bindRefundVerifyLoaders(state: RefundVerifyBindState) {
       state.trendError,
       () => !disposed && currentTrendRequestId === trendRequestId,
       state.kpiDate.value || undefined,
-      state.trendBucket.value
+      state.trendBucket.value,
+      false
     );
   }
 
