@@ -6,7 +6,7 @@
       :source-label="sourceLabel"
       :loading="loading"
       @change="updateFilters"
-      @refresh="load"
+      @refresh="refresh"
     />
 
     <p v-if="dataNotice" class="dashboard-data-note">
@@ -18,22 +18,22 @@
       <div class="dashboard-brief__signal">
         <div class="dashboard-brief__icon"><MagicStick /></div>
         <div>
-          <div class="dashboard-section-label">01 / AI EXECUTIVE BRIEF</div>
-          <h2>AI 今日经营简报</h2>
+          <div class="dashboard-section-label">01 / EXECUTIVE BRIEF</div>
+          <h2>今日经营简报</h2>
         </div>
       </div>
       <div class="dashboard-brief__content">
-        <p>
-          {{ briefRegion }}今日 GMV
-          <strong>{{ briefGmv }}</strong>
-          ，较昨日增长
-          <strong>8.2%</strong>
-          ，主要增长来自福田区和南山区。 但「XX 火锅双人餐」退款率达到
-          <strong class="is-risk-text">12.6%</strong>
-          ，较近 7 日均值上涨 63%，预计影响 GMV ¥8,200。
+        <p v-if="hasBriefSnapshot">
+          今日 GMV <strong>{{ briefGmv }}</strong>，支付订单
+          <strong>{{ briefOrders }}</strong>，核销率
+          <strong>{{ briefVerifyRate }}</strong>。
         </p>
-        <p class="dashboard-brief__subline">
-          同时科技园区域 17:00 后订单增长明显，建议今晚针对科技园用户追加晚餐套餐推广。
+        <p v-else>当前暂无真实经营快照，请刷新或检查当前账号的数据权限。</p>
+        <p v-if="latestAlert" class="dashboard-brief__subline">
+          最新预警：<strong class="is-risk-text">{{ latestAlert.title }}</strong>。{{ latestAlert.reason }}
+        </p>
+        <p v-else-if="data.updatedAt" class="dashboard-brief__subline">
+          数据更新时间：{{ data.updatedAt }}
         </p>
       </div>
       <div class="dashboard-brief__actions">
@@ -72,7 +72,7 @@
         </div>
         <span>实时经营健康度</span>
       </div>
-      <div class="dashboard-kpi-grid">
+      <div v-if="data.kpis.length" class="dashboard-kpi-grid">
         <button
           v-for="item in data.kpis"
           :key="item.key"
@@ -94,6 +94,7 @@
           <small>{{ item.secondary }}</small>
         </button>
       </div>
+      <div v-else class="dashboard-empty">暂无真实经营指标</div>
     </section>
 
     <DashboardTrendPanel
@@ -109,7 +110,7 @@
       <DashboardCompositionCard
         :tab="compositionTab"
         :items="currentBreakdown"
-        :total="data.kpis[0]?.value ?? 0"
+        :total="gmvValue"
         @update:tab="compositionTab = $event"
       />
     </div>
@@ -182,18 +183,27 @@ const {
   currentBreakdown,
   currentPackages,
   updateFilters,
-  load,
+  refresh,
   formatCount,
   formatMoney
 } = useOperationsDashboard();
 
-const briefRegion = computed(() =>
-  filters.value.region === '全部区域' ? '全域' : filters.value.region
-);
+const gmvKpi = computed(() => data.value.kpis.find((item) => item.key === 'gmv'));
+const ordersKpi = computed(() => data.value.kpis.find((item) => item.key === 'orders'));
+const verifyKpi = computed(() => data.value.kpis.find((item) => item.key === 'verify'));
+const gmvValue = computed(() => gmvKpi.value?.value ?? 0);
+const hasBriefSnapshot = computed(() => Boolean(gmvKpi.value));
 const briefGmv = computed(() => {
-  const value = data.value.kpis.find((item) => item.key === 'gmv')?.value ?? 0;
+  const value = gmvValue.value;
   return value >= 10000 ? `¥${(value / 10000).toFixed(2)} 万` : formatMoney(value);
 });
+const briefOrders = computed(() => formatCount(ordersKpi.value?.value ?? 0));
+const briefVerifyRate = computed(() => {
+  const orders = ordersKpi.value?.value ?? 0;
+  const verify = verifyKpi.value?.value ?? 0;
+  return orders > 0 ? `${((verify / orders) * 100).toFixed(1)}%` : '暂无数据';
+});
+const latestAlert = computed(() => data.value.alerts[0]);
 
 const kpiIcons: Record<DashboardKpi['icon'], unknown> = {
   coin: Coin,
@@ -217,8 +227,9 @@ function handleKpi(key: string) {
     gmv: '/operation/gmv',
     orders: '/orders',
     verify: '/verifications',
-    dau: '/users',
+    'active-users': '/users',
     'new-users': '/users',
+    'dormant-users': '/users/lifecycle',
     refund: '/operation/alerts'
   };
   if (routes[key]) go(routes[key]);
@@ -238,8 +249,8 @@ function createRecall() {
     path: '/campaigns',
     query: {
       source: 'dashboard',
-      audience: '高价值用户+14天未消费',
-      users: String(data.value.users.dormantHighValue)
+      audience: '用户生命周期：沉睡/流失',
+      users: String(data.value.users.dormantUsers)
     }
   });
 }
@@ -249,9 +260,12 @@ function restock(packageName: string) {
 }
 
 function handleAlertAction(id: string) {
-  if (id === 'refund-rate') return go('/operation/alerts');
-  if (id === 'order-drop') return go('/campaigns?source=dashboard&audience=科技园');
-  if (id === 'dinner-growth') return go('/merchant-sales?source=dashboard&area=南山区');
+  const alert = data.value.alerts.find((item) => item.id === id);
+  if (!alert) return go('/operation/alerts');
+  void router.push({
+    path: '/operation/alerts',
+    query: { alertId: alert.id, packageId: alert.packageId }
+  });
 }
 </script>
 

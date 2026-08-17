@@ -4,6 +4,7 @@ import {
   Get,
   Inject,
   Param,
+  NotFoundException,
   Post,
   Query,
   Req,
@@ -34,6 +35,7 @@ import {
   FinanceAccountQueryDto,
   FinanceAssetLedgerQueryDto,
   PaySettlementDto,
+  PartnerPickupPointQueryDto,
   ProfitSharingQueryDto,
   ReconciliationQueryDto,
   ResolveReconciliationDiffDto,
@@ -42,6 +44,7 @@ import {
 } from './finance-operations.dto';
 import { FinanceAssetService } from './finance-asset.service';
 import { FinanceOperationsService } from './finance-operations.service';
+import { PartnerPickupPointService } from './partner-pickup-point.service';
 
 type AuthUser = { userId?: string };
 
@@ -58,7 +61,8 @@ export class FinanceCenterController {
   constructor(
     @Inject(FinanceCenterService) private readonly service: FinanceCenterService,
     @Inject(FinanceAssetService) private readonly assets: FinanceAssetService,
-    @Inject(FinanceOperationsService) private readonly operations: FinanceOperationsService
+    @Inject(FinanceOperationsService) private readonly operations: FinanceOperationsService,
+    @Inject(PartnerPickupPointService) private readonly pickupPoints: PartnerPickupPointService
   ) {}
 
   @Get('dashboard')
@@ -131,6 +135,57 @@ export class FinanceCenterController {
   ) {
     assertUnrestrictedAnalytics(req);
     return this.assets.listAccounts(query);
+  }
+
+  @Get('pickup-points')
+  @Roles('admin', 'platform_operator', 'auditor')
+  @RequirePermissions('analytics:read')
+  @Throttle({ long: { limit: 30, ttl: 60000 } })
+  @ApiOperation({
+    summary: '商家提货分快照',
+    description: '读取最近一次成功同步的 JeeSite 合作商账户记录聚合快照'
+  })
+  pickupPointList(
+    @Query(createDtoPipe(PartnerPickupPointQueryDto)) query: PartnerPickupPointQueryDto,
+    @Req() req: Request
+  ) {
+    assertUnrestrictedAnalytics(req);
+    return this.pickupPoints.list(query);
+  }
+
+  @Post('pickup-points/refresh')
+  @Roles('admin', 'platform_operator')
+  @RequirePermissions('analytics:refresh')
+  @Throttle({ long: { limit: 2, ttl: 60000 } })
+  @ApiOperation({
+    summary: '异步刷新商家提货分',
+    description: '串行读取 JeeSite corePartnerAccountRecord/listData，完成后原子切换商家提货分快照'
+  })
+  pickupPointRefresh(@Req() req: Request) {
+    assertUnrestrictedAnalytics(req);
+    return this.pickupPoints.startRefreshJob();
+  }
+
+  @Get('pickup-points/refresh/active')
+  @Roles('admin', 'platform_operator', 'auditor')
+  @RequirePermissions('analytics:read')
+  @Throttle({ long: { limit: 120, ttl: 60000 } })
+  @ApiOperation({ summary: '查询当前商家提货分刷新任务' })
+  pickupPointRefreshActive(@Req() req: Request) {
+    assertUnrestrictedAnalytics(req);
+    return this.pickupPoints.getActiveRefreshJob();
+  }
+
+  @Get('pickup-points/refresh/:jobId')
+  @Roles('admin', 'platform_operator', 'auditor')
+  @RequirePermissions('analytics:read')
+  @Throttle({ long: { limit: 120, ttl: 60000 } })
+  @ApiOperation({ summary: '查询商家提货分刷新任务进度' })
+  async pickupPointRefreshStatus(@Param('jobId') jobId: string, @Req() req: Request) {
+    assertUnrestrictedAnalytics(req);
+    const job = await this.pickupPoints.getRefreshJob(jobId);
+    if (!job) throw new NotFoundException(`商家提货分刷新任务不存在或已过期: ${jobId}`);
+    return job;
   }
 
   @Post('accounts')

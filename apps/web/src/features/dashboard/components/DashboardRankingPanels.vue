@@ -39,6 +39,7 @@
             {{ item.health }}
           </span>
         </button>
+        <div v-if="!merchants.length" class="dashboard-empty">暂无真实商家数据</div>
       </div>
     </section>
 
@@ -74,14 +75,14 @@
       <div v-if="packageTab !== 'stock'" class="ranking-table ranking-table--package">
         <div class="ranking-table__head">
           <span>套餐</span>
-          <span>GMV</span>
-          <span>销量</span>
-          <span>转化</span>
-          <span>退款</span>
+          <span>售价</span>
+          <span>库存</span>
+          <span>评分</span>
+          <span>标签</span>
         </div>
         <button
           v-for="item in packages"
-          :key="item.name + item.merchant"
+          :key="item.id"
           type="button"
           class="ranking-table__row"
           @click="$emit('open-package', item.name)"
@@ -90,23 +91,25 @@
             {{ item.name }}
             <small>{{ item.merchant }}</small>
           </span>
-          <strong>{{ money(item.gmv) }}</strong>
-          <span>{{ count(item.sales) }}</span>
-          <span>{{ item.conversion }}%</span>
-          <span :class="{ 'is-risk-text': item.refundRate >= 6 }">{{ item.refundRate }}%</span>
+          <strong>{{ money(item.price) }}</strong>
+          <span>{{ count(item.stockLeft) }}</span>
+          <span>{{ item.score }}</span>
+          <span :title="item.tags.join('、')">{{ item.tags[0] || '-' }}</span>
         </button>
+        <div v-if="!packages.length" class="dashboard-empty">暂无真实套餐数据</div>
       </div>
       <div v-else class="stock-list">
-        <div v-for="item in packages" :key="item.name + item.merchant" class="stock-row">
+        <div v-for="item in packages" :key="item.id" class="stock-row">
           <div class="stock-row__copy">
             <strong>{{ item.name }}</strong>
-            <span>{{ item.merchant }} · 剩余 {{ item.remaining }} 份</span>
+            <span>{{ item.merchant }} · 剩余 {{ item.stockLeft }} 份</span>
           </div>
           <div class="stock-row__status">
-            <strong>预计 {{ item.selloutMinutes }} 分钟售罄</strong>
-            <button type="button" @click="$emit('restock', item.name)">补充库存</button>
+            <strong>运营评分 {{ item.score }}</strong>
+            <button type="button" @click="$emit('restock', item.name)">查看库存</button>
           </div>
         </div>
+        <div v-if="!packages.length" class="dashboard-empty">暂无真实库存关注数据</div>
       </div>
     </section>
   </div>
@@ -136,10 +139,10 @@ defineEmits<{
 }>();
 
 const packageTabs: Array<{ label: string; value: DashboardPackageTab }> = [
-  { label: '热销', value: 'hot' },
-  { label: '增长最快', value: 'growing' },
-  { label: '异常', value: 'risk' },
-  { label: '即将售罄', value: 'stock' }
+  { label: '爆品机会', value: 'hot' },
+  { label: '必推', value: 'growing' },
+  { label: '风险', value: 'risk' },
+  { label: '滞销', value: 'stock' }
 ];
 
 const count = (value: number) => Math.round(value).toLocaleString('zh-CN');

@@ -26,6 +26,8 @@
 
 **门店与区域分析** — 门店管理可从 JeeSite `corePartnerShop/listData` 后台串行同步完整合作商店铺目录；外部门店 ID、商家 ID、地址、状态和经纬度幂等写入本地，失败时保留旧数据，GMV 区域分析优先按门店坐标归属深圳行政区。
 
+**商家提货分** — 提货分页面从 JeeSite `corePartnerAccountRecord/listData` 读取合作商账户记录 JSON，按 `corePartnerId` 聚合 `availableCommodityPoint`，只计入 `state=1` 的有效记录；同步任务串行分页，完整成功后原子切换本地快照，外部接口失败不会清空上次成功数据。提货分以两位小数的整数单位保存，页面只读展示，不提供本地创建或调整账户。
+
 **商品与订单数据中台** — 商品 SKU 列表从本地 `ContentPackage` 快照读取，手动同步采用单飞等待并在持久化完成后重新加载；商品中心保留商品管理和独立的组合套餐入口，原重复的套餐管理入口不再展示；砍价商品的 `bargainCommodityDynamic` 支持对象和 JSON 字符串两种返回形态，并明确拆分为 `initialInventoryTotal`（初始库存）、`inventoryTotal`（现在库存）和 `hasInventory`（当日库存）；商品页提供 `pending`、`selling`、`recycle` 三种状态筛选，售卖时间从外部字段同步更新并在详情显示到时分。订单中心拆分展示线上支付、余额支付和实付合计；订单中心、物流单、卡批次和卡券页只展示订单相关数据，不提供核销、退款、库存回补、发货或卡券状态写操作。
 
 ## 技术架构
@@ -90,6 +92,8 @@ Windows 打包、安装器、`win-unpacked` 和 EXE smoke 不属于当前优化�
 配置用户名密码后系统会自动处理登录和 Cookie 刷新，详见 [自动登录文档](docs/AUTO_LOGIN.md)。
 
 门店管理刷新默认读取 `/core/corePartnerShop/listData?pageSize=100&pageNo=1`；如外部部署路径不同，可用 `EXTERNAL_PARTNER_SHOPS_PATH` 覆盖。`PARTNER_SHOP_REFRESH_PAGE_SIZE` 和 `PARTNER_SHOP_REFRESH_INTERVAL_MS` 控制门店目录的串行分页大小与页间等待。
+
+提货分同步默认读取 `/core/corePartnerAccountRecord/listData?pageSize=100&pageNo=1`；如外部部署路径不同，可用 `EXTERNAL_PARTNER_ACCOUNT_RECORDS_PATH` 覆盖。`PARTNER_ACCOUNT_REFRESH_PAGE_SIZE` 和 `PARTNER_ACCOUNT_REFRESH_INTERVAL_MS` 控制提货分目录的串行分页大小与页间等待。
 
 ### 用户目录同步（可选开关）
 

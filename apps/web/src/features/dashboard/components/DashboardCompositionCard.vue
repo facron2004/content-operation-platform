@@ -21,7 +21,7 @@
         {{ item.label }}
       </button>
     </div>
-    <div class="dashboard-composition__body">
+    <div v-if="items.length" class="dashboard-composition__body">
       <div class="dashboard-donut">
         <ChartPanel :option="donutOption" class="dashboard-donut__chart" />
         <div class="dashboard-donut__center">
@@ -40,6 +40,7 @@
         </div>
       </div>
     </div>
+    <div v-else class="dashboard-empty">暂无真实 GMV 构成数据</div>
   </section>
 </template>
 

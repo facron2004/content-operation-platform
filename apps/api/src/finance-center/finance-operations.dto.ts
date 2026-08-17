@@ -53,6 +53,22 @@ export class FinanceAccountQueryDto {
   pageSize: number = 20;
 }
 
+export class PartnerPickupPointQueryDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  page: number = 1;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  pageSize: number = 20;
+}
+
 export class CreateFinanceAccountDto {
   @IsIn(FINANCE_OWNER_TYPES as unknown as string[])
   ownerType!: string;

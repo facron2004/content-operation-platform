@@ -12,7 +12,7 @@
 
 | 项目 | 当前状态 | 证据 |
 |------|----------|------|
-| P0-03 数据库迁移基线 | 0015、0027、0028 源码/schema/policy 与实际开发库已对齐应用 | `npm run db:validate`、迁移策略校验通过；0027 增加会员目录 staging 与活动快照指针，0028 增加 `ContentPackage.currentStock`。`db:drift-check` 仍报告既有 15 张表的重定义漂移，未由本次库存字段引入 |
+| P0-03 数据库迁移基线 | 0015、0027、0028、0029 源码/schema/policy 已更新 | `npm run db:validate`、Prisma schema 校验通过；0029 增加商家提货分 staging 与活动快照指针。开发库是否已应用 0029 仍需维护窗口确认；`db:drift-check` 的既有重定义漂移不由本次提货分字段引入 |
 | P0-04 关键写入幂等 | 已完成 | `@RequireIdempotency`、400 缺失键、409 负载冲突、同键重放、竞态保护、失败记录重取、每日清理任务及前端业务意图键 |
 | P1-05 Outbox 真闭环 | 代码与聚焦验收完成，开发库迁移待应用 | handler registry、`task.published` 事务 producer、真实审计 handler、失败重试/`nextRetryAt`/`failed`；API 聚焦 `26/26`，API build 通过 |
 | API 行为 | 单元与 legacy 回归通过，集成有既有残差 | API unit `158` 文件 / `1139/1139`、legacy `103` 文件 / `410/410`；integration `8/9` 文件 / `38/39`，失败为既有 Excel 导出 zip 测试 |
@@ -114,6 +114,21 @@ GMV 区域分布会优先用 `ContentPackage.shopId` 对应的外部门店坐标
 | GMV 区域口径 | 已验证 | 实际开发库今日查询返回南山、福田、罗湖、龙华、宝安、盐田、坪山、光明、龙岗 9 个深圳区，非全量“未分区” |
 | 浏览器接线 | 已验证 | 门店页点击刷新发出 `POST /api/stores/refresh`，随后轮询任务状态，最终显示“外部门店已同步：1,953 家”并重新加载带坐标的门店列表 |
 | 只读边界 | 已实现 | 本链路只写 `Store`/`Merchant` 门店主数据，不调用订单、核销、退款、库存或物流写接口 |
+
+## 2026-08-17 商家提货分外部快照
+
+提货分页面新增 JeeSite 合作商账户记录同步链路：读取 `GET /core/corePartnerAccountRecord/listData` 返回的 JSON，按 `corePartnerId` / `corePartner.name` 识别商家，聚合 `availableCommodityPoint`，仅 `state=1` 的记录计入可用提货分；观察到的源站总数为 `15994`，提货分样本最多两位小数，后端按点×100 的 `BigInt` 整数保存。
+
+同步由 `POST /api/finance-center/pickup-points/refresh` 创建后台任务，任务串行分页读取，每页之间保留等待；所有页面读取和 staging 写入成功后，短事务只更新 `PartnerPickupPointSnapshotState` 活动指针，旧快照在事务外清理。普通 `GET /api/finance-center/pickup-points` 只读最近成功快照，不触发外部扫描；同步失败、空返回、认证失效或进程中断均继续保留旧快照。前端提货分页面提供“同步并刷新”并轮询任务进度，隐藏本地资产账户的创建/调整操作。
+
+### 本次验证边界
+
+| 层级 | 状态 | 证据或剩余动作 |
+|------|------|----------------|
+| 外部 `listData` 结构 | 已验证 | 本机登录态只读探测返回 `count=15994`，字段包含 `corePartnerId`、`availableCommodityPoint`、`state`、`corePartner.name`；未写入外部系统 |
+| 映射与精度 | 已通过 | `partner-pickup-point.mapper.spec.ts`：`3/3`；覆盖嵌套商家字段、`132.66 -> 13266n`、有效状态聚合、缺 ID 和非法小数保护 |
+| 类型、构建与 schema | 本次链路已通过，工作区全量 Web 门禁有既有残差 | API build、`prisma validate`、定向 ESLint、源码完整性与迁移策略测试通过；Web `vue-tsc`/Vite 当前被未触及的 Dashboard WIP（缺失导入与类型漂移）阻断；新增 `0029_partner_pickup_point_snapshot`，迁移策略 hash 已更新 |
+| 真实全量同步 | 待目标环境验收 | 本次未启动 15,994 条的完整外部刷新，避免重复制造外部负载；部署并应用 0029 后，由有权限用户点击“同步并刷新”，核对任务完成、商家数、总提货分和源站记录数 |
 
 ## 2026-08-16 订单中心余额支付展示
 

@@ -3,6 +3,7 @@ import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import type { Request } from 'express';
 import { createDtoPipe } from '../common/dto-pipe';
+import { hasForceSignal } from '../common';
 import { assertUnrestrictedAnalytics } from '../user-access/scope-guards';
 import { RequireLogin } from '../user-access/iam/route-auth.decorator';
 import { RequirePermissions } from '../user-access/iam/require-permissions.decorator';
@@ -27,6 +28,6 @@ export class OperationController {
     @Req() req: Request
   ) {
     assertUnrestrictedAnalytics(req);
-    return this.workbench.getWorkbench(query.date);
+    return this.workbench.getWorkbench(query.date, hasForceSignal(req, query));
   }
 }

@@ -103,6 +103,15 @@
   margin-bottom: 16px;
 }
 
+.finance-pickup-point-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  margin: -2px 0 16px;
+  color: var(--finance-muted);
+  font-size: 12px;
+}
+
 .finance-dialog-form {
   margin-top: 16px;
 }

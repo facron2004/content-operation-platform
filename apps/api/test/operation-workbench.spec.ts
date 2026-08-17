@@ -88,4 +88,35 @@ describe('OperationWorkbenchService', () => {
       'pending-outbox'
     ]);
   });
+
+  it('passes the force flag to cache-backed analytics sources', async () => {
+    const gmv = { date: '2026-08-11', updatedAt: null } as never;
+    const getKpis = vi.fn().mockResolvedValue(gmv);
+    const getTrend = vi.fn().mockResolvedValue([]);
+    const getCatalogKpis = vi.fn().mockResolvedValue({
+      totalMerchants: 0,
+      totalSkus: 0,
+      zeroSalesMerchants: 0,
+      zeroSalesSkuCount: 0,
+      zeroSalesSkuRatio: 0,
+      dataSource: 'empty'
+    });
+    const prisma = {
+      marketingCampaign: { count: vi.fn().mockResolvedValue(0) },
+      distributionTask: { count: vi.fn().mockResolvedValue(0) },
+      outboxEvent: { count: vi.fn().mockResolvedValue(0) },
+      jobRun: { count: vi.fn().mockResolvedValue(0) }
+    } as never;
+    const service = new OperationWorkbenchService(
+      prisma,
+      { getKpis, getTrend } as never,
+      { getKpis: getCatalogKpis } as never
+    );
+
+    await service.getWorkbench('2026-08-11', true);
+
+    expect(getKpis).toHaveBeenCalledWith('2026-08-11', true);
+    expect(getTrend).toHaveBeenCalledWith(7, '2026-08-11', true);
+    expect(getCatalogKpis).toHaveBeenCalledWith('2026-08-11', true);
+  });
 });

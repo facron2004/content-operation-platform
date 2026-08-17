@@ -950,6 +950,29 @@ model MemberIntegralRecord {
   @@index([createDate])
 }
 
+// External JeeSite partner account-record snapshot. The value is stored as
+// points x 100 so decimal pickup points remain exact without using Float.
+model PartnerPickupPointSnapshot {
+  generation          String
+  merchantId          String
+  merchantName        String
+  availablePointCenti BigInt
+  recordCount         Int      @default(0)
+  activeRecordCount   Int      @default(0)
+  snapshotAt          DateTime @default(now())
+
+  @@id([generation, merchantId])
+  @@index([generation, availablePointCenti])
+  @@index([merchantId, snapshotAt])
+}
+
+// Single-row pointer identifying the partner pickup-point generation used by readers.
+model PartnerPickupPointSnapshotState {
+  id          String   @id
+  generation  String
+  activatedAt DateTime @default(now())
+}
+
 model OrderPoint {
   id        String   @id @default(cuid())
   orderId   String

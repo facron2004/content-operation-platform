@@ -16,11 +16,11 @@ export class OperationWorkbenchService {
     @Inject(OverviewService) private readonly overview: OverviewService
   ) {}
 
-  async getWorkbench(date?: string): Promise<OperationWorkbenchPayload> {
+  async getWorkbench(date?: string, force = false): Promise<OperationWorkbenchPayload> {
     const [gmv, trend, catalog, pendingCounts] = await Promise.all([
-      this.gmv.getKpis(date),
-      this.gmv.getTrend(7, date),
-      this.overview.getKpis(date),
+      this.gmv.getKpis(date, force),
+      this.gmv.getTrend(7, date, force),
+      this.overview.getKpis(date, force),
       this.loadPendingCounts()
     ]);
 

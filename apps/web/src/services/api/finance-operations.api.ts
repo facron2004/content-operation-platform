@@ -16,6 +16,53 @@ export interface FinanceAccount {
   updatedAt: string;
 }
 
+export interface PartnerPickupPointItem {
+  merchantId: string;
+  merchantName: string;
+  availablePoint: string;
+  recordCount: number;
+  activeRecordCount: number;
+}
+
+export interface PartnerPickupPointSummary {
+  merchantCount: number;
+  totalRecords: number;
+  activeRecordCount: number;
+  totalAvailablePoint: string;
+  snapshotAt: string | null;
+}
+
+export interface PartnerPickupPointPage {
+  items: PartnerPickupPointItem[];
+  pagination: { page: number; pageSize: number; total: number; hasMore: boolean };
+  summary: PartnerPickupPointSummary;
+  dataSources: string[];
+}
+
+export type PartnerPickupPointRefreshStatus =
+  'queued' | 'pulling' | 'done' | 'error' | 'interrupted';
+
+export interface PartnerPickupPointRefreshJob {
+  jobId: string;
+  generation: string;
+  status: PartnerPickupPointRefreshStatus;
+  progress: {
+    currentPage: number;
+    pagesFetched: number;
+    totalPages: number;
+    totalRecords: number;
+    recordsFetched: number;
+    merchantsPersisted: number;
+    skipped: number;
+    errors: number;
+    pageSize: number;
+  };
+  result?: PartnerPickupPointRefreshJob['progress'] & { warnings: string[] };
+  error?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
 export interface AssetLedger {
   id: string;
   ledgerNo: string;
@@ -108,6 +155,32 @@ export async function listFinanceAccounts(params: {
 }) {
   return (await client.get<FinancePage<FinanceAccount>>('/finance-center/accounts', { params }))
     .data;
+}
+
+export async function listPartnerPickupPoints(params: { page?: number; pageSize?: number } = {}) {
+  return (await client.get<PartnerPickupPointPage>('/finance-center/pickup-points', { params }))
+    .data;
+}
+
+export async function startPartnerPickupPointRefresh() {
+  return (await client.post<PartnerPickupPointRefreshJob>('/finance-center/pickup-points/refresh'))
+    .data;
+}
+
+export async function getActivePartnerPickupPointRefresh() {
+  return (
+    await client.get<PartnerPickupPointRefreshJob | null>(
+      '/finance-center/pickup-points/refresh/active'
+    )
+  ).data;
+}
+
+export async function getPartnerPickupPointRefresh(jobId: string) {
+  return (
+    await client.get<PartnerPickupPointRefreshJob>(
+      `/finance-center/pickup-points/refresh/${encodeURIComponent(jobId)}`
+    )
+  ).data;
 }
 
 export async function createFinanceAccount(

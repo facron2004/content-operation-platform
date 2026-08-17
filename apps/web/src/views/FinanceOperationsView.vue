@@ -5,6 +5,15 @@
         <el-icon><Refresh /></el-icon>
         刷新
       </el-button>
+      <el-button
+        v-if="isPickupPointSection"
+        type="primary"
+        :loading="pickupPointRefreshStarting"
+        @click="startPickupPointRefresh"
+      >
+        <el-icon><Refresh /></el-icon>
+        {{ pickupPointRefreshBusy ? '同步中...' : '同步并刷新' }}
+      </el-button>
     </div>
 
     <ErrorAlert :message="error" />
@@ -78,6 +87,76 @@
         </el-table-column>
       </el-table>
       <el-empty v-if="!loading && !accounts.length" description="暂无资产账户" :image-size="56" />
+    </section>
+
+    <section v-else-if="isPickupPointSection" class="panel finance-operations-panel">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">EXTERNAL PARTNER SNAPSHOT</p>
+          <h2>商家提货分</h2>
+        </div>
+        <span class="section-meta">
+          {{ pickupPointSummary.merchantCount }} 个商家 ·
+          {{ pickupPointSummary.totalAvailablePoint }} 点
+        </span>
+      </div>
+      <el-alert
+        v-if="pickupPointRefreshBusy"
+        :title="`外部同步中：第 ${pickupPointRefreshJob?.progress.currentPage ?? 0} / ${pickupPointRefreshJob?.progress.totalPages || '—'} 页，已读取 ${pickupPointRefreshJob?.progress.recordsFetched ?? 0} 条`"
+        type="info"
+        :closable="false"
+        class="finance-operations-alert"
+      />
+      <el-alert
+        v-else-if="
+          pickupPointRefreshJob?.status === 'error' ||
+          pickupPointRefreshJob?.status === 'interrupted'
+        "
+        :title="pickupPointRefreshJob.error || '外部同步失败，继续显示上次成功快照'"
+        type="warning"
+        :closable="false"
+        class="finance-operations-alert"
+      />
+      <div class="finance-pickup-point-summary">
+        <span>有效记录 {{ pickupPointSummary.activeRecordCount }}</span>
+        <span>总记录 {{ pickupPointSummary.totalRecords }}</span>
+        <span>
+          快照时间：{{
+            pickupPointSummary.snapshotAt ? displayDateTime(pickupPointSummary.snapshotAt) : '暂无'
+          }}
+        </span>
+      </div>
+      <el-table :data="pickupPointItems" row-key="merchantId">
+        <el-table-column label="商家" min-width="240">
+          <template #default="{ row }">
+            <div class="finance-primary-cell">
+              <strong>{{ row.merchantName }}</strong>
+              <small>{{ row.merchantId }}</small>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column label="可用提货分" width="160" align="right">
+          <template #default="{ row }">
+            <strong>{{ row.availablePoint }} 点</strong>
+          </template>
+        </el-table-column>
+        <el-table-column label="有效记录" width="110" align="right">
+          <template #default="{ row }">{{ row.activeRecordCount }}</template>
+        </el-table-column>
+        <el-table-column label="记录总数" width="110" align="right">
+          <template #default="{ row }">{{ row.recordCount }}</template>
+        </el-table-column>
+        <el-table-column label="数据来源" min-width="250">
+          <template #default>
+            <span>JeeSite · corePartnerAccountRecord/listData</span>
+          </template>
+        </el-table-column>
+      </el-table>
+      <el-empty
+        v-if="!loading && !pickupPointItems.length"
+        description="暂无成功同步的商家提货分，请点击“同步并刷新”"
+        :image-size="56"
+      />
     </section>
 
     <section v-else-if="section === 'ledger'" class="panel finance-operations-panel">
@@ -564,18 +643,25 @@ import {
   createProfitSharing,
   createReconciliationBatch,
   getFinanceSettlement,
+  getActivePartnerPickupPointRefresh,
+  getPartnerPickupPointRefresh,
   listAssetLedger,
   listFinanceAccounts,
+  listPartnerPickupPoints,
   listFinanceSettlements,
   listProfitSharing,
   listReconciliationBatches,
   listReconciliationDiffs,
   payFinanceSettlement,
   resolveReconciliationDiff,
+  startPartnerPickupPointRefresh,
   triggerProfitSharing,
   type AssetLedger,
   type FinanceAccount,
   type FinanceSettlement,
+  type PartnerPickupPointItem,
+  type PartnerPickupPointRefreshJob,
+  type PartnerPickupPointSummary,
   type ProfitSharingOrder,
   type ReconciliationBatch,
   type ReconciliationDiff
@@ -615,7 +701,7 @@ const navItems: Array<{ key: Section; path: string; label: string; note: string 
     label: '商家账户',
     note: '待结算资产'
   },
-  { key: 'pickup-points', path: '/finance/pickup-points', label: '提货点', note: '提货点资产' },
+  { key: 'pickup-points', path: '/finance/pickup-points', label: '提货分', note: '商家提货分' },
   { key: 'ledger', path: '/finance/ledger', label: '资产流水', note: '追加式账本' },
   { key: 'settlements', path: '/finance/settlements', label: '商家结算', note: '审核与付款' },
   { key: 'profit-sharing', path: '/finance/profit-sharing', label: '分账管理', note: '第三方适配' },
@@ -644,6 +730,16 @@ const settlements = ref<FinanceSettlement[]>([]);
 const profitOrders = ref<ProfitSharingOrder[]>([]);
 const reconciliationBatches = ref<ReconciliationBatch[]>([]);
 const reconciliationDiffs = ref<ReconciliationDiff[]>([]);
+const pickupPointItems = ref<PartnerPickupPointItem[]>([]);
+const pickupPointSummary = ref<PartnerPickupPointSummary>({
+  merchantCount: 0,
+  totalRecords: 0,
+  activeRecordCount: 0,
+  totalAvailablePoint: '0',
+  snapshotAt: null
+});
+const pickupPointRefreshJob = ref<PartnerPickupPointRefreshJob | null>(null);
+const pickupPointRefreshStarting = ref(false);
 const accountDialog = ref(false);
 const adjustDialog = ref(false);
 const settlementDialog = ref(false);
@@ -685,14 +781,23 @@ const reconciliationForm = reactive({
 });
 let loadSequence = 0;
 let disposed = false;
+let pickupPointPollTimer: ReturnType<typeof setTimeout> | undefined;
 
 onScopeDispose(() => {
   disposed = true;
   loadSequence += 1;
+  if (pickupPointPollTimer) clearTimeout(pickupPointPollTimer);
 });
 
 const isAccountSection = computed(() =>
-  ['user-assets', 'merchant-accounts', 'pickup-points'].includes(section.value)
+  ['user-assets', 'merchant-accounts'].includes(section.value)
+);
+const isPickupPointSection = computed(() => section.value === 'pickup-points');
+const pickupPointRefreshBusy = computed(
+  () =>
+    pickupPointRefreshStarting.value ||
+    pickupPointRefreshJob.value?.status === 'queued' ||
+    pickupPointRefreshJob.value?.status === 'pulling'
 );
 const settlementDetail = computed(() => Boolean(route.params.settlementId));
 const pageMeta = computed(() => {
@@ -708,9 +813,10 @@ const pageMeta = computed(() => {
       tableTitle: '商家资产账户'
     },
     'pickup-points': {
-      title: '提货点账户',
-      description: '提货点资产独立核算，避免与现金或福利资产混用。',
-      tableTitle: '提货点资产账户'
+      title: '商家提货分',
+      description:
+        '读取 JeeSite 合作商账户记录 listData，按商家聚合可用提货分；页面只展示最近一次成功快照。',
+      tableTitle: '商家提货分'
     },
     ledger: {
       title: '资产流水',
@@ -752,14 +858,32 @@ async function loadData() {
   profitOrders.value = [];
   reconciliationBatches.value = [];
   reconciliationDiffs.value = [];
-  const isCurrent = () =>
-    !disposed && sequence === loadSequence && targetPath === route.fullPath;
+  pickupPointItems.value = [];
+  pickupPointSummary.value = {
+    merchantCount: 0,
+    totalRecords: 0,
+    activeRecordCount: 0,
+    totalAvailablePoint: '0',
+    snapshotAt: null
+  };
+  const isCurrent = () => !disposed && sequence === loadSequence && targetPath === route.fullPath;
 
   try {
-    if (isAccountSection.value) {
+    if (isPickupPointSection.value) {
+      const [result, activeJob] = await Promise.all([
+        listPartnerPickupPoints({ page: 1, pageSize: 100 }),
+        getActivePartnerPickupPointRefresh()
+      ]);
+      if (!isCurrent()) return;
+      pickupPointItems.value = result.items;
+      pickupPointSummary.value = result.summary;
+      if (activeJob) {
+        pickupPointRefreshJob.value = activeJob;
+        schedulePickupPointRefreshPoll(activeJob.jobId);
+      }
+    } else if (isAccountSection.value) {
       const result = await listFinanceAccounts({
         ownerType: section.value === 'merchant-accounts' ? 'MERCHANT' : undefined,
-        assetType: section.value === 'pickup-points' ? 'PICKUP_POINT' : undefined,
         page: 1,
         pageSize: 100
       });
@@ -797,6 +921,40 @@ async function loadData() {
     error.value = cause instanceof Error ? cause.message : '资金数据加载失败';
   } finally {
     if (isCurrent()) loading.value = false;
+  }
+}
+
+function schedulePickupPointRefreshPoll(jobId: string) {
+  if (pickupPointPollTimer) clearTimeout(pickupPointPollTimer);
+  pickupPointPollTimer = setTimeout(async () => {
+    if (disposed || !isPickupPointSection.value) return;
+    try {
+      const job = await getPartnerPickupPointRefresh(jobId);
+      if (disposed) return;
+      pickupPointRefreshJob.value = job;
+      if (job.status === 'queued' || job.status === 'pulling') {
+        schedulePickupPointRefreshPoll(jobId);
+      } else if (job.status === 'done') {
+        await loadData();
+        ElMessage.success(`商家提货分同步完成，共 ${job.progress.merchantsPersisted} 个商家`);
+      }
+    } catch (cause) {
+      if (!disposed) ElMessage.error(cause instanceof Error ? cause.message : '同步进度读取失败');
+    }
+  }, 1000);
+}
+
+async function startPickupPointRefresh() {
+  if (pickupPointRefreshBusy.value) return;
+  pickupPointRefreshStarting.value = true;
+  try {
+    const job = await startPartnerPickupPointRefresh();
+    pickupPointRefreshJob.value = job;
+    schedulePickupPointRefreshPoll(job.jobId);
+  } catch (cause) {
+    ElMessage.error(cause instanceof Error ? cause.message : '商家提货分同步启动失败');
+  } finally {
+    pickupPointRefreshStarting.value = false;
   }
 }
 

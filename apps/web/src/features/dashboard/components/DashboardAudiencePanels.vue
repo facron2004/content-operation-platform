@@ -21,7 +21,7 @@
         </div>
       </div>
       <div class="lifecycle-layout">
-        <div class="lifecycle-bars">
+        <div v-if="users.lifecycle.length" class="lifecycle-bars">
           <div v-for="item in users.lifecycle" :key="item.label" class="lifecycle-row">
             <span>{{ item.label }}</span>
             <div class="lifecycle-row__track">
@@ -30,10 +30,11 @@
             <strong>{{ item.share }}%</strong>
           </div>
         </div>
+        <div v-else class="dashboard-empty">暂无真实用户生命周期数据</div>
         <div class="recall-card">
-          <span class="recall-card__tag">AI 建议召回</span>
-          <strong>{{ count(users.dormantHighValue) }} 名高价值用户</strong>
-          <p>已连续 14 天未消费，可发送 5 元优惠券进行召回。</p>
+          <span class="recall-card__tag">生命周期预警</span>
+          <strong>{{ count(users.dormantUsers) }} 名沉睡/流失用户</strong>
+          <p>用户生命周期数据来自用户中心，可按阶段创建召回人群。</p>
           <button type="button" @click="$emit('recall')">
             立即创建召回
             <ArrowRight />
@@ -62,14 +63,14 @@
           :class="`is-${item.tone}`"
         >
           <span>{{ item.label }}</span>
-          <strong>{{ item.format === 'currency' ? money(item.value) : count(item.value) }}</strong>
+          <strong>{{ count(item.value) }}</strong>
         </div>
       </div>
       <div class="community-body">
         <div class="community-group-list">
           <div class="community-group-list__head">
-            <span>社群 TOP3</span>
-            <span>GMV</span>
+            <span>社群预览</span>
+            <span>成员 / 活跃度</span>
           </div>
           <div
             v-for="(item, index) in community.groups"
@@ -80,11 +81,12 @@
               <i>{{ index + 1 }}</i>
               {{ item.name }}
             </span>
-            <strong>{{ money(item.gmv) }}</strong>
+            <strong>{{ count(item.memberCount) }} · {{ item.activity }}</strong>
           </div>
+          <div v-if="!community.groups.length" class="dashboard-empty">暂无真实社群数据</div>
         </div>
         <div class="send-time-card">
-          <span class="send-time-card__label">今日最佳发送时间</span>
+          <span class="send-time-card__label">今日下一条发送时间</span>
           <strong>{{ community.bestSendTime }}</strong>
           <p>{{ community.bestSendReason }}</p>
           <button type="button" @click="$emit('open-community')">
@@ -112,7 +114,6 @@ defineEmits<{
 }>();
 
 const count = (value: number) => Math.round(value).toLocaleString('zh-CN');
-const money = (value: number) => `¥${Math.round(value).toLocaleString('zh-CN')}`;
 </script>
 
 <style scoped>

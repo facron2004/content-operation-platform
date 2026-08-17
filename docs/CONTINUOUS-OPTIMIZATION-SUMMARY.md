@@ -11,6 +11,14 @@
 
 ---
 
+## 2026-08-17 商家提货分外部快照接入
+
+提货分页面现从 JeeSite `corePartnerAccountRecord/listData` 读取合作商账户记录 JSON，按 `corePartnerId` 聚合 `availableCommodityPoint`，仅 `state=1` 计入可用提货分。后台任务串行分页、分批写入 `PartnerPickupPointSnapshot` staging，全部页面成功后只在短事务中切换 `PartnerPickupPointSnapshotState` 活动指针；外部失败或中断继续保留旧快照。新增 API 为 `GET/POST /api/finance-center/pickup-points` 及刷新任务状态接口，前端提货分页提供“同步并刷新”，不允许本地创建或调整外部账户。
+
+实现证据：`0029_partner_pickup_point_snapshot`、API build、Prisma schema 校验、迁移策略测试、源码完整性检查、定向 ESLint 和提货分映射/刷新任务聚焦测试均已通过；工作区全量 Web `vue-tsc`/Vite 当前被未触及的 Dashboard WIP 缺失导入与类型漂移阻断；真实 15,994 条外部全量刷新留待目标环境由有权限用户执行，避免在开发阶段重复制造外部负载。
+
+---
+
 ## 1. 目标与工作方式
 
 在用户明确说停之前，持续做安全 / 正确性 / 工程可维护性的 residual 硬化：

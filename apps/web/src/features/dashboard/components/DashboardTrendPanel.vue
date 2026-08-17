@@ -78,7 +78,9 @@ const activeMetricLabel = computed(
 const rangeLabel = computed(
   () => TIME_RANGE_OPTIONS.find((item) => item.value === props.timeRange)?.label ?? '今日'
 );
-const showCompare = computed(() => props.metric === 'gmv' && props.points.length <= 12);
+const showCompare = computed(
+  () => props.metric === 'gmv' && props.points.some((point) => point.yesterdayGmv !== undefined)
+);
 </script>
 
 <style scoped>

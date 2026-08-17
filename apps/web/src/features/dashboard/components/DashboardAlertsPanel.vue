@@ -2,9 +2,9 @@
   <section class="dashboard-panel dashboard-alerts-panel">
     <div class="dashboard-panel__header dashboard-panel__header--compact">
       <div>
-        <div class="dashboard-section-label">07 / AI SIGNALS</div>
+        <div class="dashboard-section-label">07 / SIGNALS</div>
         <h2>今日异常与运营建议</h2>
-        <p>系统先告诉你哪里有问题、为什么发生，以及现在可以做什么。</p>
+        <p>预警来自运营规则与业务数据，展示问题对象、原因和处理动作。</p>
       </div>
       <button type="button" class="dashboard-text-action" @click="$emit('open-all')">
         经营预警中心
@@ -30,16 +30,16 @@
           <div class="dashboard-alert__metrics">
             <span>{{ item.metric }}</span>
             <span>{{ item.comparison }}</span>
-            <strong>{{ item.change }}</strong>
           </div>
           <p>{{ item.reason }}</p>
-          <small>AI 建议：{{ item.suggestion }}</small>
+          <small>处理建议：{{ item.action }}</small>
         </div>
         <button type="button" class="dashboard-alert__action" @click="$emit('action', item.id)">
           {{ item.action }}
           <ArrowRight />
         </button>
       </article>
+      <div v-if="!alerts.length" class="dashboard-empty">暂无待处理真实预警</div>
     </div>
   </section>
 </template>

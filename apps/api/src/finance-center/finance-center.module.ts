@@ -1,14 +1,29 @@
 import { Module } from '@nestjs/common';
+import { ContentModule } from '../content/content.module';
 import { IdempotencyModule } from '../idempotency/idempotency.module';
+import { JobsModule } from '../jobs/jobs.module';
 import { FinanceCenterController } from './finance-center.controller';
 import { FinanceCenterService } from './finance-center.service';
 import { FinanceAssetService } from './finance-asset.service';
 import { FinanceOperationsService } from './finance-operations.service';
+import { JeeSitePartnerAccountClient } from './jeesite-partner-account.client';
+import { PartnerPickupPointService } from './partner-pickup-point.service';
 
 @Module({
-  imports: [IdempotencyModule],
+  imports: [ContentModule, JobsModule, IdempotencyModule],
   controllers: [FinanceCenterController],
-  providers: [FinanceCenterService, FinanceAssetService, FinanceOperationsService],
-  exports: [FinanceCenterService, FinanceAssetService, FinanceOperationsService]
+  providers: [
+    FinanceCenterService,
+    FinanceAssetService,
+    FinanceOperationsService,
+    JeeSitePartnerAccountClient,
+    PartnerPickupPointService
+  ],
+  exports: [
+    FinanceCenterService,
+    FinanceAssetService,
+    FinanceOperationsService,
+    PartnerPickupPointService
+  ]
 })
 export class FinanceCenterModule {}

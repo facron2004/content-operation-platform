@@ -112,6 +112,10 @@
     {
       "name": "0028_content_package_current_stock",
       "sha256": "9f6a5b26ce16ab7917d16d025bec7735ba3d93891ff5940c82bc9139e9b3721f"
+    },
+    {
+      "name": "0029_partner_pickup_point_snapshot",
+      "sha256": "77389a50edd9844a0123933b82f19d1049563d8717803e192e41b516db271f1b"
     }
   ],
   "sourceEquivalences": [

@@ -5,17 +5,26 @@ export interface OperationGmvKpi {
   totalGmv?: number | null;
   totalGmvFen?: string | null;
   totalGmvDisplay?: string;
+  totalRefund?: number | null;
   monthGmv?: number | null;
   monthGmvFen?: string | null;
   monthGmvDisplay?: string;
   totalRefundFen?: string | null;
   totalRefundDisplay?: string;
+  refundOrderCount?: number;
+  verifyOrderCount?: number;
   totalVerifyFen?: string | null;
   totalVerifyDisplay?: string;
   refundRate: number;
   verifyRate: number;
   paidOrderCount: number;
   avgOrderValue: number;
+  compare?: {
+    totalGmv?: number | null;
+    paidOrderCount?: number | null;
+    refundRate?: number | null;
+    verifyRate?: number | null;
+  };
   dataSource: string;
   [key: string]: unknown;
 }
@@ -25,6 +34,12 @@ export interface OperationTrendPoint {
   totalGmv?: number | null;
   totalGmvFen?: string | null;
   totalGmvDisplay?: string;
+  totalRefund?: number | null;
+  totalRefundFen?: string | null;
+  refundRate?: number;
+  refundCount?: number;
+  verifyRate?: number;
+  verifyCount?: number;
   paidOrderCount: number;
 }
 
@@ -62,10 +77,10 @@ export interface OperationWorkbenchResponse {
   };
 }
 
-export async function getOperationWorkbench(date?: string) {
+export async function getOperationWorkbench(date?: string, force = false) {
   return (
     await client.get<OperationWorkbenchResponse>('/operation/workbench', {
-      params: date ? { date } : undefined,
+      params: date || force ? { ...(date ? { date } : {}), ...(force ? { force: true } : {}) } : undefined,
       timeout: 30000
     })
   ).data;

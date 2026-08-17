@@ -4,7 +4,7 @@
       <div>
         <div class="dashboard-section-label">04 / CONVERSION</div>
         <h2>交易漏斗</h2>
-        <p>找到掉得最严重的一个环节，再决定下一步。</p>
+        <p>查看内容点击、支付和核销的真实转化链路。</p>
       </div>
       <button type="button" class="dashboard-text-action" @click="$emit('inspect')">
         查看转化分析
@@ -27,10 +27,11 @@
         <span v-else class="dashboard-funnel__rate dashboard-funnel__rate--muted">起始流量</span>
       </div>
     </div>
-    <div class="dashboard-funnel__insight">
+    <div v-if="stages.length" class="dashboard-funnel__insight">
       <span class="dashboard-funnel__insight-dot" />
-      <span>访问 → 下单转化率需要重点关注，建议检查近期套餐价格及详情页。</span>
+      <span>统计口径：内容点击 → 支付订单 → 核销订单，转化率来自内容运营摘要。</span>
     </div>
+    <div v-else class="dashboard-funnel__empty">暂无真实漏斗数据</div>
   </section>
 </template>
 

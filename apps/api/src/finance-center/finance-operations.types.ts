@@ -97,6 +97,29 @@ export interface FinancePage<T> {
   pagination: { page: number; pageSize: number; total: number; hasMore: boolean };
 }
 
+export interface PartnerPickupPointItemView {
+  merchantId: string;
+  merchantName: string;
+  availablePoint: string;
+  recordCount: number;
+  activeRecordCount: number;
+}
+
+export interface PartnerPickupPointSummaryView {
+  merchantCount: number;
+  totalRecords: number;
+  activeRecordCount: number;
+  totalAvailablePoint: string;
+  snapshotAt: string | null;
+}
+
+export interface PartnerPickupPointPageView {
+  items: PartnerPickupPointItemView[];
+  pagination: { page: number; pageSize: number; total: number; hasMore: boolean };
+  summary: PartnerPickupPointSummaryView;
+  dataSources: string[];
+}
+
 export interface FinanceOperationsSummary {
   pendingSettlementFen: string;
   settledFen: string;
