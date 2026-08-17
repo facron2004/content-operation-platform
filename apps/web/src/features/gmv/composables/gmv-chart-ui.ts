@@ -9,7 +9,7 @@ import { displayMoney, formatPercentRaw, readFen } from '../../../utils/format';
 
 export function buildGmvDistributionOption(distribution: GmvDistributionRow[]) {
   if (distribution.length === 0) return {};
-  return buildCategoryBar({
+  const option = buildCategoryBar({
     items: distribution.map((r) => ({
       label: r.key,
       value: Number(readFen(r, 'totalGmv') ?? 0) / 100,
@@ -26,6 +26,13 @@ export function buildGmvDistributionOption(distribution: GmvDistributionRow[]) {
     rotate: 30,
     barMaxWidth: 32
   });
+  return {
+    ...option,
+    grid: {
+      ...CHART_GRID.bar,
+      top: 32
+    }
+  };
 }
 
 export type GmvTrendMode = 'volume' | 'rates' | 'mix';
@@ -185,4 +192,3 @@ function formatTrendLabel(date: string, granularity: GmvTrendGranularity): strin
 
 // keep dual-axis helper import used for non-default modes
 void buildDualAxisLine;
-void CHART_GRID;

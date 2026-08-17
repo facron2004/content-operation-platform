@@ -8,7 +8,11 @@ export interface UserCenterMemberItem {
   nickname: string | null;
   phone: string | null;
   level: string | null;
-  pointsBalance: number;
+  sourceCreatedAt: string | null;
+  sourceUpdatedAt: string | null;
+  sourceLastLoginAt: string | null;
+  welfareBalanceFen: string | null;
+  pointsBalance: number | null;
   walletBalanceFen: string | null;
   totalGmvFen: string | null;
   totalOrders: number;
@@ -28,6 +32,10 @@ export interface UserCenterListResponse {
     hasMore: boolean;
   };
   summary: {
+    newMembersToday: number | null;
+    newMembersThisWeek: number | null;
+    newMembersThisMonth: number | null;
+    newMembersBasis: 'sourceCreatedAt' | 'firstSeenAt' | 'unavailable';
     totalMembers: number;
     paidMembers: number;
     activeMembers30d: number;
@@ -63,6 +71,41 @@ export interface UserCenterMemberDetailResponse {
   dataSources: string[];
 }
 
+export type UserCenterRefreshJobStatus =
+  | 'queued'
+  | 'pulling'
+  | 'done'
+  | 'error'
+  | 'interrupted';
+
+export interface UserCenterRefreshJob {
+  jobId: string;
+  generation: string;
+  status: UserCenterRefreshJobStatus;
+  progress: {
+    currentPage: number;
+    pagesFetched: number;
+    totalPages: number;
+    totalMembers: number;
+    membersFetched: number;
+    membersPersisted: number;
+    errors: number;
+    pageSize: number;
+  };
+  result?: {
+    currentPage: number;
+    pagesFetched: number;
+    totalPages: number;
+    totalMembers: number;
+    membersFetched: number;
+    membersPersisted: number;
+    errors: number;
+    pageSize: number;
+    warnings: string[];
+  };
+  error?: string;
+}
+
 export async function getUserCenterMembers(params: {
   search?: string;
   level?: string;
@@ -82,6 +125,30 @@ export async function getUserCenterMember(memberId: string, inviteCode?: string 
     await client.get<UserCenterMemberDetailResponse>(`/user-center/members/${memberId}`, {
       params: inviteCode ? { inviteCode } : undefined,
       timeout: 30000
+    })
+  ).data;
+}
+
+export async function startUserCenterMemberRefresh() {
+  return (
+    await client.post<UserCenterRefreshJob>('/user-center/members/refresh', undefined, {
+      timeout: 10000
+    })
+  ).data;
+}
+
+export async function getActiveUserCenterMemberRefresh() {
+  return (
+    await client.get<UserCenterRefreshJob | null>('/user-center/members/refresh/active', {
+      timeout: 10000
+    })
+  ).data;
+}
+
+export async function getUserCenterMemberRefreshStatus(jobId: string) {
+  return (
+    await client.get<UserCenterRefreshJob>(`/user-center/members/refresh/${jobId}`, {
+      timeout: 10000
     })
   ).data;
 }

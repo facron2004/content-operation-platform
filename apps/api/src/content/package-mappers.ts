@@ -24,6 +24,7 @@ export const PACKAGE_MAP_SELECT = {
   grossProfitFen: true,
   stockTotal: true,
   stockLeft: true,
+  currentStock: true,
   startTime: true,
   endTime: true,
   useRules: true,
@@ -57,6 +58,7 @@ export type PackageAuditRow = {
   temporarySalePriceFen: bigint | null;
   stockTotal: number;
   stockLeft: number;
+  currentStock?: number;
   useRules: string;
 };
 
@@ -130,6 +132,7 @@ export function mapPackage(row: PrismaContentPackage | PackageMapRow): ContentPa
     grossProfit: Number('grossProfitFen' in row ? (row.grossProfitFen ?? 0n) : 0n) / 100,
     stockTotal: row.stockTotal,
     stockLeft: row.stockLeft,
+    currentStock: 'currentStock' in row ? (row.currentStock ?? row.stockLeft) : row.stockLeft,
     startTime: row.startTime.toISOString(),
     endTime: row.endTime.toISOString(),
     useRules: splitList(row.useRules),
@@ -164,6 +167,7 @@ export function packageToDb(pkg: ContentPackage) {
     grossProfitFen: yuanToFen(pkg.grossProfit),
     stockTotal: pkg.stockTotal,
     stockLeft: pkg.stockLeft,
+    currentStock: pkg.currentStock ?? pkg.stockLeft,
     startTime: new Date(pkg.startTime),
     endTime: new Date(pkg.endTime),
     useRules: joinList(pkg.useRules),

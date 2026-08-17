@@ -13,6 +13,11 @@ export class OrderCenterListQueryDto {
   status?: string;
 
   @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  category?: string;
+
+  @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)

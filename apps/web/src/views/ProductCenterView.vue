@@ -17,9 +17,9 @@
         <small>当前筛选范围</small>
       </article>
       <article class="product-center-metric product-center-metric--accent">
-        <span>在售 SKU</span>
+        <span>{{ saleStatus === 'all' ? '在售 SKU' : '筛选状态 SKU' }}</span>
         <strong>{{ formatCount(summary.activeSkus) }}</strong>
-        <small>仅统计销售中</small>
+        <small>{{ saleStatus === 'all' ? '仅统计销售中' : '当前筛选状态' }}</small>
       </article>
       <article class="product-center-metric product-center-metric--warning">
         <span>低库存</span>
@@ -41,7 +41,8 @@
             <h2>{{ pageMeta.tableTitle }}</h2>
           </div>
           <span class="section-meta">
-            余量 {{ formatCount(summary.stockLeft) }} / {{ formatCount(summary.stockTotal) }}
+            初始 {{ formatCount(summary.initialStock) }} · 现在
+            {{ formatCount(summary.currentStock) }} · 当日 {{ formatCount(summary.dailyStock) }}
           </span>
         </div>
 
@@ -57,6 +58,12 @@
             <el-option label="库存正常" value="normal" />
             <el-option label="库存偏低" value="low" />
             <el-option label="已售罄" value="out" />
+          </el-select>
+          <el-select v-model="saleStatus" placeholder="商品状态" @change="applyFilters">
+            <el-option label="全部状态" value="all" />
+            <el-option label="待售（pending）" value="pending" />
+            <el-option label="销售中（selling）" value="selling" />
+            <el-option label="已回收（recycle）" value="recycle" />
           </el-select>
           <el-button type="primary" @click="applyFilters">查询</el-button>
         </div>
@@ -84,9 +91,19 @@
               </div>
             </template>
           </el-table-column>
-          <el-table-column label="库存" width="108" align="right">
+          <el-table-column label="初始库存" width="92" align="right">
             <template #default="{ row }">
-              <strong class="stock-value">{{ row.stockLeft }} / {{ row.stockTotal }}</strong>
+              <strong class="stock-value">{{ formatCount(row.initialStock) }}</strong>
+            </template>
+          </el-table-column>
+          <el-table-column label="现在库存" width="92" align="right">
+            <template #default="{ row }">
+              <strong class="stock-value">{{ formatCount(row.currentStock) }}</strong>
+            </template>
+          </el-table-column>
+          <el-table-column label="当日库存" width="92" align="right">
+            <template #default="{ row }">
+              <strong class="stock-value">{{ formatCount(row.dailyStock) }}</strong>
             </template>
           </el-table-column>
           <el-table-column label="售价" width="114" align="right">
@@ -128,22 +145,24 @@
               <el-button v-if="canWritePackages" size="small" @click="openEditDialog">
                 编辑申请
               </el-button>
-              <el-button
-                v-if="canWritePackages"
-                size="small"
-                type="primary"
-                @click="openInventoryDialog"
-              >
-                调整库存
-              </el-button>
             </div>
           </div>
 
           <div class="product-detail-stock">
             <div>
-              <span>可用库存</span>
-              <strong>{{ selectedProduct.stockLeft }}</strong>
-              <small>总库存 {{ selectedProduct.stockTotal }}</small>
+              <span>初始库存</span>
+              <strong>{{ formatCount(selectedProduct.initialStock) }}</strong>
+              <small>上架时设定</small>
+            </div>
+            <div>
+              <span>现在库存</span>
+              <strong>{{ formatCount(selectedProduct.currentStock) }}</strong>
+              <small>外部动态库存</small>
+            </div>
+            <div>
+              <span>当日库存</span>
+              <strong>{{ formatCount(selectedProduct.dailyStock) }}</strong>
+              <small>当前可用量</small>
             </div>
             <div>
               <span>销售价</span>
@@ -169,8 +188,8 @@
             <div>
               <span>销售周期</span>
               <strong>
-                {{ displayDate(selectedProduct.startTime) }} –
-                {{ displayDate(selectedProduct.endTime) }}
+                {{ displayDateTime(selectedProduct.startTime) }} –
+                {{ displayDateTime(selectedProduct.endTime) }}
               </strong>
             </div>
             <div>
@@ -313,24 +332,6 @@
         <el-button type="primary" :loading="actionLoading" @click="submitEdit">提交审核</el-button>
       </template>
     </el-dialog>
-
-    <el-dialog v-if="canWritePackages" v-model="inventoryDialogOpen" title="调整库存" width="440px">
-      <el-form label-width="92px">
-        <el-form-item label="调整数量" required>
-          <el-input-number v-model="inventoryForm.delta" :min="-100000" :max="100000" />
-          <span class="form-hint">正数增加，负数扣减</span>
-        </el-form-item>
-        <el-form-item label="调整原因" required>
-          <el-input v-model="inventoryForm.reason" type="textarea" :rows="3" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="inventoryDialogOpen = false">取消</el-button>
-        <el-button type="primary" :loading="actionLoading" @click="submitInventory">
-          确认调整
-        </el-button>
-      </template>
-    </el-dialog>
   </section>
 </template>
 
@@ -344,7 +345,6 @@ import { useProductCenter } from '../features/product-center/useProductCenter';
 import { canWritePackages as resolveCanWritePackages } from '../features/write-action-permissions';
 import { useRoleStore } from '../stores/role';
 import {
-  adjustProductInventory,
   approveProductEdit,
   rejectProductEdit,
   requestProductEdit,
@@ -356,6 +356,7 @@ import { buildBusinessIntentKey } from '../services/idempotency-key';
 const {
   search,
   inventoryStatus,
+  saleStatus,
   loading,
   detailLoading,
   syncing,
@@ -407,7 +408,6 @@ const formatCount = (value: number) => value.toLocaleString('zh-CN');
 const selectTableProduct = (row: ProductCenterItem) => selectProduct(row.packageId);
 
 const editDialogOpen = ref(false);
-const inventoryDialogOpen = ref(false);
 const actionLoading = ref(false);
 const editForm = reactive({
   packageName: '',
@@ -417,7 +417,6 @@ const editForm = reactive({
   saleStatus: '',
   reason: ''
 });
-const inventoryForm = reactive({ delta: 1, reason: '' });
 
 function openEditDialog() {
   if (!canWritePackages.value || !selectedProduct.value) return;
@@ -428,13 +427,6 @@ function openEditDialog() {
   editForm.saleStatus = selectedProduct.value.saleStatus ?? '';
   editForm.reason = '';
   editDialogOpen.value = true;
-}
-
-function openInventoryDialog() {
-  if (!canWritePackages.value) return;
-  inventoryForm.delta = 1;
-  inventoryForm.reason = '';
-  inventoryDialogOpen.value = true;
 }
 
 async function submitEdit() {
@@ -462,29 +454,6 @@ async function submitEdit() {
     await reload();
   } catch (cause) {
     ElMessage.error(cause instanceof Error ? cause.message : '商品编辑申请提交失败');
-  } finally {
-    actionLoading.value = false;
-  }
-}
-
-async function submitInventory() {
-  if (!canWritePackages.value) return;
-  if (!selectedPackageId.value || !inventoryForm.delta || !inventoryForm.reason.trim()) {
-    ElMessage.warning('请填写非零库存调整数量和原因');
-    return;
-  }
-  actionLoading.value = true;
-  try {
-    await adjustProductInventory(
-      selectedPackageId.value,
-      { delta: inventoryForm.delta, reason: inventoryForm.reason },
-      buildBusinessIntentKey('inventory-adjustment', selectedPackageId.value, Date.now())
-    );
-    ElMessage.success('库存调整已写入流水');
-    inventoryDialogOpen.value = false;
-    await reload();
-  } catch (cause) {
-    ElMessage.error(cause instanceof Error ? cause.message : '库存调整失败');
   } finally {
     actionLoading.value = false;
   }

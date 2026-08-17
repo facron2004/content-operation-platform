@@ -1,29 +1,108 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue';
-import { ElMessage } from 'element-plus';
+import { onMounted, ref } from 'vue';
 import ErrorAlert from '../components/ErrorAlert.vue';
-import { canManageOrders as resolveCanManageOrders } from '../features/write-action-permissions';
-import { createCardBatch, listCardPackageOptions, listCardBatches, type CardBatch } from '../services/api/gap-center.api';
-import { buildBusinessIntentKey } from '../services/idempotency-key';
-import { useRoleStore } from '../stores/role';
+import { listCardBatches, type CardBatch } from '../services/api/gap-center.api';
 
-const roleStore = useRoleStore();
-const canManageOrders = computed(() => resolveCanManageOrders(roleStore.effectiveRoles, roleStore.permissions));
-const loading = ref(false); const saving = ref(false); const error = ref<string | null>(null); const items = ref<CardBatch[]>([]); const packages = ref<Array<{ packageId: string; packageName: string }>>([]); const createVisible = ref(false); const generatedVisible = ref(false); const generated = ref<Array<{ cardNo: string; secret: string }>>([]); const form = reactive({ name: '', packageId: '', quantity: 10, validStartAt: '', validEndAt: '' });
-function date(value: string | null) { return value ? new Date(value).toLocaleDateString('zh-CN') : '长期'; }
-async function reload() { loading.value = true; error.value = null; try { const [batchData, packageData] = await Promise.all([listCardBatches({ page: 1, pageSize: 100 }), listCardPackageOptions()]); items.value = batchData.items; packages.value = packageData; } catch (cause) { error.value = cause instanceof Error ? cause.message : '卡券批次加载失败'; } finally { loading.value = false; } }
-function openCreate() { if (!canManageOrders.value) return; Object.assign(form, { name: '', packageId: '', quantity: 10, validStartAt: '', validEndAt: '' }); createVisible.value = true; }
-async function submitCreate() { if (!canManageOrders.value) return; if (!form.name.trim()) { ElMessage.warning('请填写批次名称'); return; } saving.value = true; try { const result = await createCardBatch({ name: form.name.trim(), packageId: form.packageId || undefined, quantity: form.quantity, validStartAt: form.validStartAt || undefined, validEndAt: form.validEndAt || undefined }, buildBusinessIntentKey('card-batch', form.name.trim(), Date.now())); generated.value = result.generatedCards; generatedVisible.value = true; createVisible.value = false; ElMessage.success('卡券批次已生成，请保存本次明文卡密'); await reload(); } catch (cause) { ElMessage.error(cause instanceof Error ? cause.message : '卡券批次创建失败'); } finally { saving.value = false; } }
+const loading = ref(false);
+const error = ref<string | null>(null);
+const items = ref<CardBatch[]>([]);
+
+function date(value: string | null) {
+  return value ? new Date(value).toLocaleDateString('zh-CN') : '长期';
+}
+
+async function reload() {
+  loading.value = true;
+  error.value = null;
+  try {
+    const result = await listCardBatches({ page: 1, pageSize: 100 });
+    items.value = result.items;
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : '卡券批次加载失败';
+  } finally {
+    loading.value = false;
+  }
+}
+
 onMounted(() => void reload());
 </script>
 
 <template>
-  <section v-loading="loading" class="page-stack gap-page"><div class="page-toolbar"><el-button :loading="loading" @click="reload">刷新</el-button><el-button v-if="canManageOrders" type="primary" @click="openCreate">生成批次</el-button></div><ErrorAlert :message="error" /><section class="panel"><div class="section-heading"><div><p class="eyebrow">CARD INVENTORY</p><h2>批次列表</h2></div><span class="section-meta">{{ items.length }} 条</span></div><el-table :data="items" row-key="batchId"><el-table-column label="批次" min-width="220"><template #default="{ row }"><strong>{{ row.name }}</strong><small class="muted">{{ row.batchNo }}</small></template></el-table-column><el-table-column label="兑换商品" min-width="150"><template #default="{ row }">{{ row.packageId || '未绑定商品' }}</template></el-table-column><el-table-column label="数量" width="100"><template #default="{ row }">{{ row.quantity }}</template></el-table-column><el-table-column label="状态分布" min-width="210"><template #default="{ row }"><div class="tag-list"><el-tag v-for="(count, key) in row.counts" :key="key" size="small" effect="plain">{{ key }} {{ count }}</el-tag></div></template></el-table-column><el-table-column label="有效期" width="170"><template #default="{ row }">{{ date(row.validStartAt) }} - {{ date(row.validEndAt) }}</template></el-table-column><el-table-column label="创建时间" width="160"><template #default="{ row }">{{ date(row.createdAt) }}</template></el-table-column></el-table><el-empty v-if="!loading && !items.length" description="暂无卡券批次" /></section>
-    <el-dialog v-if="canManageOrders" v-model="createVisible" title="生成卡券批次" width="520px" :close-on-click-modal="false"><el-form label-position="top"><el-form-item label="批次名称" required><el-input v-model="form.name" /></el-form-item><el-form-item label="兑换商品"><el-select v-model="form.packageId" clearable filterable style="width:100%"><el-option v-for="item in packages" :key="item.packageId" :label="item.packageName" :value="item.packageId" /></el-select></el-form-item><el-form-item label="生成数量" required><el-input-number v-model="form.quantity" :min="1" :max="500" /></el-form-item><div class="form-grid"><el-form-item label="生效日期"><el-date-picker v-model="form.validStartAt" type="date" value-format="YYYY-MM-DD" /></el-form-item><el-form-item label="失效日期"><el-date-picker v-model="form.validEndAt" type="date" value-format="YYYY-MM-DD" /></el-form-item></div></el-form><template #footer><el-button @click="createVisible=false">取消</el-button><el-button type="primary" :loading="saving" @click="submitCreate">生成</el-button></template></el-dialog>
-    <el-dialog v-if="canManageOrders" v-model="generatedVisible" title="本次生成的明文卡密" width="650px"><el-alert title="明文卡密不会再次从服务端返回，请立即导出或保存。" type="warning" :closable="false" /><el-table :data="generated" size="small" class="generated-table"><el-table-column prop="cardNo" label="卡号" /><el-table-column prop="secret" label="明文卡密" /></el-table><template #footer><el-button type="primary" @click="generatedVisible=false">我已保存</el-button></template></el-dialog>
+  <section v-loading="loading" class="page-stack gap-page">
+    <div class="page-toolbar">
+      <el-button :loading="loading" @click="reload">刷新</el-button>
+      <span class="readonly-note">订单卡券数据仅供查看</span>
+    </div>
+    <ErrorAlert :message="error" />
+    <section class="panel">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">CARD INVENTORY</p>
+          <h2>批次列表</h2>
+        </div>
+        <span class="section-meta">{{ items.length }} 条</span>
+      </div>
+      <el-table :data="items" row-key="batchId">
+        <el-table-column label="批次" min-width="220">
+          <template #default="{ row }">
+            <strong>{{ row.name }}</strong>
+            <small class="muted">{{ row.batchNo }}</small>
+          </template>
+        </el-table-column>
+        <el-table-column label="兑换商品" min-width="150">
+          <template #default="{ row }">{{ row.packageId || '未绑定商品' }}</template>
+        </el-table-column>
+        <el-table-column label="数量" width="100">
+          <template #default="{ row }">{{ row.quantity }}</template>
+        </el-table-column>
+        <el-table-column label="状态分布" min-width="210">
+          <template #default="{ row }">
+            <div class="tag-list">
+              <el-tag v-for="(count, key) in row.counts" :key="key" size="small" effect="plain">
+                {{ key }} {{ count }}
+              </el-tag>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column label="有效期" width="170">
+          <template #default="{ row }">
+            {{ date(row.validStartAt) }} - {{ date(row.validEndAt) }}
+          </template>
+        </el-table-column>
+        <el-table-column label="创建时间" width="160">
+          <template #default="{ row }">{{ date(row.createdAt) }}</template>
+        </el-table-column>
+      </el-table>
+      <el-empty v-if="!loading && !items.length" description="暂无卡券批次" />
+    </section>
   </section>
 </template>
 
 <style scoped>
-.gap-page{min-width:0}.gap-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.section-heading{display:flex;justify-content:space-between;align-items:flex-start}.section-heading h2{margin:4px 0 0}.section-meta,.muted{color:var(--muted);font-size:12px}.muted{display:block;margin-top:4px}.tag-list{display:flex;gap:5px;flex-wrap:wrap}.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.generated-table{margin-top:14px}@media(max-width:760px){.form-grid{grid-template-columns:1fr}}
+.gap-page {
+  min-width: 0;
+}
+.section-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+.section-heading h2 {
+  margin: 4px 0 0;
+}
+.section-meta,
+.muted,
+.readonly-note {
+  color: var(--muted);
+  font-size: 12px;
+}
+.muted {
+  display: block;
+  margin-top: 4px;
+}
+.tag-list {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+}
 </style>

@@ -8,10 +8,12 @@ import {
   Post,
   Query,
   Req,
+  NotFoundException,
   UseGuards,
   UseInterceptors
 } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
+import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import type { Request } from 'express';
 import { createDtoPipe } from '../common/dto-pipe';
 import { safePathId } from '../common/path-id';
@@ -23,16 +25,11 @@ import { RequirePermissions } from '../user-access/iam/require-permissions.decor
 import { Roles } from '../user-access/role.decorator';
 import {
   AddLeadFollowDto,
-  BulkShipDto,
-  CreateCardBatchDto,
   CreateCombinationDto,
-  CreateDeliveryDto,
   CreateLeadDto,
   CreateStoreDto,
   GapListQueryDto,
-  RedeemCardDto,
   UpdateCombinationStatusDto,
-  UpdateDeliveryDto,
   UpdateLeadStageDto,
   UpdateStoreDto
 } from './gap-center.dto';
@@ -111,6 +108,37 @@ export class GapCenterController {
   @RequirePermissions('merchant:read')
   storeMerchantOptions(@Query('search') search?: string) {
     return this.stores.merchantOptions(search);
+  }
+
+  @Post('stores/refresh')
+  @Roles('admin', 'platform_operator')
+  @RequirePermissions('merchant:manage')
+  @Throttle({ long: { limit: 2, ttl: 60000 } })
+  @ApiOperation({
+    summary: '异步刷新合作商店铺目录',
+    description:
+      '串行抓取 JeeSite corePartnerShop/listData，完成后原子更新门店与坐标；失败保留旧数据。'
+  })
+  startStoreRefresh() {
+    return this.stores.startRefreshJob();
+  }
+
+  @Get('stores/refresh/active')
+  @RequirePermissions('merchant:read')
+  @Throttle({ long: { limit: 120, ttl: 60000 } })
+  @ApiOperation({ summary: '查询当前合作商店铺刷新任务' })
+  activeStoreRefresh() {
+    return this.stores.getActiveRefreshJob();
+  }
+
+  @Get('stores/refresh/:jobId')
+  @RequirePermissions('merchant:read')
+  @Throttle({ long: { limit: 120, ttl: 60000 } })
+  @ApiOperation({ summary: '查询合作商店铺刷新任务进度' })
+  async storeRefreshStatus(@Param('jobId') jobId: string) {
+    const job = await this.stores.getRefreshJob(jobId);
+    if (!job) throw new NotFoundException(`门店刷新任务不存在或已过期: ${jobId}`);
+    return job;
   }
 
   @Post('stores')
@@ -207,36 +235,6 @@ export class GapCenterController {
     return this.deliveries.get(safePathId(deliveryId));
   }
 
-  @Post('deliveries')
-  @Roles('admin', 'platform_operator')
-  @RequirePermissions('orders:manage')
-  @UseGuards(IdempotencyGuard)
-  @RequireIdempotency('delivery')
-  createDelivery(@Body(createDtoPipe(CreateDeliveryDto)) body: CreateDeliveryDto) {
-    return this.deliveries.create(body);
-  }
-
-  @Patch('deliveries/:deliveryId')
-  @Roles('admin', 'platform_operator')
-  @RequirePermissions('orders:manage')
-  @UseGuards(IdempotencyGuard)
-  @RequireIdempotency('delivery')
-  updateDelivery(
-    @Param('deliveryId') deliveryId: string,
-    @Body(createDtoPipe(UpdateDeliveryDto)) body: UpdateDeliveryDto
-  ) {
-    return this.deliveries.update(safePathId(deliveryId), body);
-  }
-
-  @Post('deliveries/bulk-ship')
-  @Roles('admin', 'platform_operator')
-  @RequirePermissions('orders:manage')
-  @UseGuards(IdempotencyGuard)
-  @RequireIdempotency('delivery')
-  bulkShip(@Body(createDtoPipe(BulkShipDto)) body: BulkShipDto) {
-    return this.deliveries.bulkShip(body);
-  }
-
   @Get('card-batches')
   @RequirePermissions('orders:read')
   listCardBatches(@Query(createDtoPipe(GapListQueryDto)) query: GapListQueryDto) {
@@ -255,45 +253,9 @@ export class GapCenterController {
     return this.cards.packageOptions(search);
   }
 
-  @Post('card-batches')
-  @Roles('admin', 'platform_operator')
-  @RequirePermissions('orders:manage')
-  @UseGuards(IdempotencyGuard)
-  @RequireIdempotency('card-batch')
-  createCardBatch(@Body(createDtoPipe(CreateCardBatchDto)) body: CreateCardBatchDto, @Req() req: Request) {
-    return this.cards.createBatch(body, (req.user as AuthUser | undefined) ?? {});
-  }
-
   @Get('cards')
   @RequirePermissions('orders:read')
   listCards(@Query(createDtoPipe(GapListQueryDto)) query: GapListQueryDto) {
     return this.cards.listCards(query);
-  }
-
-  @Post('cards/:cardId/activate')
-  @Roles('admin', 'platform_operator')
-  @RequirePermissions('orders:manage')
-  @UseGuards(IdempotencyGuard)
-  @RequireIdempotency('card-batch')
-  activateCard(@Param('cardId') cardId: string) {
-    return this.cards.activate(safePathId(cardId));
-  }
-
-  @Post('cards/:cardId/freeze')
-  @Roles('admin', 'platform_operator')
-  @RequirePermissions('orders:manage')
-  @UseGuards(IdempotencyGuard)
-  @RequireIdempotency('card-batch')
-  freezeCard(@Param('cardId') cardId: string) {
-    return this.cards.freeze(safePathId(cardId));
-  }
-
-  @Post('cards/redeem')
-  @Roles('admin', 'platform_operator')
-  @RequirePermissions('orders:manage')
-  @UseGuards(IdempotencyGuard)
-  @RequireIdempotency('card-redeem')
-  redeemCard(@Body(createDtoPipe(RedeemCardDto)) body: RedeemCardDto) {
-    return this.cards.redeem(body);
   }
 }

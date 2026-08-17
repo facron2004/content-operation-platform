@@ -92,6 +92,26 @@
     {
       "name": "0023_member_invitation_hierarchy",
       "sha256": "033b7d3ed97cb4c4611a008ac523b323fc617f1e82d07ba18d40e1700a8d3149"
+    },
+    {
+      "name": "0024_member_directory_refresh",
+      "sha256": "3b388e73ac1db90dbcdaf75706f60f75df445572c615fbde29e2dfd688de5121"
+    },
+    {
+      "name": "0025_member_rights_and_welfare_snapshot",
+      "sha256": "21a9acb52d88fd6e4c43f7778028091d1ecd4dd3852a8a4faaf450b85c4b10ff"
+    },
+    {
+      "name": "0026_member_integral_records",
+      "sha256": "9762d541f37bfc8811e1c9d6a2676be21964f8823bb35d30593c941da70e44c7"
+    },
+    {
+      "name": "0027_member_directory_atomic_refresh",
+      "sha256": "5b9d82d121d4c2d0b93b477d74f5b65824c262451099903d7cdf6719a74084a3"
+    },
+    {
+      "name": "0028_content_package_current_stock",
+      "sha256": "9f6a5b26ce16ab7917d16d025bec7735ba3d93891ff5940c82bc9139e9b3721f"
     }
   ],
   "sourceEquivalences": [
@@ -130,6 +150,31 @@
             },
             {
               "name": "IdempotencyRecord_expiresAt_idx",
+              "unique": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "manual-member-invitation-hierarchy-2026-08-13",
+      "migrationName": "0023_member_invitation_hierarchy",
+      "recordedChecksum": "manual-applied",
+      "canonicalSha256": "033b7d3ed97cb4c4611a008ac523b323fc617f1e82d07ba18d40e1700a8d3149",
+      "requiredTables": [
+        {
+          "name": "Member",
+          "columns": [
+            "inviteCode",
+            "parentInviteCode"
+          ],
+          "indexes": [
+            {
+              "name": "Member_inviteCode_key",
+              "unique": true
+            },
+            {
+              "name": "Member_parentInviteCode_idx",
               "unique": false
             }
           ]

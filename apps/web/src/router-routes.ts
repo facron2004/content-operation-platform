@@ -469,17 +469,11 @@ const v2PageRoutes: RouteRecordRaw[] = [
     true,
     PLATFORM_ROLES
   ),
-  route(
-    'packages',
-    'packages',
-    '套餐管理',
-    'Goods',
-    'orders',
-    2,
-    () => import('./views/ProductCenterView.vue'),
-    false,
-    PLATFORM_ROLES
-  ),
+  {
+    path: 'packages',
+    name: 'packages-redirect',
+    redirect: '/products'
+  },
   route(
     'packages/combinations',
     'package-combinations',
@@ -674,7 +668,7 @@ const v2PageRoutes: RouteRecordRaw[] = [
     'Wallet',
     'marketing',
     14,
-    () => import('./views/WelfarePointsView.vue'),
+    () => import('./views/MemberIntegralRecordsView.vue'),
     false,
     PLATFORM_ROLES
   ),
@@ -1121,11 +1115,11 @@ const operationsDataRoutes: RouteRecordRaw[] = [
   route(
     'marketing/benefits',
     'marketing-benefits',
-    '权益账户',
+    '福利金',
     'Wallet',
     'marketing',
     12,
-    () => import('./views/MarketingPrivateView.vue'),
+    () => import('./views/WelfarePointsView.vue'),
     false,
     PLATFORM_ROLES
   ),
@@ -1273,7 +1267,7 @@ const operationsDataRoutes: RouteRecordRaw[] = [
 
 // ── Combined exports ───────────────────────────────
 export const appRoutes: RouteRecordRaw[] = [
-  { path: '', redirect: '/operation/gmv' },
+  { path: '', redirect: '/dashboard' },
   operationWorkbenchRoute,
   ...contentLegacyRoutes,
   ...cockpitRoutes,

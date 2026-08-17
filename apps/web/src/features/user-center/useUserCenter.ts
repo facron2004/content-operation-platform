@@ -1,11 +1,15 @@
 import { computed, onScopeDispose, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
+  getActiveUserCenterMemberRefresh,
   getUserCenterMember,
   getUserCenterMembers,
+  getUserCenterMemberRefreshStatus,
+  startUserCenterMemberRefresh,
   type UserCenterListResponse,
   type UserCenterMemberDetailResponse,
-  type UserCenterMemberItem
+  type UserCenterMemberItem,
+  type UserCenterRefreshJob
 } from '../../services/api/user-center.api';
 import { formatFenYuan } from '../../utils/format';
 
@@ -21,6 +25,9 @@ export function useUserCenter() {
   const detailLoading = ref(false);
   const error = ref<string | null>(null);
   const detailError = ref<string | null>(null);
+  const refreshError = ref<string | null>(null);
+  const refreshStarting = ref(false);
+  const refreshJob = ref<UserCenterRefreshJob | null>(null);
   const items = ref<UserCenterMemberItem[]>([]);
   const selectedMemberId = ref(
     typeof route.params.userId === 'string'
@@ -32,6 +39,10 @@ export function useUserCenter() {
   const detail = ref<UserCenterMemberDetailResponse | null>(null);
   const dataSources = ref<string[]>([]);
   const summary = ref<UserCenterListResponse['summary']>({
+    newMembersToday: null,
+    newMembersThisWeek: null,
+    newMembersThisMonth: null,
+    newMembersBasis: 'unavailable',
     totalMembers: 0,
     paidMembers: 0,
     activeMembers30d: 0,
@@ -47,8 +58,37 @@ export function useUserCenter() {
   let disposed = false;
   let listRequestId = 0;
   let detailRequestId = 0;
+  let refreshRequestId = 0;
+  let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+  let refreshStartedAt = 0;
+  let activeRefreshChecked = false;
 
   const selectedMember = computed(() => detail.value?.member ?? null);
+  const refreshing = computed(
+    () =>
+      refreshStarting.value ||
+      refreshJob.value?.status === 'queued' ||
+      refreshJob.value?.status === 'pulling'
+  );
+  const refreshStatusText = computed(() => {
+    const job = refreshJob.value;
+    if (!job) return '';
+    if (job.status === 'queued') return '同步任务排队中…';
+    if (job.status === 'pulling') {
+      const { pagesFetched, totalPages, membersPersisted } = job.progress;
+      return `后台同步中：第 ${pagesFetched}/${totalPages || '—'} 页，已保存 ${membersPersisted.toLocaleString('zh-CN')} 条`;
+    }
+    if (job.status === 'done') return '会员目录同步完成，当前页已重新加载';
+    if (job.status === 'interrupted') return '同步任务被服务重启中断，旧数据仍保留';
+    return '同步失败，旧数据仍保留';
+  });
+
+  function clearRefreshTimer() {
+    if (refreshTimer) {
+      clearTimeout(refreshTimer);
+      refreshTimer = null;
+    }
+  }
 
   async function reload() {
     const requestId = ++listRequestId;
@@ -145,6 +185,78 @@ export function useUserCenter() {
     await reload();
   }
 
+  async function pollRefreshJob(jobId: string, requestId: number): Promise<void> {
+    if (disposed || requestId !== refreshRequestId) return;
+    try {
+      const next = await getUserCenterMemberRefreshStatus(jobId);
+      if (disposed || requestId !== refreshRequestId) return;
+      refreshJob.value = next;
+      if (next.status === 'done') {
+        refreshError.value = next.result?.warnings.length
+          ? next.result.warnings.join('；')
+          : null;
+        await reload();
+        return;
+      }
+      if (next.status === 'error' || next.status === 'interrupted') {
+        refreshError.value = next.error ?? refreshStatusText.value;
+        return;
+      }
+    } catch (cause) {
+      if (disposed || requestId !== refreshRequestId) return;
+      if (Date.now() - refreshStartedAt > 30 * 60 * 1000) {
+        refreshError.value = cause instanceof Error ? cause.message : '刷新任务状态查询超时';
+        return;
+      }
+      refreshTimer = setTimeout(() => {
+        void pollRefreshJob(jobId, requestId);
+      }, 2000);
+      return;
+    }
+    refreshTimer = setTimeout(() => {
+      void pollRefreshJob(jobId, requestId);
+    }, 1500);
+  }
+
+  async function attachActiveRefresh() {
+    if (disposed || activeRefreshChecked) return;
+    activeRefreshChecked = true;
+    try {
+      const active = await getActiveUserCenterMemberRefresh();
+      if (disposed || !active || (active.status !== 'queued' && active.status !== 'pulling')) return;
+      const requestId = ++refreshRequestId;
+      refreshStartedAt = Date.now();
+      refreshJob.value = active;
+      await pollRefreshJob(active.jobId, requestId);
+    } catch (cause) {
+      if (!disposed) {
+        refreshError.value = cause instanceof Error ? cause.message : '用户目录同步状态读取失败';
+      }
+    }
+  }
+
+  async function refreshMembers() {
+    if (disposed || refreshing.value) return;
+    activeRefreshChecked = true;
+    const requestId = ++refreshRequestId;
+    clearRefreshTimer();
+    refreshStarting.value = true;
+    refreshError.value = null;
+    refreshStartedAt = Date.now();
+    try {
+      const job = await startUserCenterMemberRefresh();
+      if (disposed || requestId !== refreshRequestId) return;
+      refreshJob.value = job;
+      await pollRefreshJob(job.jobId, requestId);
+    } catch (cause) {
+      if (!disposed && requestId === refreshRequestId) {
+        refreshError.value = cause instanceof Error ? cause.message : '会员目录刷新启动失败';
+      }
+    } finally {
+      if (!disposed && requestId === refreshRequestId) refreshStarting.value = false;
+    }
+  }
+
   function displayFen(fen: string | null | undefined) {
     return formatFenYuan(fen);
   }
@@ -180,11 +292,14 @@ export function useUserCenter() {
     return labels[status] ?? status;
   }
 
-  reload();
+  void reload();
+  void attachActiveRefresh();
   onScopeDispose(() => {
     disposed = true;
     listRequestId += 1;
     detailRequestId += 1;
+    refreshRequestId += 1;
+    clearRefreshTimer();
   });
 
   return {
@@ -195,6 +310,10 @@ export function useUserCenter() {
     detailLoading,
     error,
     detailError,
+    refreshError,
+    refreshing,
+    refreshJob,
+    refreshStatusText,
     items,
     selectedMemberId,
     selectedMember,
@@ -203,6 +322,7 @@ export function useUserCenter() {
     pagination,
     dataSources: computed(() => dataSources.value),
     reload,
+    refreshMembers,
     applyFilters,
     setPage,
     selectMember,

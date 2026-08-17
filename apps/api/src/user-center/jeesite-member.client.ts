@@ -14,10 +14,19 @@ import {
 import { AutoLoginService } from '../content/auto-login.service';
 import { assertHostnameNotPrivateAsync, normalizeJeesiteBaseUrl } from '../content/jeesite-url';
 
-const REQUEST_TIMEOUT_MS = 8_000;
+const DEFAULT_REQUEST_TIMEOUT_MS = 8_000;
+const MAX_REQUEST_TIMEOUT_MS = 30_000;
 const MAX_RETRIES = 2;
 const RETRY_BASE_DELAY_MS = 200;
 const RETRY_MAX_DELAY_MS = 1_500;
+
+function getRequestTimeoutMs(): number {
+  const configured = Number(
+    process.env.EXTERNAL_MEMBER_FETCH_TIMEOUT_MS ?? process.env.EXTERNAL_FETCH_TIMEOUT_MS
+  );
+  if (!Number.isFinite(configured)) return DEFAULT_REQUEST_TIMEOUT_MS;
+  return Math.max(1_000, Math.min(MAX_REQUEST_TIMEOUT_MS, Math.trunc(configured)));
+}
 
 export interface JeeSiteMemberListQuery {
   page: number;
@@ -25,6 +34,11 @@ export interface JeeSiteMemberListQuery {
   search?: string;
   inviteCode?: string;
   level?: string;
+}
+
+export interface JeeSitePageQuery {
+  page: number;
+  pageSize: number;
 }
 
 export type JeeSiteMemberRow = Record<string, unknown>;
@@ -38,20 +52,54 @@ export interface JeeSiteMemberPage {
 
 @Injectable()
 export class JeeSiteMemberClient {
+  private requestQueue: Promise<void> = Promise.resolve();
+
   constructor(@Inject(AutoLoginService) private readonly autoLoginService: AutoLoginService) {}
 
   async listMembers(query: JeeSiteMemberListQuery): Promise<JeeSiteMemberPage> {
-    const baseUrl = await this.resolveBaseUrl();
-    const requestUrl = this.buildRequestUrl(
-      baseUrl,
-      process.env.EXTERNAL_MEMBERS_PATH ?? '/member/centerMember/listData'
+    return this.enqueueRequest(() => this.fetchMembers(query));
+  }
+
+  async listIntegralRecords(query: JeeSitePageQuery): Promise<JeeSiteMemberPage> {
+    return this.enqueueRequest(() =>
+      this.fetchPage(
+        query,
+        process.env.EXTERNAL_INTEGRAL_RECORDS_PATH ??
+          '/member/centerMemberIntegralRecord/listData',
+        new URLSearchParams({ pageNo: String(query.page), pageSize: String(query.pageSize) })
+      )
     );
-    const form = this.buildForm(query);
+  }
+
+  private enqueueRequest<T>(task: () => Promise<T>): Promise<T> {
+    const request = this.requestQueue.then(task, task);
+    this.requestQueue = request.then(
+      () => undefined,
+      () => undefined
+    );
+    return request;
+  }
+
+  private async fetchMembers(query: JeeSiteMemberListQuery): Promise<JeeSiteMemberPage> {
+    return this.fetchPage(
+      query,
+      process.env.EXTERNAL_MEMBERS_PATH ?? '/member/centerMember/listData',
+      this.buildForm(query)
+    );
+  }
+
+  private async fetchPage(
+    query: JeeSitePageQuery,
+    configuredPath: string,
+    form: URLSearchParams
+  ): Promise<JeeSiteMemberPage> {
+    const baseUrl = await this.resolveBaseUrl();
+    const requestUrl = this.buildRequestUrl(baseUrl, configuredPath);
 
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt += 1) {
       try {
         const cookie = await this.autoLoginService.ensureValidCookie();
-        const response = await this.fetchWithTimeout(requestUrl, {
+        const payload = await this.fetchWithTimeout(requestUrl, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/x-www-form-urlencoded',
@@ -64,7 +112,6 @@ export class JeeSiteMemberClient {
           },
           body: form.toString()
         });
-        const payload = await this.parseResponse(response);
         if (isRecord(payload) && payload.result === 'login') {
           this.autoLoginService.clearCache();
           if (await this.autoLoginService.ensureValidCookie(true)) continue;
@@ -127,28 +174,43 @@ export class JeeSiteMemberClient {
     return url.toString();
   }
 
-  private async fetchWithTimeout(input: string, init: RequestInit): Promise<Response> {
+  private async fetchWithTimeout(input: string, init: RequestInit): Promise<unknown> {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-    try {
-      const response = await fetch(input, { ...init, signal: controller.signal, redirect: 'manual' });
+    const timeoutMs = getRequestTimeoutMs();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        controller.abort();
+        reject(new Error(`JeeSite 会员接口请求超时（>${timeoutMs}ms）`));
+      }, timeoutMs);
+    });
+    const request = async (): Promise<unknown> => {
+      let response = await fetch(input, {
+        ...init,
+        signal: controller.signal,
+        redirect: 'manual'
+      });
       if (response.status >= 300 && response.status < 400) {
         const location = response.headers.get('location');
-        if (!location) return response;
+        if (!location) return await this.parseResponse(response);
         const redirectUrl = new URL(location, input);
         if (redirectUrl.hostname !== new URL(input).hostname) {
           throw new ServiceUnavailableException('JeeSite 会员接口发生了不安全跳转');
         }
         await assertHostnameNotPrivateAsync(redirectUrl.hostname);
-        return await fetch(redirectUrl.toString(), {
+        response = await fetch(redirectUrl.toString(), {
           ...init,
           signal: controller.signal,
           redirect: 'manual'
         });
       }
-      return response;
+      // Keep the same timer active while the response body is streamed and parsed.
+      return await this.parseResponse(response);
+    };
+    try {
+      return await Promise.race([request(), timeout]);
     } finally {
-      clearTimeout(timer);
+      if (timer) clearTimeout(timer);
     }
   }
 

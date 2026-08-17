@@ -21,11 +21,7 @@ import { RequireLogin } from '../user-access/iam/route-auth.decorator';
 import { RequirePermissions } from '../user-access/iam/require-permissions.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 import { ProductCenterListQueryDto } from './product-center.dto';
-import {
-  InventoryAdjustmentDto,
-  ProductChangeReviewDto,
-  ProductEditRequestDto
-} from './product-center.dto';
+import { ProductChangeReviewDto, ProductEditRequestDto } from './product-center.dto';
 import { ProductCenterService } from './product-center.service';
 import { IdempotencyGuard } from '../idempotency/idempotency.guard';
 import { IdempotencyInterceptor } from '../idempotency/idempotency.interceptor';
@@ -110,32 +106,6 @@ export class ProductCenterController {
     return this.service.requestEdit(id, body, {
       userId: (req.user as AuthUser | undefined)?.userId
     });
-  }
-
-  @Post('products/:packageId/inventory-adjustments')
-  @RequirePermissions('packages:write')
-  @RequireIdempotency('inventory-adjustment')
-  @UseGuards(IdempotencyGuard)
-  @Throttle({ long: { limit: 20, ttl: 60000 } })
-  @ApiOperation({
-    summary: '调整商品库存',
-    description: '库存写入统一经过 InventoryService 并记录前后值'
-  })
-  async adjustInventory(
-    @Param('packageId') packageId: string,
-    @Body(createDtoPipe(InventoryAdjustmentDto)) body: InventoryAdjustmentDto,
-    @Req() req: Request
-  ) {
-    const id = safePathId(packageId);
-    await assertPackageInScope(this.prisma, id, req);
-    const header = req.headers['idempotency-key'];
-    const requestId = Array.isArray(header) ? header[0] : header;
-    return this.service.adjustInventory(
-      id,
-      body,
-      { userId: (req.user as AuthUser | undefined)?.userId },
-      requestId ?? ''
-    );
   }
 
   @Post('product-change-requests/:requestId/approve')

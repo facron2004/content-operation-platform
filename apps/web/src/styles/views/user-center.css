@@ -24,7 +24,7 @@
 
 .user-center-metrics {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 10px;
 }
 
@@ -61,6 +61,45 @@
 
 .user-center-metric--accent strong {
   color: var(--accent);
+}
+
+.user-center-metric__heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.user-center-metric__heading small {
+  flex: 0 0 auto;
+  text-align: right;
+}
+
+.user-center-new-members-values {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.user-center-new-members-values div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.user-center-new-members-values strong {
+  overflow: hidden;
+  color: var(--ink);
+  font-family: var(--font-numeric);
+  font-size: 18px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-center-new-members-values span {
+  color: var(--muted);
+  font-size: 11px;
 }
 
 .user-center-content {
@@ -303,6 +342,10 @@
 @media (max-width: 760px) {
   .user-center-metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .user-center-metric--new-members {
+    grid-column: span 2;
   }
 
   .user-center-toolbar .el-input,

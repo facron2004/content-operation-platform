@@ -1,5 +1,5 @@
 /** HTTP surface for 用户福利金 (welfare point) usage dashboard.
- *  Proxies JeeSite center/memberWelfarePointRecord with in-memory aggregation. */
+ *  Reads a local snapshot and refreshes it from JeeSite only on demand. */
 import { Controller, Get, Inject, Post, Query, Res } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
@@ -20,7 +20,10 @@ export class WelfarePointController {
   @Get()
   @RequirePermissions('analytics:read')
   @Throttle({ long: { limit: 30, ttl: 60000 } })
-  @ApiOperation({ summary: '福利金记录列表（分页 + 筛选）' })
+  @ApiOperation({
+    summary: '福利金记录列表（当前页优先）',
+    description: '无筛选时只读取指定 JeeSite 页；外部失败时回退到本地同页快照。'
+  })
   list(@Query(createDtoPipe(WelfarePointQueryDto)) q: WelfarePointQueryDto) {
     return this.service.query(q);
   }
@@ -39,7 +42,10 @@ export class WelfarePointController {
   @Post('refresh')
   @RequirePermissions('analytics:refresh')
   @Throttle({ long: { limit: 3, ttl: 60000 } })
-  @ApiOperation({ summary: '从 JeeSite 同步福利金数据并更新统一数据集' })
+  @ApiOperation({
+    summary: '维护用全量福利金快照（页面不调用）',
+    description: '仅供受控维护操作使用，页面刷新不会触发该全量任务。'
+  })
   refresh() {
     return this.service.refresh();
   }

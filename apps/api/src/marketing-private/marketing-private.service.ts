@@ -10,6 +10,10 @@ import { newEntityId } from '../common/id';
 import { loadMemberBehaviorFacts, type MemberBehaviorFact } from '../common/member-behavior-facts';
 import { FinanceAssetService } from '../finance-center/finance-asset.service';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  getLatestSuccessfulMemberDirectorySnapshot,
+  type MemberDirectorySnapshot
+} from '../user-center/member-directory-snapshot';
 import type {
   AssignTagDto,
   AudienceQueryDto,
@@ -65,6 +69,13 @@ import {
 import { parseAudienceTagRule, type AudienceTagRule } from './audience-rules';
 
 type MarketingActor = { userId?: string };
+
+type MemberBehaviorSnapshot = {
+  facts: MemberBehaviorFact[];
+  directorySnapshot: MemberDirectorySnapshot | null;
+};
+
+const TAG_MEMBER_INSERT_CHUNK_SIZE = 500;
 
 const CAMPAIGN_TRANSITIONS: Record<string, Record<string, string>> = {
   start: { draft: 'active', paused: 'active' },
@@ -457,6 +468,43 @@ export class MarketingPrivateService {
     @Inject(FinanceAssetService) private readonly assets: FinanceAssetService
   ) {}
 
+  private async loadMemberBehaviorSnapshot(): Promise<MemberBehaviorSnapshot> {
+    const directorySnapshot = await getLatestSuccessfulMemberDirectorySnapshot(this.prisma);
+    return {
+      facts: await loadMemberBehaviorFacts(this.prisma, new Date(), {
+        directoryGeneration: directorySnapshot?.generation,
+        directorySource: directorySnapshot?.source
+      }),
+      directorySnapshot
+    };
+  }
+
+  private async ensureTagMembers(
+    memberIds: string[],
+    directorySnapshot: MemberDirectorySnapshot | null
+  ): Promise<void> {
+    if (!memberIds.length || !directorySnapshot) return;
+    const useStaging =
+      directorySnapshot.source === 'staging' && Boolean(this.prisma.memberDirectoryRefreshEntry);
+    if (!useStaging && !this.prisma.memberDirectoryEntry) return;
+
+    for (let offset = 0; offset < memberIds.length; offset += TAG_MEMBER_INSERT_CHUNK_SIZE) {
+      const chunk = memberIds.slice(offset, offset + TAG_MEMBER_INSERT_CHUNK_SIZE);
+      const placeholders = chunk.map(() => '?').join(',');
+      const table = useStaging ? 'MemberDirectoryRefreshEntry' : 'MemberDirectoryEntry';
+      const generationColumn = useStaging ? 'generation' : 'lastSyncGeneration';
+      await this.prisma.$executeRawUnsafe(
+        `INSERT OR IGNORE INTO "Member"
+          ("memberId", "nickname", "phone", "level", "pointsBalance", "lastSeenAt")
+         SELECT "memberId", "nickname", "phone", "level", COALESCE("pointsBalance", 0), datetime('now')
+         FROM "${table}"
+         WHERE "${generationColumn}" = ? AND "memberId" IN (${placeholders})`,
+        directorySnapshot.generation,
+        ...chunk
+      );
+    }
+  }
+
   async listTags(query: TagQueryDto): Promise<MarketingPage<MarketingTagView>> {
     const { page, pageSize, skip } = pageParams(query);
     const where: Prisma.UserTagWhereInput = {
@@ -519,7 +567,7 @@ export class MarketingPrivateService {
 
   async previewTagRule(dto: PreviewTagRuleDto): Promise<TagRulePreviewView> {
     const rule = this.parseTagRule(dto.ruleJson);
-    const facts = await loadMemberBehaviorFacts(this.prisma);
+    const { facts } = await this.loadMemberBehaviorSnapshot();
     const matched = facts.filter((fact) => matchesUserTagRule(fact, rule));
     return {
       matchedCount: matched.length,
@@ -559,7 +607,7 @@ export class MarketingPrivateService {
         .filter((value): value is { tagId: string; rule: UserTagRule } => Boolean(value))
         .map((value) => [value.tagId, value.rule])
     );
-    const facts = await loadMemberBehaviorFacts(this.prisma);
+    const { facts, directorySnapshot } = await this.loadMemberBehaviorSnapshot();
     let evaluatedCount = 0;
     let skippedCount = 0;
     let matchedCount = 0;
@@ -569,7 +617,7 @@ export class MarketingPrivateService {
         skippedCount += 1;
         continue;
       }
-      const result = await this.syncRuleTag(tag.tagId, rule, facts);
+      const result = await this.syncRuleTag(tag.tagId, rule, facts, directorySnapshot);
       evaluatedCount += 1;
       matchedCount += result.matchedCount;
     }
@@ -598,12 +646,22 @@ export class MarketingPrivateService {
   private async syncRuleTag(
     tagId: string,
     rule: UserTagRule,
-    facts?: MemberBehaviorFact[]
+    facts?: MemberBehaviorFact[],
+    directorySnapshot?: MemberDirectorySnapshot | null
   ): Promise<{ matchedCount: number; addedCount: number; removedCount: number }> {
-    const matchedMemberIds = (facts ?? (await loadMemberBehaviorFacts(this.prisma)))
+    let behaviorFacts = facts;
+    let snapshot = directorySnapshot ?? null;
+    if (!behaviorFacts) {
+      const loaded = await this.loadMemberBehaviorSnapshot();
+      behaviorFacts = loaded.facts;
+      snapshot = loaded.directorySnapshot;
+    }
+    const matchedMemberIds = behaviorFacts
       .filter((fact) => matchesUserTagRule(fact, rule))
       .map((fact) => fact.memberId);
     const matchedSet = new Set(matchedMemberIds);
+
+    await this.ensureTagMembers(matchedMemberIds, snapshot);
 
     return this.prisma.$transaction(async (tx) => {
       const existing = await tx.userTagRelation.findMany({
@@ -642,22 +700,26 @@ export class MarketingPrivateService {
   }
 
   async assignTag(tagId: string, dto: AssignTagDto): Promise<MarketingTagView> {
-    const member = await this.prisma.member.findUnique({
-      where: { memberId: dto.memberId.trim() }
-    });
+    const memberId = dto.memberId.trim();
+    let member = await this.prisma.member.findUnique({ where: { memberId: memberId } });
+    if (!member) {
+      const directorySnapshot = await getLatestSuccessfulMemberDirectorySnapshot(this.prisma);
+      await this.ensureTagMembers([memberId], directorySnapshot);
+      member = await this.prisma.member.findUnique({ where: { memberId: memberId } });
+    }
     if (!member) throw new BadRequestException('会员不存在，不能建立标签关系');
     return this.prisma.$transaction(async (tx) => {
       const tag = await tx.userTag.findUnique({ where: { tagId } });
       if (!tag) throw new NotFoundException('标签不存在');
       const existing = await tx.userTagRelation.findUnique({
-        where: { tagId_memberId: { tagId, memberId: dto.memberId.trim() } }
+        where: { tagId_memberId: { tagId, memberId } }
       });
       if (!existing) {
         await tx.userTagRelation.create({
           data: {
             relationId: newEntityId('tag-rel'),
             tagId,
-            memberId: dto.memberId.trim(),
+            memberId,
             source: dto.source ?? 'manual'
           }
         });

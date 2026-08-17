@@ -20,6 +20,11 @@ export interface UserLifecycleMemberView {
   firstPaidAt: string | null;
   lastPaidAt: string | null;
   daysSinceLastPaid: number | null;
+  sourceCreatedAt: string | null;
+  sourceUpdatedAt: string | null;
+  sourceLastLoginAt: string | null;
+  lastActivityAt: string | null;
+  daysSinceLastActivity: number | null;
 }
 
 export interface UserLifecyclePayload {

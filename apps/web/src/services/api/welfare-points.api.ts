@@ -89,6 +89,7 @@ export interface WelfarePointListResult {
   total: number;
   page: number;
   pageSize: number;
+  dataSource: 'JeeSite' | 'WelfarePointRecord';
 }
 
 export interface WelfarePointRefreshResult {

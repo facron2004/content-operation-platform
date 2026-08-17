@@ -1,4 +1,5 @@
 import client from '../http-client';
+import type { UserCenterRefreshJob } from './user-center.api';
 
 export type UserLifecycleStageKey = 'prospect' | 'new' | 'active' | 'at_risk' | 'churned';
 
@@ -22,6 +23,11 @@ export interface UserLifecycleMember {
   firstPaidAt: string | null;
   lastPaidAt: string | null;
   daysSinceLastPaid: number | null;
+  sourceCreatedAt: string | null;
+  sourceUpdatedAt: string | null;
+  sourceLastLoginAt: string | null;
+  lastActivityAt: string | null;
+  daysSinceLastActivity: number | null;
 }
 
 export interface UserLifecycleResponse {
@@ -46,4 +52,28 @@ export async function getUserLifecycle(params: {
   pageSize?: number;
 }) {
   return (await client.get<UserLifecycleResponse>('/user-center/lifecycle', { params })).data;
+}
+
+export async function startUserLifecycleRefresh() {
+  return (
+    await client.post<UserCenterRefreshJob>('/user-center/members/refresh', undefined, {
+      timeout: 10000
+    })
+  ).data;
+}
+
+export async function getActiveUserLifecycleRefresh() {
+  return (
+    await client.get<UserCenterRefreshJob | null>('/user-center/members/refresh/active', {
+      timeout: 10000
+    })
+  ).data;
+}
+
+export async function getUserLifecycleRefreshStatus(jobId: string) {
+  return (
+    await client.get<UserCenterRefreshJob>(`/user-center/members/refresh/${jobId}`, {
+      timeout: 10000
+    })
+  ).data;
 }

@@ -16,6 +16,8 @@ export interface ContentPackage {
   grossProfit: number;
   stockTotal: number;
   stockLeft: number;
+  /** 当前总库存；旧数据源没有该字段时由 stockLeft 兜底。 */
+  currentStock?: number;
   startTime: string;
   endTime: string;
   useRules: string[];

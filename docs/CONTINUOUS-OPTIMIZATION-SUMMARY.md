@@ -3,9 +3,9 @@
 > **目标**：`继续优化，我不说停不准停`  
 > **范围**：NestJS monorepo Content Operation Platform（`apps/api` + `apps/web` + `packages/shared`）  
 > **分支**：`codex/unsold-inventory-links`  
-> **状态截止**：2026-08-09；Residual **#297** 之后的 API/Web 稳定性、P0-03 迁移基线、P0-04 关键写入幂等和 P1-05 Outbox 真闭环均已记录
+> **状态截止**：2026-08-17；Residual **#297** 之后的 API/Web 稳定性、P0-03 迁移基线、P0-04 关键写入幂等、P1-05 Outbox 真闭环、用户目录/生命周期/标签数据口径、商品库存/售卖时间/订单只读边界以及商品中心重复入口收口均已记录
 > **当前门禁**：非 EXE `typecheck`、API/Web build、API/Web 行为与 legacy 回归、源码完整性、`db:validate`；0015 应用到开发库后再恢复 `db:drift-check` 作为当前门禁
-> **日期跨度**：2026-07-22 → 2026-08-09（含多次 compaction 续跑）
+> **日期跨度**：2026-07-22 → 2026-08-17（含多次 compaction 续跑）
 
 > **范围边界**：本轮不执行 Windows Desktop、EXE、安装器、`win-unpacked` 或安装后真实进程 smoke。桌面源代码与发布流程的历史完成项不等于当前 Windows 发布已验收；统一口径见 [文档对齐总览](DOCUMENTATION-STATUS.md)。
 
@@ -759,6 +759,24 @@ Residual #297 已完成：浏览器登录、本地会话和刷新改用 Cookie-o
 2026-08-09 PRD P0-04 非 EXE 关键写操作幂等已完成：新增 `@RequireIdempotency` 路由元数据，任务创建/批量创建/发布、活动启动、社群导入和 GMV 回填显式声明 Required；缺少 `Idempotency-Key` 返回 `400`，同 Key 同 Payload 重放首个响应，同 Key 不同 Payload 返回 `409`，数据库唯一键竞争与失败记录原子重获保证并发最多一个请求进入业务写入。服务端请求哈希递归排序 JSON 键，`IdempotencyRecord` 过期记录由每日 2 点、带作业单飞保护的 retention job 自动清理；Web 端为任务/活动版本、回填日期+sourceVersion 和导入/创建提交生成业务意图键，保留同一 Payload 的重试键并在 Payload 改变时轮换，任务详情发布处理器补充同步重复点击锁。P0-04 focused API `4` 个文件 `34/34`，Web behavior `71` 个文件 `360/360`、Web legacy `85` 个文件 `351/351`，根 typecheck、API build、Web build（`3190` modules transformed）、定向 ESLint（0 errors/0 warnings）、Prettier、源码完整性 `1077/0` 和 `git diff --check` 均通过；API legacy 全量仍保留两个与本切片无关的旧静态 pin 失败（residual #268/#289），相关文件未修改。本切片未读取或修改项目开发数据库，未触碰 EXE/Desktop/安装包或打包发布代码。
 
 2026-08-09 非 EXE PRD P1-05 Outbox 真闭环已落地：`OutboxService` 新增 typed handler registry 与 JSON payload 校验，`OutboxProcessorJob` 只有 handler dispatch 成功后才允许 `markProcessed`；任务发布在同一 Prisma transaction 中写入状态、`DistributionExecution` 和 `task.published` 事件，真实 handler 以 `OperationAuditLog` 形成持久副作用。新增 0015 migration 持久化 `nextRetryAt`，指数退避后达到 5 次进入 `failed`；API 聚焦单测 `26/26`、API unit `130` 个文件 `1020/1020`、API integration `9` 个文件 `38/38`、root typecheck/build、lint、`db:validate`、迁移历史→Schema `No difference detected` 和源码完整性 `1078/0` 均通过。当前开发 API 仍占用 `prisma/dev.db`，0015 尚未应用，`db:migrate`/实际库 drift 留待停机窗口重跑；本轮未执行 EXE、安装器、`win-unpacked` 或 Desktop 发布验收。
+
+2026-08-15 用户目录、生命周期和规则标签数据口径已统一：生命周期服务、规则标签预览/创建/评估/定时同步均优先读取最近一次成功的 `MemberDirectoryEntry` 完整快照，生命周期页“同步并刷新”复用现有后台串行分页任务并在完成后轮询重载；刷新失败继续保留旧快照。规则命中但尚未进入本地 `Member` 表的目录用户在写入 `UserTagRelation` 前按 500 条分批补齐最小档案，手动打标签也支持这类用户。新增/更新生命周期与标签回归后，API 全量单元测试为 `157` 个文件 `1135/1135`，聚焦用户目录/标签测试 `10/10`，root `typecheck`、API build、Web build 和改动文件 Prettier 均通过；浏览器接线验证了 POST 刷新、正确 `jobId` 轮询和完成后的 lifecycle 重载，运行快照显示 `163,827` 用户。Web behavior 当前为 `90` 个文件 `423` 个通过、1 个与本切片无关的 GMV 积分支付组合断言失败；本次未在运行实例启动真实十万级 JeeSite 全量拉取，外部凭证、全量任务完成和数据质量仍需目标环境验收。
+
+2026-08-15 用户目录重启同步与原子快照已落地：API 启动后默认触发一次受控串行会员目录同步，可用 `USER_CENTER_REFRESH_ON_STARTUP=false` 关闭；新代页面写入 `MemberDirectoryRefreshEntry` staging，全部页面完成且无持久化错误后，在单事务内替换 `MemberDirectoryEntry` 并更新 `MemberDirectorySnapshotState` 活动指针，失败、空集、服务中断均不污染旧快照。新增 `GET /user-center/members/refresh/active`，用户管理页和生命周期页可在服务重启后接续活动任务；新增 0027 migration 与 migration-policy 记录。焦点 API 回归 `22/22`、API unit `158` 文件 `1139/1139`、API legacy `103` 文件 `410/410`、root typecheck、API/Web build、`check:integrity`、`db:validate` 和迁移策略测试通过；API integration `38/39`（剩余 1 个既有 Excel 导出 zip 测试失败），Web behavior `423/424`（剩余 1 个既有 GMV 积分支付组合断言失败），真实迁移应用、浏览器重跑和 JeeSite 全量数据质量仍待停机窗口/目标环境验收。
+
+2026-08-16 商品库存与订单操作边界已收口：商家同步改为 Promise 单飞，商品页刷新等待同步持久化完成后再读取本地 `ContentPackage`，商品 GET 增加 no-cache 请求头；砍价适配器补齐 `bargainCommodityDynamic` 对象/JSON 字符串解析与 `hasInventory` 剩余量、`initialInventoryTotal` 总量口径，商品列表改为 `stockLeft DESC`，解决第一页被售罄 SKU 占满而误判“库存全是 0”的问题。订单中心、物流单、卡批次和卡券页移除核销、退款、库存回补、发货及卡券状态写路由和控件，保留查询与历史流水。API 聚焦回归 `5` 个文件 `18/18`、API build、Web build 和受影响 Web 行为测试通过；本地浏览器商品页验证汇总余量 `16,003 / 602,033` 且首屏显示非零 SKU，写接口本地验证返回 `404`。Web 全量行为仍有 1 个既有 GMV 积分支付组合断言失败；外部 JeeSite 当前会话返回登录态提示，完整实时数据仍需有效凭证的目标环境验收。
+
+2026-08-16 商品在售 SKU 缓存残留已补齐：完整 JeeSite 分页同步现在携带 `isComplete` 标记，只有全量页面成功读取、未触发分页上限且本地套餐批量写入完整时，才将本次目录中不存在的旧 `selling` 记录标记为 `pending`；部分失败或截断不会误下架。当前运行实例真实同步返回 `packagesCount=747`、`packagesPersisted=747`、`stalePackagesDeactivated=15`，`activeSkus` 从 `762` 更新为 `747`；浏览器刷新后的商品页同样显示在售 `747`、余量 `16,243 / 602,033`。API 聚焦回归 `5` 个文件 `21/21`、root typecheck、API/Web build 通过。
+
+2026-08-16 商品库存三口径已落地：砍价页 `bargainCommodityDynamic.initialInventoryTotal` 映射初始库存、`inventoryTotal` 映射现在库存并持久化到 `ContentPackage.currentStock`、`hasInventory` 映射当日库存并继续兼容 `stockLeft`；商品中心 API 与页面新增 `initialStock/currentStock/dailyStock` 三字段，列表、汇总和详情均展示，不再把三个概念压成一个 `stockLeft/stockTotal`。新增 0028 migration 并在实际根开发库应用；有效凭证下真实同步 `747/747`，接口汇总为初始 `602,033`、现在 `378,630`、当日 `16,229`，浏览器验证第二个 SKU 显示 `2,280 / 2,262 / 1,280`。聚焦 API `3` 个文件 `15/15`、API/Web build、root typecheck、`db:validate`、迁移策略 `6/6` 通过；`db:drift-check` 仍有既有 15 张重定义表残差，未归因于本次字段。
+
+2026-08-16 商品状态筛选已贯通：商品中心列表 DTO 只接受 `pending`（待售）、`selling`（销售中）、`recycle`（已回收）三种状态；Web 筛选会保留 URL 参数、同步请求并在切回“全部状态”时省略过滤参数。当前运行实例接口返回 `pending=162`、`selling=747`、`recycle=56`，每个筛选结果仅含对应状态；浏览器点选待售后 URL 为 `?saleStatus=pending` 且列表显示 `162` 条。商品中心定向回归 `2/2`、root typecheck、API/Web build 通过。
+
+2026-08-16 商品售卖时间对齐已补齐：定位到 `ContentMerchantSyncService` 的冲突更新只覆盖库存/状态等字段，遗漏 `ContentPackage.startTime/endTime`，导致外部同步成功但详情仍显示旧时间；同步 SQL 现会写入最新起止时间。JeeSite 适配器同时支持顶层 `startDate/expireDate`、`bargainCommodityDynamic` 嵌套时间字段和秒/毫秒时间戳，并保留 `pending/selling/recycle` 三种外部状态，商品详情改为按北京时间显示到时分。新增同步 SQL、非 selling 状态和嵌套数字时间回归，聚焦测试 `15/15`、root typecheck、API/Web build 通过；当前实例三状态全量同步 `2874/2874`，本地状态为 `pending=1089`、`selling=747`、`recycle=1039`，原始外部样本与本地起止时间一致；浏览器核对 SKU `2059931575084183552` 显示 `2026/05/28 00:00 – 2027/05/28 00:00`。起止日期相同的商品经外部原始字段核对为真实同日售卖，不再按相等值误报异常。
+
+2026-08-17 用户管理看板补充新增用户指标：API summary 新增今日、本周、本月三项，外部目录使用最近一次成功快照的 `sourceCreatedAt` 全量聚合，本地模式使用 `Member.firstSeenAt` 回退；日期统一按北京时间，周一为自然周起点、每月 1 日为自然月起点。Web 用户中心新增三分栏“新增用户”卡片，并在无完整外部快照时显示不可用而不是误报 0；日期边界聚焦测试 `3/3`、用户中心聚焦测试 `15/15`、root typecheck、API build、Web build、定向 ESLint 和 `git diff --check` 已通过，目标环境外部数据核对待完成。
+
+2026-08-17 商品中心重复入口已收口：`/products` 与原 `/packages` 均加载 `ProductCenterView.vue`，侧栏现仅保留“商品管理”；旧 `/packages` 链接重定向到 `/products`，独立的 `/packages/combinations` 组合套餐页面继续保留。新增导航回归覆盖重复入口移除与旧路径兼容；聚焦导航/权限测试 `12/12`、root typecheck、Web build、定向 ESLint 和 `git diff --check` 已通过，Prettier 仅保留基线已有的 `route-permissions.ts` 整文件格式提示。
 
 ## 10. 一句话结论
 

@@ -19,6 +19,7 @@ export interface BargainCoreValues {
   paidOrderCount: number;
   stockTotal: number;
   stockLeft: number;
+  currentStock: number;
 }
 
 export function combinedAreaName(city: string, area: string): string {
@@ -50,7 +51,6 @@ export function readBargainCore(row: AnyRecord): BargainCoreValues | null {
 
   const bargainState = Math.round(rowNumber(row, ['bargainState', 'bargain_state'], -10));
   const saleStatus = mapSaleStatus(bargainState);
-  if (saleStatus !== 'selling') return null;
 
   const packageName = rowText(
     row,
@@ -238,18 +238,23 @@ export function readBargainCore(row: AnyRecord): BargainCoreValues | null {
       orderCount
     )
   );
-  // 库存字段全部位于 JeeSite 响应的 bargainCommodityDynamic 嵌套 JSON 内：
-  //   hasInventory            = 当前剩余库存（-1 表示不限制/未启用库存）
-  //   inventoryTotal          = 当前总库存（随销售扣减）
-  //   initialInventoryTotal   = 初始总库存（上架时设定）
+  // 库存字段全部位于 JeeSite 响应的 bargainCommodityDynamic 嵌套 JSON 内。
+  // listData 在不同 JeeSite 版本里既可能返回对象，也可能把这段 JSON
+  // 序列化成字符串；rowNumber/valueAtPath 会统一处理这两种形态。
+  //   hasInventory            = 当日/当前可用库存（-1 表示不限制/未启用库存）
+  //   inventoryTotal          = 现在库存（随销售扣减）
+  //   initialInventoryTotal   = 初始库存（上架时设定）
   // 顶层 stockLeft/surplusStock/remainingStock 字段在 JeeSite 响应中不存在，
   // 仅作兜底保留，不作为主路径。
-  const stockTotalFromRow = Math.round(
+  const initialStockFromRow = Math.round(
     rowNumber(
       row,
       [
         'bargainCommodityDynamic.initialInventoryTotal',
-        'bargainCommodityDynamic.inventoryTotal',
+        'bargainCommodityDynamic.stockTotal',
+        'bargainCommodityDynamic.totalStock',
+        'bargainCommodityDynamic.stock',
+        'bargainCommodityDynamic.inventory',
         'stockTotal',
         'stock_total',
         'totalStock',
@@ -258,6 +263,21 @@ export function readBargainCore(row: AnyRecord): BargainCoreValues | null {
         'stockNum',
         'stock_num',
         'inventory'
+      ],
+      Number.NaN
+    )
+  );
+  const currentStockFromRow = Math.round(
+    rowNumber(
+      row,
+      [
+        'bargainCommodityDynamic.inventoryTotal',
+        'bargainCommodityDynamic.totalInventory',
+        'bargainCommodityDynamic.currentInventory',
+        'bargainCommodityDynamic.currentStock',
+        'inventoryTotal',
+        'currentInventory',
+        'currentStock'
       ],
       Number.NaN
     )
@@ -272,6 +292,16 @@ export function readBargainCore(row: AnyRecord): BargainCoreValues | null {
           rowNumber(
             row,
             [
+              'bargainCommodityDynamic.remainingInventory',
+              'bargainCommodityDynamic.inventory',
+              'bargainCommodityDynamic.stockLeft',
+              'bargainCommodityDynamic.stock_left',
+              'bargainCommodityDynamic.remainingStock',
+              'bargainCommodityDynamic.remaining_stock',
+              'bargainCommodityDynamic.surplusStock',
+              'bargainCommodityDynamic.surplus_stock',
+              'bargainCommodityDynamic.leftStock',
+              'bargainCommodityDynamic.left_stock',
               'inventory',
               'stockLeft',
               'stock_left',
@@ -285,12 +315,17 @@ export function readBargainCore(row: AnyRecord): BargainCoreValues | null {
             Number.NaN
           )
         );
-  const stockTotal = Number.isFinite(stockTotalFromRow)
-    ? clampNonNegative(stockTotalFromRow)
-    : clampNonNegative(orderCount + (Number.isFinite(stockLeftFromRow) ? stockLeftFromRow : 0));
+  const stockTotal = Number.isFinite(initialStockFromRow)
+    ? clampNonNegative(initialStockFromRow)
+    : Number.isFinite(currentStockFromRow)
+      ? clampNonNegative(currentStockFromRow)
+      : clampNonNegative(orderCount + (Number.isFinite(stockLeftFromRow) ? stockLeftFromRow : 0));
   const stockLeft = Number.isFinite(stockLeftFromRow)
     ? clamp(stockLeftFromRow, 0, stockTotal || stockLeftFromRow)
     : clampNonNegative(stockTotal - orderCount);
+  const currentStock = Number.isFinite(currentStockFromRow)
+    ? clampNonNegative(currentStockFromRow)
+    : stockLeft;
 
   return {
     packageId,
@@ -308,6 +343,7 @@ export function readBargainCore(row: AnyRecord): BargainCoreValues | null {
     orderCount,
     paidOrderCount,
     stockTotal,
-    stockLeft
+    stockLeft,
+    currentStock
   };
 }

@@ -1,5 +1,6 @@
 import type { PrismaService } from '../prisma/prisma.service';
 import { sqlDatetime } from './sqlite-datetime';
+import type { MemberDirectorySnapshotSource } from '../user-center/member-directory-snapshot';
 
 export interface MemberBehaviorFact {
   memberId: string;
@@ -14,6 +15,17 @@ export interface MemberBehaviorFact {
   firstPaidAt: Date | null;
   lastPaidAt: Date | null;
   daysSinceLastPaid: number | null;
+  sourceCreatedAt?: Date | null;
+  sourceUpdatedAt?: Date | null;
+  sourceLastLoginAt?: Date | null;
+  lastActivityAt?: Date | null;
+  daysSinceLastActivity?: number | null;
+}
+
+export interface MemberBehaviorFactOptions {
+  /** Read the external member master from one completed local snapshot. */
+  directoryGeneration?: string | null;
+  directorySource?: MemberDirectorySnapshotSource;
 }
 
 type RawMemberOrderFact = {
@@ -23,6 +35,17 @@ type RawMemberOrderFact = {
   paidGmvFen: number | bigint | null;
   firstPaidAt: string | null;
   lastPaidAt: string | null;
+};
+
+type DirectoryProfile = {
+  memberId: string;
+  nickname: string | null;
+  phone: string | null;
+  level: string | null;
+  pointsBalance: number | null;
+  sourceCreatedAt: Date | null;
+  sourceUpdatedAt: Date | null;
+  sourceLastLoginAt: Date | null;
 };
 
 function toBigInt(value: number | bigint | null | undefined): bigint | null {
@@ -45,12 +68,15 @@ function daysSince(date: Date | null, now: Date): number | null {
 /**
  * Loads the order facts shared by lifecycle analytics and rule-based tags.
  * Paid metrics intentionally use paidTime so the two features share one time definition.
+ * Lifecycle analytics may add profile/activity timestamps from a completed
+ * external directory snapshot without making another upstream request.
  */
 export async function loadMemberBehaviorFacts(
   prisma: PrismaService,
-  now = new Date()
+  now = new Date(),
+  options: MemberBehaviorFactOptions = {}
 ): Promise<MemberBehaviorFact[]> {
-  const [members, orderRows] = await Promise.all([
+  const [members, orderRows, directoryProfiles] = await Promise.all([
     prisma.member.findMany({
       select: {
         memberId: true,
@@ -72,29 +98,92 @@ export async function loadMemberBehaviorFacts(
          MAX(CASE WHEN "paidTime" IS NOT NULL THEN ${sqlDatetime('"paidTime"')} END) AS "lastPaidAt"
        FROM "OrderHeader"
        WHERE "memberId" IS NOT NULL
-       GROUP BY "memberId"`
-    )
+      GROUP BY "memberId"`
+    ),
+    options.directoryGeneration && options.directorySource === 'staging' && prisma.memberDirectoryRefreshEntry
+      ? prisma.memberDirectoryRefreshEntry
+          .findMany({
+            where: { generation: options.directoryGeneration },
+            select: {
+              memberId: true,
+              nickname: true,
+              phone: true,
+              level: true,
+              pointsBalance: true,
+              sourceCreatedAt: true,
+              sourceUpdatedAt: true,
+              sourceLastLoginAt: true
+            }
+          })
+          .catch(() => null)
+      : options.directoryGeneration && prisma.memberDirectoryEntry
+        ? prisma.memberDirectoryEntry
+            .findMany({
+              where: { lastSyncGeneration: options.directoryGeneration },
+              select: {
+                memberId: true,
+                nickname: true,
+                phone: true,
+                level: true,
+                pointsBalance: true,
+                sourceCreatedAt: true,
+                sourceUpdatedAt: true,
+                sourceLastLoginAt: true
+              }
+            })
+            .catch(() => null)
+        : Promise.resolve(null)
   ]);
 
   const orderByMember = new Map(orderRows.map((row) => [row.memberId, row]));
-  return members.map((member) => {
-    const order = orderByMember.get(member.memberId);
+  const localById = new Map(members.map((member) => [member.memberId, member]));
+  const profiles: DirectoryProfile[] = directoryProfiles
+    ? directoryProfiles
+    : members.map((member) => ({
+        memberId: member.memberId,
+        nickname: member.nickname,
+        phone: member.phone,
+        level: member.level,
+        pointsBalance: member.pointsBalance,
+        sourceCreatedAt: null,
+        sourceUpdatedAt: null,
+        sourceLastLoginAt: null
+      }));
+
+  return profiles.map((profile) => {
+    const localMember = localById.get(profile.memberId);
+    const order = orderByMember.get(profile.memberId);
     const paidOrderCount = Number(order?.paidOrderCount ?? 0);
     const firstPaidAt = parseSqliteDate(order?.firstPaidAt);
     const lastPaidAt = parseSqliteDate(order?.lastPaidAt);
+    const lastActivityAt = [
+      lastPaidAt,
+      profile.sourceLastLoginAt,
+      profile.sourceUpdatedAt,
+      profile.sourceCreatedAt
+    ].reduce<Date | null>(
+      (latest, value) => (!value || (latest && latest >= value) ? latest : value),
+      null
+    );
     return {
-      memberId: member.memberId,
-      nickname: member.nickname,
-      phone: member.phone,
-      level: member.level,
-      pointsBalance: member.pointsBalance,
-      totalOrders: Number(order?.totalOrders ?? member.totalOrders),
-      totalGmvFen: paidOrderCount > 0 ? toBigInt(order?.paidGmvFen) : member.totalGmvFen,
+      memberId: profile.memberId,
+      nickname: profile.nickname ?? localMember?.nickname ?? null,
+      phone: profile.phone ?? localMember?.phone ?? null,
+      level: profile.level ?? localMember?.level ?? null,
+      pointsBalance: profile.pointsBalance ?? localMember?.pointsBalance ?? 0,
+      totalOrders: Number(order?.totalOrders ?? localMember?.totalOrders ?? 0),
+      totalGmvFen:
+        paidOrderCount > 0 ? toBigInt(order?.paidGmvFen) : (localMember?.totalGmvFen ?? null),
       paidOrderCount,
       paidGmvFen: paidOrderCount > 0 ? toBigInt(order?.paidGmvFen) : null,
       firstPaidAt,
       lastPaidAt,
-      daysSinceLastPaid: daysSince(lastPaidAt, now)
+      daysSinceLastPaid: daysSince(lastPaidAt, now),
+      sourceCreatedAt: profile.sourceCreatedAt,
+      sourceUpdatedAt: profile.sourceUpdatedAt,
+      sourceLastLoginAt: profile.sourceLastLoginAt,
+      lastActivityAt,
+      daysSinceLastActivity: daysSince(lastActivityAt, now)
     };
   });
 }

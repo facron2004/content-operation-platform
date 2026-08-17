@@ -63,6 +63,27 @@ export interface StoreMerchantOption {
   areaName: string | null;
 }
 
+export type StoreRefreshJobStatus = 'queued' | 'pulling' | 'done' | 'error' | 'interrupted';
+
+export interface StoreRefreshJob {
+  jobId: string;
+  status: StoreRefreshJobStatus;
+  progress: {
+    currentPage: number;
+    pagesFetched: number;
+    totalPages: number;
+    totalShops: number;
+    shopsFetched: number;
+    storesPersisted: number;
+    merchantsUpdated: number;
+    skipped: number;
+    errors: number;
+    pageSize: number;
+  };
+  result?: StoreRefreshJob['progress'] & { warnings: string[] };
+  error?: string;
+}
+
 export interface MerchantScoreItem {
   merchantId: string;
   merchantName: string;
@@ -173,7 +194,9 @@ export async function listPackageCombinations(params: ListParams = {}) {
 }
 
 export async function listPackageOptions(search?: string) {
-  return (await client.get<PackageOption[]>('/package-combinations/options', { params: { search } })).data;
+  return (
+    await client.get<PackageOption[]>('/package-combinations/options', { params: { search } })
+  ).data;
 }
 
 export async function createPackageCombination(
@@ -188,11 +211,27 @@ export async function createPackageCombination(
   },
   key: string
 ) {
-  return (await client.post<PackageCombination>('/package-combinations', data, writeConfig('package-combination', key))).data;
+  return (
+    await client.post<PackageCombination>(
+      '/package-combinations',
+      data,
+      writeConfig('package-combination', key)
+    )
+  ).data;
 }
 
-export async function updatePackageCombinationStatus(id: string, status: 'active' | 'disabled', key: string) {
-  return (await client.patch<PackageCombination>(`/package-combinations/${encodeURIComponent(id)}/status`, { status }, writeConfig('package-combination', key))).data;
+export async function updatePackageCombinationStatus(
+  id: string,
+  status: 'active' | 'disabled',
+  key: string
+) {
+  return (
+    await client.patch<PackageCombination>(
+      `/package-combinations/${encodeURIComponent(id)}/status`,
+      { status },
+      writeConfig('package-combination', key)
+    )
+  ).data;
 }
 
 export async function listStores(params: ListParams = {}) {
@@ -203,12 +242,40 @@ export async function listStoreMerchantOptions(search?: string) {
   return (await client.get<StoreMerchantOption[]>('/stores/options', { params: { search } })).data;
 }
 
+export async function startStoreRefresh() {
+  return (
+    await client.post<StoreRefreshJob>('/stores/refresh', undefined, {
+      timeout: 10000,
+      headers: { 'Idempotency-Key': buildBusinessIntentKey('store', 'refresh', Date.now()) }
+    })
+  ).data;
+}
+
+export async function getActiveStoreRefresh() {
+  return (await client.get<StoreRefreshJob | null>('/stores/refresh/active', { timeout: 10000 }))
+    .data;
+}
+
+export async function getStoreRefreshStatus(jobId: string) {
+  return (
+    await client.get<StoreRefreshJob>(`/stores/refresh/${encodeURIComponent(jobId)}`, {
+      timeout: 10000
+    })
+  ).data;
+}
+
 export async function createStore(data: Record<string, unknown>, key: string) {
   return (await client.post<StoreItem>('/stores', data, writeConfig('store', key))).data;
 }
 
 export async function updateStore(id: string, data: Record<string, unknown>, key: string) {
-  return (await client.patch<StoreItem>(`/stores/${encodeURIComponent(id)}`, data, writeConfig('store', key))).data;
+  return (
+    await client.patch<StoreItem>(
+      `/stores/${encodeURIComponent(id)}`,
+      data,
+      writeConfig('store', key)
+    )
+  ).data;
 }
 
 export async function listMerchantScores(params: ListParams = {}) {
@@ -216,7 +283,13 @@ export async function listMerchantScores(params: ListParams = {}) {
 }
 
 export async function recalculateMerchantScore(merchantId: string, key: string) {
-  return (await client.post<MerchantScoreItem>(`/merchant-scores/${encodeURIComponent(merchantId)}/recalculate`, undefined, writeConfig('merchant-score', key))).data;
+  return (
+    await client.post<MerchantScoreItem>(
+      `/merchant-scores/${encodeURIComponent(merchantId)}/recalculate`,
+      undefined,
+      writeConfig('merchant-score', key)
+    )
+  ).data;
 }
 
 export async function listMerchantLeads(params: ListParams = {}) {
@@ -232,27 +305,31 @@ export async function createMerchantLead(data: Record<string, unknown>, key: str
 }
 
 export async function updateMerchantLeadStage(id: string, stage: string, key: string) {
-  return (await client.patch<MerchantLead>(`/crm/leads/${encodeURIComponent(id)}/stage`, { stage }, writeConfig('crm-lead', key))).data;
+  return (
+    await client.patch<MerchantLead>(
+      `/crm/leads/${encodeURIComponent(id)}/stage`,
+      { stage },
+      writeConfig('crm-lead', key)
+    )
+  ).data;
 }
 
-export async function addMerchantLeadFollow(id: string, data: Record<string, unknown>, key: string) {
-  return (await client.post<MerchantLead>(`/crm/leads/${encodeURIComponent(id)}/follow-records`, data, writeConfig('crm-lead', key))).data;
+export async function addMerchantLeadFollow(
+  id: string,
+  data: Record<string, unknown>,
+  key: string
+) {
+  return (
+    await client.post<MerchantLead>(
+      `/crm/leads/${encodeURIComponent(id)}/follow-records`,
+      data,
+      writeConfig('crm-lead', key)
+    )
+  ).data;
 }
 
 export async function listDeliveries(params: ListParams = {}) {
   return (await client.get<GapPage<DeliveryItem>>('/deliveries', { params })).data;
-}
-
-export async function createDelivery(data: Record<string, unknown>, key: string) {
-  return (await client.post<DeliveryItem>('/deliveries', data, writeConfig('delivery', key))).data;
-}
-
-export async function updateDelivery(id: string, data: Record<string, unknown>, key: string) {
-  return (await client.patch<DeliveryItem>(`/deliveries/${encodeURIComponent(id)}`, data, writeConfig('delivery', key))).data;
-}
-
-export async function bulkShipDeliveries(items: Array<{ deliveryId: string; logisticsCompany: string; trackingNo: string }>, key: string) {
-  return (await client.post<{ updated: number; items: DeliveryItem[] }>('/deliveries/bulk-ship', { items }, writeConfig('delivery', key))).data;
 }
 
 export async function listCardBatches(params: ListParams = {}) {
@@ -260,29 +337,22 @@ export async function listCardBatches(params: ListParams = {}) {
 }
 
 export async function listCardBatchOptions() {
-  return (await client.get<Array<{ batchId: string; batchNo: string; name: string }>>('/card-batches/options')).data;
+  return (
+    await client.get<Array<{ batchId: string; batchNo: string; name: string }>>(
+      '/card-batches/options'
+    )
+  ).data;
 }
 
 export async function listCardPackageOptions(search?: string) {
-  return (await client.get<Array<{ packageId: string; packageName: string }>>('/card-batches/package-options', { params: { search } })).data;
-}
-
-export async function createCardBatch(data: Record<string, unknown>, key: string) {
-  return (await client.post<{ batch: CardBatch; generatedCards: Array<{ cardNo: string; secret: string }> }>('/card-batches', data, writeConfig('card-batch', key))).data;
+  return (
+    await client.get<Array<{ packageId: string; packageName: string }>>(
+      '/card-batches/package-options',
+      { params: { search } }
+    )
+  ).data;
 }
 
 export async function listCards(params: ListParams = {}) {
   return (await client.get<GapPage<RedemptionCard>>('/cards', { params })).data;
-}
-
-export async function activateCard(id: string, key: string) {
-  return (await client.post<RedemptionCard>(`/cards/${encodeURIComponent(id)}/activate`, undefined, writeConfig('card-batch', key))).data;
-}
-
-export async function freezeCard(id: string, key: string) {
-  return (await client.post<RedemptionCard>(`/cards/${encodeURIComponent(id)}/freeze`, undefined, writeConfig('card-batch', key))).data;
-}
-
-export async function redeemCard(data: Record<string, unknown>, key: string) {
-  return (await client.post('/cards/redeem', data, writeConfig('card-redeem', key))).data;
 }

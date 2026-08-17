@@ -1,19 +1,29 @@
 <template>
   <section v-loading="loading" class="page-stack user-lifecycle-view">
     <div class="page-toolbar">
-      <el-button :loading="loading" @click="load">
+      <el-button v-if="canRefresh" :loading="loading || refreshing" @click="refreshMembers">
+        <el-icon><Refresh /></el-icon>
+        同步并刷新
+      </el-button>
+      <el-button v-else :loading="loading" @click="load">
         <el-icon><Refresh /></el-icon>
         刷新
       </el-button>
+      <span v-if="refreshStatusText" class="user-lifecycle-refresh-status">
+        {{ refreshStatusText }}
+      </span>
     </div>
 
     <ErrorAlert :message="error" />
+    <ErrorAlert :message="refreshError" />
 
     <div class="user-lifecycle-metrics">
-          <article class="user-lifecycle-metric panel">
-            <span>用户总数</span>
-            <strong>{{ formatCount(summary.totalMembers) }}</strong>
-            <small>{{ dataSources.includes('JeeSite Member') ? 'JeeSite 会员主档' : '当前 Member 档案' }}</small>
+      <article class="user-lifecycle-metric panel">
+        <span>用户总数</span>
+        <strong>{{ formatCount(summary.totalMembers) }}</strong>
+        <small>
+          {{ dataSources.includes('JeeSite Member') ? 'JeeSite 会员主档' : '当前 Member 档案' }}
+        </small>
       </article>
       <article class="user-lifecycle-metric panel">
         <span>已付费用户</span>
@@ -60,16 +70,16 @@
       <div class="section-heading">
         <div>
           <p class="eyebrow">STAGE MEMBERS</p>
-            <h2>{{ stage ? stages.find((item) => item.key === stage)?.label : '已同步行为用户' }}</h2>
+          <h2>{{ stage ? stages.find((item) => item.key === stage)?.label : '已同步行为用户' }}</h2>
         </div>
         <div class="user-lifecycle-table-actions">
-          <el-select
-            :model-value="stage"
-            clearable
-            placeholder="按阶段筛选"
-            @change="applyStage"
-          >
-            <el-option v-for="item in stages" :key="item.key" :label="item.label" :value="item.key" />
+          <el-select :model-value="stage" clearable placeholder="按阶段筛选" @change="applyStage">
+            <el-option
+              v-for="item in stages"
+              :key="item.key"
+              :label="item.label"
+              :value="item.key"
+            />
           </el-select>
           <span class="section-meta">共 {{ formatCount(pagination.total) }} 人</span>
         </div>
@@ -99,8 +109,13 @@
         <el-table-column label="最近支付" width="130">
           <template #default="{ row }">{{ displayDate(row.lastPaidAt) }}</template>
         </el-table-column>
+        <el-table-column label="最近活动" width="130">
+          <template #default="{ row }">{{ displayDate(row.lastActivityAt) }}</template>
+        </el-table-column>
         <el-table-column label="距今" width="100" align="right">
-          <template #default="{ row }">{{ row.daysSinceLastPaid == null ? '—' : `${row.daysSinceLastPaid} 天` }}</template>
+          <template #default="{ row }">
+            {{ row.daysSinceLastActivity == null ? '—' : `${row.daysSinceLastActivity} 天` }}
+          </template>
         </el-table-column>
       </el-table>
 
@@ -127,12 +142,17 @@ const {
   stage,
   loading,
   error,
+  refreshError,
+  canRefresh,
+  refreshing,
+  refreshStatusText,
   summary,
   stages,
   items,
   pagination,
   dataSources,
   load,
+  refreshMembers,
   applyStage,
   setPage,
   displayFen,

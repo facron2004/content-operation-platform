@@ -174,7 +174,7 @@
               <strong>{{ displayFen(dashboard.channels.walletFen) }}</strong>
             </div>
             <div>
-              <span>福利金字段</span>
+              <span>积分字段</span>
               <strong>{{ displayFen(dashboard.channels.bonusFen) }}</strong>
             </div>
             <div>
@@ -184,7 +184,7 @@
           </div>
           <p class="finance-side-note">
             在线 /
-            钱包构成支付总额；福利金、卡券按原始字段展示，可能与渠道字段存在来源重叠，不参与合计。
+            钱包构成支付总额；积分、卡券按原始字段展示，可能与渠道字段存在来源重叠，不参与合计。
           </p>
         </section>
 

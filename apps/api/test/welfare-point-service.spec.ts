@@ -228,7 +228,7 @@ describe('WelfarePointService.applyFilters', () => {
 });
 
 describe('WelfarePointService.refresh', () => {
-  it('publishes one freshly fetched dataset for subsequent summary and list reads', async () => {
+  it('publishes one freshly fetched dataset for subsequent summary reads', async () => {
     const svc = new WelfarePointService(fakeAutoLogin());
     const fresh = [rec({ id: 'fresh', centerMemberId: 'fresh-member' })];
     const fetchAll = vi
@@ -236,14 +236,138 @@ describe('WelfarePointService.refresh', () => {
       .mockResolvedValue(fresh);
 
     await svc.refresh();
-    const [summary, list] = await Promise.all([
-      svc.summary({} as WelfarePointQueryDto),
-      svc.query({} as WelfarePointQueryDto)
-    ]);
+    const summary = await svc.summary({} as WelfarePointQueryDto);
 
     expect(fetchAll).toHaveBeenCalledTimes(1);
     expect(summary.kpis.totalRecords).toBe(1);
-    expect(list.list[0]?.id).toBe('fresh');
+  });
+
+  it('uses the selected upstream page and deduplicates the same-page request', async () => {
+    const previousBaseUrl = process.env.EXTERNAL_API_BASE_URL;
+    process.env.EXTERNAL_API_BASE_URL = 'https://example.test/a';
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          code: 0,
+          data: {
+            pageNo: 4,
+            pageSize: 20,
+            count: 163780,
+            list: [
+              {
+                id: 'upstream-4',
+                centerMemberId: 'm4',
+                pointAmount: 3.2,
+                pointType: 1,
+                sourceType: 2,
+                currentBalance: 3.2,
+                createDate: '2026-08-14 10:00:00',
+                updateDate: '2026-08-14 10:00:00'
+              }
+            ]
+          }
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } }
+      )
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const svc = new WelfarePointService(
+      { ensureValidCookie: vi.fn().mockResolvedValue('sid=ok') } as never,
+      { $executeRawUnsafe: vi.fn().mockResolvedValue(1) } as never
+    );
+
+    try {
+      const [first, second] = await Promise.all([
+        svc.query({ page: 4, pageSize: 20 } as WelfarePointQueryDto),
+        svc.query({ page: 4, pageSize: 20 } as WelfarePointQueryDto)
+      ]);
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
+        body: 'pageNo=4&pageSize=20'
+      });
+      expect(first.dataSource).toBe('JeeSite');
+      expect(second.list[0]?.id).toBe('upstream-4');
+    } finally {
+      if (previousBaseUrl === undefined) delete process.env.EXTERNAL_API_BASE_URL;
+      else process.env.EXTERNAL_API_BASE_URL = previousBaseUrl;
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('falls back to the persisted page when the upstream service is unavailable', async () => {
+    const row = {
+      id: 'stored-1',
+      centerMemberId: 'm1',
+      memberName: '张三',
+      memberPhone: '178****7020',
+      memberCode: '123456',
+      pointAmountFen: 1234n,
+      pointType: 1,
+      sourceType: 1,
+      orderNo: null,
+      currentBalanceFen: 1234n,
+      expireTime: null,
+      changeDesc: '系统发放',
+      status: '0',
+      createDate: '2026-08-10 13:35:08',
+      updateDate: '2026-08-10 13:35:08'
+    };
+    const autoLogin = { ensureValidCookie: vi.fn() };
+    const prisma = {
+      $queryRawUnsafe: vi.fn((sql: string) =>
+        Promise.resolve(sql.includes('COUNT(*)') ? [{ total: 1 }] : [row])
+      )
+    } as never;
+    const svc = new WelfarePointService(autoLogin as never, prisma);
+
+    const result = await svc.query({} as WelfarePointQueryDto);
+
+    expect(result.total).toBe(1);
+    expect(result.list[0]).toMatchObject({
+      id: 'stored-1',
+      pointAmount: 12.34,
+      currentBalance: 12.34
+    });
+    expect(result.dataSource).toBe('WelfarePointRecord');
+    expect(autoLogin.ensureValidCookie).toHaveBeenCalledTimes(1);
+  });
+
+  it('persists a fresh welfare snapshot in fen precision after a successful pull', async () => {
+    const $executeRawUnsafe = vi.fn().mockResolvedValue(1);
+    const svc = new WelfarePointService(fakeAutoLogin(), { $executeRawUnsafe } as never);
+    vi.spyOn(
+      svc as unknown as { fetchAll: () => Promise<WelfarePointRecord[]> },
+      'fetchAll'
+    ).mockResolvedValue([rec({ pointAmount: 12.34, currentBalance: 12.34 })]);
+
+    await svc.refresh();
+
+    expect($executeRawUnsafe).toHaveBeenCalledTimes(1);
+    const [sql, ...params] = $executeRawUnsafe.mock.calls[0];
+    expect(sql).toContain('"WelfarePointRecord"');
+    expect(params).toContain(1234);
+  });
+
+  it('backfills only the welfare balance from the completed welfare snapshot', async () => {
+    const $executeRawUnsafe = vi.fn().mockResolvedValue(1);
+    const svc = new WelfarePointService(fakeAutoLogin(), {
+      memberDirectoryEntry: {},
+      $executeRawUnsafe
+    } as never);
+    vi.spyOn(
+      svc as unknown as { fetchAll: () => Promise<WelfarePointRecord[]> },
+      'fetchAll'
+    ).mockResolvedValue([rec({ pointAmount: 12.34, currentBalance: 12.34 })]);
+
+    await svc.refresh();
+
+    expect($executeRawUnsafe).toHaveBeenCalledTimes(2);
+    const [syncSql, ...syncParams] = $executeRawUnsafe.mock.calls[1];
+    expect(syncSql).toContain('"welfareBalanceFen"');
+    expect(syncSql).not.toContain('"pointsBalance"');
+    expect(syncParams).toHaveLength(2);
+    expect(syncParams[0]).toBe(syncParams[1]);
   });
 
   it('requires analytics:refresh on the upstream refresh endpoint', () => {

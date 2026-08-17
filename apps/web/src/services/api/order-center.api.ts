@@ -17,6 +17,7 @@ export interface OrderCenterItem {
   channel: string | null;
   orderAmountFen: string | null;
   paidAmountFen: string | null;
+  paidAmountWalletFen: string | null;
   refundAmountFen: string | null;
   verifyAmountFen: string | null;
 }
@@ -35,6 +36,7 @@ export interface OrderCenterListResponse {
     verifiedOrders: number;
     refundedOrders: number;
     paidAmountFen: string | null;
+    paidAmountWalletFen: string | null;
   };
   dataSources: string[];
 }
@@ -104,16 +106,17 @@ export interface OrderTransactionTimeline {
   verifications: VerificationRecord[];
   refunds: RefundRequest[];
   capabilities: {
-    verification: 'ready';
-    refundRequest: 'ready';
+    verification: 'read_only';
+    refundRequest: 'read_only';
     externalRefund: 'not_connected';
-    inventoryRestock: 'ready';
+    inventoryRestock: 'read_only';
   };
 }
 
 export async function getOrderCenterOrders(params: {
   search?: string;
   status?: string;
+  category?: string;
   page: number;
   pageSize: number;
 }) {
@@ -140,54 +143,4 @@ export async function getOrderCenterTransactions(orderId: string) {
       { timeout: 30000 }
     )
   ).data;
-}
-
-export async function verifyOrderCenterOrder(
-  orderId: string,
-  data: { amountFen?: string; quantity?: number; verificationCode?: string; storeId?: string; reason?: string },
-  idempotencyKey: string
-) {
-  return (
-    await client.post(`/order-center/orders/${encodeURIComponent(orderId)}/verify`, data, {
-      headers: { 'Idempotency-Key': idempotencyKey },
-      timeout: 30000
-    })
-  ).data;
-}
-
-export async function requestOrderRefund(
-  orderId: string,
-  data: { refundType: string; amountFen?: string; reason: string },
-  idempotencyKey: string
-) {
-  return (
-    await client.post(`/order-center/orders/${encodeURIComponent(orderId)}/refund-requests`, data, {
-      headers: { 'Idempotency-Key': idempotencyKey },
-      timeout: 30000
-    })
-  ).data as RefundRequest;
-}
-
-export async function approveOrderRefund(refundId: string, reason: string, idempotencyKey: string) {
-  return (
-    await client.post(
-      `/order-center/refund-requests/${encodeURIComponent(refundId)}/approve`,
-      { reason: reason || undefined },
-      { headers: { 'Idempotency-Key': idempotencyKey }, timeout: 30000 }
-    )
-  ).data as RefundRequest;
-}
-
-export async function completeOrderRefund(
-  refundId: string,
-  data: { thirdPartyRefundId: string; restoreInventoryQuantity?: number },
-  idempotencyKey: string
-) {
-  return (
-    await client.post(
-      `/order-center/refund-requests/${encodeURIComponent(refundId)}/complete`,
-      data,
-      { headers: { 'Idempotency-Key': idempotencyKey }, timeout: 30000 }
-    )
-  ).data as RefundRequest;
 }

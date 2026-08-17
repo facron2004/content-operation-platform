@@ -5,7 +5,7 @@ import {
   Logger,
   ServiceUnavailableException
 } from '@nestjs/common';
-import { clamp, describeError, exponentialBackoff, isRecord, sleep } from '@content/shared';
+import { describeError, exponentialBackoff, isRecord, sleep } from '@content/shared';
 import { LOGIN_FORM_HTML_MARKER, LOGIN_PAGE_MARKERS } from '../common/login-markers';
 import {
   JSON_RESPONSE_MAX_BYTES,
@@ -72,6 +72,7 @@ export class JeeSiteDataSourceClient {
 
     const firstPayload = await readPage(1);
     const { mergedList, totalPages } = this.collectPages(firstPayload);
+    let isComplete = true;
 
     // Soft page ceiling — bound outbound fan-out even before row cap.
     const maxPages = Math.max(
@@ -80,6 +81,7 @@ export class JeeSiteDataSourceClient {
     );
     const effectivePages = Math.min(totalPages, maxPages);
     if (totalPages > maxPages) {
+      isComplete = false;
       this.logger.warn(
         `External pagination capped ${totalPages} → ${maxPages} pages (EXTERNAL_MAX_PAGES)`
       );
@@ -110,6 +112,7 @@ export class JeeSiteDataSourceClient {
 
       const failureRatio = failedPages.length / pages.length;
       if (failedPages.length > 0) {
+        isComplete = false;
         this.logger.warn(
           `Paginated fetch partial failure: ${failedPages.length}/${pages.length} pages failed (pages: ${failedPages.join(', ')})`
         );
@@ -124,6 +127,7 @@ export class JeeSiteDataSourceClient {
     // Bound in-process retain: recommend scores further to RECOMMEND_SCORE_CAP, but
     // cold load must not hold unbounded JeeSite pages in RAM (PLATFORM_SCAN_LIMIT).
     if (mergedList.length > PLATFORM_SCAN_LIMIT) {
+      isComplete = false;
       this.logger.warn(
         `External catalog truncated ${mergedList.length} → ${PLATFORM_SCAN_LIMIT} rows (PLATFORM_SCAN_LIMIT)`
       );
@@ -140,6 +144,7 @@ export class JeeSiteDataSourceClient {
     if (Array.isArray(dataset.snapshots) && dataset.snapshots.length > PLATFORM_SCAN_LIMIT) {
       dataset.snapshots = dataset.snapshots.slice(0, PLATFORM_SCAN_LIMIT);
     }
+    dataset.isComplete = isComplete;
     return dataset;
   }
 
@@ -252,7 +257,7 @@ export class JeeSiteDataSourceClient {
     const firstRecord = isRecord(firstPayload) ? firstPayload : {};
     const totalCount = Number(firstRecord.count ?? 0);
     const pageSize = Number(firstRecord.pageSize ?? 100) || 100;
-    const totalPages = clamp(Math.ceil(totalCount / pageSize), 1, 100);
+    const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
     const mergedList: unknown[] = [];
     this.pushPageRows(firstPayload, mergedList);
     return { mergedList, totalPages };

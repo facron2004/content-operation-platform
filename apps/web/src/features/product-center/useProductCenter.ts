@@ -8,7 +8,8 @@ import {
   type ProductCenterDetailResponse,
   type ProductCenterItem,
   type ProductCenterListResponse,
-  type ProductInventoryStatus
+  type ProductInventoryStatus,
+  type ProductSaleFilter
 } from '../../services/api/product-center.api';
 import { useRoleStore } from '../../stores/role';
 import { formatFenYuan } from '../../utils/format';
@@ -24,6 +25,12 @@ export function useProductCenter() {
     typeof route.query.inventoryStatus === 'string' &&
       ['all', 'normal', 'low', 'out'].includes(route.query.inventoryStatus)
       ? (route.query.inventoryStatus as ProductInventoryStatus)
+      : 'all'
+  );
+  const saleStatus = ref<ProductSaleFilter>(
+    typeof route.query.saleStatus === 'string' &&
+      ['all', 'pending', 'selling', 'recycle'].includes(route.query.saleStatus)
+      ? (route.query.saleStatus as ProductSaleFilter)
       : 'all'
   );
   const page = ref(Number(route.query.page) > 0 ? Number(route.query.page) : 1);
@@ -49,7 +56,10 @@ export function useProductCenter() {
     lowStockSkus: 0,
     outOfStockSkus: 0,
     stockTotal: 0,
-    stockLeft: 0
+    stockLeft: 0,
+    initialStock: 0,
+    currentStock: 0,
+    dailyStock: 0
   });
   const pagination = ref<ProductCenterListResponse['pagination']>({
     page: 1,
@@ -71,6 +81,7 @@ export function useProductCenter() {
       const response = await getProductCenterProducts({
         search: search.value.trim() || undefined,
         inventoryStatus: inventoryStatus.value,
+        saleStatus: saleStatus.value !== 'all' ? saleStatus.value : undefined,
         page: page.value,
         pageSize: PAGE_SIZE
       });
@@ -110,25 +121,27 @@ export function useProductCenter() {
     try {
       ElMessage.info('正在从 JeeSite 同步套餐数据…');
       const result = await syncMerchantsFromJeeSite();
-      if (disposed) return;
-      if (result.skipped) {
-        ElMessage.info('JeeSite 同步正在进行中，已重新加载本地数据');
-      } else {
+      if (!disposed) {
         ElMessage.success(
           `已同步 ${result.packagesPersisted} 条套餐` +
-            (result.upserted ? `，${result.upserted} 家商家` : '')
+            (result.upserted ? `，${result.upserted} 家商家` : '') +
+            (result.stalePackagesDeactivated
+              ? `，已清理 ${result.stalePackagesDeactivated} 个过期在售 SKU`
+              : '')
         );
       }
     } catch (cause) {
       if (disposed) return;
       ElMessage.warning(
-        `JeeSite 同步失败：${cause instanceof Error ? cause.message : '未知错误'}；已重新加载本地数据`
+        `JeeSite 同步失败：${cause instanceof Error ? cause.message : '未知错误'}；将重新加载本地数据`
       );
     } finally {
-      if (!disposed) syncing.value = false;
+      try {
+        if (!disposed) await reload();
+      } finally {
+        syncing.value = false;
+      }
     }
-    if (disposed) return;
-    await reload();
   }
 
   async function loadDetail(packageId: string) {
@@ -156,6 +169,7 @@ export function useProductCenter() {
         query: {
           search: search.value || undefined,
           inventoryStatus: inventoryStatus.value !== 'all' ? inventoryStatus.value : undefined,
+          saleStatus: saleStatus.value !== 'all' ? saleStatus.value : undefined,
           page: page.value > 1 ? String(page.value) : undefined,
           packageId
         }
@@ -171,7 +185,8 @@ export function useProductCenter() {
     await router.replace({
       query: {
         search: search.value || undefined,
-        inventoryStatus: inventoryStatus.value !== 'all' ? inventoryStatus.value : undefined
+        inventoryStatus: inventoryStatus.value !== 'all' ? inventoryStatus.value : undefined,
+        saleStatus: saleStatus.value !== 'all' ? saleStatus.value : undefined
       }
     });
     await reload();
@@ -186,6 +201,7 @@ export function useProductCenter() {
       query: {
         search: search.value || undefined,
         inventoryStatus: inventoryStatus.value !== 'all' ? inventoryStatus.value : undefined,
+        saleStatus: saleStatus.value !== 'all' ? saleStatus.value : undefined,
         page: nextPage > 1 ? String(nextPage) : undefined
       }
     });
@@ -237,6 +253,7 @@ export function useProductCenter() {
   return {
     search,
     inventoryStatus,
+    saleStatus,
     page,
     loading,
     detailLoading,

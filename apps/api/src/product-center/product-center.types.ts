@@ -11,6 +11,9 @@ export interface ProductCenterItem {
   saleStatus: string | null;
   stockTotal: number;
   stockLeft: number;
+  initialStock: number;
+  currentStock: number;
+  dailyStock: number;
   inventoryStatus: ProductInventoryStatus;
   originalPriceFen: string | null;
   salePriceFen: string | null;
@@ -36,6 +39,9 @@ export interface ProductCenterListPayload {
     outOfStockSkus: number;
     stockTotal: number;
     stockLeft: number;
+    initialStock: number;
+    currentStock: number;
+    dailyStock: number;
   };
   dataSources: string[];
 }

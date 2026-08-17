@@ -1,13 +1,65 @@
-import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  NotFoundException,
+  Optional,
+  ServiceUnavailableException
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { CreateStoreDto, GapListQueryDto, UpdateStoreDto } from './gap-center.dto';
 import { maskPhone, pageResult } from './gap-center.utils';
 import { PrismaService } from '../prisma/prisma.service';
 import { newEntityId } from '../common/id';
+import { JobRunnerService } from '../jobs/job-runner.service';
+import { JeeSitePartnerShopClient } from './jeesite-partner-shop.client';
+import {
+  getActivePersistedOrInMemoryPartnerShopRefreshJob,
+  getPartnerShopRefreshJob,
+  getPersistedPartnerShopRefreshJob,
+  startPartnerShopRefreshJob,
+  type PartnerShopRefreshJob
+} from './partner-shop-refresh-job';
+import {
+  mapPartnerShopRow,
+  partnerShopStoreId,
+  PARTNER_SHOP_SOURCE,
+  type PartnerShopMerchantFallback,
+  type PartnerShopRecord
+} from './partner-shop.mapper';
+import type { AnyRecord } from '../content/jeesite-row-reader';
 
 @Injectable()
 export class StoreService {
-  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Optional()
+    @Inject(JeeSitePartnerShopClient)
+    private readonly partnerShopClient?: JeeSitePartnerShopClient,
+    @Optional() @Inject(JobRunnerService) private readonly jobRunner?: JobRunnerService
+  ) {}
+
+  startRefreshJob(): PartnerShopRefreshJob {
+    if (!this.partnerShopClient || !process.env.EXTERNAL_API_BASE_URL) {
+      throw new ServiceUnavailableException('外部合作商店铺数据源未配置，无法刷新门店目录');
+    }
+    return startPartnerShopRefreshJob({
+      client: this.partnerShopClient,
+      persistSnapshot: (rows) => this.persistExternalSnapshot(rows),
+      jobRunner: this.jobRunner
+    });
+  }
+
+  async getActiveRefreshJob(): Promise<PartnerShopRefreshJob | undefined> {
+    return getActivePersistedOrInMemoryPartnerShopRefreshJob(this.jobRunner);
+  }
+
+  async getRefreshJob(jobId: string): Promise<PartnerShopRefreshJob | undefined> {
+    return (
+      getPartnerShopRefreshJob(jobId) ??
+      (await getPersistedPartnerShopRefreshJob(jobId, this.jobRunner))
+    );
+  }
 
   async list(query: GapListQueryDto) {
     const search = query.search?.trim();
@@ -49,7 +101,9 @@ export class StoreService {
     ]);
     const merchantIdsWithStores = new Set(stores.map((store) => store.merchantId));
     const items = [
-      ...stores.map((store) => this.mapStore(store, this.merchantById(merchants, store.merchantId))),
+      ...stores.map((store) =>
+        this.mapStore(store, this.merchantById(merchants, store.merchantId))
+      ),
       ...merchants
         .filter((merchant) => !merchantIdsWithStores.has(merchant.merchantId))
         .map((merchant) => ({
@@ -73,7 +127,12 @@ export class StoreService {
         }))
     ].sort((left, right) => (right.updatedAt ?? '').localeCompare(left.updatedAt ?? ''));
     const start = (query.page - 1) * query.pageSize;
-    return pageResult(items.slice(start, start + query.pageSize), query.page, query.pageSize, items.length);
+    return pageResult(
+      items.slice(start, start + query.pageSize),
+      query.page,
+      query.pageSize,
+      items.length
+    );
   }
 
   async create(dto: CreateStoreDto) {
@@ -140,6 +199,134 @@ export class StoreService {
   private async assertMerchant(merchantId: string) {
     const merchant = await this.prisma.merchant.findUnique({ where: { merchantId } });
     if (!merchant) throw new BadRequestException('商家不存在，无法创建门店');
+  }
+
+  private async persistExternalSnapshot(rows: AnyRecord[]) {
+    const packageRows = await this.prisma.contentPackage.findMany({
+      where: { shopId: { not: null } },
+      select: { merchantId: true, merchantName: true, shopId: true }
+    });
+    const merchantByShopId = new Map<string, PartnerShopMerchantFallback>();
+    for (const packageRow of packageRows) {
+      for (const shopId of (packageRow.shopId ?? '').split(',')) {
+        const normalizedShopId = shopId.trim();
+        if (!normalizedShopId || merchantByShopId.has(normalizedShopId)) continue;
+        merchantByShopId.set(normalizedShopId, {
+          merchantId: packageRow.merchantId,
+          merchantName: packageRow.merchantName
+        });
+      }
+    }
+
+    const mappedByShopId = new Map<string, PartnerShopRecord>();
+    for (const row of rows) {
+      const externalShopId = String(
+        row.id ?? row.shopId ?? row.storeId ?? row.corePartnerShopId ?? ''
+      ).trim();
+      const mapped = mapPartnerShopRow(row, merchantByShopId.get(externalShopId));
+      if (mapped) mappedByShopId.set(mapped.externalShopId, mapped);
+    }
+    const mapped = [...mappedByShopId.values()];
+    if (!mapped.length) {
+      throw new ServiceUnavailableException('外部合作商店铺快照没有可识别的门店 ID，未覆盖旧数据');
+    }
+
+    const merchantIds = [...new Set(mapped.map((row) => row.merchantId))];
+    const existingMerchants = await this.prisma.merchant.findMany({
+      where: { merchantId: { in: merchantIds } },
+      select: { merchantId: true, lat: true, lng: true }
+    });
+    const existingMerchantById = new Map(existingMerchants.map((row) => [row.merchantId, row]));
+    const representativeByMerchant = new Map<string, PartnerShopRecord>();
+    for (const row of mapped) {
+      if (!representativeByMerchant.has(row.merchantId)) {
+        representativeByMerchant.set(row.merchantId, row);
+      }
+    }
+
+    const writes = [
+      ...[...representativeByMerchant.values()].map((row) => {
+        const existing = existingMerchantById.get(row.merchantId);
+        const keepExistingCoordinates =
+          existing?.lat != null &&
+          existing?.lng != null &&
+          !(existing.lat === 22.543 && existing.lng === 114.058);
+        return this.prisma.merchant.upsert({
+          where: { merchantId: row.merchantId },
+          create: {
+            merchantId: row.merchantId,
+            merchantName: row.merchantName,
+            areaId: row.areaId,
+            areaName: row.areaName,
+            address: row.address,
+            lat: row.latitude,
+            lng: row.longitude
+          },
+          update: {
+            merchantName: row.merchantName,
+            areaId: row.areaId,
+            areaName: row.areaName,
+            address: row.address,
+            ...(keepExistingCoordinates
+              ? {}
+              : {
+                  lat: row.latitude,
+                  lng: row.longitude
+                })
+          }
+        });
+      }),
+      ...mapped.map((row) => {
+        const storeId = partnerShopStoreId(row.externalShopId);
+        return this.prisma.store.upsert({
+          where: { storeId },
+          create: {
+            storeId,
+            merchantId: row.merchantId,
+            storeName: row.storeName,
+            address: row.address,
+            areaId: row.areaId,
+            areaName: row.areaName,
+            contactName: row.contactName,
+            contactPhone: row.contactPhone,
+            longitude: row.longitude,
+            latitude: row.latitude,
+            businessHours: row.businessHours,
+            status: row.status,
+            source: PARTNER_SHOP_SOURCE
+          },
+          update: {
+            merchantId: row.merchantId,
+            storeName: row.storeName,
+            address: row.address,
+            areaId: row.areaId,
+            areaName: row.areaName,
+            contactName: row.contactName,
+            contactPhone: row.contactPhone,
+            longitude: row.longitude,
+            latitude: row.latitude,
+            businessHours: row.businessHours,
+            status: row.status,
+            source: PARTNER_SHOP_SOURCE
+          }
+        });
+      }),
+      this.prisma.store.updateMany({
+        where: {
+          source: PARTNER_SHOP_SOURCE,
+          storeId: { notIn: mapped.map((row) => partnerShopStoreId(row.externalShopId)) }
+        },
+        data: { status: 'disabled' }
+      })
+    ];
+    await this.prisma.$transaction(writes);
+
+    return {
+      storesPersisted: mapped.length,
+      merchantsUpdated: representativeByMerchant.size,
+      skipped: rows.length - mapped.length,
+      errors: 0
+    };
   }
 
   private merchantById(

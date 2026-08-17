@@ -40,6 +40,7 @@ import { ReadinessService } from './common/readiness.service';
 import { InventoryModule } from './inventory/inventory.module';
 import { MarketingPrivateModule } from './marketing-private/marketing-private.module';
 import { GapCenterModule } from './gap-center/gap-center.module';
+import { MemberIntegralModule } from './member-integral/member-integral.module';
 
 @Module({
   imports: [
@@ -72,6 +73,7 @@ import { GapCenterModule } from './gap-center/gap-center.module';
     OutboxModule,
     MarketingPrivateModule,
     GapCenterModule,
+    MemberIntegralModule,
     ThrottlerModule.forRoot(appThrottlerConfig)
   ],
   controllers: [SystemVersionController, HealthController],

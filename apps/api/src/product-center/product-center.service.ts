@@ -7,10 +7,8 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { newEntityId } from '../common/id';
-import { InventoryService } from '../inventory/inventory.service';
 import { PrismaService } from '../prisma/prisma.service';
 import type {
-  InventoryAdjustmentDto,
   ProductCenterListQueryDto,
   ProductChangeReviewDto,
   ProductEditRequestDto,
@@ -45,6 +43,7 @@ type ProductRow = Prisma.ContentPackageGetPayload<{
     saleStatus: true;
     stockTotal: true;
     stockLeft: true;
+    currentStock: true;
     originalPriceFen: true;
     salePriceFen: true;
     welfarePriceFen: true;
@@ -65,6 +64,7 @@ const productSelect = {
   saleStatus: true,
   stockTotal: true,
   stockLeft: true,
+  currentStock: true,
   originalPriceFen: true,
   salePriceFen: true,
   welfarePriceFen: true,
@@ -126,6 +126,9 @@ function mapProduct(product: ProductRow, lastSnapshotAt: Date | null = null): Pr
     saleStatus: product.saleStatus,
     stockTotal: product.stockTotal,
     stockLeft: product.stockLeft,
+    initialStock: product.stockTotal,
+    currentStock: product.currentStock,
+    dailyStock: product.stockLeft,
     inventoryStatus: inventoryStatus(product.stockLeft),
     originalPriceFen: fenToString(product.originalPriceFen),
     salePriceFen: fenToString(product.salePriceFen),
@@ -226,10 +229,7 @@ function mapChangeRequest(row: {
 
 @Injectable()
 export class ProductCenterService {
-  constructor(
-    @Inject(PrismaService) private readonly prisma: PrismaService,
-    @Inject(InventoryService) private readonly inventory: InventoryService
-  ) {}
+  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
 
   async listProducts(
     query: ProductCenterListQueryDto,
@@ -268,7 +268,7 @@ export class ProductCenterService {
         this.prisma.contentPackage.count({ where }),
         this.prisma.contentPackage.findMany({
           where,
-          orderBy: [{ stockLeft: 'asc' }, { updatedAt: 'desc' }],
+          orderBy: [{ stockLeft: 'desc' }, { updatedAt: 'desc' }],
           skip,
           take: query.pageSize,
           select: productSelect
@@ -277,7 +277,7 @@ export class ProductCenterService {
         this.prisma.contentPackage.count({ where: outWhere }),
         this.prisma.contentPackage.aggregate({
           where,
-          _sum: { stockTotal: true, stockLeft: true }
+          _sum: { stockTotal: true, stockLeft: true, currentStock: true }
         }),
         this.prisma.contentPackage.count({
           where: activeWhere
@@ -315,7 +315,10 @@ export class ProductCenterService {
         lowStockSkus,
         outOfStockSkus,
         stockTotal: aggregate._sum.stockTotal ?? 0,
-        stockLeft: aggregate._sum.stockLeft ?? 0
+        stockLeft: aggregate._sum.stockLeft ?? 0,
+        initialStock: aggregate._sum.stockTotal ?? 0,
+        currentStock: aggregate._sum.currentStock ?? 0,
+        dailyStock: aggregate._sum.stockLeft ?? 0
       },
       dataSources: ['ContentPackage', 'SalesSnapshot']
     };
@@ -492,28 +495,5 @@ export class ProductCenterService {
       }
     });
     return mapChangeRequest(updated);
-  }
-
-  async adjustInventory(
-    packageId: string,
-    dto: InventoryAdjustmentDto,
-    actor: ProductActor,
-    requestId: string
-  ) {
-    const product = await this.prisma.contentPackage.findUnique({
-      where: { packageId },
-      select: { packageId: true }
-    });
-    if (!product) throw new NotFoundException('商品不存在');
-    return this.prisma.$transaction((tx) =>
-      this.inventory.adjust(tx, {
-        requestId,
-        packageId,
-        businessType: 'product_inventory',
-        businessId: packageId,
-        delta: dto.delta,
-        reason: `${actor.userId ?? 'unknown'}：${dto.reason.trim()}`
-      })
-    );
   }
 }

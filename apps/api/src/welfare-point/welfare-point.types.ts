@@ -50,6 +50,7 @@ export interface WelfarePointQueryResult {
   total: number;
   page: number;
   pageSize: number;
+  dataSource: 'JeeSite' | 'WelfarePointRecord';
 }
 
 export interface WelfarePointKpis {

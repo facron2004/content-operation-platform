@@ -1,6 +1,10 @@
+import 'reflect-metadata';
 import { describe, expect, it, vi } from 'vitest';
+import { plainToInstance } from 'class-transformer';
+import { validate } from 'class-validator';
 import type { PrismaService } from '../src/prisma/prisma.service';
 import type { JeeSiteMemberClient } from '../src/user-center/jeesite-member.client';
+import { UserCenterListQueryDto } from '../src/user-center/user-center.dto';
 import { maskMemberPhone, UserCenterService } from '../src/user-center/user-center.service';
 
 function createMemberRow() {
@@ -25,6 +29,18 @@ describe('user center', () => {
     expect(maskMemberPhone('')).toBeNull();
   });
 
+  it('accepts the real last page while keeping page size bounded', async () => {
+    const validErrors = await validate(
+      plainToInstance(UserCenterListQueryDto, { page: 8139, pageSize: 20 })
+    );
+    const oversizedErrors = await validate(
+      plainToInstance(UserCenterListQueryDto, { page: 8139, pageSize: 101 })
+    );
+
+    expect(validErrors).toHaveLength(0);
+    expect(oversizedErrors.some((error) => error.property === 'pageSize')).toBe(true);
+  });
+
   it('composes paginated members from order facts instead of stale member aggregates', async () => {
     const prisma = {
       $queryRawUnsafe: vi.fn().mockResolvedValue([
@@ -41,16 +57,14 @@ describe('user center', () => {
         findMany: vi.fn().mockResolvedValue([createMemberRow()])
       },
       orderHeader: {
-        groupBy: vi
-          .fn()
-          .mockResolvedValue([
-            {
-              memberId: 'member-1',
-              _count: { _all: 2 },
-              _sum: { paidAmountFen: 30000n },
-              _max: { paidTime: new Date('2026-08-11T00:00:00.000Z') }
-            }
-          ])
+        groupBy: vi.fn().mockResolvedValue([
+          {
+            memberId: 'member-1',
+            _count: { _all: 2 },
+            _sum: { paidAmountFen: 30000n },
+            _max: { paidTime: new Date('2026-08-11T00:00:00.000Z') }
+          }
+        ])
       }
     } as unknown as PrismaService;
     const service = new UserCenterService(prisma);
@@ -99,9 +113,7 @@ describe('user center', () => {
           .fn()
           .mockResolvedValueOnce([{ memberId: 'member-1' }])
           .mockResolvedValueOnce([member]),
-        groupBy: vi.fn().mockResolvedValue([
-          { parentInviteCode: 'INV-001', _count: { _all: 3 } }
-        ])
+        groupBy: vi.fn().mockResolvedValue([{ parentInviteCode: 'INV-001', _count: { _all: 3 } }])
       },
       orderHeader: {
         groupBy: vi.fn().mockResolvedValue([])
@@ -216,7 +228,14 @@ describe('user center', () => {
               nickName: '外部用户',
               phone: '13912345678',
               code: 'INV-EXT-001',
-              parentCode: 'INV-ROOT'
+              parentCode: 'INV-ROOT',
+              createDate: '2026-08-14 10:06',
+              updateDate: '2026-08-14 10:11',
+              loginDate: '2026-08-14 10:11:15',
+              point: '12.34',
+              bonus: 765,
+              status: '0',
+              identity: 2
             }
           ]
         })
@@ -236,12 +255,14 @@ describe('user center', () => {
           .mockResolvedValueOnce([{ totalOrders: 99, totalGmvFen: 880000n }])
           .mockResolvedValueOnce([{ paidMembers: 12000, activeMembers30d: 2400 }]),
         member: {
-          findMany: vi.fn().mockResolvedValue([
-            { ...createMemberRow(), memberId: 'member-external-1', inviteCode: 'INV-EXT-001' }
-          ]),
-          groupBy: vi.fn().mockResolvedValue([
-            { parentInviteCode: 'INV-EXT-001', _count: { _all: 4 } }
-          ])
+          findMany: vi
+            .fn()
+            .mockResolvedValue([
+              { ...createMemberRow(), memberId: 'member-external-1', inviteCode: 'INV-EXT-001' }
+            ]),
+          groupBy: vi
+            .fn()
+            .mockResolvedValue([{ parentInviteCode: 'INV-EXT-001', _count: { _all: 4 } }])
         },
         orderHeader: {
           groupBy: vi.fn().mockResolvedValue([
@@ -273,7 +294,12 @@ describe('user center', () => {
         nickname: '外部用户',
         phone: '139****5678',
         inviteCode: 'INV-EXT-001',
-        downlineCount: 4
+        welfareBalanceFen: '1234',
+        pointsBalance: 765,
+        downlineCount: 4,
+        sourceCreatedAt: '2026-08-14T02:06:00.000Z',
+        sourceUpdatedAt: '2026-08-14T02:11:00.000Z',
+        sourceLastLoginAt: '2026-08-14T02:11:15.000Z'
       });
       expect(externalClient.listMembers).toHaveBeenCalledWith({
         page: 1,
@@ -281,6 +307,99 @@ describe('user center', () => {
         search: undefined,
         level: undefined
       });
+    } finally {
+      if (previousBaseUrl === undefined) delete process.env.EXTERNAL_API_BASE_URL;
+      else process.env.EXTERNAL_API_BASE_URL = previousBaseUrl;
+    }
+  });
+
+  it('fetches the requested external page even when a completed directory snapshot exists', async () => {
+    const previousBaseUrl = process.env.EXTERNAL_API_BASE_URL;
+    process.env.EXTERNAL_API_BASE_URL = 'https://members.example.test/a';
+    try {
+      const externalClient = {
+        listMembers: vi.fn().mockResolvedValue({
+          pageNo: 8139,
+          pageSize: 20,
+          count: 163833,
+          list: [
+            {
+              id: 'member-page-8139',
+              nickName: '指定页用户',
+              code: 'INV-PAGE-8139',
+              parentCode: 'INV-ROOT'
+            }
+          ]
+        })
+      } as unknown as JeeSiteMemberClient;
+      const prisma = {
+        $queryRawUnsafe: vi
+          .fn()
+          .mockResolvedValueOnce([
+            {
+              metaJson: JSON.stringify({ snapshotReady: true, generation: 'generation-page' })
+            }
+          ])
+          .mockResolvedValue([]),
+        member: { findMany: vi.fn().mockResolvedValue([]) },
+        orderHeader: { groupBy: vi.fn().mockResolvedValue([]) },
+        memberDirectoryEntry: {
+          findMany: vi.fn().mockResolvedValue([]),
+          groupBy: vi.fn().mockResolvedValue([])
+        },
+        userTagRelation: { findMany: vi.fn().mockResolvedValue([]) }
+      } as unknown as PrismaService;
+
+      const service = new UserCenterService(prisma, externalClient);
+      const result = await service.listMembers({ page: 8139, pageSize: 20 });
+
+      expect(externalClient.listMembers).toHaveBeenCalledTimes(1);
+      expect(externalClient.listMembers).toHaveBeenCalledWith({
+        page: 8139,
+        pageSize: 20,
+        search: undefined,
+        level: undefined
+      });
+      expect(result.pagination).toMatchObject({ page: 8139, pageSize: 20, total: 163833 });
+      expect(result.dataSources).toContain('MemberDirectoryEntry');
+      expect(prisma.memberDirectoryEntry.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { memberId: { in: ['member-page-8139'] }, lastSyncGeneration: 'generation-page' }
+        })
+      );
+    } finally {
+      if (previousBaseUrl === undefined) delete process.env.EXTERNAL_API_BASE_URL;
+      else process.env.EXTERNAL_API_BASE_URL = previousBaseUrl;
+    }
+  });
+
+  it('deduplicates concurrent requests for the same external page', async () => {
+    const previousBaseUrl = process.env.EXTERNAL_API_BASE_URL;
+    process.env.EXTERNAL_API_BASE_URL = 'https://members.example.test/a';
+    try {
+      let resolvePage: ((page: { pageNo: number; pageSize: number; count: number; list: [] }) => void) | undefined;
+      const externalClient = {
+        listMembers: vi.fn().mockImplementation(
+          () =>
+            new Promise((resolve) => {
+              resolvePage = resolve;
+            })
+        )
+      } as unknown as JeeSiteMemberClient;
+      const prisma = {
+        $queryRawUnsafe: vi.fn().mockResolvedValue([{ metaJson: null }])
+      } as unknown as PrismaService;
+      const service = new UserCenterService(prisma, externalClient);
+      const query = { page: 2, pageSize: 20 };
+
+      const first = service.listMembers(query);
+      const second = service.listMembers(query);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(externalClient.listMembers).toHaveBeenCalledTimes(1);
+
+      resolvePage?.({ pageNo: 2, pageSize: 20, count: 163833, list: [] });
+      await Promise.all([first, second]);
+      expect(externalClient.listMembers).toHaveBeenCalledTimes(1);
     } finally {
       if (previousBaseUrl === undefined) delete process.env.EXTERNAL_API_BASE_URL;
       else process.env.EXTERNAL_API_BASE_URL = previousBaseUrl;
@@ -339,5 +458,84 @@ describe('user center', () => {
       if (previousBaseUrl === undefined) delete process.env.EXTERNAL_API_BASE_URL;
       else process.env.EXTERNAL_API_BASE_URL = previousBaseUrl;
     }
+  });
+
+  it('writes point and bonus to separate directory balance columns', async () => {
+    const $executeRawUnsafe = vi.fn().mockResolvedValue(1);
+    const service = new UserCenterService({ $executeRawUnsafe } as never);
+
+    await (
+      service as unknown as {
+        persistMemberDirectoryPage: (
+          rows: Array<Record<string, unknown>>,
+          generation: string
+        ) => Promise<{ persisted: number; errors: number }>;
+      }
+    ).persistMemberDirectoryPage(
+      [
+        {
+          id: 'member-rights-1',
+          code: 'INV-RIGHTS-1',
+          parentCode: 'INV-ROOT',
+          point: '12.34',
+          bonus: 765
+        }
+      ],
+      'generation-rights'
+    );
+
+    expect($executeRawUnsafe).toHaveBeenCalledTimes(1);
+    const [sql, ...params] = $executeRawUnsafe.mock.calls[0];
+    expect(sql).toContain('"MemberDirectoryRefreshEntry"');
+    expect(sql).not.toContain('INSERT INTO "MemberDirectoryEntry"');
+    expect(sql).toContain('"welfareBalanceFen"');
+    expect(sql).toContain('"pointsBalance"');
+    expect(params).toContain(1234n);
+    expect(params).toContain(765);
+  });
+
+  it('publishes a staged generation with a short pointer transaction', async () => {
+    const transactionStatements: string[] = [];
+    const cleanupStatements: string[] = [];
+    const transactionClient = {
+      $queryRawUnsafe: vi.fn().mockResolvedValue([{ count: 1 }]),
+      $executeRawUnsafe: vi.fn(async (sql: unknown) => {
+        transactionStatements.push(String(sql));
+        return 1;
+      })
+    };
+    const prisma = {
+      $transaction: vi.fn(
+        async (
+          callback: (tx: typeof transactionClient) => Promise<void>,
+          _options?: { timeout?: number; maxWait?: number }
+        ) => callback(transactionClient)
+      ),
+      $executeRawUnsafe: vi.fn(async (sql: unknown) => {
+        cleanupStatements.push(String(sql));
+        return 1;
+      })
+    } as unknown as PrismaService;
+    const service = new UserCenterService(prisma);
+
+    await (
+      service as unknown as {
+        activateMemberDirectorySnapshot: (generation: string) => Promise<void>;
+      }
+    ).activateMemberDirectorySnapshot('generation-atomic');
+
+    expect(prisma.$transaction).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.objectContaining({ timeout: 10_000, maxWait: 10_000 })
+    );
+    expect(transactionClient.$queryRawUnsafe).toHaveBeenCalledWith(
+      expect.stringContaining('FROM "MemberDirectoryRefreshEntry"'),
+      'generation-atomic'
+    );
+    expect(transactionStatements).toHaveLength(1);
+    expect(transactionStatements[0]).toContain('MemberDirectorySnapshotState');
+    expect(transactionStatements[0]).not.toContain('MemberDirectoryEntry"');
+    expect(cleanupStatements).toHaveLength(1);
+    expect(cleanupStatements[0]).toContain('DELETE FROM "MemberDirectoryRefreshEntry"');
   });
 });

@@ -15,6 +15,7 @@ export interface OrderCenterItem {
   channel: string | null;
   orderAmountFen: string | null;
   paidAmountFen: string | null;
+  paidAmountWalletFen: string | null;
   refundAmountFen: string | null;
   verifyAmountFen: string | null;
 }
@@ -33,6 +34,7 @@ export interface OrderCenterListPayload {
     verifiedOrders: number;
     refundedOrders: number;
     paidAmountFen: string | null;
+    paidAmountWalletFen: string | null;
   };
   dataSources: string[];
 }

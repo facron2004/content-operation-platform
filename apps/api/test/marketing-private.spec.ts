@@ -142,6 +142,94 @@ describe('marketing and private domain center', () => {
     });
   });
 
+  it('evaluates rules against the completed directory snapshot and tags external-only members', async () => {
+    const tag = {
+      ...tagRow(),
+      tagId: 'tag-directory-1',
+      name: '目录积分用户',
+      code: 'directory_points',
+      tagType: 'rule'
+    };
+    const updatedTag = { ...tag, memberCount: 1 };
+    const tx = {
+      userTagRelation: {
+        findMany: vi.fn().mockResolvedValue([]),
+        createMany: vi.fn().mockResolvedValue({ count: 1 }),
+        deleteMany: vi.fn()
+      },
+      userTag: {
+        update: vi.fn().mockResolvedValue(updatedTag)
+      }
+    };
+    const prisma = {
+      userTag: {
+        create: vi.fn().mockResolvedValue(tag),
+        findUniqueOrThrow: vi.fn().mockResolvedValue(updatedTag)
+      },
+      ruleConfig: {
+        create: vi.fn().mockResolvedValue({})
+      },
+      member: {
+        findMany: vi.fn().mockResolvedValue([])
+      },
+      memberDirectoryEntry: {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            memberId: 'member-directory-1',
+            nickname: '目录用户',
+            phone: '13900000000',
+            level: 'gold',
+            pointsBalance: 321,
+            sourceCreatedAt: null,
+            sourceUpdatedAt: null,
+            sourceLastLoginAt: null
+          }
+        ])
+      },
+      $queryRawUnsafe: vi
+        .fn()
+        .mockResolvedValueOnce([
+          {
+            metaJson: JSON.stringify({ snapshotReady: true, generation: 'generation-directory-1' })
+          }
+        ])
+        .mockResolvedValueOnce([
+          {
+            memberId: 'member-directory-1',
+            totalOrders: 0,
+            paidOrderCount: 0,
+            paidGmvFen: null,
+            firstPaidAt: null,
+            lastPaidAt: null
+          }
+        ]),
+      $executeRawUnsafe: vi.fn().mockResolvedValue(1),
+      $transaction: vi.fn(async (callback: (db: unknown) => Promise<unknown>) => callback(tx))
+    } as unknown as PrismaService;
+    const service = new MarketingPrivateService(prisma, {} as FinanceAssetService);
+
+    const result = await service.createTag({
+      name: tag.name,
+      code: tag.code,
+      category: tag.category,
+      tagType: 'rule',
+      ruleJson: JSON.stringify({
+        logic: 'and',
+        conditions: [{ field: 'pointsBalance', operator: 'gte', value: 300 }]
+      })
+    });
+
+    expect(result).toMatchObject({ tagId: tag.tagId, memberCount: 1 });
+    expect(prisma.$executeRawUnsafe).toHaveBeenCalledWith(
+      expect.stringContaining('INSERT OR IGNORE INTO "Member"'),
+      'generation-directory-1',
+      'member-directory-1'
+    );
+    expect(tx.userTagRelation.createMany).toHaveBeenCalledWith({
+      data: [expect.objectContaining({ memberId: 'member-directory-1', source: 'rule' })]
+    });
+  });
+
   it('recalculates a dynamic audience from tag relations and synchronizes memberships', async () => {
     const existing = {
       audienceId: 'audience-1',

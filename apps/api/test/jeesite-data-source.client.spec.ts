@@ -76,6 +76,7 @@ describe('JeeSiteDataSourceClient', () => {
     const dataset = await client.loadDataset();
 
     expect(dataset.packages).toHaveLength(1);
+    expect(dataset.isComplete).toBe(true);
     expect(autoLoginService.clearCache).toHaveBeenCalledTimes(1);
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect((fetchMock.mock.calls[0][1]?.headers as Record<string, string>).Cookie).toBe(

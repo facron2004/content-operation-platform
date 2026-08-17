@@ -1,9 +1,13 @@
-import { Inject, Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
-import { describeError } from '@content/shared';
+import { Inject, Injectable, Logger, Optional, ServiceUnavailableException } from '@nestjs/common';
+import { clamp, describeError } from '@content/shared';
 import { TtlCache } from '../common';
-import { clamp } from '@content/shared';
 import { AutoLoginService } from '../content/auto-login.service';
-import { normalizeWelfarePointList } from './welfare-point.adapter';
+import { parseJeeSiteDate, normalizeWelfarePointList } from './welfare-point.adapter';
+import { PrismaService } from '../prisma/prisma.service';
+import {
+  getLatestSuccessfulMemberDirectorySnapshot,
+  isMissingMemberDirectoryTableError
+} from '../user-center/member-directory-snapshot';
 import {
   POINT_TYPE_LABELS,
   sourceTypeLabel,
@@ -23,8 +27,14 @@ const MAX_PAGES = 500;
 const FETCH_TIMEOUT_MS = 15_000;
 const DATASET_TTL_MS = 5 * 60 * 1000;
 const DATASET_KEY = 'full';
-/** Bound outbound fan-out so we never storm JeeSite or pin the event loop. */
-const FETCH_CONCURRENCY = clamp(Number(process.env.EXTERNAL_FETCH_CONCURRENCY ?? 4) || 4, 1, 6);
+/** One request at a time is intentional: this source is shared with production users. */
+const FETCH_INTERVAL_MS = clamp(
+  Number(process.env.EXTERNAL_WELFARE_FETCH_INTERVAL_MS ?? 1000) || 1000,
+  0,
+  60_000
+);
+const WELFARE_WRITE_BATCH_SIZE = 50;
+const MAX_PAGE_RETRIES = 1;
 
 interface JeeSiteEnvelope {
   code?: number;
@@ -32,16 +42,93 @@ interface JeeSiteEnvelope {
   data?: { pageNo?: number; list?: unknown[]; count?: number; pageSize?: number };
 }
 
+type StoredWelfarePointRow = {
+  id: string;
+  centerMemberId: string;
+  memberName: string | null;
+  memberPhone: string | null;
+  memberCode: string | null;
+  pointAmountFen: bigint | number | string;
+  pointType: number;
+  sourceType: number;
+  orderNo: string | null;
+  currentBalanceFen: bigint | number | string;
+  expireTime: string | null;
+  changeDesc: string | null;
+  status: string | null;
+  createDate: string;
+  updateDate: string | null;
+};
+
 @Injectable()
 export class WelfarePointService {
   private readonly logger = new Logger(WelfarePointService.name);
-  /** Caches the fully-normalized dataset so query/summary are instant after first pull. */
+  /** Legacy aggregate cache; the page API below deliberately bypasses it. */
   private readonly datasetCache = new TtlCache(DATASET_TTL_MS, 8);
+  private externalRequestQueue: Promise<void> = Promise.resolve();
+  private lastExternalRequestAt = 0;
+  private readonly pageInFlight = new Map<string, Promise<WelfarePointQueryResult>>();
 
-  constructor(@Inject(AutoLoginService) private readonly autoLogin: AutoLoginService) {}
+  constructor(
+    @Inject(AutoLoginService) private readonly autoLogin: AutoLoginService,
+    @Optional() @Inject(PrismaService) private readonly prisma?: PrismaService
+  ) {}
 
   /** List (paginated + filtered) raw records. */
   async query(q: WelfarePointQueryDto): Promise<WelfarePointQueryResult> {
+    if (hasFilters(q)) return this.queryPersisted(q);
+    return this.queryCurrentPage(q.page ?? 1, q.pageSize ?? 20);
+  }
+
+  /** Current page is always read from JeeSite first; local rows are fallback only. */
+  private async queryCurrentPage(page: number, pageSize: number): Promise<WelfarePointQueryResult> {
+    const key = `${page}:${pageSize}`;
+    const inFlight = this.pageInFlight.get(key);
+    if (inFlight) return inFlight;
+
+    const request = this.readCurrentPage(page, pageSize);
+    this.pageInFlight.set(key, request);
+    void request.then(
+      () => {
+        if (this.pageInFlight.get(key) === request) this.pageInFlight.delete(key);
+      },
+      () => {
+        if (this.pageInFlight.get(key) === request) this.pageInFlight.delete(key);
+      }
+    );
+    return request;
+  }
+
+  private async readCurrentPage(page: number, pageSize: number): Promise<WelfarePointQueryResult> {
+    try {
+      const upstream = await this.readExternalPage(page, pageSize);
+      const rawRows = Array.isArray(upstream.data?.list) ? upstream.data.list : [];
+      const rows = normalizeWelfarePointList(rawRows as never);
+      try {
+        // A page can be historical, so never use it to overwrite a member's
+        // latest welfare balance. The full maintenance refresh is the only path
+        // that backfills directory balances.
+        await this.persistRows(rows, false);
+      } catch (error) {
+        if (!isMissingWelfarePointTableError(error)) throw error;
+        this.logger.warn('WelfarePointRecord 表尚未迁移，暂只返回当前外部页');
+      }
+      return {
+        list: rows,
+        total: Number(upstream.data?.count ?? rows.length),
+        page: Number(upstream.data?.pageNo) || page,
+        pageSize: Number(upstream.data?.pageSize) || pageSize,
+        dataSource: 'JeeSite'
+      };
+    } catch (error) {
+      const fallback = await this.loadPersistedPage(page, pageSize);
+      if (fallback) return fallback;
+      throw error;
+    }
+  }
+
+  /** Filtered queries remain local-only so a partial upstream page is not mislabeled as a full result. */
+  private async queryPersisted(q: WelfarePointQueryDto): Promise<WelfarePointQueryResult> {
     const { rows } = await this.getDataset(false);
     const filtered = this.applyFilters(rows, q);
     const total = filtered.length;
@@ -49,7 +136,7 @@ export class WelfarePointService {
     const pageSize = q.pageSize ?? 20;
     const start = (page - 1) * pageSize;
     const list = filtered.slice(start, start + pageSize);
-    return { list, total, page, pageSize };
+    return { list, total, page, pageSize, dataSource: 'WelfarePointRecord' };
   }
 
   /** Dashboard aggregations over the (filtered) dataset. */
@@ -82,12 +169,107 @@ export class WelfarePointService {
       const hit = this.datasetCache.get<WelfarePointRecord[]>(DATASET_KEY);
       if (hit) return { rows: hit, cached: true };
     }
-    const rows = await this.datasetCache.getOrLoad(DATASET_KEY, force, () => this.fetchAll());
-    return { rows, cached: false };
+    let loadedFromPersisted = false;
+    const rows = await this.datasetCache.getOrLoad(DATASET_KEY, force, async () => {
+      // A completed local snapshot is the read source after a restart. It keeps
+      // the welfare page usable while the upstream service is stopped.
+      if (!force) {
+        const stored = await this.loadPersistedRows();
+        if (stored.length) {
+          loadedFromPersisted = true;
+          return stored;
+        }
+      }
+      const fresh = await this.fetchAll();
+      try {
+        await this.persistRows(fresh, true);
+      } catch (error) {
+        if (!isMissingWelfarePointTableError(error)) throw error;
+        this.logger.warn('WelfarePointRecord 表尚未迁移，暂只使用本次内存快照');
+      }
+      return fresh;
+    });
+    return { rows, cached: loadedFromPersisted };
   }
 
-  private async fetchAll(): Promise<WelfarePointRecord[]> {
-    const cookie = await this.autoLogin.ensureValidCookie();
+  private async loadPersistedRows(): Promise<WelfarePointRecord[]> {
+    if (!this.prisma) return [];
+    try {
+      const rows = await this.prisma.$queryRawUnsafe<StoredWelfarePointRow[]>(
+        `SELECT "id", "centerMemberId", "memberName", "memberPhone", "memberCode",
+                "pointAmountFen", "pointType", "sourceType", "orderNo", "currentBalanceFen",
+                "expireTime", "changeDesc", "status", "createDate", "updateDate"
+         FROM "WelfarePointRecord"
+         ORDER BY "createDate" DESC, "id" DESC`
+      );
+      return rows.map(mapStoredWelfarePointRow);
+    } catch (error) {
+      if (isMissingWelfarePointTableError(error)) {
+        return [];
+      }
+      throw error;
+    }
+  }
+
+  private async loadPersistedPage(
+    page: number,
+    pageSize: number
+  ): Promise<WelfarePointQueryResult | null> {
+    if (!this.prisma) return null;
+    try {
+      const [countRows, rows] = await Promise.all([
+        this.prisma.$queryRawUnsafe<Array<{ total: bigint | number | string }>>(
+          'SELECT COUNT(*) AS "total" FROM "WelfarePointRecord"'
+        ),
+        this.prisma.$queryRawUnsafe<StoredWelfarePointRow[]>(
+          `SELECT "id", "centerMemberId", "memberName", "memberPhone", "memberCode",
+                  "pointAmountFen", "pointType", "sourceType", "orderNo", "currentBalanceFen",
+                  "expireTime", "changeDesc", "status", "createDate", "updateDate"
+           FROM "WelfarePointRecord"
+           ORDER BY "createDate" DESC, "id" DESC
+           LIMIT ? OFFSET ?`,
+          pageSize,
+          (page - 1) * pageSize
+        )
+      ]);
+      const total = Number(countRows[0]?.total ?? 0);
+      if (!total) return null;
+      return {
+        list: rows.map(mapStoredWelfarePointRow),
+        total,
+        page,
+        pageSize,
+        dataSource: 'WelfarePointRecord'
+      };
+    } catch (error) {
+      if (isMissingWelfarePointTableError(error)) return null;
+      throw error;
+    }
+  }
+
+  /** Serialize all upstream reads and keep a deliberate gap between requests. */
+  private enqueueExternalRequest<T>(task: () => Promise<T>): Promise<T> {
+    const request = this.externalRequestQueue.then(async () => {
+      const elapsed = Date.now() - this.lastExternalRequestAt;
+      if (this.lastExternalRequestAt > 0 && elapsed < FETCH_INTERVAL_MS) {
+        await sleep(FETCH_INTERVAL_MS - elapsed);
+      }
+      this.lastExternalRequestAt = Date.now();
+      return task();
+    });
+    this.externalRequestQueue = request.then(
+      () => undefined,
+      () => undefined
+    );
+    return request;
+  }
+
+  private readExternalPage(pageNo: number, pageSize: number): Promise<JeeSiteEnvelope> {
+    return this.enqueueExternalRequest(() => this.fetchExternalPage(pageNo, pageSize));
+  }
+
+  private async fetchExternalPage(pageNo: number, pageSize: number): Promise<JeeSiteEnvelope> {
+    let cookie = await this.autoLogin.ensureValidCookie();
     if (!cookie) {
       throw new ServiceUnavailableException('JeeSite 会话不可用，无法拉取福利金记录');
     }
@@ -98,55 +280,154 @@ export class WelfarePointService {
     }
     const url = `${baseUrl.replace(/\/$/, '')}${JEE_SITE_PATH}`;
 
-    const fetchPage = async (pageNo: number, useCookie: string): Promise<JeeSiteEnvelope> => {
-      const res = await this.postWithTimeout(url, useCookie, pageNo);
-      if (res.status >= 300 && res.status < 400) {
-        const location = res.headers.get('location') ?? '';
-        if (/login/i.test(location)) {
-          throw new LoginExpiredError(location);
-        }
-        throw new ServiceUnavailableException(`JeeSite 重定向 (${res.status} -> ${location})`);
-      }
-      if (!res.ok) {
-        throw new ServiceUnavailableException(`JeeSite 返回 ${res.status}`);
-      }
-      const text = await res.text();
-      if (/登录|login/i.test(text) && /username|__url/i.test(text)) {
-        throw new LoginExpiredError('login-page-body');
-      }
+    for (let attempt = 0; attempt <= MAX_PAGE_RETRIES; attempt += 1) {
       try {
-        return JSON.parse(text) as JeeSiteEnvelope;
-      } catch {
-        throw new ServiceUnavailableException('JeeSite 返回非 JSON 响应');
-      }
-    };
-
-    const readPage = async (
-      pageNo: number,
-      useCookie: string,
-      retries = 1
-    ): Promise<JeeSiteEnvelope> => {
-      for (let attempt = 0; attempt <= retries; attempt++) {
-        try {
-          return await fetchPage(pageNo, useCookie);
-        } catch (err) {
-          if (err instanceof LoginExpiredError && attempt < retries) {
-            this.logger.warn('Cookie 失效，尝试自动重登后重试');
-            const fresh = await this.autoLogin.ensureValidCookie(true);
-            if (fresh) return readPage(pageNo, fresh, retries - 1);
-          }
-          if (attempt === retries) {
-            throw new ServiceUnavailableException(
-              `拉取福利金第 ${pageNo} 页失败: ${describeError(err)}`
-            );
-          }
+        const res = await this.postWithTimeout(url, cookie, pageNo, pageSize);
+        if (res.status >= 300 && res.status < 400) {
+          const location = res.headers.get('location') ?? '';
+          if (/login/i.test(location)) throw new LoginExpiredError(location);
+          throw new ServiceUnavailableException(`JeeSite 重定向 (${res.status} -> ${location})`);
         }
+        if (!res.ok) {
+          throw new ServiceUnavailableException(`JeeSite 返回 ${res.status}`);
+        }
+        const text = await res.text();
+        if (/登录|login/i.test(text) && /username|__url/i.test(text)) {
+          throw new LoginExpiredError('login-page-body');
+        }
+        let payload: JeeSiteEnvelope;
+        try {
+          payload = JSON.parse(text) as JeeSiteEnvelope;
+        } catch {
+          throw new ServiceUnavailableException('JeeSite 返回非 JSON 响应');
+        }
+        if (!payload.data || !Array.isArray(payload.data.list)) {
+          throw new ServiceUnavailableException('JeeSite 福利金响应结构异常');
+        }
+        return payload;
+      } catch (error) {
+        if (error instanceof LoginExpiredError && attempt < MAX_PAGE_RETRIES) {
+          this.logger.warn('Cookie 失效，尝试自动重登后重试');
+          await sleep(200);
+          cookie = await this.autoLogin.ensureValidCookie(true);
+          if (!cookie) {
+            throw new ServiceUnavailableException('JeeSite 自动重登失败，无法拉取福利金记录');
+          }
+          continue;
+        }
+        throw new ServiceUnavailableException(
+          `拉取福利金第 ${pageNo} 页失败: ${describeError(error)}`
+        );
       }
-      throw new ServiceUnavailableException('拉取福利金失败');
-    };
+    }
 
+    throw new ServiceUnavailableException(`拉取福利金第 ${pageNo} 页失败`);
+  }
+
+  private async persistRows(rows: WelfarePointRecord[], syncBalances: boolean): Promise<void> {
+    if (!this.prisma || !rows.length) return;
+    const generation = `welfare-${Date.now().toString(36)}`;
+    for (let offset = 0; offset < rows.length; offset += WELFARE_WRITE_BATCH_SIZE) {
+      const chunk = rows.slice(offset, offset + WELFARE_WRITE_BATCH_SIZE);
+      const values = chunk
+        .map(() => `(${Array.from({ length: 16 }, () => '?').join(',')})`)
+        .join(',');
+      const params = chunk.flatMap((row) => [
+        row.id,
+        row.centerMemberId,
+        row.memberName || null,
+        row.memberPhone || null,
+        row.memberCode || null,
+        Math.round(row.pointAmount * 100),
+        row.pointType,
+        row.sourceType,
+        row.orderNo,
+        Math.round(row.currentBalance * 100),
+        row.expireTime,
+        row.changeDesc || null,
+        row.status || null,
+        row.createDate,
+        row.updateDate || null,
+        generation
+      ]);
+      await this.prisma.$executeRawUnsafe(
+        `INSERT INTO "WelfarePointRecord"
+          ("id", "centerMemberId", "memberName", "memberPhone", "memberCode", "pointAmountFen", "pointType", "sourceType", "orderNo", "currentBalanceFen", "expireTime", "changeDesc", "status", "createDate", "updateDate", "lastSyncGeneration")
+         VALUES ${values}
+         ON CONFLICT("id") DO UPDATE SET
+           "centerMemberId" = excluded."centerMemberId",
+           "memberName" = excluded."memberName",
+           "memberPhone" = excluded."memberPhone",
+           "memberCode" = excluded."memberCode",
+           "pointAmountFen" = excluded."pointAmountFen",
+           "pointType" = excluded."pointType",
+           "sourceType" = excluded."sourceType",
+           "orderNo" = excluded."orderNo",
+           "currentBalanceFen" = excluded."currentBalanceFen",
+           "expireTime" = excluded."expireTime",
+           "changeDesc" = excluded."changeDesc",
+           "status" = excluded."status",
+           "createDate" = excluded."createDate",
+           "updateDate" = excluded."updateDate",
+           "lastSyncGeneration" = excluded."lastSyncGeneration"`,
+        ...params
+      );
+    }
+    if (syncBalances) await this.syncMemberDirectoryWelfareBalances(generation);
+  }
+
+  /**
+   * The member list endpoint does not expose point/bonus balances. Welfare
+   * records do expose the running welfare balance, so copy only that field
+   * into the member directory after a complete welfare snapshot is written.
+   * The points column is intentionally untouched.
+   */
+  private async syncMemberDirectoryWelfareBalances(generation: string): Promise<void> {
+    if (!this.prisma) return;
+    try {
+      const snapshot = await getLatestSuccessfulMemberDirectorySnapshot(this.prisma);
+      const useStaging =
+        snapshot?.source === 'staging' && Boolean(this.prisma.memberDirectoryRefreshEntry);
+      if (!useStaging && !this.prisma.memberDirectoryEntry) return;
+      const directoryTable = useStaging
+        ? 'MemberDirectoryRefreshEntry'
+        : 'MemberDirectoryEntry';
+      const directoryGenerationFilter = useStaging
+        ? `AND directory."generation" = ?`
+        : '';
+      const directoryGenerationParams = useStaging ? [snapshot!.generation] : [];
+      await this.prisma.$executeRawUnsafe(
+        `UPDATE "${directoryTable}" AS directory
+         SET "welfareBalanceFen" = (
+           SELECT "currentBalanceFen"
+           FROM "WelfarePointRecord" AS welfare
+           WHERE welfare."centerMemberId" = directory."memberId"
+             AND welfare."lastSyncGeneration" = ?
+           ORDER BY welfare."createDate" DESC, welfare."id" DESC
+           LIMIT 1
+         )
+         WHERE EXISTS (
+           SELECT 1
+           FROM "WelfarePointRecord" AS welfare
+           WHERE welfare."centerMemberId" = directory."memberId"
+             AND welfare."lastSyncGeneration" = ?
+         ) ${directoryGenerationFilter}`,
+        generation,
+        generation,
+        ...directoryGenerationParams
+      );
+    } catch (error) {
+      if (isMissingMemberDirectoryTableError(error)) {
+        this.logger.warn('MemberDirectoryEntry 表尚未迁移，跳过会员福利金余额回填');
+        return;
+      }
+      throw error;
+    }
+  }
+
+  private async fetchAll(): Promise<WelfarePointRecord[]> {
     // page 1 to learn total
-    const first = await readPage(1, cookie);
+    const first = await this.readExternalPage(1, FETCH_PAGE_SIZE);
     const count = Number(first.data?.count ?? 0);
     const merged: unknown[] = [];
     if (Array.isArray(first.data?.list)) merged.push(...first.data!.list!);
@@ -157,20 +438,18 @@ export class WelfarePointService {
 
     const totalPages = clamp(Math.ceil(count / FETCH_PAGE_SIZE), 1, MAX_PAGES);
     if (totalPages > 1) {
-      const pages = Array.from({ length: totalPages - 1 }, (_, i) => i + 2);
-      for (let i = 0; i < pages.length; i += FETCH_CONCURRENCY) {
-        const batch = pages.slice(i, i + FETCH_CONCURRENCY);
-        const results = await Promise.allSettled(batch.map((p) => readPage(p, cookie)));
-        for (const r of results) {
-          if (r.status === 'fulfilled' && Array.isArray(r.value.data?.list)) {
-            merged.push(...r.value.data!.list!);
-          } else if (r.status === 'rejected') {
-            this.logger.warn(
-              `福利金分页拉取部分失败: ${describeError((r as PromiseRejectedResult).reason)}`
-            );
-          }
+      for (let pageNo = 2; pageNo <= totalPages; pageNo += 1) {
+        const page = await this.readExternalPage(pageNo, FETCH_PAGE_SIZE);
+        if (!Array.isArray(page.data?.list) || !page.data.list.length) {
+          throw new ServiceUnavailableException(`福利金第 ${pageNo} 页为空，刷新未完成`);
         }
+        merged.push(...page.data.list);
       }
+    }
+    if (merged.length < count) {
+      throw new ServiceUnavailableException(
+        `福利金数据不完整：接口声明 ${count} 条，实际仅 ${merged.length} 条`
+      );
     }
 
     this.logger.log(
@@ -179,7 +458,12 @@ export class WelfarePointService {
     return normalizeWelfarePointList(merged as never);
   }
 
-  private async postWithTimeout(url: string, cookie: string, pageNo: number): Promise<Response> {
+  private async postWithTimeout(
+    url: string,
+    cookie: string,
+    pageNo: number,
+    pageSize: number
+  ): Promise<Response> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
     try {
@@ -190,7 +474,7 @@ export class WelfarePointService {
           'Content-Type': 'application/x-www-form-urlencoded',
           'x-ajax': 'json'
         },
-        body: `pageNo=${pageNo}&pageSize=${FETCH_PAGE_SIZE}`,
+        body: `pageNo=${pageNo}&pageSize=${pageSize}`,
         signal: controller.signal,
         redirect: 'manual'
       });
@@ -355,11 +639,62 @@ export class WelfarePointService {
   }
 }
 
+function isMissingWelfarePointTableError(error: unknown): boolean {
+  return /no such table[\s\S]*WelfarePointRecord|WelfarePointRecord[\s\S]*no such table/i.test(
+    String(error)
+  );
+}
+
+function storedFenToYuan(value: bigint | number | string | null | undefined): number {
+  if (value === null || value === undefined || value === '') return 0;
+  return Number(value) / 100;
+}
+
+function mapStoredWelfarePointRow(row: StoredWelfarePointRow): WelfarePointRecord {
+  const pointType = Number(row.pointType) === 2 ? 2 : 1;
+  const sourceType = Number(row.sourceType ?? 0);
+  return {
+    id: String(row.id),
+    centerMemberId: String(row.centerMemberId ?? ''),
+    memberName: row.memberName ?? '',
+    memberPhone: row.memberPhone ?? '',
+    memberCode: row.memberCode ?? '',
+    pointAmount: storedFenToYuan(row.pointAmountFen),
+    pointType,
+    pointTypeLabel: POINT_TYPE_LABELS[pointType] ?? String(pointType),
+    sourceType,
+    sourceTypeLabel: sourceTypeLabel(sourceType),
+    orderNo: row.orderNo ?? null,
+    currentBalance: storedFenToYuan(row.currentBalanceFen),
+    expireTime: row.expireTime ?? null,
+    changeDesc: row.changeDesc ?? '',
+    status: row.status ?? '',
+    createDate: row.createDate ?? '',
+    createDateTs: parseJeeSiteDate(row.createDate),
+    updateDate: row.updateDate ?? ''
+  };
+}
+
+async function sleep(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 class LoginExpiredError extends Error {
   constructor(where: string) {
     super(`JeeSite 登录失效: ${where}`);
     this.name = 'LoginExpiredError';
   }
+}
+
+function hasFilters(q: WelfarePointQueryDto): boolean {
+  return Boolean(
+    q.phone?.trim() ||
+    q.pointType ||
+    q.sourceType?.trim() ||
+    q.dateFrom ||
+    q.dateTo ||
+    q.keyword?.trim()
+  );
 }
 
 /** True when (ts,id) is strictly newer than (prevTs,prevId). JeeSite ids are numeric

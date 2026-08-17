@@ -6,7 +6,13 @@ export interface UserCenterMemberItem {
   nickname: string | null;
   phone: string | null;
   level: string | null;
-  pointsBalance: number;
+  sourceCreatedAt: string | null;
+  sourceUpdatedAt: string | null;
+  sourceLastLoginAt: string | null;
+  /** JeeSite `point`: welfare-money balance, returned in fen for display safety. */
+  welfareBalanceFen: string | null;
+  /** JeeSite `bonus`: points balance. */
+  pointsBalance: number | null;
   walletBalanceFen: string | null;
   totalGmvFen: string | null;
   totalOrders: number;
@@ -26,6 +32,10 @@ export interface UserCenterListPayload {
     hasMore: boolean;
   };
   summary: {
+    newMembersToday: number | null;
+    newMembersThisWeek: number | null;
+    newMembersThisMonth: number | null;
+    newMembersBasis: 'sourceCreatedAt' | 'firstSeenAt' | 'unavailable';
     totalMembers: number;
     paidMembers: number;
     activeMembers30d: number;

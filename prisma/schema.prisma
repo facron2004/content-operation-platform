@@ -191,6 +191,8 @@ model ContentPackage {
   grossProfitFen           BigInt?
   stockTotal               Int
   stockLeft                Int
+  /// 外部动态库存中的当前总库存；旧数据回填为 stockLeft，避免历史商品变成空值。
+  currentStock             Int                    @default(0)
   startTime                DateTime
   endTime                  DateTime
   useRules                 String
@@ -812,6 +814,96 @@ model Member {
   @@index([parentInviteCode])
 }
 
+// 外部 JeeSite 会员主档的本地快照。只追加/更新，不在刷新失败时删除旧记录。
+// 订单、积分等经营事实仍然归属于 Member；本表只负责保存十万级目录和刷新进度可见性。
+model MemberDirectoryEntry {
+  memberId          String   @id
+  inviteCode        String?
+  parentInviteCode  String?
+  nickname          String?
+  phone             String?
+  level             String?
+  welfareBalanceFen BigInt?
+  pointsBalance     Int?
+  sourceStatus      String?
+  sourceIdentity    Int?
+  sourceCreatedAt   DateTime?
+  sourceUpdatedAt   DateTime?
+  sourceLastLoginAt DateTime?
+  firstSeenAt       DateTime @default(now())
+  lastSeenAt        DateTime @default(now())
+  lastSyncGeneration String?
+
+  @@index([inviteCode])
+  @@index([parentInviteCode])
+  @@index([level])
+  @@index([nickname])
+  @@index([phone])
+  @@index([welfareBalanceFen])
+  @@index([pointsBalance])
+  @@index([sourceCreatedAt])
+  @@index([sourceLastLoginAt])
+  @@index([lastSyncGeneration])
+}
+
+// Staging rows for an external member-directory refresh. A generation is
+// published to MemberDirectoryEntry only after every source page succeeds.
+model MemberDirectoryRefreshEntry {
+  generation        String
+  memberId          String
+  inviteCode        String?
+  parentInviteCode  String?
+  nickname          String?
+  phone             String?
+  level             String?
+  welfareBalanceFen BigInt?
+  pointsBalance     Int?
+  sourceStatus      String?
+  sourceIdentity    Int?
+  sourceCreatedAt   DateTime?
+  sourceUpdatedAt   DateTime?
+  sourceLastLoginAt DateTime?
+  firstSeenAt       DateTime @default(now())
+  lastSeenAt        DateTime @default(now())
+
+  @@id([generation, memberId])
+  @@index([generation])
+  @@index([memberId])
+}
+
+// Single-row pointer identifying the generation currently used by readers.
+model MemberDirectorySnapshotState {
+  id          String   @id
+  generation  String
+  activatedAt DateTime @default(now())
+}
+
+// External JeeSite welfare-money ledger snapshot. This is deliberately separate
+// from MemberPointLedger: `point` is welfare money, while `bonus` is points.
+model WelfarePointRecord {
+  id                String  @id
+  centerMemberId    String
+  memberName        String?
+  memberPhone       String?
+  memberCode        String?
+  pointAmountFen    BigInt
+  pointType         Int
+  sourceType        Int
+  orderNo           String?
+  currentBalanceFen BigInt
+  expireTime        String?
+  changeDesc        String?
+  status            String?
+  createDate        String
+  updateDate        String?
+  lastSyncGeneration String?
+
+  @@index([centerMemberId, createDate])
+  @@index([pointType, createDate])
+  @@index([sourceType, createDate])
+  @@index([createDate])
+}
+
 model MemberPointLedger {
   id         String   @id @default(cuid())
   memberId   String
@@ -827,6 +919,35 @@ model MemberPointLedger {
   @@index([memberId, occurredAt])
   @@index([reason])
   @@index([orderId])
+}
+
+// External JeeSite integral-record snapshot. This is separate from
+// MemberPointLedger, which stores the platform's own point ledger semantics.
+model MemberIntegralRecord {
+  id                   String   @id
+  centerMemberId       String
+  memberName           String?
+  memberPhone          String?
+  memberCode           String?
+  inviteCode           String?
+  parentInviteCode     String?
+  consumptionIntegral  Float
+  integralType         Int
+  state                Int
+  orderCode            String?
+  historyPrice         Float?
+  remarks              String?
+  status               String?
+  createDate           String
+  updateDate           String?
+  lastSyncedAt         DateTime @default(now())
+
+  @@index([centerMemberId, createDate])
+  @@index([integralType, createDate])
+  @@index([state, createDate])
+  @@index([inviteCode])
+  @@index([parentInviteCode])
+  @@index([createDate])
 }
 
 model OrderPoint {

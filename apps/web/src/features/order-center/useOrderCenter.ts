@@ -1,21 +1,15 @@
 import { computed, onScopeDispose, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
-  approveOrderRefund,
-  completeOrderRefund,
   getOrderCenterOrder,
   getOrderCenterOrders,
   getOrderCenterTransactions,
-  requestOrderRefund,
-  verifyOrderCenterOrder,
   type OrderCenterDetailResponse,
   type OrderCenterItem,
   type OrderCenterListResponse,
-  type OrderTransactionTimeline,
-  type RefundRequest
+  type OrderTransactionTimeline
 } from '../../services/api/order-center.api';
 import { formatFenYuan } from '../../utils/format';
-import { buildBusinessIntentKey } from '../../services/idempotency-key';
 
 const PAGE_SIZE = 20;
 
@@ -24,6 +18,7 @@ export function useOrderCenter() {
   const router = useRouter();
   const search = ref(typeof route.query.search === 'string' ? route.query.search : '');
   const status = ref(typeof route.query.status === 'string' ? route.query.status : '');
+  const category = ref(typeof route.query.category === 'string' ? route.query.category : '');
   const page = ref(Number(route.query.page) > 0 ? Number(route.query.page) : 1);
   const loading = ref(false);
   const detailLoading = ref(false);
@@ -40,13 +35,13 @@ export function useOrderCenter() {
   const detail = ref<OrderCenterDetailResponse | null>(null);
   const transactions = ref<OrderTransactionTimeline | null>(null);
   const transactionLoading = ref(false);
-  const actionLoading = ref(false);
   const summary = ref<OrderCenterListResponse['summary']>({
     totalOrders: 0,
     paidOrders: 0,
     verifiedOrders: 0,
     refundedOrders: 0,
-    paidAmountFen: null
+    paidAmountFen: null,
+    paidAmountWalletFen: null
   });
   const pagination = ref<OrderCenterListResponse['pagination']>({
     page: 1,
@@ -68,6 +63,7 @@ export function useOrderCenter() {
       const response = await getOrderCenterOrders({
         search: search.value.trim() || undefined,
         status: status.value || undefined,
+        category: category.value.trim() || undefined,
         page: page.value,
         pageSize: PAGE_SIZE
       });
@@ -124,82 +120,6 @@ export function useOrderCenter() {
     }
   }
 
-  async function refreshSelectedOrder() {
-    if (!selectedOrderId.value) return;
-    await reload();
-  }
-
-  async function verifySelectedOrder(data: {
-    amountFen?: string;
-    quantity?: number;
-    verificationCode?: string;
-    storeId?: string;
-    reason?: string;
-  }) {
-    if (!selectedOrderId.value) return;
-    actionLoading.value = true;
-    try {
-      await verifyOrderCenterOrder(
-        selectedOrderId.value,
-        data,
-        buildBusinessIntentKey('verification', selectedOrderId.value, String(Date.now()))
-      );
-      await refreshSelectedOrder();
-    } finally {
-      actionLoading.value = false;
-    }
-  }
-
-  async function requestSelectedRefund(data: {
-    refundType: string;
-    amountFen?: string;
-    reason: string;
-  }) {
-    if (!selectedOrderId.value) return;
-    actionLoading.value = true;
-    try {
-      await requestOrderRefund(
-        selectedOrderId.value,
-        data,
-        buildBusinessIntentKey('refund', selectedOrderId.value, String(Date.now()))
-      );
-      await refreshSelectedOrder();
-    } finally {
-      actionLoading.value = false;
-    }
-  }
-
-  async function approveSelectedRefund(refund: RefundRequest, reason = '') {
-    actionLoading.value = true;
-    try {
-      await approveOrderRefund(
-        refund.id,
-        reason,
-        buildBusinessIntentKey('refund-approve', refund.id, String(Date.now()))
-      );
-      await refreshSelectedOrder();
-    } finally {
-      actionLoading.value = false;
-    }
-  }
-
-  async function completeSelectedRefund(
-    refund: RefundRequest,
-    data: { thirdPartyRefundId: string; restoreInventoryQuantity?: number }
-  ) {
-    actionLoading.value = true;
-    try {
-      await completeOrderRefund(
-        refund.id,
-        data,
-        buildBusinessIntentKey('refund-complete', refund.id, String(Date.now()))
-      );
-      await refreshSelectedOrder();
-    } finally {
-      actionLoading.value = false;
-    }
-  }
-
   async function selectOrder(orderId: string, updateRoute = true) {
     if (disposed || !orderId) return;
     selectedOrderId.value = orderId;
@@ -208,6 +128,7 @@ export function useOrderCenter() {
         query: {
           search: search.value || undefined,
           status: status.value || undefined,
+          category: category.value.trim() || undefined,
           page: page.value > 1 ? String(page.value) : undefined,
           orderId
         }
@@ -222,7 +143,11 @@ export function useOrderCenter() {
     detail.value = null;
     transactions.value = null;
     await router.replace({
-      query: { search: search.value || undefined, status: status.value || undefined }
+      query: {
+        search: search.value || undefined,
+        status: status.value || undefined,
+        category: category.value.trim() || undefined
+      }
     });
     await reload();
   }
@@ -237,6 +162,7 @@ export function useOrderCenter() {
       query: {
         search: search.value || undefined,
         status: status.value || undefined,
+        category: category.value.trim() || undefined,
         page: nextPage > 1 ? String(nextPage) : undefined
       }
     });
@@ -245,6 +171,15 @@ export function useOrderCenter() {
 
   function displayFen(fen: string | null | undefined) {
     return formatFenYuan(fen);
+  }
+
+  function paidTotalFen(order: Pick<OrderCenterItem, 'paidAmountFen' | 'paidAmountWalletFen'>) {
+    const amounts = [order.paidAmountFen, order.paidAmountWalletFen].filter(
+      (value): value is string => value !== null && value !== undefined && value !== ''
+    );
+    return amounts.length
+      ? amounts.reduce((total, value) => total + BigInt(value), 0n).toString()
+      : null;
   }
 
   function displayDate(value: string | null | undefined) {
@@ -301,6 +236,7 @@ export function useOrderCenter() {
   return {
     search,
     status,
+    category,
     page,
     loading,
     detailLoading,
@@ -312,18 +248,14 @@ export function useOrderCenter() {
     detail,
     transactions,
     transactionLoading,
-    actionLoading,
     summary,
     pagination,
     reload,
     applyFilters,
     setPage,
     selectOrder,
-    verifySelectedOrder,
-    requestSelectedRefund,
-    approveSelectedRefund,
-    completeSelectedRefund,
     displayFen,
+    paidTotalFen,
     displayDate,
     displayDateTime,
     statusLabel,

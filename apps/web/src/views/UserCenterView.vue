@@ -1,20 +1,54 @@
 <template>
   <section v-loading="loading" class="page-stack user-center-view">
     <div class="page-toolbar">
-      <el-button :loading="loading" @click="reload">
+      <el-button type="primary" :loading="refreshing" :disabled="refreshing" @click="refreshMembers">
         <el-icon><Refresh /></el-icon>
-        刷新
+        同步用户数据
       </el-button>
+      <el-button :loading="loading" :disabled="refreshing" @click="reload">
+        刷新当前页
+      </el-button>
+      <span class="user-center-refresh-status">{{ refreshStatusText || '当前页查询不会触发全量同步' }}</span>
     </div>
 
     <ErrorAlert :message="error" />
     <ErrorAlert :message="detailError" />
+    <ErrorAlert :message="refreshError" />
 
     <div class="user-center-metrics">
       <article class="user-center-metric">
           <span>用户总数</span>
           <strong>{{ formatCount(summary.totalMembers) }}</strong>
           <small>{{ dataSources.includes('JeeSite Member') ? 'JeeSite 会员主档' : '当前客户档案' }}</small>
+      </article>
+      <article class="user-center-metric user-center-metric--new-members">
+        <div class="user-center-metric__heading">
+          <span>新增用户</span>
+          <small>
+            {{
+              summary.newMembersBasis === 'sourceCreatedAt'
+                ? '按源站注册时间'
+                : summary.newMembersBasis === 'firstSeenAt'
+                  ? '按本地首次发现时间'
+                  : '完成目录刷新后可统计'
+            }}
+          </small>
+        </div>
+        <div class="user-center-new-members-values">
+          <div>
+            <strong>{{ formatCount(summary.newMembersToday) }}</strong>
+            <span>今日</span>
+          </div>
+          <div>
+            <strong>{{ formatCount(summary.newMembersThisWeek) }}</strong>
+            <span>本周</span>
+          </div>
+          <div>
+            <strong>{{ formatCount(summary.newMembersThisMonth) }}</strong>
+            <span>本月</span>
+          </div>
+        </div>
+        <small>自然周按周一至今，自然月按每月 1 日至今</small>
       </article>
       <article class="user-center-metric">
         <span>已支付用户</span>
@@ -137,6 +171,10 @@
               <strong>{{ formatCount(selectedMember.pointsBalance) }}</strong>
             </div>
             <div>
+              <span>福利金余额</span>
+              <strong>{{ displayFen(selectedMember.welfareBalanceFen) }}</strong>
+            </div>
+            <div>
               <span>钱包余额</span>
               <strong>{{ displayFen(selectedMember.walletBalanceFen) }}</strong>
             </div>
@@ -154,6 +192,20 @@
             <div>
               <span>直属下级</span>
               <strong>{{ formatCount(selectedMember.downlineCount) }}</strong>
+            </div>
+          </div>
+          <div class="user-detail-referral">
+            <div>
+              <span>源站注册时间</span>
+              <strong>{{ displayDateTime(selectedMember.sourceCreatedAt) }}</strong>
+            </div>
+            <div>
+              <span>源站更新时间</span>
+              <strong>{{ displayDateTime(selectedMember.sourceUpdatedAt) }}</strong>
+            </div>
+            <div>
+              <span>最近登录</span>
+              <strong>{{ displayDateTime(selectedMember.sourceLastLoginAt) }}</strong>
             </div>
           </div>
 
@@ -223,6 +275,8 @@ const {
   detailLoading,
   error,
   detailError,
+  refreshError,
+  refreshStatusText,
   items,
   selectedMemberId,
   selectedMember,
@@ -230,7 +284,9 @@ const {
   summary,
   pagination,
   dataSources,
+  refreshing,
   reload,
+  refreshMembers,
   applyFilters,
   setPage,
   selectMember,
@@ -240,7 +296,8 @@ const {
   statusLabel
 } = useUserCenter();
 
-const formatCount = (value: number) => value.toLocaleString('zh-CN');
+const formatCount = (value: number | null | undefined) =>
+  value == null ? '—' : value.toLocaleString('zh-CN');
 const selectTableMember = (row: UserCenterMemberItem) => selectMember(row.memberId, true, row.inviteCode);
 </script>
 

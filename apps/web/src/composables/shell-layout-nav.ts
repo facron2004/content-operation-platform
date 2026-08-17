@@ -82,6 +82,7 @@ export const PAGE_TITLES: Record<string, string> = {
   'task-detail': '任务详情',
   attribution: '订单归因',
   'user-center': '用户中心',
+  'marketing-benefits': '福利金',
   'community-library': '社群库',
   users: '用户列表',
   'audit-logs': '操作审计'
@@ -132,15 +133,20 @@ export interface NavGroupView {
   items: NavItem[];
 }
 
-/** V2.0 一级菜单只保留九大中心，具体能力下沉到二级页面。 */
+/** 首页作为独立一级入口，九大中心承载其余业务能力。 */
 export const PROTO_NAV: NavNode[] = [
+  {
+    kind: 'item',
+    path: '/dashboard',
+    title: '首页',
+    icon: 'HomeFilled'
+  },
   {
     kind: 'group',
     key: 'operation',
     title: '经营中心',
     icon: 'DataBoard',
     aliases: [
-      '/dashboard',
       '/operation-center',
       '/overview',
       '/data-analysis',
@@ -152,6 +158,7 @@ export const PROTO_NAV: NavNode[] = [
     ],
     children: [
       { path: '/operation/gmv', title: 'GMV 分析', icon: 'TrendCharts' },
+      { path: '/data-analysis', title: '数据分析', icon: 'DataBoard' },
       { path: '/operation/realtime', title: '今日运营', icon: 'DataLine' },
       { path: '/operation/analysis', title: '区域 / 类目分析', icon: 'MapLocation' },
       { path: '/operation/alerts', title: '经营预警', icon: 'Warning' },
@@ -179,7 +186,6 @@ export const PROTO_NAV: NavNode[] = [
     aliases: ['/product-center', '/recommendations'],
     children: [
       { path: '/products', title: '商品管理', icon: 'Goods' },
-      { path: '/packages', title: '套餐管理', icon: 'Document' },
       { path: '/packages/combinations', title: '组合套餐', icon: 'Connection' },
       { path: '/inventory', title: '库存中心', icon: 'DataBoard' },
       { path: '/movement', title: '商品经营分析', icon: 'TrendCharts' },

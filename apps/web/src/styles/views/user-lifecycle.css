@@ -2,6 +2,11 @@
   gap: var(--page-gap);
 }
 
+.user-lifecycle-refresh-status {
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .user-lifecycle-table-actions {
   display: flex;
   align-items: center;
@@ -70,7 +75,9 @@
   color: var(--ink);
   cursor: pointer;
   text-align: left;
-  transition: border-color 160ms ease, transform 160ms ease;
+  transition:
+    border-color 160ms ease,
+    transform 160ms ease;
 }
 
 .user-lifecycle-stage:hover,

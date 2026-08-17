@@ -47,10 +47,10 @@ export interface OrderTransactionTimeline {
   verifications: VerificationRecordView[];
   refunds: RefundRequestView[];
   capabilities: {
-    verification: 'ready';
-    refundRequest: 'ready';
+    verification: 'read_only';
+    refundRequest: 'read_only';
     externalRefund: 'not_connected';
-    inventoryRestock: 'ready';
+    inventoryRestock: 'read_only';
   };
 }
 

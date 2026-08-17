@@ -3,6 +3,8 @@ import { IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min, MinLength } fro
 
 export const PRODUCT_INVENTORY_STATUSES = ['all', 'normal', 'low', 'out'] as const;
 export type ProductInventoryStatus = (typeof PRODUCT_INVENTORY_STATUSES)[number];
+export const PRODUCT_SALE_STATUSES = ['pending', 'selling', 'recycle'] as const;
+export type ProductSaleStatus = (typeof PRODUCT_SALE_STATUSES)[number];
 
 export class ProductCenterListQueryDto {
   @IsOptional()
@@ -20,9 +22,8 @@ export class ProductCenterListQueryDto {
   inventoryStatus: ProductInventoryStatus = 'all';
 
   @IsOptional()
-  @IsString()
-  @MaxLength(50)
-  saleStatus?: string;
+  @IsIn(PRODUCT_SALE_STATUSES as unknown as string[])
+  saleStatus?: ProductSaleStatus;
 
   @IsOptional()
   @Type(() => Number)
@@ -91,17 +92,4 @@ export class ProductChangeReviewDto {
   @IsString()
   @MaxLength(200)
   reason?: string;
-}
-
-export class InventoryAdjustmentDto {
-  @Type(() => Number)
-  @IsInt()
-  @Min(-100000)
-  @Max(100000)
-  delta!: number;
-
-  @IsString()
-  @MinLength(2)
-  @MaxLength(200)
-  reason!: string;
 }

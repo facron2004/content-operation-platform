@@ -31,6 +31,7 @@ const packageFixture = {
   grossProfit: 10,
   stockTotal: 10,
   stockLeft: 8,
+  currentStock: 7,
   startTime: '2026-08-01T00:00:00.000Z',
   endTime: '2026-08-31T23:59:59.000Z',
   useRules: ['需预约'],
@@ -63,7 +64,7 @@ describe('ContentMerchantSyncService', () => {
     service = module.get<ContentMerchantSyncService>(ContentMerchantSyncService);
   });
 
-  it('returns a skipped result for a concurrent sync instead of starting a second load', async () => {
+  it('joins a concurrent sync so the caller waits for the fresh ContentPackage write', async () => {
     let releaseLoad!: (dataset: { packages: never[]; snapshots: never[] }) => void;
     mockDataSource.loadDataset.mockReturnValueOnce(
       new Promise((resolve) => {
@@ -72,32 +73,49 @@ describe('ContentMerchantSyncService', () => {
     );
 
     const first = service.syncMerchantsFromJeeSite();
-    const second = await service.syncMerchantsFromJeeSite();
+    const second = service.syncMerchantsFromJeeSite();
 
-    expect(second).toMatchObject({ skipped: true, packagesPersisted: 0 });
     expect(mockDataSource.loadDataset).toHaveBeenCalledTimes(1);
 
     releaseLoad({ packages: [], snapshots: [] });
-    await expect(first).resolves.toMatchObject({
+    const [firstResult, secondResult] = await Promise.all([first, second]);
+    expect(firstResult).toMatchObject({
       packagesCount: 0,
       packagesPersisted: 0
     });
+    expect(secondResult).toEqual(firstResult);
   });
 
   it('upserts merchant data and persists eligible packages in one batch', async () => {
-    const dataset = { packages: [packageFixture], snapshots: [] };
+    const dataset = { packages: [packageFixture], snapshots: [], isComplete: true };
     mockDataSource.loadDataset.mockResolvedValueOnce(dataset);
 
     const result = await service.syncMerchantsFromJeeSite();
 
     expect(mockUpsertMerchants).toHaveBeenCalledWith(mockPrisma, dataset);
-    expect(mockPrisma.$executeRawUnsafe).toHaveBeenCalledTimes(1);
+    expect(mockPrisma.$executeRawUnsafe).toHaveBeenCalledTimes(2);
     const [sql] = mockPrisma.$executeRawUnsafe.mock.calls[0] as [string, ...unknown[]];
     expect(sql).toContain('INSERT INTO "ContentPackage"');
+    expect(sql).toContain('"startTime"=excluded."startTime"');
+    expect(sql).toContain('"endTime"=excluded."endTime"');
+    expect(mockPrisma.$executeRawUnsafe.mock.calls[0]).toContain(7);
+    const [reconcileSql] = mockPrisma.$executeRawUnsafe.mock.calls[1] as [string, ...unknown[]];
+    expect(reconcileSql).toContain('SET "saleStatus"=\'pending\'');
     expect(result).toMatchObject({
       upserted: 1,
       packagesCount: 1,
-      packagesPersisted: 1
+      packagesPersisted: 1,
+      stalePackagesDeactivated: 1
     });
+  });
+
+  it('does not reconcile stale selling packages when the external scan is incomplete', async () => {
+    const dataset = { packages: [packageFixture], snapshots: [], isComplete: false };
+    mockDataSource.loadDataset.mockResolvedValueOnce(dataset);
+
+    const result = await service.syncMerchantsFromJeeSite();
+
+    expect(mockPrisma.$executeRawUnsafe).toHaveBeenCalledTimes(1);
+    expect(result.stalePackagesDeactivated).toBe(0);
   });
 });

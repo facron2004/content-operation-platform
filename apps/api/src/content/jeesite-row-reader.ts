@@ -27,6 +27,16 @@ function valueAtPath(row: AnyRecord, key: string): unknown {
 
   let current: unknown = row;
   for (const part of key.split('.')) {
+    if (typeof current === 'string') {
+      const trimmed = current.trim();
+      if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+        try {
+          current = JSON.parse(trimmed) as unknown;
+        } catch {
+          return undefined;
+        }
+      }
+    }
     if (!isRecord(current)) return undefined;
     current = current[part];
   }
@@ -86,18 +96,30 @@ export function normalizeRatio(value: number): number {
 
 export function rowDateText(row: AnyRecord, keys: RowFieldSet, fallback: string): string {
   for (const key of keys) {
-    const raw = row[key];
+    const raw = valueAtPath(row, key);
     if (typeof raw === 'number' && Number.isFinite(raw)) {
       const milliseconds = raw < 1e12 ? raw * 1000 : raw;
       const date = new Date(milliseconds);
       if (!Number.isNaN(date.getTime())) return date.toISOString();
     }
-  }
+    if (raw instanceof Date && !Number.isNaN(raw.getTime())) return raw.toISOString();
+    if (typeof raw !== 'string') continue;
 
-  const value = rowText(row, keys);
-  if (!value) return fallback;
-  const normalized = value.includes(' ') ? value.replace(' ', 'T') : value;
-  const hasTimezone = /[Zz]$|[+-]\d{2}:\d{2}$/.test(normalized);
-  const date = new Date(hasTimezone ? normalized : `${normalized}+08:00`);
-  return Number.isNaN(date.getTime()) ? fallback : date.toISOString();
+    const value = raw.trim();
+    if (!value) continue;
+    if (/^-?\d+(?:\.\d+)?$/.test(value)) {
+      const numeric = Number(value);
+      if (Number.isFinite(numeric)) {
+        const milliseconds = numeric < 1e12 ? numeric * 1000 : numeric;
+        const date = new Date(milliseconds);
+        if (!Number.isNaN(date.getTime())) return date.toISOString();
+      }
+    }
+
+    const normalized = value.includes(' ') ? value.replace(' ', 'T') : value;
+    const hasTimezone = /[Zz]$|[+-]\d{2}:\d{2}$/.test(normalized);
+    const date = new Date(hasTimezone ? normalized : `${normalized}+08:00`);
+    if (!Number.isNaN(date.getTime())) return date.toISOString();
+  }
+  return fallback;
 }

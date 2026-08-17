@@ -2,6 +2,8 @@ import client from '../http-client';
 import type { RetryableConfig } from '../http-client-utils';
 
 export type ProductInventoryStatus = 'all' | 'normal' | 'low' | 'out';
+export type ProductSaleStatus = 'pending' | 'selling' | 'recycle';
+export type ProductSaleFilter = 'all' | ProductSaleStatus;
 
 export interface ProductCenterItem {
   packageId: string;
@@ -14,6 +16,9 @@ export interface ProductCenterItem {
   saleStatus: string | null;
   stockTotal: number;
   stockLeft: number;
+  initialStock: number;
+  currentStock: number;
+  dailyStock: number;
   inventoryStatus: Exclude<ProductInventoryStatus, 'all'>;
   originalPriceFen: string | null;
   salePriceFen: string | null;
@@ -39,6 +44,9 @@ export interface ProductCenterListResponse {
     outOfStockSkus: number;
     stockTotal: number;
     stockLeft: number;
+    initialStock: number;
+    currentStock: number;
+    dailyStock: number;
   };
   dataSources: string[];
 }
@@ -89,13 +97,14 @@ export async function getProductCenterProducts(params: {
   search?: string;
   category?: string;
   inventoryStatus?: ProductInventoryStatus;
-  saleStatus?: string;
+  saleStatus?: ProductSaleStatus;
   page: number;
   pageSize: number;
 }) {
   return (
     await client.get<ProductCenterListResponse>('/product-center/products', {
       params,
+      headers: { 'Cache-Control': 'no-cache', Pragma: 'no-cache' },
       timeout: 30000
     })
   ).data;
@@ -105,8 +114,7 @@ export interface SyncMerchantsResponse {
   upserted: number;
   packagesCount: number;
   packagesPersisted: number;
-  skipped?: boolean;
-  note?: string;
+  stalePackagesDeactivated: number;
 }
 
 /**
@@ -115,17 +123,17 @@ export interface SyncMerchantsResponse {
  */
 export async function syncMerchantsFromJeeSite() {
   return (
-    await client.post<SyncMerchantsResponse>(
-      '/content/sync-merchants',
-      {},
-      { timeout: 60000, __silentError__: true } as RetryableConfig
-    )
+    await client.post<SyncMerchantsResponse>('/content/sync-merchants', {}, {
+      timeout: 60000,
+      __silentError__: true
+    } as RetryableConfig)
   ).data;
 }
 
 export async function getProductCenterProduct(packageId: string) {
   return (
     await client.get<ProductCenterDetailResponse>(`/product-center/products/${packageId}`, {
+      headers: { 'Cache-Control': 'no-cache', Pragma: 'no-cache' },
       timeout: 30000
     })
   ).data;
@@ -149,20 +157,6 @@ export async function requestProductEdit(
   return (
     await client.post<ProductChangeRequest>(
       `/product-center/products/${packageId}/edit-requests`,
-      payload,
-      { headers: { 'Idempotency-Key': idempotencyKey } }
-    )
-  ).data;
-}
-
-export async function adjustProductInventory(
-  packageId: string,
-  payload: { delta: number; reason: string },
-  idempotencyKey: string
-) {
-  return (
-    await client.post<InventoryOperation>(
-      `/product-center/products/${packageId}/inventory-adjustments`,
       payload,
       { headers: { 'Idempotency-Key': idempotencyKey } }
     )

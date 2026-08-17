@@ -9,34 +9,29 @@ import { DataSourceService } from './data-source.service';
 export class ContentMerchantSyncService {
   private readonly logger = new Logger(ContentMerchantSyncService.name);
   /** Single-flight across sync-merchants (loadDataset + multi-batch package upsert). */
-  private merchantSyncRunning = false;
+  private merchantSyncFlight: Promise<SyncMerchantsResult> | null = null;
 
   constructor(
     @Inject(DataSourceService) private readonly dataSource: DataSourceService,
     @Inject(PrismaService) private readonly prisma: PrismaService
   ) {}
 
-  async syncMerchantsFromJeeSite() {
-    if (this.merchantSyncRunning) {
-      this.logger.warn('Skipping merchant sync — previous run still in flight');
-      return {
-        upserted: 0,
-        skipped: true as const,
-        packagesCount: 0,
-        packagesPersisted: 0,
-        note: 'Merchant sync already running'
-      };
+  syncMerchantsFromJeeSite(): Promise<SyncMerchantsResult> {
+    if (this.merchantSyncFlight) {
+      this.logger.warn('Joining merchant sync already in flight');
+      return this.merchantSyncFlight;
     }
-    this.merchantSyncRunning = true;
-    try {
-      return await this.syncMerchantsFromJeeSiteUnlocked();
-    } finally {
-      this.merchantSyncRunning = false;
-    }
+
+    const flight = this.syncMerchantsFromJeeSiteUnlocked();
+    this.merchantSyncFlight = flight;
+    return flight.finally(() => {
+      if (this.merchantSyncFlight === flight) this.merchantSyncFlight = null;
+    });
   }
 
-  private async syncMerchantsFromJeeSiteUnlocked() {
+  private async syncMerchantsFromJeeSiteUnlocked(): Promise<SyncMerchantsResult> {
     this.logger.log('Fetching JeeSite dataset with merchant addresses...');
+    const syncStartedAt = toSqliteDateTime();
     const dataset = await this.dataSource.loadDataset({ forceRefresh: true });
     const result = await upsertMerchants(this.prisma, dataset);
 
@@ -46,9 +41,8 @@ export class ContentMerchantSyncService {
     const pkgs = dataset.packages.filter((p) => p.packageId && p.merchantId);
     for (let i = 0; i < pkgs.length; i += BATCH) {
       const batch = pkgs.slice(i, i + BATCH);
-      const vc = batch
-        .map(() => '(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
-        .join(',');
+      const valuePlaceholders = Array.from({ length: 31 }, () => '?').join(',');
+      const vc = batch.map(() => `(${valuePlaceholders})`).join(',');
       const now = toSqliteDateTime();
       const params = batch.flatMap((p) => [
         p.packageId,
@@ -66,6 +60,7 @@ export class ContentMerchantSyncService {
         yuanToFen(p.grossProfit),
         p.stockTotal,
         p.stockLeft,
+        p.currentStock ?? p.stockLeft,
         p.startTime,
         p.endTime,
         JSON.stringify(p.useRules),
@@ -89,7 +84,7 @@ export class ContentMerchantSyncService {
             "areaId","areaName","category",
             "originalPriceFen","salePriceFen",
             "welfarePriceFen","commissionRate",
-            "grossProfitFen","stockTotal","stockLeft",
+            "grossProfitFen","stockTotal","stockLeft","currentStock",
             "startTime","endTime","useRules","sellingPoints",
             "miniProgramPath","detailSummary","saleStatus","merchantCooperationScore",
             "areaMatchScore","timeMatchScore","historyScore",
@@ -127,7 +122,10 @@ export class ContentMerchantSyncService {
             END,
             "category"=excluded."category","salePriceFen"=excluded."salePriceFen",
             "stockTotal"=excluded."stockTotal",
-            "stockLeft"=excluded."stockLeft","saleStatus"=excluded."saleStatus",
+            "stockLeft"=excluded."stockLeft",
+            "currentStock"=excluded."currentStock",
+            "startTime"=excluded."startTime","endTime"=excluded."endTime",
+            "saleStatus"=excluded."saleStatus",
             "shopId"=COALESCE(NULLIF(excluded."shopId",''),"ContentPackage"."shopId"),
             "merchantAddress"=excluded."merchantAddress",
             "updatedAt"=excluded."updatedAt"`,
@@ -141,9 +139,39 @@ export class ContentMerchantSyncService {
       }
     }
 
+    let stalePackagesDeactivated = 0;
+    if (dataset.isComplete && pkgCount === pkgs.length) {
+      const reconciliationAt = toSqliteDateTime();
+      stalePackagesDeactivated = Number(
+        await this.prisma.$executeRawUnsafe(
+          `UPDATE "ContentPackage"
+           SET "saleStatus"='pending', "updatedAt"=?
+           WHERE "saleStatus"='selling'
+             AND datetime(replace(replace("updatedAt", 'T', ' '), 'Z', '')) < datetime(?)`,
+          reconciliationAt,
+          syncStartedAt
+        )
+      );
+      if (stalePackagesDeactivated > 0) {
+        this.logger.log(`Reconciled ${stalePackagesDeactivated} stale selling packages as pending`);
+      }
+    }
+
     this.logger.log(
-      `Merchant sync complete: ${result.upserted} merchants, ${pkgCount} packages upserted`
+      `Merchant sync complete: ${result.upserted} merchants, ${pkgCount} packages upserted, ${stalePackagesDeactivated} stale selling packages deactivated`
     );
-    return { ...result, packagesCount: dataset.packages.length, packagesPersisted: pkgCount };
+    return {
+      ...result,
+      packagesCount: dataset.packages.length,
+      packagesPersisted: pkgCount,
+      stalePackagesDeactivated
+    };
   }
 }
+
+type SyncMerchantsResult = {
+  upserted: number;
+  packagesCount: number;
+  packagesPersisted: number;
+  stalePackagesDeactivated: number;
+};

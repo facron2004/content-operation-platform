@@ -32,6 +32,7 @@ type OrderRow = Prisma.OrderHeaderGetPayload<{
     channel: true;
     orderAmountFen: true;
     paidAmountFen: true;
+    paidAmountWalletFen: true;
     refundAmountFen: true;
     verifyAmountFen: true;
   };
@@ -52,6 +53,7 @@ const orderSelect = {
   channel: true,
   orderAmountFen: true,
   paidAmountFen: true,
+  paidAmountWalletFen: true,
   refundAmountFen: true,
   verifyAmountFen: true
 } as const;
@@ -78,6 +80,7 @@ function mapOrder(
     channel: order.channel,
     orderAmountFen: fenToString(order.orderAmountFen),
     paidAmountFen: fenToString(order.paidAmountFen),
+    paidAmountWalletFen: fenToString(order.paidAmountWalletFen),
     refundAmountFen: fenToString(order.refundAmountFen),
     verifyAmountFen: fenToString(order.verifyAmountFen)
   };
@@ -89,8 +92,18 @@ export class OrderCenterService {
 
   async listOrders(query: OrderCenterListQueryDto): Promise<OrderCenterListPayload> {
     const search = query.search?.trim();
+    const category = query.category?.trim();
+    const categoryPackageIds = category
+      ? (
+          await this.prisma.contentPackage.findMany({
+            where: { category },
+            select: { packageId: true }
+          })
+        ).map((contentPackage) => contentPackage.packageId)
+      : undefined;
     const where: Prisma.OrderHeaderWhereInput = {
       ...(query.status?.trim() ? { status: query.status.trim() } : {}),
+      ...(category ? { packageId: { in: categoryPackageIds ?? [] } } : {}),
       ...(search
         ? {
             OR: [
@@ -120,7 +133,10 @@ export class OrderCenterService {
         this.prisma.orderHeader.count({ where: paidWhere }),
         this.prisma.orderHeader.count({ where: verifiedWhere }),
         this.prisma.orderHeader.count({ where: refundedWhere }),
-        this.prisma.orderHeader.aggregate({ where: paidWhere, _sum: { paidAmountFen: true } })
+        this.prisma.orderHeader.aggregate({
+          where: paidWhere,
+          _sum: { paidAmountFen: true, paidAmountWalletFen: true }
+        })
       ]);
 
     const memberIds = [
@@ -167,7 +183,8 @@ export class OrderCenterService {
         paidOrders,
         verifiedOrders,
         refundedOrders,
-        paidAmountFen: fenToString(paidAggregate._sum.paidAmountFen)
+        paidAmountFen: fenToString(paidAggregate._sum.paidAmountFen),
+        paidAmountWalletFen: fenToString(paidAggregate._sum.paidAmountWalletFen)
       },
       dataSources: ['OrderHeader', 'Member', 'ContentPackage']
     };

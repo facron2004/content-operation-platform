@@ -5,6 +5,7 @@ import { combinedAreaName, readBargainCore } from './jeesite-bargain-core';
 import { readBargainMetrics } from './jeesite-bargain-metrics';
 import { extractRows, rowNumber, rowText } from './jeesite-row-reader';
 import { adminFormUrl } from './jeesite-url';
+import type { ContentDataset } from './data-source.types';
 
 export {
   adminFormUrl,
@@ -23,7 +24,7 @@ type DatasetOptions = {
 export function mapJeesiteBargainListToDataset(
   payload: unknown,
   options: DatasetOptions = {}
-): { packages: ContentPackage[]; snapshots: SalesSnapshot[] } {
+): ContentDataset {
   const now = options.now ?? nowISO();
   const packages: ContentPackage[] = [];
   const snapshots: SalesSnapshot[] = [];
@@ -62,6 +63,7 @@ export function mapJeesiteBargainListToDataset(
       grossProfit: Math.round(core.resolvedSalePrice * metrics.commissionRate * 100) / 100,
       stockTotal: core.stockTotal,
       stockLeft: core.stockLeft,
+      currentStock: core.currentStock,
       startTime: metrics.startTime,
       endTime: metrics.endTime,
       useRules: metrics.useRules,

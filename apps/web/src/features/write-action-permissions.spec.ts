@@ -30,7 +30,7 @@ describe('write action permissions', () => {
     expect(canManageMerchants(['platform_operator'], ['merchant:read'])).toBe(false);
   });
 
-  it('gates product and order buttons, dialogs, and mutation handlers', async () => {
+  it('keeps product edits gated and keeps product/order pages read-only where required', async () => {
     const [product, order] = await Promise.all([
       readFile(path.join(webSrc, 'views/ProductCenterView.vue'), 'utf8'),
       readFile(path.join(webSrc, 'views/OrderCenterView.vue'), 'utf8')
@@ -38,11 +38,13 @@ describe('write action permissions', () => {
 
     expect(product).toContain('v-if="canWritePackages"');
     expect(product).toContain('v-if="canWritePackages && change.status === \'requested\'"');
-    expect(product.match(/if \(!canWritePackages\.value\) return;/g)).toHaveLength(7);
-    expect(order).toContain('v-if="canManageOrders"');
-    expect(order).toContain('v-if="canManageOrders && canVerify(selectedOrder.status)"');
-    expect(order).toContain('v-if="canManageOrders && canRefund(selectedOrder.status)"');
-    expect(order.match(/if \(!canManageOrders\.value\) return;/g)).toHaveLength(7);
+    expect(product.match(/if \(!canWritePackages\.value\) return;/g)).toHaveLength(5);
+    expect(product).not.toContain('调整库存');
+    expect(product).not.toContain('inventory-adjustments');
+    expect(order).not.toContain('canManageOrders');
+    expect(order).not.toContain('@click="openVerifyDialog"');
+    expect(order).not.toContain('@click="openRefundDialog"');
+    expect(order).toContain('订单中心仅同步并展示');
   });
 
   it('gates merchant and package gap-center write surfaces', async () => {

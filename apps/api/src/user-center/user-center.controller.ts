@@ -1,10 +1,11 @@
-import { Controller, Get, Inject, Param, Query, Req } from '@nestjs/common';
+import { Controller, Get, Inject, NotFoundException, Param, Post, Query, Req } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import type { Request } from 'express';
 import { createDtoPipe } from '../common/dto-pipe';
 import { safePathId } from '../common/path-id';
 import { assertUnrestrictedAnalytics } from '../user-access/scope-guards';
+import { Roles } from '../user-access/role.decorator';
 import { RequireLogin } from '../user-access/iam/route-auth.decorator';
 import { RequirePermissions } from '../user-access/iam/require-permissions.decorator';
 import { UserCenterListQueryDto } from './user-center.dto';
@@ -43,6 +44,42 @@ export class UserCenterController {
   ) {
     assertUnrestrictedAnalytics(req);
     return this.service.listMembers(query);
+  }
+
+  @Roles('admin', 'platform_operator')
+  @RequirePermissions('analytics:refresh')
+  @Throttle({ long: { limit: 2, ttl: 60000 } })
+  @Post('members/refresh')
+  @ApiOperation({
+    summary: '异步刷新 JeeSite 会员目录',
+    description: '单线程逐页拉取并持久化，返回 jobId；刷新失败时保留上一次成功目录，不删除旧数据。'
+  })
+  startRefresh() {
+    const job = this.service.startRefreshJob();
+    return {
+      jobId: job.jobId,
+      generation: job.generation,
+      status: job.status,
+      progress: job.progress
+    };
+  }
+
+  @RequirePermissions('analytics:read')
+  @Throttle({ long: { limit: 120, ttl: 60000 } })
+  @Get('members/refresh/active')
+  @ApiOperation({ summary: '查询当前会员目录刷新任务' })
+  activeRefresh() {
+    return this.service.getActiveRefreshJob();
+  }
+
+  @RequirePermissions('analytics:read')
+  @Throttle({ long: { limit: 120, ttl: 60000 } })
+  @Get('members/refresh/:jobId')
+  @ApiOperation({ summary: '查询会员目录刷新任务进度' })
+  async refreshStatus(@Param('jobId') jobId: string) {
+    const job = await this.service.getRefreshJob(jobId);
+    if (!job) throw new NotFoundException(`刷新任务不存在或已过期: ${jobId}`);
+    return job;
   }
 
   @Get('members/:memberId')

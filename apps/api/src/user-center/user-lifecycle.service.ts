@@ -1,8 +1,11 @@
-import { Inject, Injectable, Optional } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { loadMemberBehaviorFacts } from '../common/member-behavior-facts';
 import { PrismaService } from '../prisma/prisma.service';
 import { sqlDatetime, toSqliteDateTime } from '../common/sqlite-datetime';
-import { JeeSiteMemberClient } from './jeesite-member.client';
+import {
+  getLatestSuccessfulMemberDirectorySnapshot,
+  type MemberDirectorySnapshot
+} from './member-directory-snapshot';
 import { maskMemberPhone } from './user-center.service';
 import {
   classifyUserLifecycle,
@@ -26,14 +29,17 @@ function fenToString(value: number | bigint | string | null | undefined): string
 @Injectable()
 export class UserLifecycleService {
   constructor(
-    @Inject(PrismaService) private readonly prisma: PrismaService,
-    @Optional() @Inject(JeeSiteMemberClient) private readonly jeeSiteMemberClient?: JeeSiteMemberClient
+    @Inject(PrismaService) private readonly prisma: PrismaService
   ) {}
 
   async getOverview(query: UserLifecycleQueryDto): Promise<UserLifecyclePayload> {
     const now = new Date();
+    const directorySnapshot = await getLatestSuccessfulMemberDirectorySnapshot(this.prisma);
     const [facts, globalSummaryRows, memberDirectoryTotal] = await Promise.all([
-      loadMemberBehaviorFacts(this.prisma, now),
+      loadMemberBehaviorFacts(this.prisma, now, {
+        directoryGeneration: directorySnapshot?.generation,
+        directorySource: directorySnapshot?.source
+      }),
       this.prisma.$queryRawUnsafe<RawLifecycleSummary[]>(
         `SELECT
            COUNT(DISTINCT CASE
@@ -49,7 +55,7 @@ export class UserLifecycleService {
          FROM "OrderHeader"`,
         toSqliteDateTime(new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000))
       ),
-      this.loadMemberDirectoryTotal()
+      this.loadMemberDirectoryTotal(directorySnapshot)
     ]);
     const stagedFacts = facts.map((fact) => ({
       fact,
@@ -82,8 +88,8 @@ export class UserLifecycleService {
       : stagedFacts;
     filtered.sort(
       (left, right) =>
-        (right.fact.lastPaidAt?.getTime() ?? Number.NEGATIVE_INFINITY) -
-        (left.fact.lastPaidAt?.getTime() ?? Number.NEGATIVE_INFINITY)
+        (right.fact.lastActivityAt?.getTime() ?? right.fact.lastPaidAt?.getTime() ?? Number.NEGATIVE_INFINITY) -
+        (left.fact.lastActivityAt?.getTime() ?? left.fact.lastPaidAt?.getTime() ?? Number.NEGATIVE_INFINITY)
     );
     const page = Math.max(1, Math.min(100, query.page));
     const pageSize = Math.max(1, Math.min(100, query.pageSize));
@@ -111,7 +117,12 @@ export class UserLifecycleService {
         paidGmvFen: fact.paidGmvFen?.toString() ?? null,
         firstPaidAt: fact.firstPaidAt?.toISOString() ?? null,
         lastPaidAt: fact.lastPaidAt?.toISOString() ?? null,
-        daysSinceLastPaid: fact.daysSinceLastPaid
+        daysSinceLastPaid: fact.daysSinceLastPaid,
+        sourceCreatedAt: fact.sourceCreatedAt?.toISOString() ?? null,
+        sourceUpdatedAt: fact.sourceUpdatedAt?.toISOString() ?? null,
+        sourceLastLoginAt: fact.sourceLastLoginAt?.toISOString() ?? null,
+        lastActivityAt: fact.lastActivityAt?.toISOString() ?? null,
+        daysSinceLastActivity: fact.daysSinceLastActivity ?? null
       })),
       pagination: {
         page,
@@ -125,9 +136,22 @@ export class UserLifecycleService {
     };
   }
 
-  private async loadMemberDirectoryTotal(): Promise<number | null> {
-    if (!this.jeeSiteMemberClient || !process.env.EXTERNAL_API_BASE_URL) return null;
-    const page = await this.jeeSiteMemberClient.listMembers({ page: 1, pageSize: 1 });
-    return page.count;
+  private async loadMemberDirectoryTotal(
+    snapshot: MemberDirectorySnapshot | null
+  ): Promise<number | null> {
+    if (!snapshot) return null;
+    try {
+      if (snapshot.source === 'staging' && this.prisma.memberDirectoryRefreshEntry) {
+        return await this.prisma.memberDirectoryRefreshEntry.count({
+          where: { generation: snapshot.generation }
+        });
+      }
+      if (!this.prisma.memberDirectoryEntry) return null;
+      return await this.prisma.memberDirectoryEntry.count({
+        where: { lastSyncGeneration: snapshot.generation }
+      });
+    } catch {
+      return null;
+    }
   }
 }

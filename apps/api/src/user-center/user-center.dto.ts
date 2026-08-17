@@ -16,7 +16,7 @@ export class UserCenterListQueryDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  @Max(100)
+  @Max(10_000)
   page: number = 1;
 
   @IsOptional()

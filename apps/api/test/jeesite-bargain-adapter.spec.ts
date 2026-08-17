@@ -318,6 +318,9 @@ describe('JeeSite bargain backend adapter', () => {
       welfarePrice: 50,
       stockTotal: 182,
       stockLeft: 1,
+      currentStock: 169,
+      startTime: '2026-03-30T16:00:00.000Z',
+      endTime: '2026-09-29T16:00:00.000Z',
       useRules: ['holiday excluded']
     });
     expect(dataset.snapshots[0]).toMatchObject({
@@ -327,6 +330,78 @@ describe('JeeSite bargain backend adapter', () => {
       remainingStock: 1
     });
     expect(dataset.snapshots[0].sellThroughRate).toBeCloseTo(181 / 182, 4);
+  });
+
+  it('reads inventory when bargainCommodityDynamic is JSON text in listData', () => {
+    const dataset = mapJeesiteBargainListToDataset({
+      list: [
+        {
+          id: 'json-dynamic-inventory',
+          title: 'JSON 动态库存套餐',
+          sellingPrice: 39,
+          bargainState: 10,
+          bargainCommodityDynamic: JSON.stringify({
+            hasInventory: 12,
+            initialInventoryTotal: 100
+          })
+        }
+      ]
+    });
+
+    expect(dataset.packages[0]).toMatchObject({
+      stockTotal: 100,
+      stockLeft: 12,
+      currentStock: 12
+    });
+    expect(dataset.snapshots[0].remainingStock).toBe(12);
+  });
+
+  it('reads sale times from nested numeric fields in bargainCommodityDynamic JSON', () => {
+    const startTimestamp = Date.parse('2026-06-01T09:30:00+08:00');
+    const endTimestamp = Date.parse('2026-06-30T23:59:59+08:00');
+    const dataset = mapJeesiteBargainListToDataset({
+      list: [
+        {
+          id: 'nested-sale-time',
+          title: '嵌套售卖时间套餐',
+          sellingPrice: 39,
+          bargainState: 10,
+          bargainCommodityDynamic: JSON.stringify({
+            startTime: startTimestamp,
+            endTime: endTimestamp,
+            hasInventory: 12,
+            initialInventoryTotal: 100
+          })
+        }
+      ]
+    });
+
+    expect(dataset.packages[0]).toMatchObject({
+      startTime: new Date(startTimestamp).toISOString(),
+      endTime: new Date(endTimestamp).toISOString()
+    });
+  });
+
+  it('falls back to nested inventory when the remaining field is not hasInventory', () => {
+    const dataset = mapJeesiteBargainListToDataset({
+      list: [
+        {
+          id: 'nested-inventory-fallback',
+          title: '嵌套库存套餐',
+          sellingPrice: 39,
+          bargainState: 10,
+          bargainCommodityDynamic: {
+            inventory: 12,
+            initialInventoryTotal: 100
+          }
+        }
+      ]
+    });
+
+    expect(dataset.packages[0]).toMatchObject({
+      stockTotal: 100,
+      stockLeft: 12
+    });
   });
 
   it('uses fixed price when fixed-price mode is enabled and temporary price otherwise', () => {
@@ -375,7 +450,7 @@ describe('JeeSite bargain backend adapter', () => {
     ]);
   });
 
-  it('keeps only selling JeeSite rows', () => {
+  it('keeps JeeSite rows across pending, selling, and recycle statuses', () => {
     const dataset = mapJeesiteBargainListToDataset({
       list: [
         {
@@ -402,7 +477,15 @@ describe('JeeSite bargain backend adapter', () => {
       ]
     });
 
-    expect(dataset.packages.map((pkg) => pkg.packageId)).toEqual(['selling-row']);
-    expect(dataset.snapshots.map((snapshot) => snapshot.packageId)).toEqual(['selling-row']);
+    expect(dataset.packages.map((pkg) => [pkg.packageId, pkg.saleStatus])).toEqual([
+      ['selling-row', 'selling'],
+      ['pending-row', 'pending'],
+      ['recycle-row', 'recycle']
+    ]);
+    expect(dataset.snapshots.map((snapshot) => snapshot.packageId)).toEqual([
+      'selling-row',
+      'pending-row',
+      'recycle-row'
+    ]);
   });
 });

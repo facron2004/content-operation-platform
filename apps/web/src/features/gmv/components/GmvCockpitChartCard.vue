@@ -13,6 +13,7 @@
       仅展示 GMV 最高的前 {{ limitLabel }} 个分桶（至少匹配 {{ matchedLabel }}
       个），「其他」为长尾合计；图表占比按全平台 GMV 计算。
     </p>
+    <p v-if="hint" class="chart-hint">{{ hint }}</p>
     <ChartPanel :option="option" />
   </section>
 </template>
@@ -30,11 +31,13 @@ const props = withDefaults(
     truncated?: boolean;
     limit?: number | null;
     matched?: number | null;
+    hint?: string;
   }>(),
   {
     truncated: false,
     limit: null,
-    matched: null
+    matched: null,
+    hint: ''
   }
 );
 defineEmits<{ change: [value: string | number | boolean | undefined] }>();
@@ -60,5 +63,12 @@ const titleLabel = computed(() => {
   background: #fffbeb;
   border: 1px solid #fde68a;
   border-radius: 6px;
+}
+
+.chart-hint {
+  margin: 0 0 10px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
 }
 </style>

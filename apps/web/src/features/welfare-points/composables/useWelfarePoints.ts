@@ -1,179 +1,71 @@
-import { computed, onMounted, ref } from 'vue';
+import { onMounted, ref } from 'vue';
 import {
-  exportWelfarePointsCsv,
   getWelfarePointsList,
-  getWelfarePointsSummary,
-  refreshWelfarePoints,
-  type WelfarePointQuery,
-  type WelfarePointRecord,
-  type WelfarePointSummary
+  type WelfarePointListResult,
+  type WelfarePointRecord
 } from '../../../services/api/welfare-points.api';
 import { extractErrorMessage } from '../../../services/http-client';
-import {
-  buildSourceBarOption,
-  buildTopMembersOption,
-  buildTrendOption,
-  buildTypeDonutOption
-} from './welfare-points-chart';
 
+const DEFAULT_PAGE_SIZE = 20;
+
+/**
+ * Welfare records are append-only. The page is therefore the unit of work:
+ * read the selected JeeSite page, persist those rows idempotently, and use the
+ * local page only when the external read fails.
+ */
 export function useWelfarePoints() {
-  const phone = ref('');
-  const pointType = ref<'1' | '2' | ''>('');
-  const sourceType = ref<string>('');
-  const keyword = ref('');
-  const dateFrom = ref('');
-  const dateTo = ref('');
-  const dateRange = computed({
-    get: () => (dateFrom.value || dateTo.value ? [dateFrom.value, dateTo.value] : null),
-    set: (value: [string, string] | null) => {
-      dateFrom.value = value?.[0] ?? '';
-      dateTo.value = value?.[1] ?? '';
-    }
-  });
-
   const page = ref(1);
-  const pageSize = ref(20);
-
-  const summary = ref<WelfarePointSummary | null>(null);
-  const list = ref<WelfarePointRecord[]>([]);
+  const pageSize = ref(DEFAULT_PAGE_SIZE);
   const total = ref(0);
+  const list = ref<WelfarePointRecord[]>([]);
+  const dataSource = ref<WelfarePointListResult['dataSource']>('JeeSite');
   const loading = ref(false);
-  const listLoading = ref(false);
-  const syncing = ref(false);
-  const loadError = ref('');
-  const cached = ref(false);
+  const error = ref('');
+  let requestId = 0;
 
-  function buildParams(): WelfarePointQuery {
-    const p: WelfarePointQuery = {
-      page: page.value,
-      pageSize: pageSize.value,
-      phone: phone.value || undefined,
-      pointType: (pointType.value || undefined) as '1' | '2' | undefined,
-      sourceType: sourceType.value || undefined,
-      dateFrom: dateFrom.value || undefined,
-      dateTo: dateTo.value || undefined,
-      keyword: keyword.value || undefined
-    };
-    return p;
-  }
-
-  async function loadSummary(bypassCache = false) {
+  async function reload() {
+    const currentRequestId = ++requestId;
     loading.value = true;
-    loadError.value = '';
+    error.value = '';
     try {
-      const data = await getWelfarePointsSummary(buildParams(), bypassCache);
-      summary.value = data;
-      cached.value = data.cached;
-    } catch (e) {
-      loadError.value = extractErrorMessage(e, '福利金数据加载失败');
+      // Bypass the browser cache because the upstream page is the primary
+      // source and new records can arrive between two visits.
+      const response = await getWelfarePointsList(
+        { page: page.value, pageSize: pageSize.value },
+        true
+      );
+      if (currentRequestId !== requestId) return;
+      list.value = response.list;
+      total.value = response.total;
+      page.value = response.page;
+      pageSize.value = response.pageSize;
+      dataSource.value = response.dataSource;
+    } catch (cause) {
+      if (currentRequestId === requestId) {
+        error.value = extractErrorMessage(cause, '福利金记录加载失败');
+      }
     } finally {
-      loading.value = false;
+      if (currentRequestId === requestId) loading.value = false;
     }
   }
 
-  async function loadList(bypassCache = false) {
-    listLoading.value = true;
-    try {
-      const data = await getWelfarePointsList(buildParams(), bypassCache);
-      list.value = data.list;
-      total.value = data.total;
-    } catch (e) {
-      loadError.value = extractErrorMessage(e, '福利金记录加载失败');
-    } finally {
-      listLoading.value = false;
-    }
-  }
-
-  async function reload(syncUpstream = false) {
-    if (!syncUpstream) {
-      await Promise.all([loadSummary(), loadList()]);
-      return;
-    }
-
-    syncing.value = true;
-    loadError.value = '';
-    try {
-      await refreshWelfarePoints();
-      // The sync endpoint finishes first and invalidates all cached pages. Both
-      // reads then bypass the Web cache and observe the same fresh API snapshot.
-      await Promise.all([loadSummary(true), loadList(true)]);
-    } catch (e) {
-      loadError.value = extractErrorMessage(e, '福利金数据同步失败');
-    } finally {
-      syncing.value = false;
-    }
-  }
-
-  function applyFilters() {
-    page.value = 1;
+  function changePage(nextPage: number) {
+    if (nextPage < 1 || nextPage === page.value) return;
+    page.value = nextPage;
     void reload();
   }
-
-  function resetFilters() {
-    phone.value = '';
-    pointType.value = '';
-    sourceType.value = '';
-    keyword.value = '';
-    dateFrom.value = '';
-    dateTo.value = '';
-    page.value = 1;
-    void reload();
-  }
-
-  function changePage(next: number) {
-    page.value = next;
-    void loadList();
-  }
-
-  function exportCsv() {
-    return exportWelfarePointsCsv(buildParams());
-  }
-
-  // chart options
-  const trendOption = computed(() =>
-    summary.value ? buildTrendOption(summary.value.dailyTrend) : {}
-  );
-  const typeOption = computed(() =>
-    summary.value ? buildTypeDonutOption(summary.value.byType) : {}
-  );
-  const sourceOption = computed(() =>
-    summary.value ? buildSourceBarOption(summary.value.bySource) : {}
-  );
-  const topMembersOption = computed(() =>
-    summary.value ? buildTopMembersOption(summary.value.topMembers) : {}
-  );
 
   onMounted(() => void reload());
 
   return {
-    // filters
-    phone,
-    pointType,
-    sourceType,
-    keyword,
-    dateRange,
-    // pagination
     page,
     pageSize,
     total,
-    changePage,
-    // state
-    summary,
     list,
+    dataSource,
     loading,
-    listLoading,
-    syncing,
-    loadError,
-    cached,
-    // actions
-    applyFilters,
-    resetFilters,
+    error,
     reload,
-    exportCsv,
-    // charts
-    trendOption,
-    typeOption,
-    sourceOption,
-    topMembersOption
+    changePage
   };
 }

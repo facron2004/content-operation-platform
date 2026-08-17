@@ -1,5 +1,14 @@
-import { Inject, Injectable, NotFoundException, Optional } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+  Optional,
+  ServiceUnavailableException
+} from '@nestjs/common';
+import { parseYuanStringToFen } from '@content/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { JobRunnerService } from '../jobs/job-runner.service';
 import type { UserCenterListQueryDto } from './user-center.dto';
 import type {
   UserCenterMemberDetail,
@@ -12,9 +21,29 @@ import {
   type JeeSiteMemberRow
 } from './jeesite-member.client';
 import { sqlDatetime, toSqliteDateTime } from '../common/sqlite-datetime';
+import {
+  getLatestSuccessfulMemberDirectorySnapshot,
+  isMissingMemberDirectoryTableError,
+  type MemberDirectorySnapshot
+} from './member-directory-snapshot';
+import { parseJeeSiteDate, toJeeSiteSqliteDate } from './member-directory-time';
+import {
+  getActivePersistedOrInMemoryUserCenterRefreshJob,
+  getPersistedUserCenterRefreshJob,
+  getUserCenterRefreshJob,
+  startUserCenterRefreshJob,
+  type UserCenterRefreshJob
+} from './user-center-refresh-job';
+import {
+  countNewMembersByCreatedAt,
+  getNewMemberWindows,
+  unavailableNewMemberSummary,
+  type NewMemberSummary
+} from './user-center-new-members';
 
 const DETAIL_ORDER_LIMIT = 10;
 const DETAIL_LEDGER_LIMIT = 10;
+const DIRECTORY_WRITE_BATCH_SIZE = 50;
 const LOCAL_MEMBER_SELECT = {
   memberId: true,
   inviteCode: true,
@@ -68,7 +97,13 @@ type MemberRow = {
   nickname: string | null;
   phone: string | null;
   level: string | null;
-  pointsBalance: number;
+  sourceStatus?: string | null;
+  sourceIdentity?: number | null;
+  sourceCreatedAt?: Date | null;
+  sourceUpdatedAt?: Date | null;
+  sourceLastLoginAt?: Date | null;
+  welfareBalanceFen?: bigint | null;
+  pointsBalance: number | null;
   walletBalanceFen: bigint | null;
   totalGmvFen: bigint | null;
   firstOrderAt: Date | null;
@@ -100,6 +135,12 @@ type RawOrderTotals = {
 type RawMemberSummary = {
   paidMembers: number | bigint | string;
   activeMembers30d: number | bigint | string;
+};
+
+type RawNewMemberSummary = {
+  newMembersToday: number | bigint | string | null;
+  newMembersThisWeek: number | bigint | string | null;
+  newMembersThisMonth: number | bigint | string | null;
 };
 
 type MemberDownlineGroup = {
@@ -139,6 +180,19 @@ function externalString(row: JeeSiteMemberRow, ...keys: string[]): string | null
   return null;
 }
 
+function externalInteger(row: JeeSiteMemberRow, key: string): number | null {
+  const value = row[key];
+  if (value === null || value === undefined || value === '') return null;
+  const parsed = typeof value === 'number' ? value : Number(value);
+  return Number.isInteger(parsed) ? parsed : null;
+}
+
+function externalYuanFen(row: JeeSiteMemberRow, key: string): bigint | null {
+  const value = row[key];
+  if (value === null || value === undefined || value === '') return null;
+  return parseYuanStringToFen(String(value));
+}
+
 function mapExternalMember(row: JeeSiteMemberRow): MemberRow | null {
   const memberId = externalString(row, 'id', 'memberId');
   if (!memberId) return null;
@@ -155,7 +209,52 @@ function mapExternalMember(row: JeeSiteMemberRow): MemberRow | null {
     nickname: externalString(row, 'nickName', 'nickname'),
     phone: externalString(row, 'phone', 'mobile'),
     level: externalString(row, 'level'),
-    pointsBalance: 0,
+    sourceStatus: externalString(row, 'status'),
+    sourceIdentity: externalInteger(row, 'identity'),
+    sourceCreatedAt: parseJeeSiteDate(row.createDate),
+    sourceUpdatedAt: parseJeeSiteDate(row.updateDate),
+    sourceLastLoginAt: parseJeeSiteDate(row.loginDate),
+    // JeeSite semantics: point is welfare money; bonus is points.
+    welfareBalanceFen: externalYuanFen(row, 'point'),
+    pointsBalance: externalInteger(row, 'bonus'),
+    walletBalanceFen: null,
+    totalGmvFen: null,
+    firstOrderAt: null,
+    lastOrderAt: null,
+    totalOrders: 0,
+    tags: null
+  };
+}
+
+function mapDirectoryMember(row: {
+  memberId: string;
+  inviteCode: string | null;
+  parentInviteCode: string | null;
+  nickname: string | null;
+  phone: string | null;
+  level: string | null;
+  sourceStatus: string | null;
+  sourceIdentity: number | null;
+  sourceCreatedAt: Date | null;
+  sourceUpdatedAt: Date | null;
+  sourceLastLoginAt: Date | null;
+  welfareBalanceFen: bigint | null;
+  pointsBalance: number | null;
+}): MemberRow {
+  return {
+    memberId: row.memberId,
+    inviteCode: row.inviteCode,
+    parentInviteCode: row.parentInviteCode,
+    nickname: row.nickname,
+    phone: row.phone,
+    level: row.level,
+    sourceStatus: row.sourceStatus,
+    sourceIdentity: row.sourceIdentity,
+    sourceCreatedAt: row.sourceCreatedAt,
+    sourceUpdatedAt: row.sourceUpdatedAt,
+    sourceLastLoginAt: row.sourceLastLoginAt,
+    welfareBalanceFen: row.welfareBalanceFen,
+    pointsBalance: row.pointsBalance,
     walletBalanceFen: null,
     totalGmvFen: null,
     firstOrderAt: null,
@@ -173,7 +272,25 @@ function mergeMemberProfile(local: MemberRow | undefined, external: MemberRow): 
     parentInviteCode: external.parentInviteCode ?? local?.parentInviteCode ?? null,
     nickname: external.nickname ?? local?.nickname ?? null,
     phone: external.phone ?? local?.phone ?? null,
-    level: external.level ?? local?.level ?? null
+    level: external.level ?? local?.level ?? null,
+    welfareBalanceFen: external.welfareBalanceFen ?? local?.welfareBalanceFen ?? null,
+    // External directory semantics win. The current member list has no bonus
+    // field, so do not turn a local default zero into a claimed source balance.
+    pointsBalance: external.pointsBalance
+  };
+}
+
+function mergeExternalMemberProfile(
+  local: MemberRow | undefined,
+  directory: MemberRow | undefined,
+  external: MemberRow
+): MemberRow {
+  const snapshot = directory ? mergeMemberProfile(local, directory) : local;
+  const merged = mergeMemberProfile(snapshot, external);
+  return {
+    ...merged,
+    welfareBalanceFen: external.welfareBalanceFen ?? directory?.welfareBalanceFen ?? null,
+    pointsBalance: external.pointsBalance ?? directory?.pointsBalance ?? null
   };
 }
 
@@ -198,6 +315,10 @@ function mapMember(
     nickname: member.nickname,
     phone: maskMemberPhone(member.phone),
     level: member.level,
+    sourceCreatedAt: dateToString(member.sourceCreatedAt),
+    sourceUpdatedAt: dateToString(member.sourceUpdatedAt),
+    sourceLastLoginAt: dateToString(member.sourceLastLoginAt),
+    welfareBalanceFen: fenToString(member.welfareBalanceFen),
     pointsBalance: member.pointsBalance,
     walletBalanceFen: fenToString(member.walletBalanceFen),
     totalGmvFen: fenToString(orderSummary.totalGmvFen),
@@ -212,29 +333,79 @@ function mapMember(
 
 @Injectable()
 export class UserCenterService {
-  private static readonly DOWNLINE_CACHE_TTL_MS = 5 * 60 * 1000;
-  private downlineCountCache: { map: Map<string, number>; expiresAt: number } | null = null;
+  private readonly logger = new Logger(UserCenterService.name);
+  private readonly externalMemberPageInFlight = new Map<
+    string,
+    Promise<UserCenterListPayload>
+  >();
+  private externalMemberPageQueue: Promise<void> = Promise.resolve();
 
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
-    @Optional() @Inject(JeeSiteMemberClient) private readonly jeeSiteMemberClient?: JeeSiteMemberClient
+    @Optional() @Inject(JeeSiteMemberClient) private readonly jeeSiteMemberClient?: JeeSiteMemberClient,
+    @Optional() @Inject(JobRunnerService) private readonly jobRunner?: JobRunnerService
   ) {}
 
   async listMembers(query: UserCenterListQueryDto): Promise<UserCenterListPayload> {
     try {
       if (this.jeeSiteMemberClient && process.env.EXTERNAL_API_BASE_URL) {
-        return await this.listExternalMembers(query, true);
+        const snapshot = await getLatestSuccessfulMemberDirectorySnapshot(this.prisma);
+        try {
+          // Read the requested source page first. A completed snapshot only
+          // enriches the page and provides a fallback; it must not turn a
+          // page click into a full local replay.
+          return await this.listExternalMembers(query, true, snapshot ?? undefined);
+        } catch (error) {
+          if (snapshot) return this.listDirectoryMembers(query, true, snapshot);
+          // If the upstream is unavailable before the first completed refresh,
+          // keep the already imported local directory visible instead of
+          // turning a transient timeout into an empty user center.
+          const localCount = await this.prisma.member.count().catch(() => 0);
+          if (localCount > 0) return this.listLocalMembers(query, true);
+          throw error;
+        }
       }
       return await this.listLocalMembers(query, true);
     } catch (error) {
       // The running dev DB can lag one migration behind while the API is open.
       // Keep the list usable until the migration can be applied during maintenance.
-      if (!isMissingInvitationColumnError(error)) throw error;
+      const missingInvitationColumns = isMissingInvitationColumnError(error);
+      const missingDirectoryTable = isMissingMemberDirectoryTableError(error);
+      if (!missingInvitationColumns && !missingDirectoryTable) throw error;
       if (this.jeeSiteMemberClient && process.env.EXTERNAL_API_BASE_URL) {
-        return this.listExternalMembers(query, false);
+        if (missingDirectoryTable) {
+          return this.listExternalMembers(query, !missingInvitationColumns);
+        }
+        const snapshot = await getLatestSuccessfulMemberDirectorySnapshot(this.prisma);
+        return this.listExternalMembers(query, false, snapshot ?? undefined);
       }
       return this.listLocalMembers(query, false);
     }
+  }
+
+  startRefreshJob(): UserCenterRefreshJob {
+    if (!this.jeeSiteMemberClient || !process.env.EXTERNAL_API_BASE_URL) {
+      throw new ServiceUnavailableException('外部会员数据源未配置，无法刷新用户目录');
+    }
+    return startUserCenterRefreshJob({
+      client: this.jeeSiteMemberClient,
+      prepareSnapshot: (generation) => this.prepareMemberDirectorySnapshot(generation),
+      persistPage: (rows, generation) => this.persistMemberDirectoryPage(rows, generation),
+      finalizeSnapshot: (generation) => this.activateMemberDirectorySnapshot(generation),
+      discardSnapshot: (generation) => this.discardMemberDirectorySnapshot(generation),
+      jobRunner: this.jobRunner
+    });
+  }
+
+  async getActiveRefreshJob(): Promise<UserCenterRefreshJob | undefined> {
+    return getActivePersistedOrInMemoryUserCenterRefreshJob(this.jobRunner);
+  }
+
+  async getRefreshJob(jobId: string): Promise<UserCenterRefreshJob | undefined> {
+    return (
+      getUserCenterRefreshJob(jobId) ??
+      (await getPersistedUserCenterRefreshJob(jobId, this.jobRunner))
+    );
   }
 
   private async listLocalMembers(
@@ -262,10 +433,13 @@ export class UserCenterService {
 
     const [total, matchingMembers] = await Promise.all([
       this.prisma.member.count({ where }),
-      this.prisma.member.findMany({ where, select: { memberId: true } })
+      this.prisma.member.findMany({ where, select: { memberId: true, firstSeenAt: true } })
     ]);
 
     const matchingMemberIds = matchingMembers.map((member) => member.memberId);
+    const newMemberSummary = countNewMembersByCreatedAt(
+      matchingMembers.map((member) => member.firstSeenAt)
+    );
     const activeSince = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const orderAggregates = matchingMemberIds.length
       ? await this.prisma.$queryRawUnsafe<RawMemberOrderAggregate[]>(
@@ -376,6 +550,7 @@ export class UserCenterService {
         hasMore: skip + pageMemberIds.length < total
       },
       summary: {
+        ...newMemberSummary,
         totalMembers: total,
         paidMembers: paidOrders.length,
         activeMembers30d: activePaidOrders.length,
@@ -393,21 +568,169 @@ export class UserCenterService {
 
   private async listExternalMembers(
     query: UserCenterListQueryDto,
-    includeInvitationHierarchy: boolean
+    includeInvitationHierarchy: boolean,
+    directorySnapshot?: MemberDirectorySnapshot
   ): Promise<UserCenterListPayload> {
-    const externalPage = await this.jeeSiteMemberClient!.listMembers({
+    const requestKey = JSON.stringify({
       page: query.page,
       pageSize: query.pageSize,
-      search: query.search,
-      level: query.level
+      search: query.search?.trim() || undefined,
+      level: query.level?.trim() || undefined,
+      includeInvitationHierarchy,
+      directorySnapshot
     });
-    const externalMembers = externalPage.list
-      .map(mapExternalMember)
-      .filter((member): member is MemberRow => Boolean(member));
+    const inFlight = this.externalMemberPageInFlight.get(requestKey);
+    if (inFlight) return inFlight;
+
+    const request = this.enqueueExternalMemberPage(async () => {
+      const externalPage = await this.jeeSiteMemberClient!.listMembers({
+        page: query.page,
+        pageSize: query.pageSize,
+        search: query.search,
+        level: query.level
+      });
+      const externalMembers = externalPage.list
+        .map(mapExternalMember)
+        .filter((member): member is MemberRow => Boolean(member));
+      return this.composeExternalMemberPage(
+        externalMembers,
+        {
+          page: externalPage.pageNo,
+          pageSize: externalPage.pageSize,
+          total: externalPage.count
+        },
+        includeInvitationHierarchy,
+        directorySnapshot
+          ? ['JeeSite Member', 'MemberDirectoryEntry', 'OrderHeader']
+          : ['JeeSite Member', 'OrderHeader'],
+        Boolean(directorySnapshot),
+        directorySnapshot
+      );
+    });
+    this.externalMemberPageInFlight.set(requestKey, request);
+    void request.then(
+      () => {
+        if (this.externalMemberPageInFlight.get(requestKey) === request) {
+          this.externalMemberPageInFlight.delete(requestKey);
+        }
+      },
+      () => {
+        if (this.externalMemberPageInFlight.get(requestKey) === request) {
+          this.externalMemberPageInFlight.delete(requestKey);
+        }
+      }
+    );
+    return request;
+  }
+
+  private enqueueExternalMemberPage<T>(task: () => Promise<T>): Promise<T> {
+    const queued = this.externalMemberPageQueue.then(task, task);
+    this.externalMemberPageQueue = queued.then(
+      () => undefined,
+      () => undefined
+    );
+    return queued;
+  }
+
+  private async listDirectoryMembers(
+    query: UserCenterListQueryDto,
+    includeInvitationHierarchy: boolean,
+    snapshot: MemberDirectorySnapshot
+  ): Promise<UserCenterListPayload> {
+    const search = query.search?.trim();
+    const searchFields = [
+      { memberId: { contains: search } },
+      { nickname: { contains: search } },
+      { phone: { contains: search } },
+      ...(includeInvitationHierarchy
+        ? [{ inviteCode: { contains: search } }, { parentInviteCode: { contains: search } }]
+        : [])
+    ];
+    const select = {
+      memberId: true,
+      inviteCode: true,
+      parentInviteCode: true,
+      nickname: true,
+      phone: true,
+      level: true,
+      sourceStatus: true,
+      sourceIdentity: true,
+      sourceCreatedAt: true,
+      sourceUpdatedAt: true,
+      sourceLastLoginAt: true,
+      welfareBalanceFen: true,
+      pointsBalance: true
+    } as const;
+    const [total, entries] =
+      snapshot.source === 'staging' && this.prisma.memberDirectoryRefreshEntry
+        ? await Promise.all([
+            this.prisma.memberDirectoryRefreshEntry.count({
+              where: {
+                generation: snapshot.generation,
+                ...(query.level?.trim() ? { level: query.level.trim() } : {}),
+                ...(search ? { OR: searchFields } : {})
+              }
+            }),
+            this.prisma.memberDirectoryRefreshEntry.findMany({
+              where: {
+                generation: snapshot.generation,
+                ...(query.level?.trim() ? { level: query.level.trim() } : {}),
+                ...(search ? { OR: searchFields } : {})
+              },
+              orderBy: [{ lastSeenAt: 'desc' }, { memberId: 'asc' }],
+              skip: (query.page - 1) * query.pageSize,
+              take: query.pageSize,
+              select
+            })
+          ])
+        : await Promise.all([
+            this.prisma.memberDirectoryEntry.count({
+              where: {
+                lastSyncGeneration: snapshot.generation,
+                ...(query.level?.trim() ? { level: query.level.trim() } : {}),
+                ...(search ? { OR: searchFields } : {})
+              }
+            }),
+            this.prisma.memberDirectoryEntry.findMany({
+              where: {
+                lastSyncGeneration: snapshot.generation,
+                ...(query.level?.trim() ? { level: query.level.trim() } : {}),
+                ...(search ? { OR: searchFields } : {})
+              },
+              orderBy: [{ lastSeenAt: 'desc' }, { memberId: 'asc' }],
+              skip: (query.page - 1) * query.pageSize,
+              take: query.pageSize,
+              select
+            })
+          ]);
+    return this.composeExternalMemberPage(
+      entries.map(mapDirectoryMember),
+      {
+        page: query.page,
+        pageSize: query.pageSize,
+        total
+      },
+      includeInvitationHierarchy,
+      ['JeeSite Member', 'MemberDirectoryEntry', 'OrderHeader'],
+      true,
+      snapshot
+    );
+  }
+
+  private async composeExternalMemberPage(
+    externalMembers: MemberRow[],
+    pagination: { page: number; pageSize: number; total: number },
+    includeInvitationHierarchy: boolean,
+    dataSources: string[],
+    useDirectorySnapshot: boolean,
+    directorySnapshot?: MemberDirectorySnapshot
+  ): Promise<UserCenterListPayload> {
+    const directoryGeneration = directorySnapshot?.generation;
     const memberIds = externalMembers.map((member) => member.memberId);
     const activeSince = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const [
       localMembers,
+      directoryMembers,
       orderAggregates,
       paidOrders,
       orderTotals,
@@ -419,6 +742,47 @@ export class UserCenterService {
               where: { memberId: { in: memberIds } },
               select: includeInvitationHierarchy ? LOCAL_MEMBER_SELECT : LEGACY_MEMBER_SELECT
             })
+          : [],
+        memberIds.length && useDirectorySnapshot && directorySnapshot && directoryGeneration
+          ? directorySnapshot.source === 'staging' && this.prisma.memberDirectoryRefreshEntry
+            ? this.prisma.memberDirectoryRefreshEntry.findMany({
+                where: { memberId: { in: memberIds }, generation: directoryGeneration },
+                select: {
+                  memberId: true,
+                  inviteCode: true,
+                  parentInviteCode: true,
+                  nickname: true,
+                  phone: true,
+                  level: true,
+                  sourceStatus: true,
+                  sourceIdentity: true,
+                  sourceCreatedAt: true,
+                  sourceUpdatedAt: true,
+                  sourceLastLoginAt: true,
+                  welfareBalanceFen: true,
+                  pointsBalance: true
+                }
+              })
+            : this.prisma.memberDirectoryEntry
+              ? this.prisma.memberDirectoryEntry.findMany({
+                  where: { memberId: { in: memberIds }, lastSyncGeneration: directoryGeneration },
+                  select: {
+                    memberId: true,
+                    inviteCode: true,
+                    parentInviteCode: true,
+                    nickname: true,
+                    phone: true,
+                    level: true,
+                    sourceStatus: true,
+                    sourceIdentity: true,
+                    sourceCreatedAt: true,
+                    sourceUpdatedAt: true,
+                    sourceLastLoginAt: true,
+                    welfareBalanceFen: true,
+                    pointsBalance: true
+                  }
+                })
+              : []
           : [],
         memberIds.length
           ? this.prisma.$queryRawUnsafe<RawMemberOrderAggregate[]>(
@@ -479,16 +843,29 @@ export class UserCenterService {
     );
     const tagsByMember = await this.loadTagsByMember(memberIds);
     const localById = new Map(localMembers.map((member) => [member.memberId, member]));
+    const directoryById = new Map(
+      directoryMembers.map((member) => [member.memberId, mapDirectoryMember(member)])
+    );
     const totals = orderTotals[0] ?? { totalOrders: 0, totalGmvFen: null };
     const memberSummary = memberSummaryRows[0] ?? { paidMembers: 0, activeMembers30d: 0 };
     const downlineCountByInviteCode = await this.loadDownlineCounts(
       externalMembers,
-      includeInvitationHierarchy
+      includeInvitationHierarchy,
+      useDirectorySnapshot,
+      directorySnapshot
     );
+    const newMemberSummary =
+      directorySnapshot && directoryGeneration
+        ? await this.loadDirectoryNewMemberSummary(directorySnapshot)
+        : unavailableNewMemberSummary();
 
     return {
       items: externalMembers.map((externalMember) => {
-        const member = mergeMemberProfile(localById.get(externalMember.memberId), externalMember);
+        const member = mergeExternalMemberProfile(
+          localById.get(externalMember.memberId),
+          directoryById.get(externalMember.memberId),
+          externalMember
+        );
         const paid = paidByMember.get(member.memberId);
         return mapMember(
           member,
@@ -505,19 +882,62 @@ export class UserCenterService {
         );
       }),
       pagination: {
-        page: externalPage.pageNo,
-        pageSize: externalPage.pageSize,
-        total: externalPage.count,
-        hasMore: externalPage.pageNo * externalPage.pageSize < externalPage.count
+        page: pagination.page,
+        pageSize: pagination.pageSize,
+        total: pagination.total,
+        hasMore: pagination.page * pagination.pageSize < pagination.total
       },
       summary: {
-        totalMembers: externalPage.count,
+        ...newMemberSummary,
+        totalMembers: pagination.total,
         paidMembers: Number(memberSummary.paidMembers),
         activeMembers30d: Number(memberSummary.activeMembers30d),
         totalOrders: Number(totals.totalOrders),
         totalGmvFen: fenToString(fenBigIntOrNull(totals.totalGmvFen))
       },
-      dataSources: ['JeeSite Member', 'OrderHeader']
+      dataSources
+    };
+  }
+
+  private async loadDirectoryNewMemberSummary(
+    snapshot: MemberDirectorySnapshot
+  ): Promise<NewMemberSummary> {
+    const windows = getNewMemberWindows();
+    const table = snapshot.source === 'staging' ? 'MemberDirectoryRefreshEntry' : 'MemberDirectoryEntry';
+    const generationColumn = snapshot.source === 'staging' ? 'generation' : 'lastSyncGeneration';
+    const rows = await this.prisma.$queryRawUnsafe<RawNewMemberSummary[]>(
+      `SELECT
+         COUNT(DISTINCT CASE
+           WHEN ${sqlDatetime('"sourceCreatedAt"')} >= datetime(?)
+            AND ${sqlDatetime('"sourceCreatedAt"')} < datetime(?)
+           THEN "memberId"
+         END) AS "newMembersToday",
+         COUNT(DISTINCT CASE
+           WHEN ${sqlDatetime('"sourceCreatedAt"')} >= datetime(?)
+            AND ${sqlDatetime('"sourceCreatedAt"')} < datetime(?)
+           THEN "memberId"
+         END) AS "newMembersThisWeek",
+         COUNT(DISTINCT CASE
+           WHEN ${sqlDatetime('"sourceCreatedAt"')} >= datetime(?)
+            AND ${sqlDatetime('"sourceCreatedAt"')} < datetime(?)
+           THEN "memberId"
+         END) AS "newMembersThisMonth"
+       FROM "${table}"
+       WHERE "${generationColumn}" = ?`,
+      toSqliteDateTime(windows.today.start),
+      toSqliteDateTime(windows.today.end),
+      toSqliteDateTime(windows.thisWeek.start),
+      toSqliteDateTime(windows.thisWeek.end),
+      toSqliteDateTime(windows.thisMonth.start),
+      toSqliteDateTime(windows.thisMonth.end),
+      snapshot.generation
+    );
+    const row = Array.isArray(rows) ? rows[0] : undefined;
+    return {
+      newMembersToday: Number(row?.newMembersToday ?? 0),
+      newMembersThisWeek: Number(row?.newMembersThisWeek ?? 0),
+      newMembersThisMonth: Number(row?.newMembersThisMonth ?? 0),
+      newMembersBasis: 'sourceCreatedAt'
     };
   }
 
@@ -538,27 +958,39 @@ export class UserCenterService {
 
   private async loadDownlineCounts(
     members: MemberRow[],
-    includeInvitationHierarchy: boolean
+    includeInvitationHierarchy: boolean,
+    useDirectorySnapshot = false,
+    directorySnapshot?: MemberDirectorySnapshot
   ): Promise<Map<string, number>> {
     if (!includeInvitationHierarchy) return new Map();
     const inviteCodes = members
       .map((member) => member.inviteCode)
       .filter((inviteCode): inviteCode is string => Boolean(inviteCode));
     if (!inviteCodes.length) return new Map();
-    // 外部数据源：直接从 JeeSite 会员接口统计 parentInviteCode 分布，不依赖本地空表
-    if (this.jeeSiteMemberClient && process.env.EXTERNAL_API_BASE_URL) {
-      try {
-        const downlineMap = await this.loadDownlineCountMapFromExternal();
-        return new Map(inviteCodes.map((code) => [code, downlineMap.get(code) ?? 0]));
-      } catch {
-        // 外部统计失败时回退到本地表，保证列表可用
-      }
-    }
-    const groups = await this.prisma.member.groupBy({
-      by: ['parentInviteCode'],
-      where: { parentInviteCode: { in: inviteCodes } },
-      _count: { _all: true }
-    });
+    if (useDirectorySnapshot && !directorySnapshot) return new Map();
+    const groups = useDirectorySnapshot && directorySnapshot
+      ? directorySnapshot.source === 'staging' && this.prisma.memberDirectoryRefreshEntry
+        ? await this.prisma.memberDirectoryRefreshEntry.groupBy({
+            by: ['parentInviteCode'],
+            where: {
+              parentInviteCode: { in: inviteCodes },
+              generation: directorySnapshot.generation
+            },
+            _count: { _all: true }
+          })
+        : await this.prisma.memberDirectoryEntry.groupBy({
+            by: ['parentInviteCode'],
+            where: {
+              parentInviteCode: { in: inviteCodes },
+              lastSyncGeneration: directorySnapshot.generation
+            },
+            _count: { _all: true }
+          })
+      : await this.prisma.member.groupBy({
+          by: ['parentInviteCode'],
+          where: { parentInviteCode: { in: inviteCodes } },
+          _count: { _all: true }
+        });
     return new Map(
       groups
         .filter((group): group is MemberDownlineGroup & { parentInviteCode: string } => Boolean(group.parentInviteCode))
@@ -566,58 +998,190 @@ export class UserCenterService {
     );
   }
 
-  /**
-   * 拉取 JeeSite 全量会员的 parentInviteCode 分布，构建 inviteCode → 下级数 映射。
-   * 首页拿 total 后并发拉取剩余分页，结果缓存 5 分钟避免重复请求。
-   */
-  private async loadDownlineCountMapFromExternal(): Promise<Map<string, number>> {
-    if (this.downlineCountCache && Date.now() < this.downlineCountCache.expiresAt) {
-      return this.downlineCountCache.map;
+  private async prepareMemberDirectorySnapshot(generation: string): Promise<void> {
+    await this.prisma.$executeRawUnsafe(
+      `DELETE FROM "MemberDirectoryRefreshEntry" WHERE "generation" = ?`,
+      generation
+    );
+  }
+
+  private async discardMemberDirectorySnapshot(generation: string): Promise<void> {
+    await this.prisma.$executeRawUnsafe(
+      `DELETE FROM "MemberDirectoryRefreshEntry" WHERE "generation" = ?`,
+      generation
+    );
+  }
+
+  private async activateMemberDirectorySnapshot(generation: string): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      const rows = await tx.$queryRawUnsafe<Array<{ count: number | bigint }>>(
+        `SELECT COUNT(*) AS "count"
+         FROM "MemberDirectoryRefreshEntry"
+         WHERE "generation" = ?`,
+        generation
+      );
+      if (Number(rows[0]?.count ?? 0) === 0) {
+        throw new Error('会员目录 staging 为空，未切换活动快照');
+      }
+
+      await tx.$executeRawUnsafe(
+        `INSERT INTO "MemberDirectorySnapshotState" ("id", "generation", "activatedAt")
+         VALUES ('active', ?, datetime('now'))
+         ON CONFLICT("id") DO UPDATE SET
+           "generation" = excluded."generation",
+           "activatedAt" = excluded."activatedAt"`,
+        generation
+      );
+    }, { timeout: 10_000, maxWait: 10_000 });
+
+    // Cleanup is deliberately outside the pointer transaction. A cleanup
+    // failure must not invalidate the newly published snapshot.
+    try {
+      await this.prisma.$executeRawUnsafe(
+        `DELETE FROM "MemberDirectoryRefreshEntry" WHERE "generation" <> ?`,
+        generation
+      );
+    } catch (error) {
+      this.logger.warn(`会员目录旧 staging 清理失败，保留待下次清理: ${String(error)}`);
     }
-    const counts = new Map<string, number>();
-    const pageSize = 500;
-    const firstPage = await this.jeeSiteMemberClient!.listMembers({ page: 1, pageSize });
-    const total = firstPage.count;
-    this.collectParentInviteCodes(firstPage.list, counts);
-    const totalPages = Math.ceil(total / pageSize);
-    if (totalPages > 1) {
-      const remaining = Array.from({ length: totalPages - 1 }, (_, i) => i + 2);
-      // 限制并发为 3，避免大量并发请求触发 JeeSite 连接拒绝
-      const concurrency = 3;
-      for (let i = 0; i < remaining.length; i += concurrency) {
-        const batch = remaining.slice(i, i + concurrency);
-        const pages = await Promise.all(
-          batch.map((pageNo) =>
-            this.jeeSiteMemberClient!.listMembers({ page: pageNo, pageSize })
-          )
-        );
-        for (const page of pages) {
-          this.collectParentInviteCodes(page.list, counts);
+  }
+
+  private async persistMemberDirectoryPage(
+    rows: JeeSiteMemberRow[],
+    generation: string
+  ): Promise<{ persisted: number; errors: number }> {
+    const entries = rows
+      .map(mapExternalMember)
+      .filter((entry): entry is MemberRow => Boolean(entry));
+    let persisted = 0;
+    let errors = rows.length - entries.length;
+
+    for (let offset = 0; offset < entries.length; offset += DIRECTORY_WRITE_BATCH_SIZE) {
+      const chunk = entries.slice(offset, offset + DIRECTORY_WRITE_BATCH_SIZE);
+      const values = chunk
+        .map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime(\'now\'), datetime(\'now\'))')
+        .join(',');
+      const params = chunk.flatMap((entry) => [
+        generation,
+        entry.memberId,
+        entry.inviteCode ?? null,
+        entry.parentInviteCode ?? null,
+        entry.nickname,
+        entry.phone,
+        entry.level,
+        entry.welfareBalanceFen ?? null,
+        entry.pointsBalance ?? null,
+        entry.sourceStatus ?? null,
+        entry.sourceIdentity ?? null,
+        toJeeSiteSqliteDate(entry.sourceCreatedAt),
+        toJeeSiteSqliteDate(entry.sourceUpdatedAt),
+        toJeeSiteSqliteDate(entry.sourceLastLoginAt)
+      ]);
+      const sql = `INSERT INTO "MemberDirectoryRefreshEntry"
+        ("generation", "memberId", "inviteCode", "parentInviteCode", "nickname", "phone", "level", "welfareBalanceFen", "pointsBalance", "sourceStatus", "sourceIdentity", "sourceCreatedAt", "sourceUpdatedAt", "sourceLastLoginAt", "firstSeenAt", "lastSeenAt")
+        VALUES ${values}
+        ON CONFLICT("generation", "memberId") DO UPDATE SET
+          "inviteCode" = excluded."inviteCode",
+          "parentInviteCode" = excluded."parentInviteCode",
+          "nickname" = excluded."nickname",
+          "phone" = excluded."phone",
+          "level" = excluded."level",
+          "welfareBalanceFen" = excluded."welfareBalanceFen",
+          "pointsBalance" = excluded."pointsBalance",
+          "sourceStatus" = excluded."sourceStatus",
+          "sourceIdentity" = excluded."sourceIdentity",
+          "sourceCreatedAt" = excluded."sourceCreatedAt",
+          "sourceUpdatedAt" = excluded."sourceUpdatedAt",
+          "sourceLastLoginAt" = excluded."sourceLastLoginAt",
+          "lastSeenAt" = excluded."lastSeenAt"`;
+
+      try {
+        await this.prisma.$executeRawUnsafe(sql, ...params);
+        persisted += chunk.length;
+      } catch {
+        // One malformed row must not discard the other 99 valid rows.
+        for (const entry of chunk) {
+          try {
+            await this.prisma.$executeRawUnsafe(
+              `INSERT INTO "MemberDirectoryRefreshEntry"
+                ("generation", "memberId", "inviteCode", "parentInviteCode", "nickname", "phone", "level", "welfareBalanceFen", "pointsBalance", "sourceStatus", "sourceIdentity", "sourceCreatedAt", "sourceUpdatedAt", "sourceLastLoginAt", "firstSeenAt", "lastSeenAt")
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+               ON CONFLICT("generation", "memberId") DO UPDATE SET
+                 "inviteCode" = excluded."inviteCode",
+                 "parentInviteCode" = excluded."parentInviteCode",
+                 "nickname" = excluded."nickname",
+                 "phone" = excluded."phone",
+                 "level" = excluded."level",
+                 "welfareBalanceFen" = excluded."welfareBalanceFen",
+                 "pointsBalance" = excluded."pointsBalance",
+                 "sourceStatus" = excluded."sourceStatus",
+                 "sourceIdentity" = excluded."sourceIdentity",
+                 "sourceCreatedAt" = excluded."sourceCreatedAt",
+                 "sourceUpdatedAt" = excluded."sourceUpdatedAt",
+                 "sourceLastLoginAt" = excluded."sourceLastLoginAt",
+                 "lastSeenAt" = excluded."lastSeenAt"`,
+              generation,
+              entry.memberId,
+              entry.inviteCode ?? null,
+              entry.parentInviteCode ?? null,
+               entry.nickname,
+               entry.phone,
+               entry.level,
+               entry.welfareBalanceFen ?? null,
+               entry.pointsBalance ?? null,
+               entry.sourceStatus ?? null,
+              entry.sourceIdentity ?? null,
+              toJeeSiteSqliteDate(entry.sourceCreatedAt),
+              toJeeSiteSqliteDate(entry.sourceUpdatedAt),
+              toJeeSiteSqliteDate(entry.sourceLastLoginAt)
+            );
+            persisted += 1;
+          } catch {
+            errors += 1;
+          }
         }
       }
     }
-    this.downlineCountCache = {
-      map: counts,
-      expiresAt: Date.now() + UserCenterService.DOWNLINE_CACHE_TTL_MS
-    };
-    return counts;
+    return { persisted, errors };
   }
 
-  private collectParentInviteCodes(
-    rows: JeeSiteMemberRow[],
-    counts: Map<string, number>
-  ): void {
-    for (const row of rows) {
-      const parentCode = externalString(
-        row,
-        'parentCode',
-        'parentInviteCode',
-        'parentInvitationCode',
-        'superiorInviteCode'
-      );
-      if (parentCode) {
-        counts.set(parentCode, (counts.get(parentCode) ?? 0) + 1);
-      }
+  private async findDirectoryMember(
+    memberId: string,
+    snapshot: MemberDirectorySnapshot | null
+  ): Promise<MemberRow | null> {
+    if (!snapshot) return null;
+    try {
+      const select = {
+        memberId: true,
+        inviteCode: true,
+        parentInviteCode: true,
+        nickname: true,
+        phone: true,
+        level: true,
+        sourceStatus: true,
+        sourceIdentity: true,
+        sourceCreatedAt: true,
+        sourceUpdatedAt: true,
+        sourceLastLoginAt: true,
+        welfareBalanceFen: true,
+        pointsBalance: true
+      } as const;
+      const row =
+        snapshot.source === 'staging' && this.prisma.memberDirectoryRefreshEntry
+          ? await this.prisma.memberDirectoryRefreshEntry.findFirst({
+              where: { memberId, generation: snapshot.generation },
+              select
+            })
+          : this.prisma.memberDirectoryEntry
+            ? await this.prisma.memberDirectoryEntry.findFirst({
+                where: { memberId, lastSyncGeneration: snapshot.generation },
+                select
+              })
+            : null;
+      return row ? mapDirectoryMember(row) : null;
+    } catch (error) {
+      if (isMissingMemberDirectoryTableError(error)) return null;
+      throw error;
     }
   }
 
@@ -635,31 +1199,41 @@ export class UserCenterService {
     inviteCode: string | undefined,
     includeInvitationHierarchy: boolean
   ): Promise<UserCenterMemberDetail> {
+    const directorySnapshot =
+      this.jeeSiteMemberClient && process.env.EXTERNAL_API_BASE_URL
+        ? await getLatestSuccessfulMemberDirectorySnapshot(this.prisma)
+        : null;
     const localMember = await this.prisma.member.findUnique({
       where: { memberId },
       select: includeInvitationHierarchy ? LOCAL_MEMBER_SELECT : LEGACY_MEMBER_SELECT
     });
     let member: MemberRow;
     let externalProfile = false;
+    const directoryMember = await this.findDirectoryMember(memberId, directorySnapshot);
     if (localMember) {
-      member = localMember;
+      member = directoryMember ? mergeMemberProfile(localMember, directoryMember) : localMember;
     } else if (this.jeeSiteMemberClient && process.env.EXTERNAL_API_BASE_URL) {
-      const externalQueries: JeeSiteMemberListQuery[] = [];
-      if (inviteCode?.trim()) {
-        externalQueries.push({ page: 1, pageSize: 1, inviteCode: inviteCode.trim() });
+      if (directoryMember) {
+        member = directoryMember;
+        externalProfile = true;
+      } else {
+        const externalQueries: JeeSiteMemberListQuery[] = [];
+        if (inviteCode?.trim()) {
+          externalQueries.push({ page: 1, pageSize: 1, inviteCode: inviteCode.trim() });
+        }
+        externalQueries.push({ page: 1, pageSize: 1, search: memberId });
+        let externalMember: MemberRow | undefined;
+        for (const externalQuery of externalQueries) {
+          const externalPage = await this.jeeSiteMemberClient.listMembers(externalQuery);
+          externalMember = externalPage.list
+            .map(mapExternalMember)
+            .find((candidate): candidate is MemberRow => candidate?.memberId === memberId);
+          if (externalMember) break;
+        }
+        if (!externalMember) throw new NotFoundException('用户不存在');
+        member = externalMember;
+        externalProfile = true;
       }
-      externalQueries.push({ page: 1, pageSize: 1, search: memberId });
-      let externalMember: MemberRow | undefined;
-      for (const externalQuery of externalQueries) {
-        const externalPage = await this.jeeSiteMemberClient.listMembers(externalQuery);
-        externalMember = externalPage.list
-          .map(mapExternalMember)
-          .find((candidate): candidate is MemberRow => candidate?.memberId === memberId);
-        if (externalMember) break;
-      }
-      if (!externalMember) throw new NotFoundException('用户不存在');
-      member = externalMember;
-      externalProfile = true;
     } else {
       throw new NotFoundException('用户不存在');
     }
@@ -718,11 +1292,26 @@ export class UserCenterService {
     const tagText = tagRelations.map((relation) => relation.tag.name).join(',') || member.tags;
     let downlineCount = 0;
     if (includeInvitationHierarchy && member.inviteCode) {
-      if (this.jeeSiteMemberClient && process.env.EXTERNAL_API_BASE_URL) {
+      if (directorySnapshot) {
         try {
-          const downlineMap = await this.loadDownlineCountMapFromExternal();
-          downlineCount = downlineMap.get(member.inviteCode) ?? 0;
-        } catch {
+          downlineCount =
+            directorySnapshot.source === 'staging' && this.prisma.memberDirectoryRefreshEntry
+              ? await this.prisma.memberDirectoryRefreshEntry.count({
+                  where: {
+                    parentInviteCode: member.inviteCode,
+                    generation: directorySnapshot.generation
+                  }
+                })
+              : this.prisma.memberDirectoryEntry
+                ? await this.prisma.memberDirectoryEntry.count({
+                    where: {
+                      parentInviteCode: member.inviteCode,
+                      lastSyncGeneration: directorySnapshot.generation
+                    }
+                  })
+                : 0;
+        } catch (error) {
+          if (!isMissingMemberDirectoryTableError(error)) throw error;
           downlineCount = await this.prisma.member.count({
             where: { parentInviteCode: member.inviteCode }
           });

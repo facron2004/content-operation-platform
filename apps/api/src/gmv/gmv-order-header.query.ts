@@ -7,6 +7,15 @@ import {
   toFenBigInt
 } from '../common';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  classifyShenzhenDistrict,
+  isKnownShenzhenFallbackCoordinate,
+  normalizeShenzhenDistrictName
+} from '../merchant/shenzhen-districts';
+import {
+  PARTNER_SHOP_SOURCE,
+  PARTNER_SHOP_STORE_ID_PREFIX
+} from '../gap-center/partner-shop.mapper';
 import { emptyHourlyPoints, type GmvHourlyPoint } from './gmv.dto';
 import { type OrderHeaderGmvRow } from './gmv-order-header.types';
 
@@ -92,6 +101,12 @@ export type DistSqlRow = {
   refundFen: bigint | null;
 };
 
+type AreaDistSqlRow = DistSqlRow & {
+  merchantId: string;
+  lat: number | null;
+  lng: number | null;
+};
+
 export async function loadOrderHeaderAreaDistribution(
   prisma: PrismaLike,
   startBound: string,
@@ -107,12 +122,27 @@ export async function loadOrderHeaderAreaDistribution(
   )) as Array<{ totalGmvFen: bigint | null }>;
   const totalGmvFen = toFenBigInt(totalRow[0]?.totalGmvFen);
 
+  // ContentPackage.shopId can contain a comma-separated list when one
+  // package is sold by more than one external shop. Pick the first stable
+  // shop ID without multiplying an order's GMV by every matched shop.
+  const packageShopIds = `replace(COALESCE(cp."shopId", ''), ' ', '')`;
+  const firstPackageShopId = `CASE WHEN instr(${packageShopIds}, ',') > 0 THEN substr(${packageShopIds}, 1, instr(${packageShopIds}, ',') - 1) ELSE ${packageShopIds} END`;
+
   const rows = (await prisma.$queryRawUnsafe(
     `SELECT COALESCE(
               NULLIF(oh."areaName", ''),
               NULLIF(cp."areaName", ''),
+              NULLIF(store."areaName", ''),
               '未分区'
             ) AS "key",
+            COALESCE(
+              NULLIF(oh."merchantId", ''),
+              NULLIF(cp."merchantId", ''),
+              NULLIF(oh."merchantName", ''),
+              '未知商家'
+            ) AS "merchantId",
+            COALESCE(store."latitude", m."lat") AS "lat",
+            COALESCE(store."longitude", m."lng") AS "lng",
             COALESCE(SUM(${SQL_GMV_OH}), 0) AS "gmvFen",
             COALESCE(SUM(oh."paidAmountFen"), 0) AS "gmvOnlineFen",
             COALESCE(SUM(oh."paidAmountWalletFen"), 0) AS "gmvWalletFen",
@@ -120,37 +150,71 @@ export async function loadOrderHeaderAreaDistribution(
             COALESCE(SUM(oh."refundAmountFen"), 0) AS "refundFen"
      FROM "OrderHeader" oh
      LEFT JOIN "ContentPackage" cp ON cp."packageId" = oh."packageId"
+     LEFT JOIN "Store" store ON store."source" = '${PARTNER_SHOP_SOURCE}'
+       AND store."storeId" = '${PARTNER_SHOP_STORE_ID_PREFIX}' || ${firstPackageShopId}
+     LEFT JOIN "Merchant" m ON m."merchantId" = COALESCE(
+       NULLIF(oh."merchantId", ''),
+       NULLIF(cp."merchantId", '')
+     )
      WHERE ${sqlDatetimeExclusiveRange('oh."paidTime"')}
-     GROUP BY COALESCE(NULLIF(oh."areaName", ''), NULLIF(cp."areaName", ''), '未分区')
-     ORDER BY "gmvFen" DESC, "key" ASC
-     LIMIT ?`,
+     GROUP BY
+       COALESCE(
+         NULLIF(oh."areaName", ''),
+         NULLIF(cp."areaName", ''),
+         NULLIF(store."areaName", ''),
+         '未分区'
+       ),
+       COALESCE(
+         NULLIF(oh."merchantId", ''),
+         NULLIF(cp."merchantId", ''),
+         NULLIF(oh."merchantName", ''),
+         '未知商家'
+       ),
+       COALESCE(store."latitude", m."lat"),
+       COALESCE(store."longitude", m."lng")`,
     startBound,
-    endBound,
-    limit
-  )) as DistSqlRow[];
+    endBound
+  )) as AreaDistSqlRow[];
 
-  const meaningful = rows.filter((r) => r.key && r.key !== '未分区');
-  if (meaningful.length === 0) {
-    const merchantRows = (await prisma.$queryRawUnsafe(
-      `SELECT COALESCE(NULLIF(oh."merchantName", ''), '未知商家') AS "key",
-              COALESCE(SUM(${SQL_GMV_OH}), 0) AS "gmvFen",
-              COALESCE(SUM(oh."paidAmountFen"), 0) AS "gmvOnlineFen",
-              COALESCE(SUM(oh."paidAmountWalletFen"), 0) AS "gmvWalletFen",
-              COALESCE(SUM(oh."paidAmountBonusFen"), 0) AS "gmvBonusFen",
-              COALESCE(SUM(oh."refundAmountFen"), 0) AS "refundFen"
-       FROM "OrderHeader" oh
-       WHERE ${sqlDatetimeExclusiveRange('oh."paidTime"')}
-       GROUP BY COALESCE(NULLIF(oh."merchantName", ''), '未知商家')
-       ORDER BY "gmvFen" DESC, "key" ASC
-       LIMIT ?`,
-      startBound,
-      endBound,
-      limit
-    )) as DistSqlRow[];
-    return { totalGmvFen, rows: merchantRows, dimLabel: 'merchant' as const };
+  return {
+    totalGmvFen,
+    rows: aggregateCoordinateAreaRows(rows, limit),
+    dimLabel: 'area' as const
+  };
+}
+
+function aggregateCoordinateAreaRows(rows: AreaDistSqlRow[], limit: number): DistSqlRow[] {
+  const buckets = new Map<string, DistSqlRow>();
+  for (const row of rows) {
+    const key = resolveCoordinateAreaKey(row);
+    const bucket = buckets.get(key) ?? {
+      key,
+      gmvFen: 0n,
+      gmvOnlineFen: 0n,
+      gmvWalletFen: 0n,
+      gmvBonusFen: 0n,
+      refundFen: 0n
+    };
+    bucket.gmvFen = toFenBigInt(bucket.gmvFen) + toFenBigInt(row.gmvFen);
+    bucket.gmvOnlineFen = toFenBigInt(bucket.gmvOnlineFen) + toFenBigInt(row.gmvOnlineFen);
+    bucket.gmvWalletFen = toFenBigInt(bucket.gmvWalletFen) + toFenBigInt(row.gmvWalletFen);
+    bucket.gmvBonusFen = toFenBigInt(bucket.gmvBonusFen) + toFenBigInt(row.gmvBonusFen);
+    bucket.refundFen = toFenBigInt(bucket.refundFen) + toFenBigInt(row.refundFen);
+    buckets.set(key, bucket);
   }
 
-  return { totalGmvFen, rows, dimLabel: 'area' as const };
+  return [...buckets.values()]
+    .sort((left, right) => {
+      const gmvDelta = toFenBigInt(right.gmvFen) - toFenBigInt(left.gmvFen);
+      return gmvDelta === 0n ? left.key.localeCompare(right.key, 'zh-CN') : gmvDelta > 0n ? 1 : -1;
+    })
+    .slice(0, limit);
+}
+
+function resolveCoordinateAreaKey(row: AreaDistSqlRow): string {
+  const hasFallbackCenter = isKnownShenzhenFallbackCoordinate(row.lat, row.lng);
+  const district = hasFallbackCenter ? null : classifyShenzhenDistrict(row.lat, row.lng);
+  return district ?? normalizeShenzhenDistrictName(row.key) ?? '未分区';
 }
 
 export async function loadOrderHeaderCategoryDistribution(

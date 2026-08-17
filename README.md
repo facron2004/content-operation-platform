@@ -2,7 +2,7 @@
 
 本地生活套餐推广运营中台，基于 JeeSite 实时数据实现套餐销售监测、推广优先级排序、AI/规则文案生成、人工审核、社群分发和效果回流的全链路闭环。
 
-> **当前状态（2026-08-09）**：本轮优化以 API、Web、shared、Prisma 和文档为范围。P0-03 迁移基线与 P0-04 关键写入幂等已完成并通过非 EXE 门禁；Windows Desktop、EXE、安装器、`win-unpacked` 和安装后真实进程验收明确延期，详见 [文档对齐总览](docs/DOCUMENTATION-STATUS.md)。
+> **当前状态（2026-08-17）**：用户目录、用户生命周期和规则标签已统一使用最近一次成功的 JeeSite 会员目录快照；API 启动后默认自动触发一次受控串行同步（可用 `USER_CENTER_REFRESH_ON_STARTUP=false` 关闭），同步完成后才原子切换活动快照，失败或重启中断会继续保留旧快照，两个页面会接续显示活动任务进度。商品管理刷新会等待商家同步完成后再读取本地快照，商品冲突更新会覆盖最新售卖起止时间，详情按北京时间显示到时分，库存列表优先展示有剩余量的 SKU；商品中心保留商品管理和独立的组合套餐入口，原与商品管理重复的套餐管理入口已收口，旧 `/packages` 路径跳转到 `/products`。订单、履约和卡券关联页面保持只读。门店管理的“刷新外部门店数据”现在串行抓取 `core/corePartnerShop/listData`，按外部门店 ID 幂等写入门店坐标，完整成功后才切换本地门店快照；GMV 区域分布优先使用门店坐标匹配深圳区中心点。生命周期页的“同步并刷新”仍支持手动立即触发，规则标签可覆盖目录中的完整用户集合。P0-03 迁移基线与 P0-04 关键写入幂等已完成并通过非 EXE 门禁；Windows Desktop、EXE、安装器、`win-unpacked` 和安装后真实进程验收明确延期，详见 [文档对齐总览](docs/DOCUMENTATION-STATUS.md)。
 
 ## 核心功能
 
@@ -19,6 +19,14 @@
 **社群运营** — 基于社群画像（人群类型、偏好品类、历史转化）自动匹配今日推荐套餐，生成推送时间表和作战卡。
 
 **效果看板** — 追踪文案生成量、审核通过率、GMV、转化率等关键指标，支持昨日复盘和趋势分析。
+
+**用户中心与生命周期** — 用户中心保留完整 JeeSite 会员目录快照，用户看板展示用户总数及按源站注册时间统计的今日、本周（周一至今）、本月（每月 1 日至今）新增用户；生命周期按付费行为和目录活动时间分层。服务启动和显式同步都采用后台串行分页，先写入新代暂存区，成功后原子切换，失败时保留上一次成功快照。
+
+**标签管理** — 规则预览、创建、评估和定时同步都基于最近一次成功的完整会员目录，目录中尚未进入本地 `Member` 表的用户会在建立标签关系前补齐最小档案。
+
+**门店与区域分析** — 门店管理可从 JeeSite `corePartnerShop/listData` 后台串行同步完整合作商店铺目录；外部门店 ID、商家 ID、地址、状态和经纬度幂等写入本地，失败时保留旧数据，GMV 区域分析优先按门店坐标归属深圳行政区。
+
+**商品与订单数据中台** — 商品 SKU 列表从本地 `ContentPackage` 快照读取，手动同步采用单飞等待并在持久化完成后重新加载；商品中心保留商品管理和独立的组合套餐入口，原重复的套餐管理入口不再展示；砍价商品的 `bargainCommodityDynamic` 支持对象和 JSON 字符串两种返回形态，并明确拆分为 `initialInventoryTotal`（初始库存）、`inventoryTotal`（现在库存）和 `hasInventory`（当日库存）；商品页提供 `pending`、`selling`、`recycle` 三种状态筛选，售卖时间从外部字段同步更新并在详情显示到时分。订单中心拆分展示线上支付、余额支付和实付合计；订单中心、物流单、卡批次和卡券页只展示订单相关数据，不提供核销、退款、库存回补、发货或卡券状态写操作。
 
 ## 技术架构
 
@@ -80,6 +88,14 @@ Windows 打包、安装器、`win-unpacked` 和 EXE smoke 不属于当前优化�
 | `EXTERNAL_API_PASSWORD` | JeeSite 登录密码 | — |
 
 配置用户名密码后系统会自动处理登录和 Cookie 刷新，详见 [自动登录文档](docs/AUTO_LOGIN.md)。
+
+门店管理刷新默认读取 `/core/corePartnerShop/listData?pageSize=100&pageNo=1`；如外部部署路径不同，可用 `EXTERNAL_PARTNER_SHOPS_PATH` 覆盖。`PARTNER_SHOP_REFRESH_PAGE_SIZE` 和 `PARTNER_SHOP_REFRESH_INTERVAL_MS` 控制门店目录的串行分页大小与页间等待。
+
+### 用户目录同步（可选开关）
+
+| 变量 | 说明 | 默认值 |
+|------|------|--------|
+| `USER_CENTER_REFRESH_ON_STARTUP` | API 启动后是否自动触发一次受控会员目录同步；设为 `false` 可关闭 | `true` |
 
 ### AI 文案生成（可选）
 
@@ -164,6 +180,10 @@ Windows 打包、安装器、`win-unpacked` 和 EXE smoke 不属于当前优化�
 | 作战台 | GET | `/ops/review` | 昨日运营复盘 |
 | 看板 | GET | `/dashboard/summary` | 仪表盘汇总 |
 | 看板 | GET | `/performance` | 效果数据 |
+| 用户中心 | GET | `/user-center/lifecycle` | 用户生命周期汇总与分层列表 |
+| 用户中心 | POST | `/user-center/members/refresh` | 启动后台串行刷新 JeeSite 会员目录 |
+| 用户中心 | GET | `/user-center/members/refresh/active` | 查询当前活动的会员目录刷新任务 |
+| 用户中心 | GET | `/user-center/members/refresh/:jobId` | 查询会员目录刷新进度 |
 | 预警 | GET | `/alerts` | 运营预警列表（支持分页） |
 | 预警 | POST | `/alerts/:id/resolve` | 处理单条预警 |
 | 社群 | GET | `/communities` | 社群匹配列表 |
@@ -173,6 +193,10 @@ Windows 打包、安装器、`win-unpacked` 和 EXE smoke 不属于当前优化�
 | 健康 | GET | `/health` | 系统健康检查 |
 
 关键写入接口（任务创建/批量创建/发布、活动启动、社群批量导入、GMV 回填）要求 `Idempotency-Key`，同一业务意图重试会重放成功结果，负载不同时返回 `409`；详见持续优化报告中的 P0-04 条目。
+
+会员目录的普通列表和生命周期读取不在请求内重新扫描 JeeSite；API 启动后会自动触发一次受控全量同步，也可由有权限用户通过 `/user-center/members/refresh` 手动触发，页面通过 `/user-center/members/refresh/active` 接续任务，只有任务完成后才读取新的活动快照。外部接口凭证、Cookie 和实际外部数据质量仍需在目标环境单独验收。
+
+商品管理的刷新会等待商家数据同步的最终结果，再读取更新后的 `ContentPackage`；商品读取接口发送 no-cache 请求。商品页同时展示初始库存、现在库存和当日库存，其中 `stockTotal/stockLeft` 继续兼容旧的总量/余量读路径，`currentStock` 持久化 `inventoryTotal`。商品列表按 `stockLeft` 降序展示，避免售罄 SKU 把第一页全部占满；这只是展示排序，不会改写库存。商品状态筛选通过 URL 和 API 查询贯通 `pending`、`selling`、`recycle` 三种状态。订单相关页面及其 API 只保留查询和历史流水读取，业务核销、退款、库存调整、发货和卡券状态变更不属于当前中台操作范围。
 
 ## 角色体系
 

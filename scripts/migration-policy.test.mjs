@@ -37,14 +37,14 @@ test('repository migration policy pins every canonical migration source', () => 
 
   assert.deepEqual(result.errors, []);
   assert.equal(result.policy?.schemaVersion, 1);
-  assert.equal(result.policy?.canonicalMigrations.length, 23);
+  assert.equal(result.policy?.canonicalMigrations.length, 28);
   assert.deepEqual(
     result.policy?.sourceEquivalences.map((item) => item.migrationName),
     ['0004_drop_legacy_float_columns']
   );
   assert.deepEqual(
     result.policy?.legacyBaselines.map((item) => item.migrationName),
-    ['0005_add_idempotency_record']
+    ['0005_add_idempotency_record', '0023_member_invitation_hierarchy']
   );
 });
 
