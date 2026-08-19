@@ -16,6 +16,7 @@ export interface MemberIntegralRecord {
   remarks: string;
   status: string;
   createDate: string;
+  createDateTs: number;
   updateDate: string | null;
 }
 
@@ -29,13 +30,79 @@ export interface MemberIntegralRecordPage {
 
 export type MemberIntegralRecordRaw = Record<string, unknown>;
 
-// The external system returns numeric codes, but this page has not verified a
-// stable dictionary for them. Keep the raw value visible instead of guessing a
-// business meaning that could mislabel a record.
+/** Aggregated dashboard view over the (optionally filtered) integral dataset.
+ *  Mirrors the welfare-point summary shape so the frontend can reuse the same
+ *  chart components. The integral source has no recharge/consume dichotomy, so
+ *  positive/negative changes are derived from the signed consumptionIntegral. */
+export interface MemberIntegralKpis {
+  totalRecords: number;
+  totalGain: number;
+  totalConsume: number;
+  netChange: number;
+  memberCount: number;
+  totalHistoryPrice: number;
+}
+
+export interface LabeledAmount {
+  key: string | number;
+  label: string;
+  amount: number;
+  count: number;
+}
+
+export interface MemberIntegralDailyTrendPoint {
+  date: string; // YYYY-MM-DD
+  gain: number;
+  consume: number;
+  net: number;
+  count: number;
+}
+
+export interface MemberIntegralTopMember {
+  centerMemberId: string;
+  memberName: string;
+  memberPhone: string;
+  memberCode: string;
+  gain: number;
+  consume: number;
+  net: number;
+  recordCount: number;
+}
+
+export interface MemberIntegralSummary {
+  kpis: MemberIntegralKpis;
+  byType: LabeledAmount[];
+  byState: LabeledAmount[];
+  dailyTrend: MemberIntegralDailyTrendPoint[];
+  topMembers: MemberIntegralTopMember[];
+  dataRange: { minDate: string | null; maxDate: string | null };
+  cached: boolean;
+}
+
+// Verified against live JeeSite rows (remarks column confirms each code).
+// Type 2 and 9 have no local rows yet, so they keep the fallback until a sync
+// surfaces their remarks — do NOT guess a label that could mislabel a record.
+export const INTEGRAL_TYPE_LABELS: Record<number, string> = {
+  1: '购买奖励',
+  3: '订单消费',
+  4: '退款回滚',
+  5: '分享奖励',
+  6: '人员操作',
+  7: '签到',
+  8: '评价奖励',
+  10: '推荐',
+  12: '兑换福利金'
+};
+
+export const INTEGRAL_STATE_LABELS: Record<number, string> = {
+  1: '充值',
+  2: '消费'
+};
+
 export function integralTypeLabel(value: number): string {
-  return `类型 ${value}`;
+  return INTEGRAL_TYPE_LABELS[value] ?? `类型 ${value}`;
 }
 
 export function integralStateLabel(value: number): string {
-  return `状态 ${value}`;
+  return INTEGRAL_STATE_LABELS[value] ?? `状态 ${value}`;
 }

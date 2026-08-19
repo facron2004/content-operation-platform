@@ -494,6 +494,33 @@ describe('user center', () => {
     expect(params).toContain(765);
   });
 
+  it('loads the newest existing directory member as the incremental boundary', async () => {
+    const $queryRawUnsafe = vi.fn().mockResolvedValue([
+      {
+        memberId: 'old-latest',
+        sourceCreatedAt: '2026-08-18 20:05:00'
+      }
+    ]);
+    const service = new UserCenterService({ $queryRawUnsafe } as never);
+
+    const boundary = await (
+      service as unknown as {
+        loadLatestExistingMemberDirectoryMember: (
+          generation: string
+        ) => Promise<{ memberId: string; sourceCreatedAt: Date } | null>;
+      }
+    ).loadLatestExistingMemberDirectoryMember('generation-active');
+
+    expect(boundary).toEqual({
+      memberId: 'old-latest',
+      sourceCreatedAt: new Date('2026-08-18T20:05:00.000Z')
+    });
+    expect($queryRawUnsafe).toHaveBeenCalledWith(
+      expect.stringContaining('ORDER BY datetime('),
+      'generation-active'
+    );
+  });
+
   it('publishes a staged generation with a short pointer transaction', async () => {
     const transactionStatements: string[] = [];
     const cleanupStatements: string[] = [];

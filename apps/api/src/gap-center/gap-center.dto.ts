@@ -36,6 +36,11 @@ export class GapListQueryDto {
   @IsOptional()
   @IsString()
   @MaxLength(100)
+  areaName?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
   stage?: string;
 
   @IsOptional()

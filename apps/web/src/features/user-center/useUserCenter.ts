@@ -5,7 +5,7 @@ import {
   getUserCenterMember,
   getUserCenterMembers,
   getUserCenterMemberRefreshStatus,
-  startUserCenterMemberRefresh,
+  startUserCenterMemberIncrementalRefresh,
   type UserCenterListResponse,
   type UserCenterMemberDetailResponse,
   type UserCenterMemberItem,
@@ -76,9 +76,14 @@ export function useUserCenter() {
     if (job.status === 'queued') return '同步任务排队中…';
     if (job.status === 'pulling') {
       const { pagesFetched, totalPages, membersPersisted } = job.progress;
-      return `后台同步中：第 ${pagesFetched}/${totalPages || '—'} 页，已保存 ${membersPersisted.toLocaleString('zh-CN')} 条`;
+      const mode = job.kind === 'incremental' ? '增量同步' : '全量同步';
+      return `${mode}中：第 ${pagesFetched}/${totalPages || '—'} 页，已保存 ${membersPersisted.toLocaleString('zh-CN')} 条`;
     }
-    if (job.status === 'done') return '会员目录同步完成，当前页已重新加载';
+    if (job.status === 'done') {
+      return job.kind === 'incremental'
+        ? '新增用户同步完成，当前页和看板已重新加载'
+        : '会员目录同步完成，当前页已重新加载';
+    }
     if (job.status === 'interrupted') return '同步任务被服务重启中断，旧数据仍保留';
     return '同步失败，旧数据仍保留';
   });
@@ -192,9 +197,7 @@ export function useUserCenter() {
       if (disposed || requestId !== refreshRequestId) return;
       refreshJob.value = next;
       if (next.status === 'done') {
-        refreshError.value = next.result?.warnings.length
-          ? next.result.warnings.join('；')
-          : null;
+        refreshError.value = null;
         await reload();
         return;
       }
@@ -244,7 +247,7 @@ export function useUserCenter() {
     refreshError.value = null;
     refreshStartedAt = Date.now();
     try {
-      const job = await startUserCenterMemberRefresh();
+      const job = await startUserCenterMemberIncrementalRefresh();
       if (disposed || requestId !== refreshRequestId) return;
       refreshJob.value = job;
       await pollRefreshJob(job.jobId, requestId);

@@ -1,89 +1,73 @@
-# DeepSeek AI 文案生成集成指南
+# AI 文案生成集成指南 (DeepSeek / OpenAI)
 
-> **当前边界（2026-08-09）**：本文是 API/Web 的可选 AI 配置说明；密钥仅通过本地环境变量或运行时配置提供，不进入源码、文档或打包产物。Windows/EXE 集成不在本轮验收范围。
+> **当前基线（2026-08-18）**：本文说明系统 AI 智能文案生成的配置方式、调用流程与降级保护。API Key 仅通过本地环境变量或前端页面运行时配置传入，仅保存在内存中，严禁写入代码或提交到仓库。
+
+---
 
 ## 功能说明
 
-系统已集成 DeepSeek 大模型，用于智能生成推广文案。支持模板生成和AI生成两种模式。
+系统支持大模型智能生成与本地规则模板生成双轨模式：
+1. **AI 智能生成模式**：基于套餐事实（标题、价格、库存、使用规则、适用门店）与渠道定位（微信社群、朋友圈、商家转发、小红书种草），生成高转化率文案。
+2. **规则模板生成模式**：内置多套高转化率规则文案模板，作为默认模式与离线/失败时的自动降级兜底。
+3. **内容安全与质量校验**：生成的文案自动经过禁用词过滤（如“全网最低”、“稳赚不赔”等广告法违规词）、价格一致性校验与规则完整性检查。
 
-## 配置步骤
+---
 
-### 1. 获取 DeepSeek API Key
+## 支持的 AI 提供商
 
-访问 [DeepSeek 开放平台](https://platform.deepseek.com/) 注册并获取 API Key
+| 提供商标识 (`AI_PROVIDER`) | 说明 | 默认 Base URL | 默认模型 |
+|-----------------------------|------|---------------|----------|
+| `deepseek` | DeepSeek 开放平台 | `https://api.deepseek.com/v1` | `deepseek-chat` |
+| `openai` | OpenAI 官方或兼容代理 | `https://api.openai.com/v1` | `gpt-4o-mini` |
+| `template` | 本地规则模板引擎（无需网络与 Key） | — | — |
 
-### 2. 配置环境变量
+---
 
-在 `.env` 文件中添加：
+## 环境变量配置
 
-```bash
-DEEPSEEK_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxx
+在 `.env` 文件中配置（以 DeepSeek 为例）：
+
+```env
+# 启用 DeepSeek AI 生成
+AI_PROVIDER="deepseek"
+AI_API_KEY="sk-xxxxxxxxxxxxxxxxxxxxxxxx"
+AI_API_BASE_URL="https://api.deepseek.com/v1"
+AI_MODEL="deepseek-chat"
+
+# 兼容旧配置项
+DEEPSEEK_API_KEY="sk-xxxxxxxxxxxxxxxxxxxxxxxx"
 ```
 
-### 3. 重启服务
+---
 
-```bash
-npm run dev
-```
+## 运行时动态配置
 
-## 使用方式
+除环境变量外，管理员亦可在系统前端 **文案生成** 或 **系统设置** 页面动态配置 AI 接口参数：
+- 动态配置仅保存在后端当前运行实例的内存中，服务重启后自动失效。
+- 接口附带 SSRF 防护校验，禁止配置指向内网 IP 的恶意 Base URL。
 
-### API 调用
+---
 
-生成文案时添加 `useAI: true` 参数：
+## API 调用示例
 
-```typescript
+```http
 POST /api/content/generate
+Content-Type: application/json
 
 {
   "packageId": "P001",
   "channel": "wechat_group",
   "scenario": "daily_push",
   "copyCount": 3,
-  "useAI": true  // 启用AI生成
+  "useAI": true
 }
 ```
 
-### 前端集成
+---
 
-在生成文案页面添加开关：
+## 核心实现文件
 
-```vue
-<el-switch v-model="useAI" active-text="AI生成" inactive-text="模板生成" />
-```
-
-## 工作原理
-
-1. **AI模式**：调用 DeepSeek API，根据套餐信息、推广策略、渠道特点生成个性化文案
-2. **模板模式**：使用预定义规则生成文案（默认模式）
-3. **降级策略**：AI调用失败时自动降级到模板模式
-
-## 文案审核
-
-AI生成的文案会自动经过以下审核：
-
-- ✅ 禁用词检测（全网最低、稳赚等）
-- ✅ 价格一致性校验
-- ✅ 库存准确性校验
-- ✅ 使用规则完整性检查
-
-## 成本说明
-
-DeepSeek 定价（2024年）：
-- 输入：¥0.001 / 1K tokens
-- 输出：¥0.002 / 1K tokens
-
-单次文案生成约消耗 500-800 tokens，成本约 ¥0.001-0.002
-
-## 文件说明
-
-- `apps/api/src/content/ai-copy.service.ts` - AI服务封装
-- `apps/api/src/content/content.service.ts` - 文案生成逻辑
-- `apps/api/src/content/content.module.ts` - 模块配置
-
-## 注意事项
-
-1. API Key 请勿提交到代码仓库
-2. 建议设置请求频率限制
-3. 生产环境建议配置降级策略
-4. 定期检查API调用量和费用
+- `apps/api/src/content/ai-copy/ai-copy.service.ts` — 大模型 API 封装与重试
+- `apps/api/src/content/ai-copy/ai-copy.controller.ts` — 运行时配置接口
+- `apps/api/src/domain/copy-rules.ts` — 本地规则模板与违禁词过滤器
+- `apps/web/src/views/GenerateView.vue` — 前端文案生成交互与 AI 开关

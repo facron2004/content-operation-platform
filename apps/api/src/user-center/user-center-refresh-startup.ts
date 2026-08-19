@@ -1,4 +1,4 @@
-import { Injectable, Logger, type OnApplicationBootstrap } from '@nestjs/common';
+import { Inject, Injectable, Logger, type OnApplicationBootstrap } from '@nestjs/common';
 import { UserCenterService } from './user-center.service';
 
 function startupRefreshEnabled(): boolean {
@@ -10,7 +10,7 @@ function startupRefreshEnabled(): boolean {
 export class UserCenterRefreshStartup implements OnApplicationBootstrap {
   private readonly logger = new Logger(UserCenterRefreshStartup.name);
 
-  constructor(private readonly userCenter: UserCenterService) {}
+  constructor(@Inject(UserCenterService) private readonly userCenter: UserCenterService) {}
 
   onApplicationBootstrap(): void {
     if (process.env.NODE_ENV === 'test' || process.env.VITEST) return;
@@ -23,9 +23,18 @@ export class UserCenterRefreshStartup implements OnApplicationBootstrap {
       return;
     }
 
+    // 有活动快照走增量（快），无则全量（首次启动）。后续定时增量由 cron 维护。
     try {
-      const job = this.userCenter.startRefreshJob();
-      this.logger.log(`用户目录启动同步已排队 job=${job.jobId}`);
+      void this.userCenter
+        .startIncrementalRefreshJob()
+        .then((job) => {
+          this.logger.log(`用户目录启动同步已排队 job=${job.jobId} kind=${job.kind}`);
+        })
+        .catch((error: unknown) => {
+          this.logger.warn(
+            `用户目录启动同步未能启动: ${error instanceof Error ? error.message : String(error)}`
+          );
+        });
     } catch (error: unknown) {
       this.logger.warn(
         `用户目录启动同步未能启动: ${error instanceof Error ? error.message : String(error)}`

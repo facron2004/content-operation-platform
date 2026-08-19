@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, nextTick, ref } from 'vue';
 import PaginationFooter from '../../../components/PaginationFooter.vue';
 import MerchantSalesRankingColumns from './MerchantSalesRankingColumns.vue';
 import MerchantSalesRankingHeader from './MerchantSalesRankingHeader.vue';
@@ -23,12 +23,30 @@ export type MerchantSalesRankingTableProps = {
   formatPercent: (value: number) => string;
 };
 const props = defineProps<MerchantSalesRankingTableProps>();
-defineEmits<{
+const emit = defineEmits<{
   'update:sortBy': [value: string];
   'load-ranking': [];
   'page-change': [page: number];
   'size-change': [size: number];
 }>();
+
+const tableScrollRef = ref<HTMLElement | null>(null);
+
+function scrollToTop() {
+  void nextTick(() => {
+    if (tableScrollRef.value) tableScrollRef.value.scrollTop = 0;
+  });
+}
+
+function onPageChange(page: number) {
+  emit('page-change', page);
+  scrollToTop();
+}
+
+function onSizeChange(size: number) {
+  emit('size-change', size);
+  scrollToTop();
+}
 
 const limitLabel = computed(() => {
   const lim = props.ranking.limit;
@@ -55,36 +73,38 @@ const totalMerchantsLabel = computed(() => {
       </template>
       ；分页在该上限内切换。完整清单请用 CSV 导出（同样有 1000 行上限）或收窄窗口。
     </p>
-    <el-table
-      v-loading="listLoading"
-      :data="ranking.items"
-      size="small"
-      empty-text="暂无数据"
-      :row-class-name="rowClass"
-    >
-      <MerchantSalesRankingColumns
-        :rate-class="rateClass"
-        :rate-class-inv="rateClassInv"
-        :format-number="formatNumber"
-        :format-percent="formatPercent"
-      />
-    </el-table>
+    <div ref="tableScrollRef" class="ms-table-scroll">
+      <el-table
+        v-loading="listLoading"
+        :data="ranking.items"
+        size="small"
+        empty-text="暂无数据"
+        :row-class-name="rowClass"
+      >
+        <MerchantSalesRankingColumns
+          :rate-class="rateClass"
+          :rate-class-inv="rateClassInv"
+          :format-number="formatNumber"
+          :format-percent="formatPercent"
+        />
+      </el-table>
+    </div>
     <PaginationFooter
       v-if="ranking.pagination.total > 0"
-      class="pagination-footer"
+      class="pagination-footer ms-pager"
       :pagination="rankingPagination as never"
-      @page-change="$emit('page-change', $event)"
-      @size-change="$emit('size-change', $event)"
+      @page-change="onPageChange"
+      @size-change="onSizeChange"
     />
   </section>
 </template>
 <style scoped>
 .ranking-cap-hint {
-  margin: 0 0 10px;
+  margin: 0;
   padding: 8px 12px;
-  border-radius: 8px;
-  background: rgba(245, 158, 11, 0.08);
-  color: #92400e;
+  border-radius: 10px;
+  background: rgba(255, 149, 0, 0.08);
+  color: #c93400;
   font-size: 12px;
   line-height: 1.5;
 }

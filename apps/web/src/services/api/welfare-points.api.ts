@@ -129,7 +129,13 @@ export function getWelfarePointsList(
 }
 
 export async function refreshWelfarePoints(): Promise<WelfarePointRefreshResult> {
-  const response = await client.post('/welfare-points/refresh');
+  // Full upstream pull is throttled to 1 page/sec and can run minutes when the
+  // JeeSite dataset is large. The default 30s axios timeout would report a
+  // failure while the backend keeps writing rows, making the user think data
+  // was lost. Allow up to 5 minutes — this is an explicit maintenance action.
+  const response = await client.post('/welfare-points/refresh', undefined, {
+    timeout: 300000
+  });
   // One pattern clears summary plus every cached list page/filter combination.
   clearCache('/welfare-points');
   return response.data as WelfarePointRefreshResult;

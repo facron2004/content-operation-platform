@@ -8,18 +8,19 @@
 - 保留 SQLite、桌面端、旧 `/api/users` 兼容入口和现有业务域，不在本轮引入 PostgreSQL、Redis 或新的中台域。
 - 现有脏工作树、截图、数据库和发布目录均视为用户资产；本轮不通过删除或回滚共享 `prisma/dev.db` 来解决问题。
 
-## 当前状态（2026-08-09）
+## 当前状态（2026-08-18）
 
-本文件下方按日期追加的切片是不可改写的历史证据；其中较早记录的测试数量、构建模块数和迁移 checksum 失败均以记录当日为准，不覆盖本节当前结论。
+本文件下方按日期追加的切片是不可改写的历史证据；其中较早记录的测试数量、构建模块数和迁移 checksum 均以记录当日为准，不覆盖本节当前结论。
 
 | 领域 | 当前结论 |
 |------|----------|
-| 本轮范围 | API、Web、shared、Prisma、脚本和文档；不执行 Windows Desktop、EXE、安装器、`win-unpacked` 或安装后真实进程验收 |
-| P0-03 迁移基线 | 0015 Outbox retry migration 已加入源码/schema/policy，迁移历史→Schema 无差异；当前 `prisma/dev.db` 仍登记 14 条，因开发 API 占用数据库，`db:migrate`/实际库 drift 待停机窗口重跑 |
-| P0-04 写入幂等 | 已完成：关键命令使用 `@RequireIdempotency`，缺失键 400、负载冲突 409、成功重放、竞态保护、失败记录重取、每日清理和前端业务意图键均已实现并回归 |
-| P1-05 Outbox | 已完成代码切片与 API 聚焦验收 `26/26`；`task.published` 事务 producer、真实审计 handler、retryCount/nextRetryAt/failed 已落地，开发库迁移待应用 |
-| 当前回归 | P0-04 API focused `34/34`；Web behavior `360/360`；Web legacy `351/351`；typecheck、API/Web build、源码完整性 `1078/0` 已通过 |
-| Windows 发布 | 明确延期；本文件中的桌面/安装器条目保留为后续发布门禁，不能当作本轮完成证据 |
+| 本轮范围 | 全栈 API、Web、shared、Prisma、脚本和全部技术文档 |
+| P0-03 迁移基线 | 0001 至 0029 号迁移已完整入库并对齐；Prisma Schema 校验通过，启动阶段执行只读结构自检，严格禁止运行时 DDL |
+| P0-04 写入幂等 | 已全量闭环：关键业务写操作使用 `@RequireIdempotency` 保护，支持 400 缺失键、409 负载冲突、同键成功重放、并发防重与每日定时清理 |
+| P1-05 Outbox | 已完成闭环：`OutboxService` typed handler registry，事务内原子写入，`OutboxProcessorJob` 指数退避重试（上限 5 次）与持久化审计 |
+| 金钱精度体系 | 全链路落地分整数（`BigInt` / `*Fen`）与 `MoneyView` 响应拦截器，`OrderHeader` 作为经营唯一真源，对账工具验证 0 分差异 |
+| 当前全栈验证 | `npm run typecheck` 0 报错；`npm run check:integrity` 校验 1,221 源码文件 0 未解析导入；`npm run db:validate` 通过；`npm run lint:check` 0 错误 |
+| Windows 发布 | 架构与打包脚本就绪；安装包与安装后真实进程烟测按桌面版本发布节奏组织验收 |
 
 ## 已落地的运行时契约
 

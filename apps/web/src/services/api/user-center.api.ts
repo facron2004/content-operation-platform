@@ -78,7 +78,10 @@ export type UserCenterRefreshJobStatus =
   | 'error'
   | 'interrupted';
 
+export type UserCenterRefreshJobKind = 'full' | 'incremental';
+
 export interface UserCenterRefreshJob {
+  kind: UserCenterRefreshJobKind;
   jobId: string;
   generation: string;
   status: UserCenterRefreshJobStatus;
@@ -132,6 +135,14 @@ export async function getUserCenterMember(memberId: string, inviteCode?: string 
 export async function startUserCenterMemberRefresh() {
   return (
     await client.post<UserCenterRefreshJob>('/user-center/members/refresh', undefined, {
+      timeout: 10000
+    })
+  ).data;
+}
+
+export async function startUserCenterMemberIncrementalRefresh() {
+  return (
+    await client.post<UserCenterRefreshJob>('/user-center/members/refresh/incremental', undefined, {
       timeout: 10000
     })
   ).data;

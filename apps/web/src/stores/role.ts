@@ -20,6 +20,12 @@ const roleLabels: Record<UserRole, string> = {
   executor: '执行人员'
 };
 
+/** Full role catalog in display order. Admins can switch among all of these
+ *  for testing perspectives; non-admins still only see server-granted roles. */
+const allRoleOptions: Array<{ value: UserRole; label: string }> = Object.entries(
+  roleLabels
+).map(([value, label]) => ({ value: value as UserRole, label }));
+
 const STORAGE_KEY = 'ops_current_role';
 const validRoles: string[] = Object.keys(roleLabels);
 
@@ -44,6 +50,8 @@ export const useRoleStore = defineStore('role', () => {
     // Empty until server hydrates — never advertise the full role catalog pre-session
     // (that let localStorage / free setRole send any role as an API query param).
     const granted = serverInfo.value?.roles ?? [];
+    // Admin may switch among all roles for testing perspectives.
+    if (granted.includes('admin')) return allRoleOptions;
     return granted.map((value) => ({ value, label: roleLabels[value] ?? value }));
   });
   /** Empty until server session loads — prevents localStorage privilege elevation. */
@@ -57,8 +65,14 @@ export const useRoleStore = defineStore('role', () => {
   const hasServerSession = computed(() => sessionLoaded.value && serverInfo.value !== null);
 
   function setRole(role: UserRole) {
-    // Refuse until server session is live, and only among granted roles.
-    if (!serverInfo.value || !serverInfo.value.roles.includes(role)) return;
+    // Refuse until server session is live.
+    if (!serverInfo.value) return;
+    const granted = serverInfo.value.roles;
+    // Admin may switch to any role for testing perspectives.
+    const allowed = granted.includes('admin')
+      ? validRoles.includes(role)
+      : granted.includes(role);
+    if (!allowed) return;
     currentRole.value = role;
     try {
       localStorage.setItem(STORAGE_KEY, role);

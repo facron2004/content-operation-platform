@@ -2,87 +2,282 @@
   gap: 12px;
 }
 
-.window-tabs {
+/* ---- 页头 ---- */
+.ms-view .ms-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 4px;
+}
+.ms-kicker {
+  margin: 0 0 5px;
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+}
+.ms-header h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+}
+.ms-header__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.ms-date-label {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* ---- 窗口选择栏（苹果分段控件） ---- */
+.ms-view :deep(.ms-window-bar) {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 8px 12px;
+  padding: 10px 16px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--panel);
+  box-shadow: var(--shadow-soft);
 }
-
-.window-tabs__hint {
+.ms-window-meta {
   color: var(--muted);
   font-size: 12px;
+  font-weight: 500;
 }
 
+/* 苹果风分段控件 */
+.ms-view :deep(.ms-segment .el-radio-button__inner) {
+  padding: 5px 14px;
+  border-radius: 8px !important;
+  font-size: 13px;
+  font-weight: 600;
+  border: none;
+}
+.ms-view :deep(.ms-segment .el-radio-button:first-child .el-radio-button__inner) {
+  border-top-left-radius: 8px !important;
+  border-bottom-left-radius: 8px !important;
+}
+.ms-view :deep(.ms-segment .el-radio-button:last-child .el-radio-button__inner) {
+  border-top-right-radius: 8px !important;
+  border-bottom-right-radius: 8px !important;
+}
+
+/* ---- KPI 指标卡片 ---- */
 .ms-view :deep(.kpi-row) {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
 }
-
-.ms-view :deep(.chart-card),
-.ms-view :deep(.top-offenders) {
+.ms-view :deep(.metric-tile) {
   padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  box-shadow: var(--shadow-soft);
+}
+.ms-view :deep(.metric-tile span) {
+  font-size: 11px;
+  letter-spacing: 0.02em;
+}
+.ms-view :deep(.metric-tile strong) {
+  font-size: 22px;
+  font-weight: 700;
+}
+.ms-view :deep(.metric-tile.danger) {
+  background: rgba(255, 59, 48, 0.06);
+  border-color: rgba(255, 59, 48, 0.2);
+}
+.ms-view :deep(.metric-tile.danger strong) {
+  color: #ff3b30;
+}
+.ms-view :deep(.metric-tile.info) {
+  background: rgba(0, 122, 255, 0.05);
+  border-color: rgba(0, 122, 255, 0.15);
 }
 
-.ms-view :deep(.chart-card header),
-.ms-view :deep(.top-offenders header) {
+/* ---- 趋势图表面板 ---- */
+.ms-view :deep(.chart-card) {
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--panel);
+  box-shadow: var(--shadow-soft);
+}
+.ms-view :deep(.chart-card header) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
   gap: 12px;
 }
-
-.ms-view :deep(.chart-card h3),
-.ms-view :deep(.top-offenders h3) {
+.ms-view :deep(.chart-card h3) {
   margin: 0;
-  font-size: 14px;
-  font-weight: 800;
+  font-size: 15px;
+  font-weight: 700;
 }
-
 .ms-view :deep(.chart-card .chart-shell) {
   height: 240px;
   min-height: 240px;
 }
 
-.ms-view :deep(.pagination-footer) {
-  margin-top: 12px;
+/* ---- 商家排行表 ---- */
+.ms-view :deep(.top-offenders) {
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--panel);
+  box-shadow: var(--shadow-soft);
   display: flex;
-  justify-content: flex-end;
+  flex-direction: column;
+  gap: 10px;
+  /* 全局 .panel overflow:hidden 会让 sticky 失效 */
+  overflow: visible;
+}
+/* 表格滚动容器 */
+.ms-view :deep(.ms-table-scroll) {
+  max-height: 400px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  border-radius: 10px;
+}
+.ms-view :deep(.top-offenders header) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.ms-view :deep(.top-offenders h3) {
+  margin: 0;
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 700;
 }
 
+/* 排序分段控件（小号） */
+.ms-view :deep(.top-offenders .el-radio-group .el-radio-button__inner) {
+  padding: 4px 10px;
+  border-radius: 8px !important;
+  font-size: 12px;
+  font-weight: 600;
+  border: none;
+}
+.ms-view :deep(.top-offenders .el-radio-button:first-child .el-radio-button__inner) {
+  border-top-left-radius: 8px !important;
+  border-bottom-left-radius: 8px !important;
+}
+.ms-view :deep(.top-offenders .el-radio-button:last-child .el-radio-button__inner) {
+  border-top-right-radius: 8px !important;
+  border-bottom-right-radius: 8px !important;
+}
+
+/* 排行上限提示 */
+.ms-view :deep(.ranking-cap-hint) {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgba(255, 149, 0, 0.08);
+  color: #c93400;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* el-table 苹果风覆盖 */
+.ms-view :deep(.top-offenders .el-table) {
+  font-size: 12px;
+}
+.ms-view :deep(.top-offenders th.el-table__cell) {
+  background: var(--soft);
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 11px;
+  border-bottom: 1px solid var(--line);
+}
+.ms-view :deep(.top-offenders td.el-table__cell) {
+  border-bottom: 1px solid var(--soft-strong);
+  color: var(--ink-soft);
+  padding: 8px 0;
+}
+.ms-view :deep(.top-offenders .el-table__row:hover td.el-table__cell) {
+  background: rgba(120, 120, 128, 0.06);
+}
+
+/* 分页（sticky 固定底部） */
+.ms-view :deep(.ms-pager) {
+  position: sticky;
+  bottom: 0;
+  margin-top: 8px;
+  padding: 8px 0 2px;
+  background: var(--panel);
+  border-top: 1px solid var(--line);
+  z-index: 2;
+}
+
+/* ---- 胶囊标签 ---- */
+.ms-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: rgba(120, 120, 128, 0.12);
+  color: var(--ink-soft);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+.ms-pill--muted {
+  background: rgba(120, 120, 128, 0.12);
+  color: var(--muted);
+}
+.ms-pill--warn {
+  background: rgba(255, 149, 0, 0.14);
+  color: #c93400;
+}
+.ms-pill--success {
+  background: rgba(52, 199, 89, 0.14);
+  color: #248a3d;
+}
+
+/* ---- 速率色 ---- */
 .ms-view :deep(.rate-danger) {
-  color: #ef4444;
+  color: #ff3b30;
   font-weight: 700;
 }
-
 .ms-view :deep(.rate-warning) {
-  color: #f59e0b;
+  color: #ff9500;
   font-weight: 700;
 }
-
 .ms-view :deep(.rate-ok) {
   color: var(--ink);
 }
-
-:deep(.is-danger) {
-  background: var(--danger-soft);
+.ms-view :deep(.is-danger) {
+  background: rgba(255, 59, 48, 0.05);
+}
+.ms-view :deep(.is-warning) {
+  background: rgba(255, 149, 0, 0.05);
 }
 
-:deep(.is-warning) {
-  background: #fff7ed;
-}
-
+/* ---- 响应式 ---- */
 @media (max-width: 1280px) {
   .ms-view :deep(.kpi-row) {
     grid-template-columns: repeat(2, 1fr);
   }
 }
-
 @media (max-width: 768px) {
   .ms-view :deep(.kpi-row) {
     grid-template-columns: 1fr;
+  }
+  .ms-view :deep(.ms-window-bar) {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }

@@ -8,6 +8,7 @@ import { RefundModule } from '../refund/refund.module';
 import { IdempotencyModule } from '../idempotency/idempotency.module';
 import { GmvController } from './gmv.controller';
 import { GmvService } from './gmv.service';
+import { GmvRefreshStartup } from './gmv-refresh-startup';
 
 // --- gmv.module.ts ---
 @Module({
@@ -20,7 +21,7 @@ import { GmvService } from './gmv.service';
     IdempotencyModule
   ],
   controllers: [GmvController],
-  providers: [GmvService],
+  providers: [GmvService, GmvRefreshStartup],
   exports: [GmvService]
 })
 export class GmvModule {}

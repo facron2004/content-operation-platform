@@ -58,6 +58,27 @@ export class UserCenterController {
     const job = this.service.startRefreshJob();
     return {
       jobId: job.jobId,
+      kind: job.kind,
+      generation: job.generation,
+      status: job.status,
+      progress: job.progress
+    };
+  }
+
+  @Roles('admin', 'platform_operator')
+  @RequirePermissions('analytics:refresh')
+  @Throttle({ long: { limit: 6, ttl: 60000 } })
+  @Post('members/refresh/incremental')
+  @ApiOperation({
+    summary: '增量同步 JeeSite 会员目录',
+    description:
+      '复用当前活动快照，按 sourceCreatedAt 找到最新旧用户，读到该用户后停止，仅抓取其之前的新增会员。无活动快照时退化为全量刷新。'
+  })
+  async startIncrementalRefresh() {
+    const job = await this.service.startIncrementalRefreshJob();
+    return {
+      jobId: job.jobId,
+      kind: job.kind,
       generation: job.generation,
       status: job.status,
       progress: job.progress

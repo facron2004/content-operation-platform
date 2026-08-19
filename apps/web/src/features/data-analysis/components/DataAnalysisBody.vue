@@ -59,17 +59,6 @@ defineEmits<{
       :package-truncated="summary.packageTruncated === true"
     />
 
-    <!-- Residual #279: panel-cap honesty banners (interactive Top-N is not exhaustive). -->
-    <p v-if="summary.rankingTruncated" class="list-cap-hint">
-      排行预览仅展示前 {{ summary.rankingLimit ?? 20 }} 名业务员/商家（全量请导出 Excel）。
-    </p>
-    <p v-if="summary.refundTruncated" class="list-cap-hint">
-      退款预览仅展示前 {{ summary.refundLimit ?? 15 }} 名（全量请导出 Excel）。
-    </p>
-    <p v-if="summary.packageTruncated" class="list-cap-hint">
-      热门商品预览仅展示前 {{ summary.packageLimit ?? 5 }} 个（全量请导出 Excel）。
-    </p>
-
     <div class="da-rank-row">
       <DataAnalysisRankTable
         title="业务员销售额排行"

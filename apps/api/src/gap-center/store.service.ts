@@ -66,12 +66,14 @@ export class StoreService {
     const storeWhere: Prisma.StoreWhereInput = {
       ...(query.status ? { status: query.status } : {}),
       ...(query.merchantId ? { merchantId: query.merchantId } : {}),
+      ...(query.areaName ? { areaName: { contains: query.areaName } } : {}),
       ...(search
         ? { OR: [{ storeName: { contains: search } }, { address: { contains: search } }] }
         : {})
     };
     const merchantWhere: Prisma.MerchantWhereInput = {
       ...(query.merchantId ? { merchantId: query.merchantId } : {}),
+      ...(query.areaName ? { areaName: { contains: query.areaName } } : {}),
       ...(query.status && query.status !== 'active' ? { merchantId: '__no_projection__' } : {}),
       ...(search
         ? {

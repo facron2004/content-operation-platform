@@ -15,17 +15,21 @@ import type {
 } from './jeesite-member.client';
 
 export const USER_CENTER_REFRESH_JOB_NAME = 'user-center-member-refresh';
+export const USER_CENTER_INCREMENTAL_JOB_NAME = 'user-center-member-incremental';
 
 const DEFAULT_PAGE_SIZE = 500;
 const MAX_PAGE_SIZE = 500;
 const DEFAULT_PAGE_INTERVAL_MS = 1_000;
 const MAX_PAGE_INTERVAL_MS = 60_000;
 const MAX_REFRESH_PAGES = 10_000;
+// 增量同步默认只抓前若干页（每页 500，上限 100 页 = 5 万条），覆盖单次新增潮
+const MAX_INCREMENTAL_PAGES = 100;
 const MAX_JOBS = 32;
 
 const logger = new Logger('UserCenterRefreshJob');
 
 export type UserCenterRefreshJobStatus = 'queued' | 'pulling' | 'done' | 'error' | 'interrupted';
+export type UserCenterRefreshJobKind = 'full' | 'incremental';
 
 export interface UserCenterRefreshProgress {
   currentPage: number;
@@ -43,6 +47,7 @@ export interface UserCenterRefreshResult extends UserCenterRefreshProgress {
 }
 
 export interface UserCenterRefreshJob {
+  kind: UserCenterRefreshJobKind;
   jobId: string;
   generation: string;
   status: UserCenterRefreshJobStatus;
@@ -70,6 +75,26 @@ export interface UserCenterRefreshJobDeps {
   finalizeSnapshot?: (generation: string) => Promise<void>;
   /** Best-effort cleanup when a generation cannot become active. */
   discardSnapshot?: (generation: string) => Promise<void>;
+  jobRunner?: JobRunnerService;
+}
+
+export interface UserCenterIncrementalBoundary {
+  memberId: string;
+  sourceCreatedAt: Date;
+}
+
+/** 增量同步依赖：复用活动 generation，读取到最新旧记录后早停。 */
+export interface UserCenterIncrementalJobDeps {
+  client: JeeSiteMemberClient;
+  /** 返回当前活动会员目录 generation；无则增量无法进行，应改走全量。 */
+  resolveActiveGeneration: () => Promise<string | null>;
+  /** 返回活动 generation 下按 sourceCreatedAt 排序的最新旧记录，作为早停边界。 */
+  loadLatestExistingMember: (generation: string) => Promise<UserCenterIncrementalBoundary | null>;
+  /** 仅 upsert 边界之前的新行，返回本页实际写入结果。 */
+  persistIncrementalPage: (
+    rows: JeeSiteMemberRow[],
+    generation: string
+  ) => Promise<{ persisted: number; errors: number }>;
   jobRunner?: JobRunnerService;
 }
 
@@ -123,6 +148,13 @@ function emptyProgress(config: UserCenterRefreshConfig): UserCenterRefreshProgre
 
 function findActiveJob(): UserCenterRefreshJob | undefined {
   return [...jobs.values()].find((job) => job.status === 'queued' || job.status === 'pulling');
+}
+
+function readExternalMemberId(row: JeeSiteMemberRow): string | null {
+  const value = row.id ?? row.memberId;
+  if (typeof value === 'string' && value.trim()) return value.trim();
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  return null;
 }
 
 function trimJobs(): void {
@@ -193,6 +225,7 @@ export function restoreUserCenterRefreshJob(
     ? meta.warnings.filter((value): value is string => typeof value === 'string')
     : [];
   return {
+    kind: meta.kind === 'incremental' ? 'incremental' : 'full',
     jobId,
     generation,
     status,
@@ -226,24 +259,49 @@ export async function getPersistedUserCenterRefreshJob(
   jobRunner?: JobRunnerService
 ): Promise<UserCenterRefreshJob | undefined> {
   if (!jobRunner) return undefined;
-  const run = await jobRunner.findLatestByMeta(USER_CENTER_REFRESH_JOB_NAME, 'refreshJobId', jobId);
-  return run ? restoreUserCenterRefreshJob(jobId, run) : undefined;
+  const fullRun = await jobRunner.findLatestByMeta(
+    USER_CENTER_REFRESH_JOB_NAME,
+    'refreshJobId',
+    jobId
+  );
+  if (fullRun) return restoreUserCenterRefreshJob(jobId, fullRun);
+  const incrementalRun = await jobRunner.findLatestByMeta(
+    USER_CENTER_INCREMENTAL_JOB_NAME,
+    'refreshJobId',
+    jobId
+  );
+  return incrementalRun ? restoreUserCenterRefreshJob(jobId, incrementalRun) : undefined;
 }
 
 export async function getActivePersistedUserCenterRefreshJob(
   jobRunner?: JobRunnerService
 ): Promise<UserCenterRefreshJob | undefined> {
   if (!jobRunner) return undefined;
-  const result = await jobRunner.listRuns({
-    jobName: USER_CENTER_REFRESH_JOB_NAME,
-    status: 'running',
-    page: 1,
-    pageSize: 1
-  });
-  const run = result.items[0];
-  if (!run) return undefined;
-  const jobId = readString(parseMeta(run.metaJson), 'refreshJobId');
-  return jobId ? restoreUserCenterRefreshJob(jobId, run) : undefined;
+  // 增量与全量互斥，任一在跑都视为活动任务；优先返回最新那条
+  const [fullResult, incrementalResult] = await Promise.all([
+    jobRunner.listRuns({
+      jobName: USER_CENTER_REFRESH_JOB_NAME,
+      status: 'running',
+      page: 1,
+      pageSize: 1
+    }),
+    jobRunner.listRuns({
+      jobName: USER_CENTER_INCREMENTAL_JOB_NAME,
+      status: 'running',
+      page: 1,
+      pageSize: 1
+    })
+  ]);
+  const candidates = [fullResult.items[0], incrementalResult.items[0]].filter(
+    (run): run is JobRunRecord => Boolean(run)
+  );
+  if (!candidates.length) return undefined;
+  // JobRun 的 startedAt 为字符串时间戳，直接比较可定序
+  candidates.sort((a, b) =>
+    (b.startedAt ?? '').localeCompare(a.startedAt ?? '')
+  );
+  const jobId = readString(parseMeta(candidates[0].metaJson), 'refreshJobId');
+  return jobId ? restoreUserCenterRefreshJob(jobId, candidates[0]) : undefined;
 }
 
 export async function getActivePersistedOrInMemoryUserCenterRefreshJob(
@@ -258,6 +316,7 @@ export function startUserCenterRefreshJob(deps: UserCenterRefreshJobDeps): UserC
 
   const config = getUserCenterRefreshConfig();
   const job: UserCenterRefreshJob = {
+    kind: 'full',
     jobId: createJobId(),
     generation: createGeneration(),
     status: 'queued',
@@ -273,6 +332,38 @@ export function startUserCenterRefreshJob(deps: UserCenterRefreshJobDeps): UserC
     job.error = error instanceof Error ? error.message : String(error);
     job.updatedAt = Date.now();
     logger.error(`会员目录刷新任务 ${job.jobId} 异常退出: ${String(error)}`);
+  });
+  return job;
+}
+
+/**
+ * 启动增量同步任务：复用当前活动 generation，从第 1 页抓起，遇到最新旧记录即早停。
+ * 与全量任务共享内存互斥（findActiveJob），二者不能同时运行。
+ */
+export function startUserCenterIncrementalRefreshJob(
+  deps: UserCenterIncrementalJobDeps
+): UserCenterRefreshJob {
+  const active = findActiveJob();
+  if (active) return active;
+
+  const config = getUserCenterRefreshConfig();
+  const job: UserCenterRefreshJob = {
+    kind: 'incremental',
+    jobId: createJobId(),
+    generation: '',
+    status: 'queued',
+    progress: emptyProgress(config),
+    createdAt: Date.now(),
+    updatedAt: Date.now()
+  };
+  jobs.set(job.jobId, job);
+  trimJobs();
+
+  void runUserCenterIncrementalRefreshJob(job, deps).catch((error: unknown) => {
+    job.status = 'error';
+    job.error = error instanceof Error ? error.message : String(error);
+    job.updatedAt = Date.now();
+    logger.error(`会员目录增量任务 ${job.jobId} 异常退出: ${String(error)}`);
   });
   return job;
 }
@@ -401,8 +492,155 @@ async function runUserCenterRefreshJob(
       execute,
       {
         refreshJobId: job.jobId,
+        kind: 'full',
         generation: job.generation,
         pageSize: config.pageSize
+      },
+      { persistMeta: true }
+    );
+    return;
+  }
+  await execute(() => undefined);
+}
+
+async function runUserCenterIncrementalRefreshJob(
+  job: UserCenterRefreshJob,
+  deps: UserCenterIncrementalJobDeps
+): Promise<void> {
+  const config = getUserCenterRefreshConfig();
+  const execute = async (setMeta: UserCenterRefreshMetaSetter): Promise<number> => {
+    const warnings: string[] = [];
+
+    const checkpoint = (extra: Record<string, unknown> = {}) => {
+      job.updatedAt = Date.now();
+      setMeta({
+        refreshJobId: job.jobId,
+        kind: 'incremental',
+        generation: job.generation,
+        phase: job.status,
+        ...job.progress,
+        warnings,
+        ...extra
+      });
+    };
+
+    try {
+      const activeGeneration = await deps.resolveActiveGeneration();
+      if (!activeGeneration) {
+        throw new Error('无活动会员目录快照，请先执行全量同步');
+      }
+      job.generation = activeGeneration;
+      job.status = 'pulling';
+      checkpoint();
+
+      const boundary = await deps.loadLatestExistingMember(activeGeneration);
+      if (!boundary) {
+        throw new Error('活动快照没有可用的最新旧用户边界，请先执行全量同步');
+      }
+      warnings.push(
+        `增量边界 memberId=${boundary.memberId} sourceCreatedAt=${boundary.sourceCreatedAt.toISOString()}`
+      );
+
+      let pageNo = 1;
+      let totalPages = 1;
+      let totalMembers = 0;
+      let pageSize = config.pageSize;
+      let earlyStopped = false;
+      let boundaryFound = false;
+
+      while (pageNo <= totalPages) {
+        if (pageNo > 1 && config.pageIntervalMs > 0) {
+          await sleep(config.pageIntervalMs);
+        }
+
+        const page: JeeSiteMemberPage = await deps.client.listMembers({
+          page: pageNo,
+          pageSize
+        });
+        if (page.list.length > config.pageSize) {
+          throw new Error(
+            `JeeSite 会员接口第 ${pageNo} 页返回 ${page.list.length} 条，超过安全页大小 ${config.pageSize}`
+          );
+        }
+        pageSize = Math.min(config.pageSize, Math.max(1, page.pageSize || pageSize));
+        totalMembers = Math.max(totalMembers, page.count);
+        totalPages = Math.max(1, Math.ceil(totalMembers / pageSize));
+
+        if (!page.list.length) {
+          throw new Error(`增量刷新未读取到旧库边界 ${boundary.memberId}，未切换新增数据`);
+        }
+
+        const boundaryIndex = page.list.findIndex(
+          (row) => readExternalMemberId(row) === boundary.memberId
+        );
+        const newRows = boundaryIndex >= 0 ? page.list.slice(0, boundaryIndex) : page.list;
+        const persisted = newRows.length
+          ? await deps.persistIncrementalPage(newRows, activeGeneration)
+          : { persisted: 0, errors: 0 };
+        job.progress = {
+          currentPage: pageNo,
+          pagesFetched: job.progress.pagesFetched + 1,
+          totalPages,
+          totalMembers,
+          membersFetched: job.progress.membersFetched + newRows.length,
+          membersPersisted: job.progress.membersPersisted + persisted.persisted,
+          errors: job.progress.errors + persisted.errors,
+          pageSize
+        };
+        checkpoint();
+
+        if (boundaryIndex >= 0) {
+          boundaryFound = true;
+          earlyStopped = true;
+          warnings.push(
+            `第 ${pageNo} 页读取到旧库边界 ${boundary.memberId}，已停止抓取`
+          );
+          break;
+        }
+
+        if (page.list.length < pageSize) {
+          throw new Error(`增量刷新未读取到旧库边界 ${boundary.memberId}，未切换新增数据`);
+        }
+        if (pageNo >= MAX_INCREMENTAL_PAGES) {
+          throw new Error(
+            `增量刷新超过安全页数 ${MAX_INCREMENTAL_PAGES}，仍未读取到旧库边界 ${boundary.memberId}`
+          );
+        }
+        pageNo += 1;
+      }
+
+      if (!boundaryFound) {
+        throw new Error(`增量刷新未读取到旧库边界 ${boundary.memberId}，未切换新增数据`);
+      }
+
+      if (job.progress.errors > 0) {
+        throw new Error(`增量刷新有 ${job.progress.errors} 条记录未能持久化`);
+      }
+
+      job.status = 'done';
+      job.result = { ...job.progress, warnings };
+      checkpoint({ snapshotReady: true, incremental: true, earlyStopped, boundaryFound });
+      logger.log(
+        `会员目录增量完成 job=${job.jobId} pages=${job.progress.pagesFetched} persisted=${job.progress.membersPersisted} earlyStopped=${earlyStopped} errors=${job.progress.errors}`
+      );
+      return job.progress.membersPersisted;
+    } catch (error: unknown) {
+      job.status = 'error';
+      job.error = error instanceof Error ? error.message : String(error);
+      job.updatedAt = Date.now();
+      checkpoint({ error: job.error });
+      logger.warn(`会员目录增量失败 job=${job.jobId}: ${job.error}`);
+      throw error;
+    }
+  };
+
+  if (deps.jobRunner) {
+    await deps.jobRunner.runJob(
+      USER_CENTER_INCREMENTAL_JOB_NAME,
+      execute,
+      {
+        refreshJobId: job.jobId,
+        kind: 'incremental'
       },
       { persistMeta: true }
     );

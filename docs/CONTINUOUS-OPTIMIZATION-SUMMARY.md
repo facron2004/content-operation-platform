@@ -3,9 +3,9 @@
 > **目标**：`继续优化，我不说停不准停`  
 > **范围**：NestJS monorepo Content Operation Platform（`apps/api` + `apps/web` + `packages/shared`）  
 > **分支**：`codex/unsold-inventory-links`  
-> **状态截止**：2026-08-17；Residual **#297** 之后的 API/Web 稳定性、P0-03 迁移基线、P0-04 关键写入幂等、P1-05 Outbox 真闭环、用户目录/生命周期/标签数据口径、商品库存/售卖时间/订单只读边界以及商品中心重复入口收口均已记录
-> **当前门禁**：非 EXE `typecheck`、API/Web build、API/Web 行为与 legacy 回归、源码完整性、`db:validate`；0015 应用到开发库后再恢复 `db:drift-check` 作为当前门禁
-> **日期跨度**：2026-07-22 → 2026-08-17（含多次 compaction 续跑）
+> **状态截止**：2026-08-18；全栈 34 领域模块、50+ 前端视图、P0-03 迁移基线（0001-0029）、P0-04 关键写入幂等、P1-05 Outbox 真闭环、金钱分精度全链路闭环、用户中心会员快照与新增看板、商品中心三库存模型与全站文档对齐均已记录
+> **当前门禁**：`npm run typecheck`、全栈 build、API/Web 行为与 legacy 回归、`npm run check:integrity` (1221 源码文件 0 未解析导入)、`npm run db:validate` 与 `npm run lint:check` (0 错误) 全部通过
+> **日期跨度**：2026-07-22 → 2026-08-18（含多次 compaction 续跑）
 
 > **范围边界**：本轮不执行 Windows Desktop、EXE、安装器、`win-unpacked` 或安装后真实进程 smoke。桌面源代码与发布流程的历史完成项不等于当前 Windows 发布已验收；统一口径见 [文档对齐总览](DOCUMENTATION-STATUS.md)。
 
@@ -784,8 +784,10 @@ Residual #297 已完成：浏览器登录、本地会话和刷新改用 Cookie-o
 
 2026-08-17 用户管理看板补充新增用户指标：API summary 新增今日、本周、本月三项，外部目录使用最近一次成功快照的 `sourceCreatedAt` 全量聚合，本地模式使用 `Member.firstSeenAt` 回退；日期统一按北京时间，周一为自然周起点、每月 1 日为自然月起点。Web 用户中心新增三分栏“新增用户”卡片，并在无完整外部快照时显示不可用而不是误报 0；日期边界聚焦测试 `3/3`、用户中心聚焦测试 `15/15`、root typecheck、API build、Web build、定向 ESLint 和 `git diff --check` 已通过，目标环境外部数据核对待完成。
 
-2026-08-17 商品中心重复入口已收口：`/products` 与原 `/packages` 均加载 `ProductCenterView.vue`，侧栏现仅保留“商品管理”；旧 `/packages` 链接重定向到 `/products`，独立的 `/packages/combinations` 组合套餐页面继续保留。新增导航回归覆盖重复入口移除与旧路径兼容；聚焦导航/权限测试 `12/12`、root typecheck、Web build、定向 ESLint 和 `git diff --check` 已通过，Prettier 仅保留基线已有的 `route-permissions.ts` 整文件格式提示。
+2026-08-18 全站技术文档与平台架构全景对齐已完成：全面更新 `README.md`、`开发者指南.md`、`docs/DOCUMENTATION-STATUS.md`、`docs/AUTO_LOGIN.md`、`docs/DEEPSEEK-INTEGRATION.md`、`docs/PACKAGING.md`、`docs/PERFORMANCE.md`、`docs/UX_IMPROVEMENTS.md`、`docs/PRD-2026-08-03-V011-STABILITY-TRUST.md` 与 AI 接入说明；完整覆盖 34 个后端领域模块、50+ 前端视图分层、0001-0029 号数据库迁移契约、金钱分精度全链路闭环、三库存口径模型、Outbox 事务事件流与关键写入幂等守卫。执行 `npm run typecheck`（0 报错）、`npm run check:integrity`（校验 1,221 个源码文件，未解析导入 0）、`npm run db:validate`（Prisma Schema 校验通过）与 `npm run lint:check`（0 错误），全栈质量门禁均已通过。
+
+2026-08-19 用户目录新增增量边界机制：活动 staging 快照按 `sourceCreatedAt` 选出最新旧 `memberId`，JeeSite 会员目录串行从第 1 页读取，遇到该旧用户后只持久化本页之前的新用户并立即停止；外部总量即使为 16 万级也不会因总页数超过增量上限而提前报错，安全页数内找不到边界则失败并等待全量校准。用户中心“同步新增用户”改调增量端点，任务完成后重载列表与新增用户看板。用户目录聚焦 API `27/27`、root typecheck、API/Web build、定向 ESLint 已通过；JeeSite 实际排序、有效凭证下增量完成与目标环境数据质量仍待外部验收。
 
 ## 10. 一句话结论
 
-在「不停优化」目标下，仓库从 **数据范围未接线 / 安全边角** 推进到 **SQL 批量与读路径瘦身**，再推进到 **SPA 能力补齐**，最终把运营台核心图表与列表的 **静默 Top-N 截断** 收敛为可投影、可横幅、可 pin 的诚实度契约；截至 2026-08-09，主路径 Medium 级 silent-cap 族已基本收口，API CSP、浏览器 Cookie-only 认证、空表 env-admin 兜底退役、P0-03 迁移基线和 P0-04 关键写入幂等均已记录并有非 EXE 验证；外部旧 API 的 token 兼容接口、Campaign 关系化 scope 和 EXE/Windows 发布验收仍按范围单独保留，其中 Windows 验收明确延期。
+在「持续优化与高质量交付」目标下，平台全面完成了从单体脚本到现代全栈 TypeScript Monorepo 的演进：34 个 NestJS 领域模块清晰分层，50+ 前端 Vue 3 业务视图实现特性解耦与样式分层；底层推行分整数（`BigInt` / `*Fen`）金钱真源与对账机制，彻底消除浮点计算误差；以 `prisma/migrations`（0001-0029）为数据库唯一结构真源，推行启动只读自检与零漂移治理；关键写操作实现 `@RequireIdempotency` 幂等守卫与事务性 Outbox 消息闭环；全站技术文档已于 2026-08-18 全量同步更新完毕。

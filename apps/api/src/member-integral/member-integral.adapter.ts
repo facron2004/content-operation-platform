@@ -5,6 +5,17 @@ import {
   type MemberIntegralRecordRaw
 } from './member-integral.types';
 
+/** Parse a JeeSite "YYYY-MM-DD HH:mm:ss" string into epoch ms.
+ *  Returns 0 when the value is absent or unparseable, so an invalid date never
+ *  silently disables a date filter (callers compare against epoch bounds). */
+export function parseJeeSiteDate(value: string | null | undefined): number {
+  if (!value) return 0;
+  // JeeSite dates use a space separator; Date.parse handles ISO and the
+  // space form (treated as local time) on every runtime we ship.
+  const ts = Date.parse(value.replace(' ', 'T'));
+  return Number.isNaN(ts) ? 0 : ts;
+}
+
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -41,6 +52,7 @@ export function normalizeMemberIntegralRecord(
 
   const integralType = readNumber(raw, 'integralType') ?? 0;
   const state = readNumber(raw, 'state') ?? 0;
+  const createDate = readString(raw, 'createDate') ?? '';
   return {
     id,
     centerMemberId,
@@ -58,7 +70,8 @@ export function normalizeMemberIntegralRecord(
     historyPrice: readNumber(raw, 'historyPrice'),
     remarks: readString(raw, 'remarks', 'remark') ?? '',
     status: readString(raw, 'status') ?? '',
-    createDate: readString(raw, 'createDate') ?? '',
+    createDate,
+    createDateTs: parseJeeSiteDate(createDate),
     updateDate: readString(raw, 'updateDate')
   };
 }

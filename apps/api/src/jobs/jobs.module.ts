@@ -11,7 +11,7 @@ import { OverdueTaskJob } from './overdue-task.job';
 import { PerformanceAggregationJob } from './performance-aggregation.job';
 import { TaskPerformanceDailyRetentionJob } from './task-performance-daily-retention.job';
 import { TrackingVisitRetentionJob } from './tracking-visit-retention.job';
-import { JobRunnerService } from './job-runner.service';
+import { JobRunnerModule } from './job-runner.module';
 import { JobMonitoringController } from './job-monitoring.controller';
 import { DataIntegrityPatrolJob } from './data-integrity-patrol.job';
 import { IdempotencyModule } from '../idempotency/idempotency.module';
@@ -20,10 +20,9 @@ import { MarketingPrivateModule } from '../marketing-private/marketing-private.m
 import { UserTagRulesJob } from './user-tag-rules.job';
 
 @Module({
-  imports: [ScheduleModule.forRoot(), IdempotencyModule, MarketingPrivateModule],
+  imports: [ScheduleModule.forRoot(), IdempotencyModule, JobRunnerModule, MarketingPrivateModule],
   controllers: [JobMonitoringController],
   providers: [
-    JobRunnerService,
     OverdueTaskJob,
     PerformanceAggregationJob,
     TrackingVisitRetentionJob,
@@ -39,6 +38,6 @@ import { UserTagRulesJob } from './user-tag-rules.job';
     IdempotencyRetentionJob,
     UserTagRulesJob
   ],
-  exports: [JobRunnerService]
+  exports: [JobRunnerModule]
 })
 export class JobsModule {}

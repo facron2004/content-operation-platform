@@ -3,7 +3,7 @@
 **Date**: 2026-07-07
 **Scope**: 5 dimensions (Backend Architecture / Frontend Architecture / Core Domain Module / Shared Packages & Tests / Security & Configuration)
 
-> **当前对齐说明（2026-08-09）**：本文件是 2026-07-07 的历史审计快照，原始日期、评分和测试统计保留。当前代码已继续完成 Prisma 迁移基线（P0-03）与关键写入幂等（P0-04），并有独立 API/Web 行为回归；旧文档中的“前端测试延期”和固定 `291/24` 数字不能代表当前状态。当前仅做 API/Web/shared/Prisma/文档验证，Windows Desktop、EXE、安装器和安装后 smoke 明确延期，最新证据见 [文档对齐总览](docs/DOCUMENTATION-STATUS.md)。
+> **当前对齐说明（2026-08-18）**：本文件是 2026-07-07 的历史审计快照，原始日期、评分和测试统计保留。当前代码已全量完成 Prisma 迁移基线（0001-0029）、关键写入幂等（P0-04）、Outbox 事务事件流与金钱分精度全链路闭环，并拥有完备的 API/Web 行为回归套件。最新状态与验收证据见 [文档对齐总览](docs/DOCUMENTATION-STATUS.md)。
 
 ## Resolution Status
 

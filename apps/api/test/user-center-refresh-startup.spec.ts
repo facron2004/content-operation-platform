@@ -21,8 +21,8 @@ afterEach(() => {
   else process.env.USER_CENTER_REFRESH_ON_STARTUP = previous.startupEnabled;
 });
 
-function createStartup(startRefreshJob: () => unknown) {
-  const userCenter = { startRefreshJob } as unknown as UserCenterService;
+function createStartup(startIncrementalRefreshJob: () => Promise<unknown> | unknown) {
+  const userCenter = { startIncrementalRefreshJob } as unknown as UserCenterService;
   return new UserCenterRefreshStartup(userCenter);
 }
 
@@ -32,11 +32,13 @@ describe('user center refresh startup', () => {
     delete process.env.VITEST;
     process.env.EXTERNAL_API_BASE_URL = 'https://example.test/a';
     process.env.USER_CENTER_REFRESH_ON_STARTUP = 'true';
-    const startRefreshJob = vi.fn().mockReturnValue({ jobId: 'job-1' });
+    const startIncrementalRefreshJob = vi
+      .fn()
+      .mockResolvedValue({ jobId: 'job-1', kind: 'incremental' });
 
-    createStartup(startRefreshJob).onApplicationBootstrap();
+    createStartup(startIncrementalRefreshJob).onApplicationBootstrap();
 
-    expect(startRefreshJob).toHaveBeenCalledTimes(1);
+    expect(startIncrementalRefreshJob).toHaveBeenCalledTimes(1);
   });
 
   it('does not start a refresh when the startup switch is disabled', () => {
@@ -44,11 +46,11 @@ describe('user center refresh startup', () => {
     delete process.env.VITEST;
     process.env.EXTERNAL_API_BASE_URL = 'https://example.test/a';
     process.env.USER_CENTER_REFRESH_ON_STARTUP = 'false';
-    const startRefreshJob = vi.fn();
+    const startIncrementalRefreshJob = vi.fn();
 
-    createStartup(startRefreshJob).onApplicationBootstrap();
+    createStartup(startIncrementalRefreshJob).onApplicationBootstrap();
 
-    expect(startRefreshJob).not.toHaveBeenCalled();
+    expect(startIncrementalRefreshJob).not.toHaveBeenCalled();
   });
 
   it('does not start a refresh without an external source', () => {
@@ -56,10 +58,10 @@ describe('user center refresh startup', () => {
     delete process.env.VITEST;
     delete process.env.EXTERNAL_API_BASE_URL;
     process.env.USER_CENTER_REFRESH_ON_STARTUP = 'true';
-    const startRefreshJob = vi.fn();
+    const startIncrementalRefreshJob = vi.fn();
 
-    createStartup(startRefreshJob).onApplicationBootstrap();
+    createStartup(startIncrementalRefreshJob).onApplicationBootstrap();
 
-    expect(startRefreshJob).not.toHaveBeenCalled();
+    expect(startIncrementalRefreshJob).not.toHaveBeenCalled();
   });
 });

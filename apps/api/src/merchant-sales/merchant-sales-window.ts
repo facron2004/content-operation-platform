@@ -1,7 +1,6 @@
 /** Consolidated merchant-sales module. */
 import { BadRequestException } from '@nestjs/common';
 import { beijingDateKey, endOfMonthKey, shiftDateKey, startOfWeekKey } from '@content/shared';
-import { SQL_GMV_SS } from '../common/gmv-math';
 import { assertInclusiveDaySpan, daySpanErrorCode, daySpanErrorSpan } from '../domain/sales-daily';
 import type { MerchantSalesSort, MerchantSalesWindow } from './merchant-sales.dto';
 
@@ -13,14 +12,16 @@ export { startOfWeekKey, endOfMonthKey };
 
 // --- merchant-sales-window-format.ts ---
 export function sortColumn(sortBy: MerchantSalesSort): string {
+  // Return SELECT aliases — in a GROUP BY query, ordering by raw column names
+  // picks an arbitrary row's value instead of the SUM aggregate, causing
+  // non-deterministic sort order.
   switch (sortBy) {
     case 'gmvDesc':
-      // Same composition as SQL_GMV_SS (online + wallet; bonus never included).
-      return `(${SQL_GMV_SS})`;
+      return '"gmv"';
     case 'refundDesc':
-      return '"refundAmountFen"';
+      return '"gmvRefund"';
     case 'verifyDesc':
-      return '"verifyAmountFen"';
+      return '"gmvVerify"';
     case 'orderCountDesc':
       return '"orderCount"';
   }

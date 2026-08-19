@@ -3,12 +3,12 @@
     <div class="page-toolbar">
       <el-button type="primary" :loading="refreshing" :disabled="refreshing" @click="refreshMembers">
         <el-icon><Refresh /></el-icon>
-        同步用户数据
+        同步新增用户
       </el-button>
       <el-button :loading="loading" :disabled="refreshing" @click="reload">
         刷新当前页
       </el-button>
-      <span class="user-center-refresh-status">{{ refreshStatusText || '当前页查询不会触发全量同步' }}</span>
+      <span class="user-center-refresh-status">{{ refreshStatusText || '当前页查询不会触发全量目录同步' }}</span>
     </div>
 
     <ErrorAlert :message="error" />

@@ -31,7 +31,9 @@ import {
   getActivePersistedOrInMemoryUserCenterRefreshJob,
   getPersistedUserCenterRefreshJob,
   getUserCenterRefreshJob,
+  startUserCenterIncrementalRefreshJob,
   startUserCenterRefreshJob,
+  type UserCenterIncrementalBoundary,
   type UserCenterRefreshJob
 } from './user-center-refresh-job';
 import {
@@ -395,6 +397,70 @@ export class UserCenterService {
       discardSnapshot: (generation) => this.discardMemberDirectorySnapshot(generation),
       jobRunner: this.jobRunner
     });
+  }
+
+  /**
+   * 启动增量同步：复用当前活动 generation，读取到最新旧用户后早停。
+   * 无活动快照时退化为全量刷新（首次启动场景）。
+   */
+  async startIncrementalRefreshJob(): Promise<UserCenterRefreshJob> {
+    if (!this.jeeSiteMemberClient || !process.env.EXTERNAL_API_BASE_URL) {
+      throw new ServiceUnavailableException('外部会员数据源未配置，无法刷新用户目录');
+    }
+    const activeGeneration = await this.resolveActiveMemberDirectoryGeneration();
+    if (!activeGeneration) {
+      this.logger.log('无活动会员目录快照，增量任务退化为全量刷新');
+      return this.startRefreshJob();
+    }
+    return startUserCenterIncrementalRefreshJob({
+      client: this.jeeSiteMemberClient,
+      resolveActiveGeneration: () => Promise.resolve(activeGeneration),
+      loadLatestExistingMember: (generation) =>
+        this.loadLatestExistingMemberDirectoryMember(generation),
+      persistIncrementalPage: (rows, generation) =>
+        this.persistMemberDirectoryIncrementalPage(rows, generation),
+      jobRunner: this.jobRunner
+    });
+  }
+
+  private async resolveActiveMemberDirectoryGeneration(): Promise<string | null> {
+    const snapshot = await getLatestSuccessfulMemberDirectorySnapshot(this.prisma);
+    return snapshot?.source === 'staging' ? snapshot.generation : null;
+  }
+
+  private async loadLatestExistingMemberDirectoryMember(
+    generation: string
+  ): Promise<UserCenterIncrementalBoundary | null> {
+    try {
+      const rows = await this.prisma.$queryRawUnsafe<
+        Array<{ memberId: string | null; sourceCreatedAt: string | Date | null }>
+      >(
+        `SELECT "memberId", "sourceCreatedAt"
+         FROM "MemberDirectoryRefreshEntry"
+         WHERE "generation" = ? AND "sourceCreatedAt" IS NOT NULL
+         ORDER BY ${sqlDatetime('"sourceCreatedAt"')} DESC, "memberId" DESC
+         LIMIT 1`,
+        generation
+      );
+      const row = rows[0];
+      if (!row?.memberId || !row.sourceCreatedAt) return null;
+      const parsed = parseSqliteDate(
+        row.sourceCreatedAt instanceof Date
+          ? row.sourceCreatedAt.toISOString()
+          : String(row.sourceCreatedAt)
+      );
+      return parsed ? { memberId: row.memberId, sourceCreatedAt: parsed } : null;
+    } catch (error: unknown) {
+      if (isMissingMemberDirectoryTableError(error)) return null;
+      throw error;
+    }
+  }
+
+  private async persistMemberDirectoryIncrementalPage(
+    rows: JeeSiteMemberRow[],
+    generation: string
+  ): Promise<{ persisted: number; errors: number }> {
+    return this.persistMemberDirectoryPage(rows, generation);
   }
 
   async getActiveRefreshJob(): Promise<UserCenterRefreshJob | undefined> {

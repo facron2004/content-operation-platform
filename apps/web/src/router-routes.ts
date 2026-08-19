@@ -344,7 +344,7 @@ const v2PageRoutes: RouteRecordRaw[] = [
     'DataLine',
     'operations',
     3,
-    () => import('./views/DashboardView.vue'),
+    () => import('./views/TodayOperationsView.vue'),
     false,
     PLATFORM_ROLES
   ),
